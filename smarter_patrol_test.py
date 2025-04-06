@@ -326,14 +326,14 @@ def manual_control():
 control_thread = threading.Thread(target=manual_control, daemon=True)
 control_thread.start()
 
-# Main loop (Autonomous patrol)
+# ✅ Main loop (Autonomous patrol)
 try:
     while True:
         if not manual_mode:
             move_forward()
+        time.sleep(1)  
 
 except KeyboardInterrupt:
-    print("Stopping PiDog...")
-    dog.do_action("stand", speed=80)
-    dog.wait_all_done()
-    dog.close()
+    print("🚪 Exiting PiDog patrol mode...")
+    stop_movement()  
+    dog.close() 
