@@ -1,5 +1,7 @@
 PiDog Enhanced Functionality Project 🚀🐶
 Expanding the capabilities of the Sunfounder PiDog through custom Python scripts.
+
+
 Overview
 
 This repository contains an assortment of Python scripts designed to enhance the functionality of the Sunfounder PiDog, transforming it into a smarter, voice-controlled robotic companion capable of autonomous movement, obstacle avoidance, and interactive commands.
