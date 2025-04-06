@@ -84,30 +84,15 @@ pip install speech_recognition pyaudio
 python3 voice_command.py
 
 
-AI Dream (untested)
-
-This script introduces learning and memory functionality to the Sunfounder PiDog, allowing it to store obstacle locations, track frequently used commands, and adapt behavior over time.
+This script enables AI Learning Mode for PiDog, allowing it to store experiences, analyze patterns, and adjust behavior dynamically.
 
 Key Features:
 
-✅ Persistent Memory Storage – Saves past interactions and obstacles in pidog_memory.json. ✅ Obstacle Tracking – Records blocked positions for future avoidance. ✅ Command Learning – Tracks user commands to prioritize the most frequently used ones. ✅ Dream Mode – Periodic self-analysis while idle, allowing PiDog to adjust movement based on past experiences. ✅ Graceful Shutdown – Ensures PiDog safely exits when Dream Mode is interrupted.
+✅ Obstacle Memory – Tracks and stores detected obstacles for future avoidance. ✅ Command Learning – Records frequently used commands to prioritize responses. ✅ AI Dream Mode – Periodically processes stored data to refine future actions. ✅ Autonomous Adaptation – Adjusts movement based on past experiences. ✅ Persistent Memory Storage – Saves learning data in a JSON file for long-term use. ✅ Graceful Shutdown – Ensures PiDog stops safely when exiting AI Learning Mode.
 
 How It Works:
 
-    PiDog initializes and stands up.
-
-    Loads past learning data from a JSON file (or creates a new one if missing).
-
-    Records obstacles encountered during operation to refine navigation.
-
-    Tracks voice commands to optimize responses.
-
-    Dream Mode activates when idle, periodically analyzing stored data.
-
-    Adjusts behavior dynamically based on frequently issued commands and blocked paths.
-
-    Safely exits upon interruption, ensuring PiDog stops and saves data.
-
+1️⃣ PiDog initializes and stands in a ready position. 2️⃣ Detects obstacles, storing their locations in memory. 3️⃣ Records voice commands, tracking their frequency for optimized responses. 4️⃣ Runs AI Dream Mode, periodically analyzing stored data and adjusting behavior accordingly. 5️⃣ Remembers common obstacles and frequently used commands to refine future interactions. 6️⃣ Continuously learns until interrupted, ensuring ongoing improvement.
 
 AI Exploration (untested)
 
