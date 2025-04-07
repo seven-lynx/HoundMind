@@ -85,7 +85,10 @@ pip install speech_recognition pyaudio
 
 python3 voice_command.py
 
-AI Dream (untested)
+
+Modules:
+
+🐶 AI Dream (untested)
 
 This script enables AI Learning Mode for PiDog, allowing it to store experiences, analyze patterns, and adjust behavior dynamically.
 
@@ -97,7 +100,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands in a ready position. 2️⃣ Detects obstacles, storing their locations in memory. 3️⃣ Records voice commands, tracking their frequency for optimized responses. 4️⃣ Runs AI Dream Mode, periodically analyzing stored data and adjusting behavior accordingly. 5️⃣ Remembers common obstacles and frequently used commands to refine future interactions. 6️⃣ Continuously learns until interrupted, ensuring ongoing improvement.
 
-AI Exploration (untested)
+🐶 AI Exploration (untested)
 
 This script enables autonomous exploration for PiDog, allowing it to navigate and react dynamically to obstacles.
 
@@ -110,7 +113,7 @@ How It Works:
 1️⃣ PiDog initializes and starts in a standing position. 2️⃣ Tracks position as it moves. 3️⃣ Detects obstacles using its distance sensor. 4️⃣ Adjusts path by turning left or right when encountering a blocked area. 5️⃣ Continues exploring dynamically until interrupted.
 
 
-AI Guard (untested)
+🐶 AI Guard (untested)
 
 This script implements a Guard Mode for PiDog using facial recognition to monitor its surroundings and react accordingly.
 
@@ -122,7 +125,7 @@ How It Works:
 
 1️⃣ PiDog initializes and assumes a standing position. 2️⃣ Facial detection model loads, allowing real-time recognition. 3️⃣ Captures images using the camera and converts them to grayscale. 4️⃣ Compares detected faces with a set of known images. 5️⃣ Triggers different responses – tail wagging for recognized faces, barking for intruders. 6️⃣ Continuously scans until interrupted, ensuring PiDog remains on guard.
 
-Auto Defense (incomplete)
+🐶 Auto Defense (incomplete)
 
 This script enables Auto-Defense Mode for PiDog, allowing it to detect and react to fast-moving objects that may pose a threat.
 
@@ -134,7 +137,7 @@ How It Works:
 
 1️⃣ PiDog initializes and assumes a standing position. 2️⃣ Reads distance sensor to detect potential threats. 3️⃣ Simulates speed detection for approaching objects. 4️⃣ Decides whether to "dodge" or "brace" based on object proximity and speed. 5️⃣ Continuously scans until interrupted, ensuring PiDog remains defensive.
 
-Companion (untested)
+🐶 Companion (untested)
 
 This script enables Companion Mode for PiDog, allowing it to engage in conversational interactions with users using AI-powered speech synthesis and chatbot responses.
 
@@ -145,7 +148,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands up in ready mode. 2️⃣ Text-to-Speech engine activates, allowing PiDog to speak responses aloud. 3️⃣ Captures user input, sending prompts to the chatbot API. 4️⃣ PiDog speaks the chatbot-generated response, creating a natural conversation. 5️⃣ Runs continuously until the user enters "exit" or interrupts the program.
 
-Dance (untested)
+🐶 Dance (untested)
 
 This script enables Dance Mode for PiDog, allowing it to analyze music and synchronize movement with the beat.
 
@@ -157,7 +160,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands ready. 2️⃣ Loads an audio file (song.mp3) for beat analysis. 3️⃣ Detects BPM using librosa. 4️⃣ Executes dance moves based on tempo speed. 5️⃣ Continuously syncs dance movements until interrupted.
 
-Emotion (untested)
+🐶 Emotion (untested)
 
 This script enables Emotion Recognition Mode for PiDog, allowing it to detect facial expressions and respond with interactive behaviors.
 
@@ -169,7 +172,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands ready for interaction. 2️⃣ Captures images using the camera and converts them to grayscale. 3️⃣ Detects facial expressions based on position and size. 4️⃣ Triggers different responses – wagging tail, moving closer, barking softly. 5️⃣ Continuously monitors expressions until interrupted, creating an interactive experience.
 
-Follow (untested)
+🐶 Follow (untested)
 
 This script enables AI-Assisted Follow Mode for PiDog, allowing it to detect and track human movement using OpenCV.
 
@@ -181,7 +184,7 @@ How It Works:
 
 1️⃣ PiDog initializes and assumes a standing position. 2️⃣ Scans the environment for a human face using the camera. 3️⃣ Moves forward toward the detected person while maintaining safe distance. 4️⃣ Stops if too close to prevent collisions. 5️⃣ Rotates to search if the target is lost, ensuring continuous tracking.
 
-Function List
+🐶 Function List
 
 This script retrieves and lists all available functions and attributes for PiDog, making it useful for understanding its capabilities.
 
@@ -193,7 +196,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands ready. 2️⃣ Retrieves all available methods from the PiDog instance. 3️⃣ Filters out system-defined methods, keeping only useful commands. 4️⃣ Prints the full list of user-accessible functions for reference. 5️⃣ Closes PiDog safely, ensuring proper shutdown.
 
-Gesture (untested)
+🐶 Gesture (untested)
 
 This script enables Gesture Recognition Mode for PiDog, allowing it to respond dynamically to hand movements detected through OpenCV.
 
@@ -211,7 +214,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands ready. 2️⃣ Captures images using the camera and converts them to grayscale. 3️⃣ Detects hand gestures and analyzes size/movement. 4️⃣ Triggers appropriate response – movement, stopping, or tail wagging. 5️⃣ Continuously scans for gestures until interrupted, ensuring ongoing interaction.
 
-Guard (untested)
+🐶 Guard (untested)
 
 This script enables Guard Mode for PiDog, allowing it to monitor its surroundings and react to detected movement using an ultrasonic sensor.
 
@@ -223,7 +226,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands in a ready position. 2️⃣ Reads distance sensor to detect nearby movement. 3️⃣ Triggers responses – barking and scanning the area when movement is detected. 4️⃣ Remains in Guard Mode if no movement is detected, checking continuously. 5️⃣ Stops safely upon interruption, ensuring a controlled shutdown.
 
-Maintenance (untested)
+🐶 Maintenance (untested)
 
 This script enables Maintenance Mode for PiDog, allowing it to run periodic diagnostics and log potential issues.
 
@@ -235,7 +238,7 @@ How It Works:
 
 1️⃣ PiDog initializes and assumes a standing position. 2️⃣ Loads past maintenance logs or creates a new tracking file. 3️⃣ Runs various system checks for battery, motors, sensors, overheating, and connectivity. 4️⃣ Updates maintenance records if issues are detected. 5️⃣ Repeats checks every 5 minutes, ensuring PiDog remains in top condition. 6️⃣ Stops safely upon interruption, preserving maintenance logs for future analysis.
 
-Mapping
+🐶 Mapping
 
 This script enables Autonomous Mapping Mode for PiDog, allowing it to explore, track its movement, detect obstacles, and intelligently navigate around blocked areas.
 
@@ -247,7 +250,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands ready. 2️⃣ Moves forward, updating its position in a coordinate system. 3️⃣ Detects obstacles, deciding whether to retreat or find a new path. 4️⃣ Records visited locations, creating a mapped view of the environment. 5️⃣ Occasionally scans new areas, ensuring better mapping coverage. 6️⃣ Returns to start position when interrupted, retracing steps safely.
 
-Memory (untested)
+🐶 Memory (untested)
 
 This script enables Learning Mode for PiDog, allowing it to store interactions and adjust behavior based on user feedback.
 
@@ -259,7 +262,7 @@ How It Works:
 
 1️⃣ PiDog initializes and assumes a ready position. 2️⃣ Tracks user feedback, storing "good dog" and "bad dog" interactions in memory. 3️⃣ Adjusts its emotional response based on past interactions. 4️⃣ Continuously listens for input, refining behavior dynamically. 5️⃣ Stops safely upon interruption, preserving learned behavior for future interactions.
 
-Mic Test
+🐶 Mic Test
 
 This script tests the microphone and verifies that speech recognition is working correctly.
 
@@ -267,7 +270,7 @@ Key Features:
 
 ✅ Microphone Test – Captures audio input from the default microphone. ✅ Background Noise Adjustment – Reduces interference for better speech recognition. ✅ Speech-to-Text Conversion – Uses recognize_google() to process spoken words. ✅ Error Handling – Detects issues like unclear speech or recognition service failures. ✅ Audio Recording – Saves the captured voice input as mic_test.wav for playback. ✅ Standalone Execution – Runs automatically when executed (if __name__ == "__main__").
 
-Patrol
+🐶 Patrol
 
 This script enables Autonomous Exploration Mode for PiDog, allowing it to navigate, detect obstacles, and react dynamically while occasionally performing idle animations.
 
@@ -283,7 +286,7 @@ How It Works:
 
 1️⃣ Captures speech using the microphone. 2️⃣ Processes and converts speech to text using Google’s recognition service. 3️⃣ Displays recognized text or reports errors if speech isn't clear. 4️⃣ Saves the recorded audio for later review. 5️⃣ Ensures proper execution when run as a standalone script.
 
-Pet Interaction (untested)
+🐶 Pet Interaction (untested)
 
 This script enables Pet Interaction Mode for PiDog, allowing it to detect and react to pets using AI-powered pet recognition.
 
@@ -301,7 +304,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands ready for interaction. 2️⃣ Captures images using the camera and applies pet recognition. 3️⃣ Identifies pets using a trained model (or simulated classification). 4️⃣ Triggers appropriate response – tail wagging, movement, or cautious behavior. 5️⃣ Continuously scans for pets, allowing real-time interaction.
 
-Pidog Voice (untested)
+🐶 Pidog Voice (untested)
 
 This script enables AI Voice Personality Mode for PiDog, allowing it to listen, recognize, and respond to voice commands in an engaging and conversational manner.
 
@@ -313,7 +316,7 @@ How It Works:
 
 1️⃣ PiDog initializes and assumes a standing position. 2️⃣ Uses speech recognition to detect spoken commands. 3️⃣ Processes commands and generates appropriate verbal responses. 4️⃣ Executes physical actions based on recognized phrases (e.g., tail wagging, stopping movement). 5️⃣ Continuously listens for new commands, ensuring dynamic engagement. 6️⃣ Stops safely upon interruption, preserving its state for future use.
 
-Random Action
+🐶 Random Action
 
 This script enables automated execution of random Python files within the current directory.
 
@@ -327,7 +330,7 @@ How It Works:
 
 This script is useful for automating script testing or cycling through multiple Python programs without manual intervention. 
 
-Smart Patrol
+🐶 Smart Patrol
 
 This script enables Autonomous Patrol Mode with collision detection, manual controls, and intelligent movement adjustments for PiDog.
 
@@ -339,7 +342,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands ready. 2️⃣ Patrol Mode starts, guiding PiDog forward with obstacle detection and avoidance. 3️⃣ IMU Collision Detection actively runs, monitoring for sudden impacts or excessive tilt. 4️⃣ Evasive actions trigger automatically if a collision is detected. 5️⃣ Manual Controls allow user intervention, enabling real-time adjustments. 6️⃣ Continues patrolling until interrupted, ensuring dynamic exploration.
 
-Smarter Patrol
+🐶 Smarter Patrol
 
 This script enables Autonomous Patrol Mode with IMU-based collision detection, manual control, and intelligent navigation adjustments for PiDog.
 
@@ -351,7 +354,7 @@ How It Works:
 
 1️⃣ PiDog initializes and assumes a standing position. 2️⃣ Patrol Mode activates, guiding PiDog forward with obstacle detection and avoidance. 3️⃣ IMU Collision Detection actively runs, monitoring for sudden impacts or excessive tilt. 4️⃣ Evasive actions trigger automatically if a collision is detected. 5️⃣ Manual control overrides autonomous movement, allowing real-time navigation. 6️⃣ Patrolling continues until interrupted, ensuring dynamic exploration and obstacle adaptation.
 
-Voice Command
+🐶 Voice Command
 
 This script enables Voice Command Mode for PiDog, allowing it to recognize and execute spoken commands in real-time.
 
@@ -363,7 +366,7 @@ How It Works:
 
 1️⃣ PiDog initializes and stands ready. 2️⃣ Continuously listens for voice input, filtering ambient noise. 3️⃣ Detects spoken commands and matches them to predefined actions. 4️⃣ Executes movement or interactions (e.g., forward, backward, bark, tail wag). 5️⃣ Allows user intervention to manually override autonomous behavior. 6️⃣ Stops safely upon interruption, ensuring PiDog remains controlled.
 
-Voice Patrol
+🐶 Voice Patrol
 
 This script enables Autonomous Patrol Mode with Voice Commands for PiDog, allowing it to navigate dynamically while responding to user instructions.
 
