@@ -85,6 +85,7 @@ pip install speech_recognition pyaudio
 
 python3 voice_command.py
 
+AI Dream (untested)
 
 This script enables AI Learning Mode for PiDog, allowing it to store experiences, analyze patterns, and adjust behavior dynamically.
 
