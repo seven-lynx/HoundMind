@@ -64,24 +64,56 @@ def retreat():
     resume_patrol()
 
 def detect_obstacle():
-    """Scan surroundings and accurately mark blocked positions."""
+    """Scan forward, left, and right for obstacles & preemptively avoid them."""
     forward_distance = dog.read_distance()
+    print(f"🚧 Forward obstacle distance: {forward_distance}")
 
+    # ✅ Scan left and right
+    dog.head_move([[-40, 0, 0]], immediately=True, speed=60)
+    dog.wait_head_done()
+    left_distance = dog.read_distance()
+    time.sleep(0.2)
+
+    dog.head_move([[40, 0, 0]], immediately=True, speed=60)
+    dog.wait_head_done()
+    right_distance = dog.read_distance()
+    time.sleep(0.2)
+
+    dog.head_move([[0, 0, 0]], immediately=True, speed=60)  # ✅ Reset head to forward position
+    dog.wait_head_done()
+
+    print(f"🔎 Left distance: {left_distance}, Right distance: {right_distance}")
+
+    # ✅ Determine best direction dynamically
     if forward_distance < 40:
-        print("🚧 Obstacle detected ahead!")
+        print("🚨 Obstacle ahead detected!")
 
-        current_location = (position["x"], position["y"])
-        obstacle_count[current_location] = obstacle_count.get(current_location, 0) + 1
+        # ✅ **Track obstacle detections before marking position as blocked**
+        current_position = tuple(position)
+        obstacle_count[current_position] = obstacle_count.get(current_position, 0) + 1
 
-        if obstacle_count[current_location] >= 3:  
-            print(f"🚧 Marking {current_location} as blocked.")
-            position["blocked"].add(current_location)
+        if obstacle_count[current_position] >= 3:  # ✅ Only block after 3 detections
+            if current_position not in blocked_positions:
+                print("🚧 Marking current position as blocked.")
+                blocked_positions.add(current_position)
 
         retreat()
         check_sides()
         return True
 
-    return False  # Continue patrol
+    elif left_distance < 35:  
+        print("🛑 Obstacle detected on the left! Turning right to avoid.")
+        update_position("right")
+        dog.do_action("turn_right", step_count=3, speed=200)  # ✅ Turn away from obstacle
+        dog.wait_all_done()
+    
+    elif right_distance < 35:  
+        print("🛑 Obstacle detected on the right! Turning left to avoid.")
+        update_position("left")
+        dog.do_action("turn_left", step_count=3, speed=200)  # ✅ Turn away from obstacle
+        dog.wait_all_done()
+
+    return False  # ✅ Continue moving forward if no obstacle is detected
 
 def check_sides():
     """Determine if PiDog can move left or right after retreating from an obstacle."""
