@@ -270,6 +270,10 @@ Key Features:
 
 ✅ Microphone Test – Captures audio input from the default microphone. ✅ Background Noise Adjustment – Reduces interference for better speech recognition. ✅ Speech-to-Text Conversion – Uses recognize_google() to process spoken words. ✅ Error Handling – Detects issues like unclear speech or recognition service failures. ✅ Audio Recording – Saves the captured voice input as mic_test.wav for playback. ✅ Standalone Execution – Runs automatically when executed (if __name__ == "__main__").
 
+How It Works:
+
+1️⃣ Captures speech using the microphone. 2️⃣ Processes and converts speech to text using Google’s recognition service. 3️⃣ Displays recognized text or reports errors if speech isn't clear. 4️⃣ Saves the recorded audio for later review. 5️⃣ Ensures proper execution when run as a standalone script.
+
 🐶 Patrol
 
 This script enables Autonomous Exploration Mode for PiDog, allowing it to navigate, detect obstacles, and react dynamically while occasionally performing idle animations.
@@ -282,9 +286,6 @@ How It Works:
 
 1️⃣ PiDog initializes and assumes a ready position. 2️⃣ Moves forward, adjusting speed randomly to mimic real-world movement. 3️⃣ Detects obstacles, choosing between retreating or turning to avoid collisions. 4️⃣ Occasionally performs idle behaviors, making movement more interactive. 5️⃣ Scans its environment periodically, preventing repetitive paths. 6️⃣ Continues navigating until interrupted, ensuring autonomous movement.
 
-How It Works:
-
-1️⃣ Captures speech using the microphone. 2️⃣ Processes and converts speech to text using Google’s recognition service. 3️⃣ Displays recognized text or reports errors if speech isn't clear. 4️⃣ Saves the recorded audio for later review. 5️⃣ Ensures proper execution when run as a standalone script.
 
 🐶 Pet Interaction (untested)
 
