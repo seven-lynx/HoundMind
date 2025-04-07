@@ -381,6 +381,54 @@ Contributing
 
 Interested in improving PiDog’s capabilities? Feel free to submit pull requests, add new features, or refine existing functions. Many of these scripts are still untested, and we'd appreciate your feedback as we continue refining.
 
+🛠️ Features to Come:
+
+🚀 Advanced Navigation & Movement
+
+✅ Path Optimization AI – Learns efficient routes by mapping surroundings dynamically. ✅ Multi-Terrain Adaptation – Adjusts gait and speed for different surfaces like carpet, grass, or tile. ✅ Obstacle Avoidance Upgrade – Uses machine learning to predict movement patterns and avoid collisions better. ✅ Autonomous Exploration Mode – PiDog actively scans new areas to build an internal map and improve decision-making. ✅ Dynamic Speed Control – Adjusts movement speed based on surroundings and user preferences.
+
+
+🎤 Voice & Interaction Enhancements
+
+✅ Custom Voice Commands – Users can teach PiDog new words and associate them with actions. ✅ Conversational AI Personality – PiDog can hold short conversations, respond to greetings, and recognize emotions. ✅ Multiple Speaker Recognition – Identifies different voices to personalize responses for different users. ✅ Sound-Based Tracking – Moves toward a user when their voice or a clap is detected.
+
+
+📷 Sensor & AI Vision Upgrades
+
+✅ Facial Recognition – Identifies familiar faces and reacts accordingly. ✅ Pet Detection & Interaction – Detects and responds to other pets intelligently. ✅ Augmented Reality Integration – Displays PiDog’s mapping data and status through an AR app. ✅ Improved Gesture Recognition – Recognizes hand signals for better control without voice commands. ✅ Thermal Camera for Night Vision – Enhances PiDog’s ability to detect obstacles in low light.
+
+
+🧠 AI Learning & Emotional Intelligence
+
+✅ Behavior Adaptation AI – Learns from interactions and adjusts behavior based on user preferences. ✅ Emotion Detection – Recognizes human facial expressions and reacts accordingly. ✅ Self-Learning Commands – Predicts and prioritizes commonly used commands for better response speed. ✅ Dream Mode Expansion – Uses idle time to process past experiences and refine responses.
+
+
+🔧 Hardware & Mechanical Improvements
+
+✅ Wireless Charging Dock – Allows PiDog to autonomously charge when power is low. ✅ Replaceable Battery System – Enables quick battery swaps for longer run times. ✅ Self-Repair Alerts – Detects hardware issues and provides maintenance recommendations.
+
+
+📡 Connectivity & Smart Home Integration
+
+✅ Smart Home Synchronization – Connects with IoT devices to respond to household events. ✅ Remote Control App – Allows users to interact with PiDog from anywhere via smartphone. ✅ Cloud-Based AI Updates – Enables continuous improvements through software enhancements. 
+
+✅ Separate scripts for each function, imported and called when needed from a main script
+
+
+ 🔬 Experimental AI Capabilities
+
+✅ Adaptive Mood Responses – PiDog reacts to different tones of voice or gestures. ✅ Dream-Driven Learning – Expands its “Dream Mode” to refine strategies based on past experiences. ✅ Predictive Command Response – Uses AI to anticipate user commands before they're spoken. ✅ Multi-Agent Collaboration – Allows PiDog to work alongside other robotic assistants. ✅ Social Learning AI – Observes interactions and adjusts behavior based on multiple users.
+
+
+🎮 Gamification & Fun Features
+
+✅ Trick Training Mode – Users can teach PiDog tricks like spinning, high-fives, and play-bowing. ✅ Chase & Fetch Game Mode – Allows PiDog to chase objects or respond to playful movements. ✅ Interactive Storytelling – PiDog can tell simple stories and involve the user in its responses. ✅ Emotion-Based Sound Effects – Different tones of bark or movement sounds based on mood. ✅ Dance Mode – PiDog can move rhythmically to music or user commands.
+
+
+📊 Data Visualization & User Analytics
+
+✅ Movement Heatmaps – Displays PiDog’s movement trends and obstacle history visually. ✅ Interaction Reports – Provides insights on how users engage with PiDog. ✅ User Customization Panel – Allows users to fine-tune PiDog’s behaviors and responses. ✅ AI-Based Speech Insights – Adjusts conversational tone based on user engagement patterns. ✅ Enhanced Data Privacy Controls – Allows users to manage PiDog’s learning and stored memory.
+
 License
 
 This project is released under the GNU Public License, making it available for the PiDog community to modify and expand upon.
