@@ -249,21 +249,22 @@ def listen_for_command():
 
         while True:
             try:
-                audio = recognizer.listen(source)
+                audio = recognizer.listen(source)  # Remove timeout for continuous listening
                 command = recognizer.recognize_google(audio).lower()
                 print(f"Detected speech: {command}")
-                process_command(command)
+                process_command(command)  # Execute detected command
                     
             except sr.UnknownValueError:
                 print("Could not understand speech.")
             except sr.RequestError:
                 print("Speech recognition service error.")
 
-    if command in ["resume patrol", "start patrol"]:
-        print("Resuming patrol mode...")
-        manual_mode = False  
+def process_command(command):
+    """Interpret and execute voice commands"""
+    if not command:
+        return
 
-    elif command in ["come here", "come", "go forward"]:
+    if command in ["come here", "come", "go forward"]:
         print("PiDog heard you! Moving forward...")
         dog.do_action("forward", step_count=5, speed=120)
 
@@ -298,30 +299,23 @@ def listen_for_command():
         print("PiDog turns to face the opposite direction")
         dog.do_action("turn_right", step_count=12, speed=200)
 
-    elif command in ["sit", "take a seat"]:
-        print("🐾 PiDog sitting down...")
-        dog.do_action("sit", speed=50)
-
     else:
         print("Unknown command. Try again.")
 
-
-# Run voice command detection in a separate thread
+# ✅ Start voice command detection in a separate thread
 voice_thread = threading.Thread(target=listen_for_command, daemon=True)
 voice_thread.start()
 
-# Keep PiDog active while listening
+# ✅ Main loop (Always patrolling unless interrupted)
 try:
     while True:
-        time.sleep(1)  # Keep the main thread alive
-
-# Main loop (Autonomous patrol)
-try:
-    while True:
-        if not manual_mode:
-            move_forward()
+        if manual_mode:
+            time.sleep(0.5)  # ✅ Pauses only when a voice command interrupts patrol
+        else:
+            move_forward()  # ✅ Patrol never stops unless overridden
+            time.sleep(0.5)  # ✅ Allows periodic adjustments
 
 except KeyboardInterrupt:
-    print("Exiting Voice Command Mode...")
-    stop_movement()  # Ensures PiDog stops safely before exiting
-    dog.close()  # Shut down PiDog properly
+    print("🚪 Exiting PiDog patrol mode...")
+    stop_movement()  
+    dog.close()  
