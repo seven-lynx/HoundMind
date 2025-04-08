@@ -29,7 +29,7 @@ Our work includes:
 
     Option to resume random selection → Users can return to automatic execution after interruption.
 
-✅ Expanded action.py with More Commands
+✅ Expanded actions.py with More Commands
 
     Modular action handling → Now includes all PiDog movements, including turns, balance, and fun behaviors.
 
