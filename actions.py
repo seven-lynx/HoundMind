@@ -19,7 +19,7 @@ def load_behavior(module_name, function_name):
         print(f"❌ Error: {module_name}.{function_name} not found!")
         return None
 
-# ✅ Balance Mode Import (Fixed)
+# ✅ Balance Mode Import
 balance = load_behavior("balance", "pidog_balance")
 
 # ✅ LED Control
@@ -110,26 +110,42 @@ def navigate():
 
     print("🎯 Navigation Complete! PiDog is facing the best direction.")
 
-# ✅ General Actions
+# ✅ Basic Actions
 def sit():
-    print("🐶 Sitting...")
-    update_led((0, 0, 255), rgb.fade)
-    dog.do_action("sit", speed=80)
+    """PiDog sits."""
+    dog.do_action("sit", speed=100)
 
 def lay_down():
-    print("🐕 Laying down...")
-    update_led((0, 255, 0), rgb.breathe)
-    dog.do_action("lay_down", speed=80)
+    """PiDog lies down."""
+    dog.do_action("lay_down", speed=100)
 
-def bark():
-    print("🔊 Barking...")
-    update_led((255, 0, 0), rgb.flash)
-    dog.do_action("bark", speed=100)
+def push_up():
+    """PiDog does push-ups."""
+    dog.do_action("push_up", speed=100)
 
 def wag_tail():
-    print("🐕 Wagging tail...")
-    update_led((0, 0, 255), rgb.flash)
-    dog.do_action("wag_tail", speed=80)
+    """PiDog wags its tail."""
+    dog.do_action("wag_tail", speed=100)
+
+def jump():
+    """PiDog jumps."""
+    dog.do_action("jump", speed=120)
+
+def jump_and_wag():
+    """PiDog jumps while wagging its tail."""
+    dog.do_action("jump_and_wag", speed=120)
+
+def scratch_ear():
+    """PiDog scratches its ear."""
+    dog.do_action("scratch_ear", speed=100)
+
+def tilting_head():
+    """PiDog tilts its head curiously."""
+    dog.do_action("tilting_head", speed=80)
+
+def bark():
+    """PiDog barks."""
+    dog.do_action("bark", speed=100)
 
 # ✅ Optimized Movement Function
 def turn(direction, step_count):
@@ -189,7 +205,6 @@ def stop_and_stand():
     dog.do_action("stand", speed=120)
     enable_balance_mode()  # ✅ Restart balance after standing
 
-# ✅ Fun Actions
 def play_dead():
     print("💀 Playing dead...")
     update_led((0, 0, 0), rgb.fade)
@@ -201,8 +216,7 @@ def wave_paw():
     update_led((255, 100, 100), rgb.pulse)
     dog.do_action("tilting_head", speed=80)
 
-# ✅ NEW ACTIONS: Jump Variations
-def jump():
+def acrobatic_jump():
     """PiDog performs a simple jump while maintaining balance."""
     print("🐶 Jumping with balance mode!")
 
@@ -249,7 +263,6 @@ def start_idle():
         update_led((255, 255, 255), rgb.breathe)
         idle_mode()
 
-
 def start_find_open_space():
     """Starts PiDog's adaptive navigation from find_open_space.py."""
     print("🔎 Running adaptive navigation...")
@@ -258,7 +271,7 @@ def start_find_open_space():
     navigate_function = getattr(navigation_module, "navigate", None)
 
     if navigate_function:
-        update_led((0, 255, 255), None)  # ✅ Light cyan for scanning mode
+        update_led((0, 255, 255), None)
         navigate_function()
     else:
         print("❌ Adaptive Navigation module not found!")
