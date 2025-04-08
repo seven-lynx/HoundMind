@@ -1,326 +1,142 @@
 #!/usr/bin/env python3
 import time
-import random
 import threading
+import random
 from pidog import Pidog
+from pidog.b9_rgb import RGB  # Import LED control
 
-# ✅ Initialize PiDog
+# ✅ Initialize PiDog and RGB LED
 dog = Pidog()
-dog.do_action("stand", speed=120)  # Ensure PiDog is ready
+rgb = RGB(dog)
+dog.do_action("stand", speed=100)
 dog.wait_all_done()
 time.sleep(0.5)
 
-# ✅ Define global movement speed
-current_speed = 120  # Default normal speed
+# ✅ Define patrol parameters
+position = {"x": 0, "y": 0}
+blocked_positions = set()  # Stores permanently blocked areas
+direction = "forward"  # Default direction
+movement_speed = 100
+current_state = "patrolling"  # Default state
 
-# ✅ Position tracking variables
-position = [0, 0]
-blocked_positions = set()
+# ✅ Emotional LED States
+EMOTIONAL_STATES = {
+    "patrolling": ("🌟 Curious", (0, 255, 0), rgb.breathe),  # 🟢 Green Breathing LED
+    "obstacle_detected": ("😨 Startled", (255, 0, 0), rgb.flash),  # 🔴 Red Flash Effect
+    "avoiding_zone": ("🤔 Thinking", (0, 0, 255), rgb.pulse),  # 🔵 Blue Pulsing Effect
+    "navigating": ("🔄 Navigating", (255, 165, 0), rgb.breathe),  # 🟠 Orange Breathing LED
+}
 
-# ✅ Flag to control movement
-manual_mode = False
+def update_led():
+    """Update LED based on PiDog’s emotional state."""
+    emotion, color, effect = EMOTIONAL_STATES.get(current_state, ("😶 Neutral", (255, 255, 255), rgb.breathe))
+    rgb.set_color(color)
+    effect(1)  # Apply selected LED effect
+    print(f"💡 LED updated: {emotion} -> {color}")
 
-# ✅ Track obstacle detection count
-obstacle_count = {}
+def update_position():
+    """Track PiDog’s position based on movement direction."""
+    step_size = 1  # Movement step size
 
-def update_position(direction):
-    """Adjust PiDog's coordinates based on movement."""
     if direction == "forward":
-        position[1] += 1
+        position["y"] += step_size
     elif direction == "backward":
-        position[1] -= 1
+        position["y"] -= step_size
     elif direction == "left":
-        position[0] -= 1
+        position["x"] -= step_size
     elif direction == "right":
-        position[0] += 1
+        position["x"] += step_size
 
-    print(f"PiDog's current position: {position}")
+    print(f"📍 Updated Position: {position}")
 
-def retreat():
-    """Move PiDog backward after detecting an obstacle and ensure patrol resumes."""
-    print("Retreating from obstacle...")
-    update_position("backward")
-
-    # Reset head to neutral before retreating
-    dog.head_move([[0, 0, 0]], immediately=True, speed=60)
+def scan_surroundings():
+    """Continuously scan left and right while patrolling."""
+    dog.head_move([[-40, 0, 0]], immediately=True, speed=80)  # Look left
     dog.wait_head_done()
+    left_distance = dog.read_distance()
 
-    # Move backward
-    dog.do_action("backward", step_count=2, speed=120)
-    dog.wait_all_done()
-    time.sleep(0.5)
+    dog.head_move([[40, 0, 0]], immediately=True, speed=80)  # Look right
+    dog.wait_head_done()
+    right_distance = dog.read_distance()
 
-    print("Resuming patrol after retreat...")
-    resume_patrol()
+    dog.head_move([[0, 0, 0]], immediately=True, speed=80)  # Reset head position
+    forward_distance = dog.read_distance()
 
-def resume_patrol():
-    # Ensure PiDog resumes patrol after obstacle avoidance.
-    global manual_mode
-    manual_mode = False  # Ensure patrol mode resumes
-    move_forward()
+    print(f"🔎 Forward: {forward_distance}, Left: {left_distance}, Right: {right_distance}")
+    return forward_distance, left_distance, right_distance
 
 def detect_obstacle():
-    """Scan forward, left, and right for obstacles & preemptively avoid them."""
-    forward_distance = dog.read_distance()
-    print(f"🚧 Forward obstacle distance: {forward_distance}")
+    """Detect obstacles continuously and react dynamically."""
+    global direction, current_state
 
-    # ✅ Scan left and right
-    dog.head_move([[-40, 0, 0]], immediately=True, speed=60)
-    dog.wait_head_done()
-    left_distance = dog.read_distance()
-    time.sleep(0.2)
+    forward_distance, left_distance, right_distance = scan_surroundings()
 
-    dog.head_move([[40, 0, 0]], immediately=True, speed=60)
-    dog.wait_head_done()
-    right_distance = dog.read_distance()
-    time.sleep(0.2)
+    current_position = (position["x"], position["y"])
 
-    dog.head_move([[0, 0, 0]], immediately=True, speed=60)  # ✅ Reset head to forward position
-    dog.wait_head_done()
-
-    print(f"🔎 Left distance: {left_distance}, Right distance: {right_distance}")
-
-    # ✅ Determine best direction dynamically
-    if forward_distance < 40:
-        print("🚨 Obstacle ahead detected!")
-
-        # ✅ **Track obstacle detections before marking position as blocked**
-        current_position = tuple(position)
-        obstacle_count[current_position] = obstacle_count.get(current_position, 0) + 1
-
-        if obstacle_count[current_position] >= 3:  # ✅ Only block after 3 detections
-            if current_position not in blocked_positions:
-                print("🚧 Marking current position as blocked.")
-                blocked_positions.add(current_position)
-
-        retreat()
-        check_sides()
+    # ✅ Predictive Avoidance: If an area has 3+ obstacles detected, mark it as blocked
+    if current_position in blocked_positions:
+        print("⚠️ Predicting obstacle—changing path!")
+        current_state = "avoiding_zone"
+        update_led()
+        direction = random.choice(["left", "right"])
         return True
 
-    elif left_distance < 35:  
-        print("🛑 Obstacle detected on the left! Turning right to avoid.")
-        update_position("right")
-        dog.do_action("turn_right", step_count=3, speed=200)  # ✅ Turn away from obstacle
+    # ✅ Head-on obstacle detected, retreat and find open space
+    if forward_distance < 40:
+        print("🚨 Obstacle ahead! Retreating...")
+        current_state = "obstacle_detected"
+        update_led()
+        dog.do_action("bark", speed=80)  # Bark when startled
+        time.sleep(0.5)
+
+        dog.do_action("backward", step_count=2, speed=120)  # Step backward
         dog.wait_all_done()
-    
-    elif right_distance < 35:  
-        print("🛑 Obstacle detected on the right! Turning left to avoid.")
-        update_position("left")
-        dog.do_action("turn_left", step_count=3, speed=200)  # ✅ Turn away from obstacle
-        dog.wait_all_done()
 
-    return False  # ✅ Continue moving forward if no obstacle is detected
+        # Choose open direction
+        direction = "left" if left_distance > right_distance else "right"
+        return True
 
-def check_sides():
-    """PiDog dynamically selects the safest path, avoiding previously blocked areas."""
-    print("Checking for side paths after retreating...")
-    update_emotion("avoiding")
+    # ✅ Avoid obstacles detected to the left or right
+    if left_distance < 35:
+        print("🛑 Left obstacle detected! Turning right.")
+        direction = "right"
+        return True
 
-    dog.head_move([[-40, 0, 0]], immediately=True, speed=60)
-    dog.wait_head_done()
-    left_distance = dog.read_distance()
-    time.sleep(0.2)
+    if right_distance < 35:
+        print("🛑 Right obstacle detected! Turning left.")
+        direction = "left"
+        return True
 
-    dog.head_move([[40, 0, 0]], immediately=True, speed=60)
-    dog.wait_head_done()
-    right_distance = dog.read_distance()
-    time.sleep(0.2)
+    current_state = "patrolling"
+    update_led()
+    return False  # No obstacles detected
 
-    dog.head_move([[0, 0, 0]], immediately=True, speed=60)  # ✅ Reset head position
-    dog.wait_head_done()
+def patrol():
+    """PiDog continuously patrols while scanning left and right."""
+    global direction, movement_speed
 
-    print(f"Left distance: {left_distance}, Right distance: {right_distance}")
-
-    left_position = (position[0] - 1, position[1])
-    right_position = (position[0] + 1, position[1])
-
-    if left_distance > right_distance and left_position not in blocked_positions:
-        print("Turning left toward open space...")
-        update_position("left")
-        dog.do_action("turn_left", step_count=3, speed=200)
-    elif right_position not in blocked_positions:
-        print("Turning right toward open space...")
-        update_position("right")
-        dog.do_action("turn_right", step_count=3, speed=200)
-    else:
-        print("Both sides blocked. Retreating further...")
-        retreat()
-
-    dog.wait_all_done()
-    resume_patrol()
-
-def adjust_gait():
-    """Modify PiDog's movement based on detected imbalance using IMU."""
-    global current_speed  
-    pitch, roll, yaw = dog.gyroData
-    ax, ay, az = dog.accData
-
-    if abs(pitch) > 30 or abs(roll) > 30 or abs(ax) > 3.0 or abs(ay) > 3.0:
-        print("⚠️ Unstable terrain detected! Slowing PiDog down for better stability...")
-        current_speed = 80  # ✅ Reduce speed dynamically
-
-        # ✅ Lower PiDog slightly for extra balance
-        current_pose['z'] -= 2
-        if current_pose['z'] < 30:
-            current_pose['z'] = 30
-        
-        # ✅ Apply roll & pitch corrections
-        current_rpy['roll'] = -roll * 0.5  
-        current_rpy['pitch'] = -pitch * 0.5  
-    else:
-        print("✅ Stable terrain detected. Restoring normal speed...")
-        current_speed = 120
-        current_pose['z'] = 80  
-        current_rpy['roll'] = 0
-        current_rpy['pitch'] = 0
-
-def move_forward():
-    # Move PiDog forward while checking obstacles.
-    global manual_mode, current_speed
-    speed = 120  
-
-    update_emotion("patrolling")
-
-    for _ in range(5):
-        if manual_mode:
-            return 
- 
-        adjust_gait()  # ✅ Dynamically modify movement based on IMU data
-       
-        if detect_obstacle():  
-            stop_movement()
-            check_sides()  
-            return
-        
-        update_position("forward")
-
-        if tuple(position) in blocked_positions:
-            print("Detected previously blocked area! Changing direction...")
-            check_sides()
-            return
-        
-        dog.do_action("forward", step_count=1, speed=current_speed)  
-
-def turn_left():
-    """PiDog turns left while adjusting head movement."""
-    print("🔄 Turning left...")
-    dog.head_move([[-30, 0, 0]], immediately=True, speed=80)  # ✅ Look left before turning
-
-    dog.do_action("turn_left", step_count=3, speed=120)  # ✅ Execute turn
-    dog.wait_all_done()
-
-    dog.head_move([[0, 0, 0]], immediately=True, speed=80)  # ✅ Reset head to neutral
-    dog.wait_head_done()
-
-def turn_right():
-    """PiDog turns right while adjusting head movement."""
-    print("🔄 Turning right...")
-    dog.head_move([[30, 0, 0]], immediately=True, speed=80)  # ✅ Look right before turning
-
-    dog.do_action("turn_right", step_count=3, speed=120)  # ✅ Execute turn
-    dog.wait_all_done()
-
-    dog.head_move([[0, 0, 0]], immediately=True, speed=80)  # ✅ Reset head to neutral
-    dog.wait_head_done()
-
-def stop_movement():
-    """Immediately stop PiDog."""
-    global manual_mode
-    manual_mode = True
-    dog.do_action("stand", speed=80)
-    dog.wait_all_done()
-    time.sleep(0.5)
-
-def update_emotion(status):
-    """Change PiDog's RGB LED colors based on events."""
-    if status == "patrolling":
-        dog.rgb_strip.set_mode(style="breath", color="green", brightness=1)  
-        print("PiDog is happily patrolling!")
-
-    elif status == "scanning":
-        dog.rgb_strip.set_mode(style="breath", color="blue", brightness=1)  
-        print("PiDog is scanning for obstacles...")
-
-    elif status == "blocked":
-        dog.rgb_strip.set_mode(style="boom", color="red", brightness=1)  
-        print("PiDog detected an obstacle and stopped!")
-
-    elif status == "avoiding":
-        dog.rgb_strip.set_mode(style="bark", color="yellow", brightness=1)  
-        print("PiDog is changing its path!")
-
-    dog.wait_all_done()
-
-# ✅ Continuous IMU Collision Detection
-def check_collision():
-    """Detect sudden changes in acceleration or tilt that indicate a collision."""
-    ax, ay, az = dog.accData  # Get acceleration data from IMU
-    pitch, roll, yaw = dog.gyroData  # Get rotation angles from IMU
-    
-    if abs(ax) > 2.5 or abs(ay) > 2.5:  # Detect sudden acceleration/deceleration
-        print("🚨 Collision detected! Taking evasive action...")
-        stop_movement()
-        retreat()
-
-    if abs(pitch) > 20 or abs(roll) > 20:  # Detect excessive tilt
-        print("⚠️ PiDog is tilted! Possible collision or fall detected.")
-        stop_movement()
-        dog.do_action("stand", speed=120)  # Auto-correct posture
-
-def imu_monitor():
-    """Continuously monitor IMU for collisions while PiDog patrols."""
-
+    print("🐶 Starting Patrol Mode...")
     while True:
-        check_collision()
-        time.sleep(0.2)
+        obstacle_detected = detect_obstacle()
 
-# ✅ Start IMU monitoring in a background thread
-imu_thread = threading.Thread(target=imu_monitor, daemon=True)
-imu_thread.start()
-
-# Terminal command listener
-def manual_control():
-    # Listen for terminal commands to manually control PiDog.
-    global manual_mode
-
-    while True:
-        command = input("Enter command ('left', 'right', 'stop', 'resume'): ").strip().lower()
-
-        if command == "left":
-            print("Manual turn left!")
-            update_position("left")
-            dog.do_action("turn_left", step_count=3, speed=120)
-            dog.wait_all_done()
-
-        elif command == "right":
-            print("Manual turn right!")
-            update_position("right")
-            dog.do_action("turn_right", step_count=3, speed=120)
-            dog.wait_all_done()
-
-        elif command == "stop":
-            print("Stopping PiDog!")
-            stop_movement()
-
-        elif command == "resume":
-            print("Resuming autonomous patrol mode!")
-            resume_patrol()
-
+        if obstacle_detected:
+            dog.do_action(f"turn_{direction}", step_count=3, speed=200)
         else:
-            print("Invalid command. Use 'left', 'right', 'stop', or 'resume'.")
+            update_position()
+            dog.do_action(direction, step_count=2, speed=movement_speed)
 
-# Run manual control in a separate thread
-control_thread = threading.Thread(target=manual_control, daemon=True)
-control_thread.start()
+        dog.wait_all_done()
+        time.sleep(0.5)  # Short delay between movements
 
-# Main loop (Autonomous patrol)
+# ✅ Start patrol in a separate thread
+patrol_thread = threading.Thread(target=patrol, daemon=True)
+patrol_thread.start()
+
 try:
     while True:
-        if not manual_mode:
-            move_forward()
-
+        time.sleep(1)  # Keep the main thread alive
 except KeyboardInterrupt:
-    print("Stopping PiDog...")
+    print("🔴 Stopping Patrol Mode...")
     dog.do_action("stand", speed=80)
     dog.wait_all_done()
     dog.close()

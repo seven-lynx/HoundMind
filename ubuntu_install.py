@@ -12,24 +12,28 @@ from version import __version__
 
 print("Robot Hat Python Library v%s" % __version__)
 
-available_options = ["--no-dep", "--only-lib", "--no-build-isolation"]
+avaiable_options = ["--no-dep", "--only-lib", "--no-build-isolation"]
 options = []
 if len(sys.argv) > 1:
     options = list.copy(sys.argv[1:])
 
-# Define color print
+
+# define color print
+# =================================================================
 def warn(msg, end='\n', file=sys.stdout, flush=False):
     print(f'\033[0;33m{msg}\033[0m', end=end, file=file, flush=flush)
 
 def error(msg, end='\n', file=sys.stdout, flush=False):
     print(f'\033[0;31m{msg}\033[0m', end=end, file=file, flush=flush)
 
-# Check if run as root
+# check if run as root
+# =================================================================
 if os.geteuid() != 0:
     warn("Script must be run as root. Try \"sudo python3 install.py\".")
     sys.exit(1)
 
-# Utility functions
+# utils
+# =================================================================
 def run_command(cmd=""):
     import subprocess
     p = subprocess.Popen(cmd,
@@ -44,94 +48,130 @@ errors = []
 at_work_tip_sw = False
 
 def working_tip():
-    """Provides a simple rotating character animation while a task runs."""
     char = ['/', '-', '\\', '|']
     i = 0
     global at_work_tip_sw
     while at_work_tip_sw:
         i = (i + 1) % 4
-        sys.stdout.write('\033[?25l')  # Cursor invisible
+        sys.stdout.write('\033[?25l')  # cursor invisible
         sys.stdout.write('%s\033[1D' % char[i])
         sys.stdout.flush()
         time.sleep(0.5)
 
     sys.stdout.write(' \033[1D')
-    sys.stdout.write('\033[?25h')  # Cursor visible
+    sys.stdout.write('\033[?25h')  # cursor visible
     sys.stdout.flush()
 
+
 def do(msg="", cmd=""):
-    """Executes installation commands with a progress indicator."""
     print(" - %s ... " % (msg), end='', flush=True)
+    # at_work_tip start
     global at_work_tip_sw
     at_work_tip_sw = True
     _thread = threading.Thread(target=working_tip)
     _thread.daemon = True
     _thread.start()
-
+    # process run
     status, result = run_command(cmd)
-
+    # print(status, result)
+    # at_work_tip stop
     at_work_tip_sw = False
-    _thread.join()
-
+    _thread.join()  # wait for thread to finish
+    # status
     if status == 0 or status == None or result == "":
         print('Done')
     else:
         print('Error')
-        errors.append(f"{msg} error:\n  Status:{status}\n  Error:{result}")
+        errors.append("%s error:\n  Status:%s\n  Error:%s" %
+                      (msg, status, result))
+
 
 def check_os_bit():
-    """Determines whether the system is running on 32-bit or 64-bit."""
+    '''
+    # import platform
+    # machine_type = platform.machine() 
+    latest bullseye uses a 64-bit kernel
+    This method is no longer applicable, the latest raspbian will uses 64-bit kernel 
+    (kernel 6.1.x) by default, "uname -m" shows "aarch64", 
+    but the system is still 32-bit.
+    '''
     _, os_bit = run_command("getconf LONG_BIT")
     return int(os_bit)
 
-# Check system architecture
+# check system
+# =================================================================
 os_bit = check_os_bit()
 
-# Dependencies list installed with apt (Modified for Ubuntu)
+# Dependencies list installed with apt
+# =================================================================
 APT_INSTALL_LIST = [
+    'raspi-config',
     "i2c-tools",
     "espeak",
-    "libsdl2-dev",
-    "libsdl2-mixer-dev",
-    "portaudio19-dev",  # Required for pyaudio
-    "sox",
+    'libsdl2-dev',
+    'libsdl2-mixer-dev',
+    'portaudio19-dev',  # pyaudio
+    'sox',
 ]
+if os_bit == 64:
+    APT_INSTALL_LIST.append("libttspico-utils")  # tts -> pico2wave
 
 # Dependencies list installed with pip3
+# =================================================================
 PIP_INSTALL_LIST = [
-    "smbus2",
-    "gpiozero",
-    "pyaudio",
-    "spidev",
-    "pyserial",
-    "pillow",
+    'smbus2',
+    'gpiozero',
+    'pyaudio',
+    'spidev',
+    'pyserial',
+    'pillow',
     "'pygame>=2.1.2'",
 ]
 
-# Main installation function
+
+# main
+# =================================================================
 def install():
-    """Handles package installation and system configuration."""
+    # check whether pip has the option "--break-system-packages"
     _is_bsps = ''
-    status, _ = run_command("pip3 help install | grep break-system-packages")
-    if status == 0:
+    status, _ = run_command("pip3 help install|grep break-system-packages")
+    if status == 0: # if true
         _is_bsps = "--break-system-packages"
 
+    # --- install robot_hat package ---
     _if_build_isolation = ""
     if "--no-build-isolation" in options:
         _if_build_isolation = "--no-build-isolation"
     do(msg=f"install robot_hat package {_if_build_isolation}",
        cmd=f'pip3 install ./ {_is_bsps} {_if_build_isolation}')
 
+    # --- only-library ---
     if "--only-lib" not in options:
+        # --- install dependencies ---
         if "--no-dep" not in options:
-            print("Installing dependencies with apt-get:")
+            # --------------------------------
+            print("Install dependencies with apt-get:")
+            # update apt-get
             do(msg="update apt-get", cmd='apt-get update')
+            #
             for dep in APT_INSTALL_LIST:
                 do(msg=f"install {dep}", cmd=f'apt-get install {dep} -y')
-
-            print("Installing dependencies with pip3:")
-            if _is_bsps:
-                print("Install dependencies with pip3:")
+            #
+            if 'libttspico-utils' not in APT_INSTALL_LIST:
+                _pool = 'http://ftp.debian.org/debian/pool/non-free/s/svox/'
+                if raspbain_version >= 12:
+                    libttspico= 'libttspico0t64_1.0+git20130326-14.1_armhf.deb'
+                    libttspico_utils = 'libttspico-utils_1.0+git20130326-14.1_armhf.deb'
+                elif raspbain_version < 12:
+                    libttspico = 'libttspico0_1.0+git20130326-11_armhf.deb'
+                    libttspico_utils = 'libttspico-utils_1.0+git20130326-11_armhf.deb'
+                do(msg="install pico2wave",
+                    cmd=f'wget {_pool}{libttspico}' +
+                    f' &&wget {_pool}{libttspico_utils}' +
+                    f' && apt-get install -f ./{libttspico} ./{libttspico_utils} -y'
+                    )
+            # --------------------------------
+            print("Install dependencies with pip3:")
             # check whether pip has the option "--break-system-packages"
             if _is_bsps != '':
                 _is_bsps = "--break-system-packages"
