@@ -62,7 +62,7 @@ Our work includes:
 ✔ Integrated all default PiDog actions from documentation. ✔ Added manually defined movements (circle walking, play dead, sniff ground, paw wave, etc.). ✔ RGB effects for every action, enhancing engagement. ✔ Synchronized head movements with turns for a more natural feel. ✔ Refined turn mechanics—Small: 4 steps, Medium: 8 steps, Big: 12 steps—all at 200 speed. ✔ Implemented emergency stop that halts all actions and makes PiDog stand instantly.
 ⚖️ Developed a Separate Balance Module (balance.py)
 
-✔ Ensures PiDog stays balanced dynamically, adjusting posture in real time. ✔ Modified pidog_commands.py to call balance.py dynamically when needed. ✔ Emergency stop correctly halts balance before transitioning to stand mode.
+✔ Ensures PiDog stays balanced dynamically, adjusting posture in real time. ✔ Modified actions.py to call balance.py dynamically when needed. ✔ Emergency stop correctly halts balance before transitioning to stand mode.
 🚀 Optimized System Modularity
 
 ✔ Decoupled balance logic from the movement script for cleaner design. ✔ Allowed all other scripts (patrol, idle, voice control) to call movement functions easily. ✔ Laid groundwork for future refinements—adaptive terrain response, obstacle sensing, etc.
