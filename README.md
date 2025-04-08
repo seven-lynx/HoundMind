@@ -18,6 +18,57 @@ Our work includes:
 
     Real-Time Position Tracking – Keeps track of PiDog's movement for structured navigation.
 
+
+🔥 Major Updates Across All Modules
+
+✅ Master Script (master.py) Enhancements
+
+    Added spacebar interruption → Allows users to stop execution and manually choose a module.
+
+    Simplified module selection UI → Displays a numbered list for clean, user-friendly navigation.
+
+    Option to resume random selection → Users can return to automatic execution after interruption.
+
+✅ Expanded action.py with More Commands
+
+    Modular action handling → Now includes all PiDog movements, including turns, balance, and fun behaviors.
+
+    Jump behaviors added → PiDog can jump normally or jump while wagging its tail, ensuring balance during jumps.
+
+    New function find_open_space() → Calls find_open_space.py dynamically to help PiDog choose the best path when obstacles are frequent.
+
+✅ Created & Improved find_open_space.py (formerly adaptive_navigation.py)
+
+    PiDog scans forward, left, and right → Continuously chooses the safest direction.
+
+    Keeps rotating until the forward measurement is the longest → Ensures PiDog doesn’t get stuck in tight spaces.
+
+    Renamed for clarity → Now called find_open_space.py instead of adaptive_navigation.py.
+
+✅ Enhanced patrol.py with Smart Obstacle Avoidance
+
+    Expanded position tracking → PiDog now stores x, y coordinates PLUS directional facing (0° = forward, -90° = left, 90° = right).
+
+    Obstacle Memory Decay → Older obstacles lose importance over time, preventing PiDog from avoiding paths forever.
+
+    Real-Time Corrections → Compares past scans to detect changes in obstacles and intelligently adjust movement.
+
+    Path Prediction for Smarter Turns → PiDog prioritizes paths that have remained open, rather than reacting impulsively.
+
+    Triggers find_open_space() when obstacles are frequent → Avoids dead ends and maximizes mobility.
+
+🏗️ Built a Comprehensive Master Movement Script
+
+✔ Integrated all default PiDog actions from documentation. ✔ Added manually defined movements (circle walking, play dead, sniff ground, paw wave, etc.). ✔ RGB effects for every action, enhancing engagement. ✔ Synchronized head movements with turns for a more natural feel. ✔ Refined turn mechanics—Small: 4 steps, Medium: 8 steps, Big: 12 steps—all at 200 speed. ✔ Implemented emergency stop that halts all actions and makes PiDog stand instantly.
+⚖️ Developed a Separate Balance Module (balance.py)
+
+✔ Ensures PiDog stays balanced dynamically, adjusting posture in real time. ✔ Modified pidog_commands.py to call balance.py dynamically when needed. ✔ Emergency stop correctly halts balance before transitioning to stand mode.
+🚀 Optimized System Modularity
+
+✔ Decoupled balance logic from the movement script for cleaner design. ✔ Allowed all other scripts (patrol, idle, voice control) to call movement functions easily. ✔ Laid groundwork for future refinements—adaptive terrain response, obstacle sensing, etc.
+
+✅ PiDog is now smarter, more adaptive, and capable of avoiding repeated mistakes. ✅ It learns from past movement patterns and makes real-time corrections. ✅ Every module is now more structured, expandable, and seamlessly interconnected.
+
 Features
 🗣️ Voice Command System
 
