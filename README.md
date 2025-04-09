@@ -18,8 +18,108 @@ Our work includes:
 
     Real-Time Position Tracking – Keeps track of PiDog's movement for structured navigation.
 
+🔄 PiDog Development Updates (April 8, 2025) v0.5.1
 
-🔥 Major Updates Across All Modules
+
+🛠 Major System Improvements
+
+✅ Refactored whisper_voice_control.py → Added global state tracking, behavior logging, thread-safe execution, and error tracking. ✅ Optimized voice_patrol.py → Integrated voice commands, ensured manual patrol override, and improved error handling. ✅ Enhanced guard_mode.py → Added motion tracking, global state awareness, and persistent logging for security events. ✅ Implemented advanced memory system (memory.py) → Created short-term & long-term memory, persistent storage, auto-expiry mechanisms, and trend recognition.
+
+
+🔗 Behavioral & AI Enhancements
+
+✅ PiDog now tracks active modes correctly (global_state.py) → Ensures accurate state transitions across all behaviors. ✅ Improved PiDog's ability to learn (memory.py) → Recognizes patterns in user interactions for smarter behavior adaptation. ✅ Added emotional intelligence (emotions.py) → PiDog reacts dynamically based on stored experiences.
+
+
+🔗 Module Interoperability Overhaul
+
+✅ Unified communication between all modules → Ensured smooth interactions across patrol, memory, voice, guard, and emotion systems. ✅ Standardized state tracking (global_state.py) → Allows seamless transitions between modes. ✅ Optimized behavioral flow in state_functions.py → Improved mode-switching logic for dynamic responses.
+
+
+📄 Documentation & Schematic Updates
+
+✅ Created an interactive system overview (README.md) ✅ Refined architectural design (state_functions.py) → Improved behavior transitions and mode-switching logic. ✅ Commented code and added descriptions for each (working) module.
+
+
+🛠 PiDog Modules Overview
+
+🔹 Core Execution & State Management
+
+    master.py → The central module that manages PiDog’s execution, mode transitions, and system-wide integration.
+
+    global_state.py → Tracks PiDog’s current mode, errors, and interaction history, ensuring behavioral continuity.
+
+    state_functions.py → Manages state transitions, allowing PiDog to switch smoothly between patrol, idle, learning, and guard modes.
+
+🔹 Movement & Navigation
+
+    actions.py → Defines all of PiDog’s movement functions (walking, turning, barking, wagging tail, standing, etc.).
+
+    smarter_patrol.py → Implements autonomous navigation, enabling PiDog to patrol and avoid obstacles dynamically.
+
+    find_open_space.py → Helps PiDog detect and move toward open areas, ensuring safe navigation.
+
+🔹 Idle & Environmental Awareness
+
+    idle_behavior.py → Controls PiDog’s passive behaviors (wagging tail, scratching, reacting to sound).
+
+    turn_toward_noise.py → Adjusts PiDog’s head and body position toward detected sounds.
+
+    guard_mode.py → Enables motion detection, allowing PiDog to monitor its environment and react to movement.
+
+🔹 Voice Control & AI Interaction
+
+    whisper_voice_control.py → Processes spoken voice commands using Whisper AI, enabling real-time control.
+
+    voice_patrol.py → Allows manual override of patrol mode using voice commands, integrating with whisper_voice_control.py.
+
+🔹 Learning & Memory
+
+    memory.py → Stores short-term and long-term experiences, tracking past interactions for smarter decision-making.
+
+    emotions.py → Modifies PiDog’s expressive behavior based on past interactions and detected emotions.
+
+
+ALL OTHER MODULES WILL BE DISIGNATED "test" AND ARE FOR STANDALONE USE ONLY UNTIL FULLY INTEGRATED.
+
+
+🛠 PiDog System Architecture
+
+
+                          ```mermaid
+graph TD;
+    master.py -->|Manages State| global_state.py;
+    master.py -->|Transitions Behavior| state_functions.py;
+    master.py -->|Stores Memory| memory.py;
+    master.py -->|Modifies Reactions| emotions.py;
+    global_state.py -->|Tracks Mode & Logs Errors| actions.py;
+    actions.py --> smarter_patrol.py;
+    smarter_patrol.py --> find_open_space.py;
+    smarter_patrol.py --> voice_patrol.py;
+    voice_patrol.py --> whisper_voice_control.py;
+    idle_behavior.py --> turn_toward_noise.py;
+    guard_mode.py -->|Monitors Movement| memory.py;
+
+
+
+| **Module**                 | **Purpose**                                   | **Key Interactions**                                      |
+|----------------------------|----------------------------------------------|-----------------------------------------------------------|
+| `master.py`                | Controls execution & mode switching          | Calls `state_functions.py`, monitors `global_state.py`, interacts with all behavior modules |
+| `global_state.py`          | Tracks PiDog’s current state & logs errors   | Used by all modules to maintain interactions & behavioral continuity |
+| `state_functions.py`       | Manages behavioral transitions               | Works with `master.py`, `memory.py`, `actions.py` to adjust behavior dynamically |
+| `memory.py`                | Stores short-term & long-term experiences    | Tracks PiDog’s patterns, integrates with `state_functions.py`, `actions.py`, and `global_state.py` |
+| `emotions.py`              | Modifies PiDog’s expressive behaviors        | Works with `idle_behavior.py`, `memory.py`, `global_state.py` for adaptive responses |
+| `actions.py`               | Defines movement functions                   | Called by `voice_patrol.py`, `smarter_patrol.py`, `idle_behavior.py`, and `guard_mode.py` |
+| `smarter_patrol.py`        | Enables autonomous navigation                | Uses `actions.py`, `find_open_space.py`, `global_state.py` for patrol functionality |
+| `find_open_space.py`       | Detects open areas for movement              | Works with `smarter_patrol.py` to identify safe movement paths |
+| `idle_behavior.py`         | Manages passive animations & reactions       | Uses `actions.py`, `turn_toward_noise.py`, interacts with `emotions.py` for responsiveness |
+| `turn_toward_noise.py`     | Adjusts head/body position based on sounds   | Works with `idle_behavior.py`, `actions.py`, and `global_state.py` |
+| `whisper_voice_control.py` | Enables real-time voice command processing   | Calls `actions.py`, updates `global_state.py`, logs memory interactions |
+| `voice_patrol.py`          | Allows manual override of patrol mode        | Works with `whisper_voice_control.py`, `smarter_patrol.py`, and `global_state.py` |
+| `guard_mode.py`            | Monitors surroundings & reacts to movement   | Uses `actions.py`, logs movement into `global_state.py`, interacts with `memory.py` |
+
+
+🔥 Major Updates Across All Modules v0.5.0
 
 ✅ Master Script (master.py) Enhancements
 
