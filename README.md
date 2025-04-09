@@ -92,19 +92,17 @@ ALL OTHER MODULES WILL BE DISIGNATED "test" AND ARE FOR STANDALONE USE ONLY UNTI
 
 ```mermaid
 graph TD;
-    master.py -->|Manages State| global_state.py;
-    master.py -->|Transitions Behavior| state_functions.py;
-    master.py -->|Stores Memory| memory.py;
-    master.py -->|Modifies Reactions| emotions.py;
-    global_state.py -->|Tracks Mode| actions.py;
+    master.py --> global_state.py;
+    master.py --> state_functions.py;
+    master.py --> memory.py;
+    master.py --> emotions.py;
+    global_state.py --> actions.py;
     actions.py --> smarter_patrol.py;
     smarter_patrol.py --> find_open_space.py;
     smarter_patrol.py --> voice_patrol.py;
     voice_patrol.py --> whisper_voice_control.py;
     idle_behavior.py --> turn_toward_noise.py;
     guard_mode.py --> memory.py;
-
-
 
 | **Module**                 | **Purpose**                                   | **Key Interactions**                                      |
 |----------------------------|----------------------------------------------|-----------------------------------------------------------|
