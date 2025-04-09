@@ -210,7 +210,7 @@ To use these scripts on your Sunfounder PiDog, follow these steps:
 
 1️⃣ Clone the repository:
 
-git clone https://github.com/your-username/PiDog.git
+git clone https://github.com/seven-lynx/PiDog.git
 
 2️⃣ Navigate to the project folder:
 
