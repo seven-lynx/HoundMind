@@ -40,6 +40,10 @@ Our work includes:
 
 ✅ Created an interactive system overview (README.md) ✅ Refined architectural design (state_functions.py) → Improved behavior transitions and mode-switching logic. ✅ Commented code and added descriptions for each (working) module.
 
+🚀 Next Steps
+
+✔ Further enhance PiDog's adaptive learning with dynamic behavioral updates. ✔ Expand voice command integration for better real-time interactions. ✔ Optimize idle behaviors to create a more expressive companion.
+
 
 🛠 PiDog Modules Overview
 
