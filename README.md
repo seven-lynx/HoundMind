@@ -90,10 +90,18 @@ ALL OTHER MODULES WILL BE DISIGNATED "test" AND ARE FOR STANDALONE USE ONLY UNTI
 🛠 PiDog System Architecture
 
 
-```mermaid
-graph TD;
-    A --> B;
-    B --> C;
+                          [ master.py ]
+                               │
+     ┌───────────────────┬───────────────────┬───────────────────┐
+     │                   │                   │                   │
+[ global_state.py ]  [ state_functions.py ]  [ memory.py ]   [ emotions.py ]
+     │                   │                   │                   │
+[ actions.py ]      [ smarter_patrol.py ]  [ whisper_voice_control.py ]
+     │                   │                   │                   
+[ find_open_space.py ]  [ voice_patrol.py ]  [ idle_behavior.py ]
+     │                   │                   │
+[ turn_toward_noise.py ]  [ guard_mode.py ]
+
 
 | **Module**                 | **Purpose**                                   | **Key Interactions**                                      |
 |----------------------------|----------------------------------------------|-----------------------------------------------------------|
