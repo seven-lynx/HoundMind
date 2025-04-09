@@ -91,18 +91,18 @@ ALL OTHER MODULES WILL BE DISIGNATED "test" AND ARE FOR STANDALONE USE ONLY UNTI
 
 
 ```mermaid
-graph TD;
-    master.py --> global_state.py;
-    master.py --> state_functions.py;
-    master.py --> memory.py;
-    master.py --> emotions.py;
-    global_state.py --> actions.py;
-    actions.py --> smarter_patrol.py;
-    smarter_patrol.py --> find_open_space.py;
-    smarter_patrol.py --> voice_patrol.py;
-    voice_patrol.py --> whisper_voice_control.py;
-    idle_behavior.py --> turn_toward_noise.py;
-    guard_mode.py --> memory.py;
+graph TD
+    master["master.py"] --> global_state["global_state.py"]
+    master --> state_functions["state_functions.py"]
+    master --> memory["memory.py"]
+    master --> emotions["emotions.py"]
+    global_state --> actions["actions.py"]
+    actions --> smarter_patrol["smarter_patrol.py"]
+    smarter_patrol --> find_open_space["find_open_space.py"]
+    smarter_patrol --> voice_patrol["voice_patrol.py"]
+    voice_patrol --> whisper_voice["whisper_voice_control.py"]
+    idle_behavior["idle_behavior.py"] --> turn_toward_noise["turn_toward_noise.py"]
+    guard_mode["guard_mode.py"] --> memory
 
 | **Module**                 | **Purpose**                                   | **Key Interactions**                                      |
 |----------------------------|----------------------------------------------|-----------------------------------------------------------|
