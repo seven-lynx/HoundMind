@@ -38,7 +38,7 @@ Our work includes:
 
 📄 Documentation & Schematic Updates
 
-✅ Created an interactive system overview (README.md) ✅ Refined architectural design (state_functions.py) → Improved behavior transitions and mode-switching logic. ✅ Commented code and added descriptions for each (working) module.
+✅ Updated README.md ✅ Refined architectural design (state_functions.py) → Improved behavior transitions and mode-switching logic. ✅ Commented code and added descriptions for each (working) module.
 
 🚀 Next Steps
 
