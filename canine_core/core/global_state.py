@@ -1,3 +1,4 @@
+raise ImportError("Archived module: use canine_core.core.state.StateStore via BehaviorContext.")
 """
 PiDog Global State Management
 ==================================

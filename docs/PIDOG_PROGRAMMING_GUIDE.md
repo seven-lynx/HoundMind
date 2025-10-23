@@ -44,9 +44,9 @@
 
 > **🚀 New to PiDog programming?** These resources get you coding quickly:
 
-- **[`pidog_programming_examples.py`](./pidog_programming_examples.py)** - Runnable examples for every feature with menu system
-- **[`api_reference_enhanced.md`](./api_reference_enhanced.md)** - Complete method documentation with all parameters
-- **[`advanced_pidog_ai.py`](./advanced_pidog_ai.py)** - Advanced AI behavior system demonstration
+- **[`pidog_programming_examples.py`](../examples/pidog_programming_examples.py)** - Runnable examples for every feature with menu system
+- **[`api_reference.md`](./api_reference.md)** - Complete method documentation with all parameters
+- **[`packmind/orchestrator.py`](../packmind/orchestrator.py)** - Advanced AI behavior system demonstration
 
 ---
 
@@ -965,11 +965,11 @@ if __name__ == "__main__":
 ## Additional Resources
 
 ### Complete Example Files
-- **[`pidog_programming_examples.py`](./pidog_programming_examples.py)** - Menu-driven examples for every PiDog feature
-- **[`advanced_pidog_ai.py`](./advanced_pidog_ai.py)** - Advanced AI behavior system with emotions and learning
+- **[`pidog_programming_examples.py`](../examples/pidog_programming_examples.py)** - Menu-driven examples for every PiDog feature
+- **[`packmind/orchestrator.py`](../packmind/orchestrator.py)** - Advanced AI behavior system with emotions and learning
 
 ### Reference Documentation
-- **[`api_reference_enhanced.md`](./api_reference_enhanced.md)** - Complete API reference with all methods and parameters
+- **[`api_reference.md`](./api_reference.md)** - Complete API reference with all methods and parameters
 
 ### Official Resources
 - [Official PiDog Documentation](https://docs.sunfounder.com/projects/pidog/en/latest/)

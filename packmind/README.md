@@ -1,125 +1,67 @@
-# PiDog Standalone AI Systems 🤖
+# PackMind: Standalone PiDog AI 🤖
 
-This directory contains **complete, self-contained AI systems** for PiDog. Each file is a standalone program that provides full AI functionality without dependencies on the modular system.
+PackMind is a fully featured, standalone AI for PiDog. It contains its own orchestrator, services, behaviors, and subsystems for mapping, navigation, localization, and visualization.
 
-## 🎯 **What Are Standalone AIs?**
+Independence: PackMind and CanineCore are related but distinct projects. PackMind does not import or depend on CanineCore.
 
-These are **complete, ready-to-run AI programs** that include:
-- All necessary imports and dependencies
-- Built-in configuration systems  
-- Complete behavior implementations
-- Full sensor integration
-- Independent state management
+## 🚀 Run the AI Orchestrator
 
-**Key Difference:** Unlike the modular system, these don't require external modules - each is a complete AI solution.
+```powershell
+python packmind/orchestrator.py
+```
 
-## 🚀 **Available Standalone AIs**
+Configure behavior and features via `packmind/packmind_config.py` (presets available). The orchestrator enables features like voice, SLAM, sensor fusion, and autonomous navigation based on your config and installed dependencies.
 
-### 🧠 `advanced_pidog_ai.py`
-**Complete AI-powered PiDog with advanced behaviors**
-- Multi-sensor integration and decision making
-- Emotional LED responses and learning patterns
-- Sound-reactive head tracking
-- Advanced movement coordination
-- Energy management system
+## 📦 Subpackages (library modules)
 
-**Run:** `python advanced_pidog_ai.py`
+- 🗺️ Mapping: `packmind/mapping/house_mapping.py`
+    - SLAM-based house map, rooms, and landmarks
+    - `from packmind.mapping.house_mapping import PiDogSLAM, CellType`
 
-### 🗺️ `house_mapping.py` 
-**SLAM-based house mapping system**
-- Real-time house mapping and room detection
-- Persistent map storage and retrieval
-- Autonomous exploration algorithms
-- Obstacle detection and mapping
+- 🎯 Navigation: `packmind/nav/pathfinding.py`
+    - A* pathfinding and high-level navigation
+    - `from packmind.nav.pathfinding import PiDogPathfinder, NavigationController`
 
-**Run:** `python house_mapping.py`
+- 🔄 Localization: `packmind/localization/sensor_fusion_localization.py`
+    - IMU + ultrasonic sensor-fusion localization
+    - `from packmind.localization.sensor_fusion_localization import SensorFusionLocalizer`
 
-### 🎯 `pathfinding.py`
-**Advanced pathfinding and navigation**
-- A* pathfinding with dynamic obstacles
-- Real-time path optimization
-- Multi-goal navigation planning
-- Obstacle memory and avoidance
+- 📊 Visualization: `packmind/visualization/map_visualization.py`
+    - ASCII map printing and export tools
+    - `from packmind.visualization.map_visualization import MapVisualizer`
 
-**Run:** `python pathfinding.py`
+Note: Older top-level files like `house_mapping.py` or `pathfinding.py` were moved into these folders. Update imports accordingly.
 
-### 📊 `map_visualization.py`
-**Real-time map visualization system**
-- Live mapping display and analysis
-- Path visualization and tracking  
-- Obstacle detection visualization
-- Performance metrics dashboard
+## ⚙️ Configuration
 
-**Run:** `python map_visualization.py`
+Edit `packmind/packmind_config.py` and choose a preset or customize values. Example:
 
-### 🔄 `sensor_fusion_localization.py`
-**Advanced sensor fusion and localization**
-- Multi-sensor data fusion (IMU, distance, vision)
-- Kalman filtering for position estimation
-- Dynamic localization and tracking
-- Surface type detection and adaptation
-
-**Run:** `python sensor_fusion_localization.py`
-
-## ⚙️ **Configuration**
-
-### `packmind_config.py`
-**Centralized configuration for ALL standalone AIs**
 ```python
 class PiDogConfig:
-    # Enable/disable major systems
-    ENABLE_VOICE_COMMANDS = True
-    ENABLE_SLAM_MAPPING = True
-    ENABLE_EMOTIONAL_SYSTEM = True
-    
-    # Sensor thresholds
-    OBSTACLE_IMMEDIATE_THREAT = 20.0
-    OBSTACLE_SAFE_DISTANCE = 40.0
-    
-    # Movement parameters
-    TURN_STEPS_NORMAL = 2
-    WALK_STEPS_NORMAL = 2
+        ENABLE_VOICE_COMMANDS = True
+        ENABLE_SLAM_MAPPING = True
+        ENABLE_SENSOR_FUSION = True
+        ENABLE_EMOTIONAL_SYSTEM = True
+        ENABLE_AUTONOMOUS_NAVIGATION = False
 ```
 
-## 📚 **Documentation**
+## 📚 Documentation
 
-- **`PiDog_Configuration_Guide.txt`** - Detailed configuration options
-- **`api_reference_enhanced.md`** - Complete API reference  
-- **`intelligent_obstacle_avoidance_guide.md`** - Obstacle avoidance guide
-- **`voice_setup_instructions.md`** - Voice control setup
+- `PackMind_Configuration_Guide.txt`
+- `intelligent_obstacle_avoidance_guide.md`
+- `voice_setup_instructions.md`
 
-## 🔗 **vs. Modular System**
+For general PiDog programming resources, see `../docs/`.
 
-| **Standalone AIs** | **Modular System** |
-|-------------------|------------------|
-| ✅ Complete programs | 🔧 Composable modules |
-| ✅ Self-contained | 🔧 Requires integration |
-| ✅ Ready to run | 🔧 Build your own system |
-| ✅ All features included | 🔧 Mix and match features |
-| ✅ Quick demos | 🔧 Long-term projects |
+## 🔗 vs. CanineCore (for clarity)
 
-## 🚦 **Quick Start**
-
-1. **Choose your AI system** based on what you want to demonstrate
-2. **Configure** by editing `packmind_config.py` 
-3. **Run directly** - no additional setup required!
-
-```bash
-# Example: Run the complete advanced AI
-python advanced_pidog_ai.py
-
-# Example: Run mapping system  
-python house_mapping.py
-```
-
-## 💡 **When to Use Standalone AIs**
-
-- **Demos and presentations** - Show complete AI functionality quickly
-- **Testing new features** - Prototype without breaking modular system
-- **Learning PiDog AI** - Study complete implementations  
-- **Quick experiments** - Test ideas rapidly
-- **Backup systems** - Reliable fallback implementations
+| PackMind (this) | CanineCore |
+|---|---|
+| ✅ Standalone AI | 🔧 Composable behavior framework |
+| ✅ Self-contained orchestrator | 🔧 Uses behaviors + services |
+| ✅ Quick demos, end-to-end | 🔧 Long-term customization |
+| 🚫 No dependency on CanineCore | 🚫 No dependency on PackMind |
 
 ---
 
-*For the composable, modular PiDog system, see `../modular_system/`* 🔧
+Want a framework to build your own behaviors? See `../canine_core/` 🔧

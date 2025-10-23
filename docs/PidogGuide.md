@@ -228,9 +228,9 @@ This comprehensive programming guide includes:
 
 | Resource | Description | Best For |
 |----------|-------------|----------|
-| **[`pidog_programming_examples.py`](./pidog_programming_examples.py)** | Interactive examples with menu system | Learning by running code |
-| **[`api_reference_enhanced.md`](./api_reference_enhanced.md)** | Complete API documentation | Reference during development |
-| **[`advanced_pidog_ai.py`](./advanced_pidog_ai.py)** | Advanced AI behavior demo | Understanding complex patterns |
+| **[`pidog_programming_examples.py`](../examples/pidog_programming_examples.py)** | Interactive examples with menu system | Learning by running code |
+| **[`api_reference.md`](./api_reference.md)** | Complete API documentation | Reference during development |
+| **[`packmind/orchestrator.py`](../packmind/orchestrator.py)** | Advanced AI behavior demo | Understanding complex patterns |
 | **[`PIDOG_PROGRAMMING_GUIDE.md`](./PIDOG_PROGRAMMING_GUIDE.md)** | Complete programming guide | Comprehensive learning |
 
 ### Programming Topics Covered

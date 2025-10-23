@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-PiDog Modular System Entry Point
-===============================
+CanineCore Entry Point
+======================
 
-Entry point for the PiDog Modular System - a composable, extensible framework
-for building custom PiDog behaviors and personalities.
+Entry point for CanineCore – the modular, extensible framework for composing
+PiDog behaviors and services.
 
-🔧 MODULAR SYSTEM: Mix and match behaviors, create custom combinations
-🤖 STANDALONE AIs: For ready-to-run complete AI systems, see standalone_ai/
+🔧 CanineCore: Mix and match behaviors, create custom combinations
+🤖 PackMind: For a standalone AI orchestrator, run packmind/orchestrator.py
 
 Usage:
     python main.py
@@ -23,28 +23,28 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'canine_core'))
 
 def main():
-    """Main entry point for PiDog Modular System."""
-    print("🔧 PiDog Modular System v0.5.1")
+    """Main entry point for CanineCore."""
+    print("🔧 CanineCore v0.5.1")
     print("=" * 50)
     print("🎭 Mix and match behaviors | 🧠 Custom AI combinations")
     print("🔄 Hot-swap modules | 💾 Learning and memory")
     print()
-    print("� For standalone AI systems, run files in standalone_ai/ directly")
+    print("🤖 For the standalone AI, run: python packmind/orchestrator.py (or python packmind.py)")
     print("=" * 50)
     
     try:
         from canine_core.core.orchestrator import main as core_main
         core_main()
     except ImportError as e:
-        print(f"❌ Error importing modular system: {e}")
+        print(f"❌ Error importing CanineCore orchestrator: {e}")
         print("Make sure all dependencies are installed and paths are correct.")
         print()
         print("📁 Expected structure:")
-        print("   modular_system/core/master.py")
-        print("   standalone_ai/*.py")
+        print("   canine_core/core/orchestrator.py")
+        print("   packmind/orchestrator.py")
         sys.exit(1)
     except KeyboardInterrupt:
-        print("\n👋 PiDog modular system shutdown gracefully.")
+        print("\n👋 CanineCore shutdown gracefully.")
         sys.exit(0)
     except Exception as e:
         print(f"❌ Unexpected error: {e}")

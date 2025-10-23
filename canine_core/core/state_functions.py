@@ -1,3 +1,4 @@
+raise ImportError("Archived module: use canine_core.core.state.StateStore and services instead.")
 """
 PiDog State Functions (Optimized)
 ==================================

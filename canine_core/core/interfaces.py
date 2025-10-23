@@ -20,6 +20,8 @@ class BehaviorContext:
     hardware: Any
     sensors: Any
     emotions: Any
+    motion: Any
+    voice: Any
     memory: Any
     state: Any
     logger: Logger

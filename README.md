@@ -1,160 +1,134 @@
-# PiDog Enhanced Functionality Project 🚀🐶
+# Pidog: Advanced Behaviors and AI for SunFounder PiDog 🐶
 
-A comprehensive robotics project expanding the capabilities of the Sunfounder PiDog through **two distinct systems**: standalone AI programs and a modular framework.
+This repository provides two related—but completely independent—ways to run your PiDog:
 
-## 🎯 **Two Systems, Two Approaches**
+- CanineCore: a modular behavior framework for composing and interactively running behaviors.
+- PackMind: a standalone AI with its own orchestrator, services, and optional mapping/navigation stack.
 
-### 🤖 **PackMind AI Systems** (`packmind/`)
-**Complete, ready-to-run AI programs** - Just run and go!
+Use either system. They don’t import or depend on each other.
 
-### 🔧 **Modular System** (`modular_system/`)
-**Composable framework** - Build your own PiDog personality!
-- **Purpose:** Custom behaviors, long-term projects, extensibility  
-- **Usage:** `python main.py`
-- **Features:** Mix/match modules, hot-swapping, learning system
+Legacy modules for the old system are stored in Legacy, and the entire project has been forked at https://github.com/DrMikeKW/Pidog-New_Scripts/
 
-## 📁 **Project Structure**
+## What’s inside
+
+- CanineCore (`canine_core/`): async orchestrator, services (motion, sensors, emotions, voice), and behavior modules.
+- PackMind (`packmind/`): AI orchestrator plus subsystems for mapping (SLAM), navigation (A*), localization (sensor fusion), voice, scanning, and obstacle handling.
+- Docs (`docs/`): programming guides, API reference, voice setup, and config guides.
+- Examples (`examples/`): runnable examples.
+- Legacy (`legacy/`): archived test modules and examples (not actively maintained)
+
+## Quick install and run on the Raspberry Pi 🧰
+
+Requirements
+
+- Raspberry Pi with PiDog assembled and powered
+- Raspberry Pi OS (Bookworm or compatible), Python 3.9+
+- Official `pidog` package (and related hardware libs) installed on the Pi
+
+1) Clone the repo on the Pi
+
+```bash
+cd ~
+git clone https://github.com/seven-lynx/Pidog.git
+cd Pidog
+```
+
+2) Install Python dependencies
+
+```bash
+pip3 install -r requirements.txt
+```
+
+Optional: enable voice features
+
+```bash
+sudo apt update && sudo apt install -y portaudio19-dev python3-pyaudio
+pip3 install speech_recognition pyaudio
+```
+
+3) Run one of the systems
+
+PackMind (standalone AI)
+
+```bash
+python3 packmind/orchestrator.py
+# or
+python3 packmind.py
+```
+
+CanineCore (modular behaviors)
+
+```bash
+python3 main.py                # Orchestrator default
+python3 canine_core/control.py # Interactive behavior menu
+```
+
+Tip: On a development PC without hardware, many hardware services fallback to safe no-ops. Camera/audio/servos still require proper setup when you move to the Pi.
+
+## Which should I choose?
+
+- PackMind: batteries‑included AI demo that coordinates sensing, emotions, scanning, and optional mapping/navigation.
+- CanineCore: clean, composable framework to mix and match behaviors and services; ideal for building your own modules.
+
+## Features at a glance
+
+- Voice commands with optional wake word (when enabled)
+- Intelligent scanning and obstacle avoidance
+- Behavior orchestration and state handling
+- Emotional LED themes and reactive sounds
+- Optional SLAM mapping, A* navigation, and sensor‑fusion localization (PackMind)
+
+## Project layout
 
 ```
 Pidog/
-├── 📄 main.py                    # Entry point for MODULAR system
-├── 📄 README.md                  # This file
-├── 📄 requirements.txt           # Dependencies
-├── 🤖 packmind/                  # Complete AI programs (ready-to-run)
-│   ├── 🧠 advanced_pidog_ai.py  # Complete AI with all features
-│   ├── 🗺️ house_mapping.py      # SLAM mapping system
-│   ├── 🎯 pathfinding.py        # Advanced pathfinding
-│   ├── 📊 map_visualization.py   # Real-time mapping display
-│   ├── 🔄 sensor_fusion_localization.py # Multi-sensor fusion
-│   ├── ⚙️ pidog_config.py       # Config for standalone AIs
-│   ├── 📚 *.md, *.txt           # Standalone AI documentation
-│   └── 📖 README.md             # Standalone AI guide
-├── 🔧 modular_system/            # Composable framework
-│   ├── 🧠 core/                 # Core system management
-│   │   ├── master.py            # Module orchestration  
-│   │   ├── global_state.py      # State management
-│   │   ├── memory.py            # Learning system
-│   │   └── emotions.py          # Emotional intelligence
-│   ├── 🎭 behaviors/            # Behavior modules
-│   │   ├── smart_patrol.py      # Intelligent patrol
-│   │   ├── voice_patrol.py      # Voice-controlled movement
-│   │   ├── guard_mode.py        # Security monitoring
-│   │   └── ...                 # Other behaviors
-│   ├── 🛠️ utils/                # Utility functions
-│   └── 📖 README.md             # Modular system guide  
-├── 🧪 tests/                    # Test files for both systems
-├── ⚙️ config/                   # Shared configuration
-├── 📚 docs/                     # All documentation
-├── 💡 examples/                 # Example usage scripts
-└── 🔧 scripts/                  # Setup and installation
+├─ main.py                    # CanineCore entry point
+├─ canine_core/
+│  ├─ behaviors/
+│  ├─ core/                   # orchestrator, interfaces, services, state
+│  └─ config/
+├─ packmind/
+│  ├─ orchestrator.py         # PackMind entry point
+│  ├─ behaviors/ core/ services/
+│  ├─ mapping/ nav/ localization/ visualization/
+│  └─ packmind_config.py
+├─ docs/
+├─ examples/
+├─ scripts/
+└─ legacy/
 ```
 
-## 🚀 **Which System Should I Use?**
+## Developer quick start (desktop) 💻
 
-### 🤖 **Choose Standalone AIs If You Want:**
-- ✅ **Quick demos** - Show off PiDog capabilities immediately
-- ✅ **Complete solutions** - Everything included, no assembly required  
-- ✅ **Learning/studying** - Understand complete AI implementations
-- ✅ **Testing features** - Try specific AI capabilities
-- ✅ **Presentations** - Reliable, impressive demonstrations
+On Windows (PowerShell) or macOS/Linux, you can explore without hardware:
 
-### 🔧 **Choose Modular System If You Want:**
-- ✅ **Custom behaviors** - Build your own unique PiDog personality
-- ✅ **Long-term projects** - Develop and refine over time
-- ✅ **Mix and match** - Combine different behaviors creatively
-- ✅ **Learning system** - PiDog that adapts and remembers
-- ✅ **Extensibility** - Add your own modules and features
-
-## 🚀 **Quick Start**
-
-### **Option A: Standalone AI (Instant Results)**
-```bash
-# 1. Install dependencies
+```powershell
 pip install -r requirements.txt
-
-# 2. Configure (edit packmind/packmind_config.py if needed)
-
-# 3. Run any complete AI system
-python packmind/advanced_pidog_ai.py
-python packmind/house_mapping.py  
-python packmind/pathfinding.py
+python main.py                  # CanineCore
+python packmind/orchestrator.py # PackMind
 ```
 
-### **Option B: Modular System (Customizable)**
-```bash
-# 1. Install dependencies  
-pip install -r requirements.txt
+Note: Hardware‑dependent features won’t function fully without PiDog.
 
-# 2. Configure (edit canine_core/config/canine_config.py if needed)
+## Documentation
 
-# 3. Choose interactively or run the orchestrator
-python main.py               # Auto (orchestrator default)
-python canine_core/control.py  # Interactive control menu
-python main.py
-```
+- Programming Guide: `docs/PIDOG_PROGRAMMING_GUIDE.md`
+- Quick Start Programming: `docs/QUICK_START_PROGRAMMING.md`
+- API Reference: `docs/api_reference.md`
+- Voice Setup: `docs/voice_setup_instructions.md`
+- CanineCore configuration: `docs/canine_core_config_guide.md`
+- PackMind architecture: `packmind/ARCHITECTURE.md`
 
-## 🔧 Key Features
+## Troubleshooting
 
-- **🎙️ Voice Control**: Wake word activation and natural language commands
-- **🗺️ SLAM Mapping**: Advanced house mapping and localization  
-- **🛡️ Guard Mode**: Motion detection and security patrol
-- **🧠 AI Behaviors**: Intelligent pathfinding and obstacle avoidance
-- **💭 Memory System**: Learning from interactions and experiences
-- **😊 Emotional AI**: Dynamic LED emotions and behavioral responses
+- If `pidog` imports fail on the Pi, install the official SunFounder libraries and verify servo calibration.
+- For voice issues, confirm `portaudio19-dev` and `pyaudio` are installed and a default input device is set.
+- On desktops without hardware, expect safe no‑ops for hardware calls.
 
-## 📚 Module Overview
+## License
 
-### Core Modules (`src/core/`)
-- **master.py**: Main control system and module management
-- **global_state.py**: Centralized state tracking across modules
-- **memory.py**: Short-term and long-term memory with persistence
-- **emotions.py**: Emotional intelligence and LED expression system
+See `LICENSE` for details.
 
-### Behavior Modules (`src/behaviors/`)
-- **smart_patrol.py**: Intelligent autonomous patrol with obstacle avoidance
-- **voice_patrol.py**: Voice-controlled patrol and navigation
-- **guard_mode.py**: Security monitoring and motion detection
-- **idle_behavior.py**: Engaging idle state behaviors
+—
 
-### AI Modules (`src/ai/`)
-- **sensor_fusion_localization.py**: Multi-sensor localization system
-- **pathfinding.py**: A* pathfinding with dynamic obstacle avoidance
-- **house_mapping.py**: SLAM-based house mapping and room detection
-- **advanced_pidog_ai.py**: High-level AI decision making
-
-## 🧪 Testing
-
-Run individual behavior tests:
-```bash
-python tests/voice_command_test.py
-python tests/smart_patrol_test.py
-python tests/master_test.py
-```
-
-## 📖 Documentation
-
-Comprehensive guides available in the `docs/` directory:
-- Programming Guide (`PIDOG_PROGRAMMING_GUIDE.md`)
-- Quick Start Guide (`QUICK_START_PROGRAMMING.md`) 
-- Configuration Guide (`PiDog_Configuration_Guide.txt`)
-- Voice Setup Instructions (`voice_setup_instructions.md`)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the terms found in the `LICENSE` file.
-
-## 👨‍💻 Author
-
-**seven-lynx** - *Initial work and ongoing development*
-
----
-
-*Transforming PiDog into an intelligent, autonomous robotic companion! 🐕‍🦺*
+Built to help you teach, learn, and explore with PiDog.

@@ -16,7 +16,6 @@ ALIASES = [
     "idle_behavior",
     "smart_patrol",
     "smarter_patrol",
-    "reactions",
     "voice_patrol",
     "guard_mode",
     "whisper_voice_control",
@@ -40,7 +39,7 @@ def main() -> None:
     modes = ["Run a single module", "Run a custom sequence", "Run random cycle", "Run a preset"]
     mode_idx = prompt_menu("Choose a mode:", modes)
 
-    # Build orchestrator (uses default YAML config if present)
+    # Build orchestrator (uses CanineConfig by default; presets selectable below)
     orch = Orchestrator(config_path=None)
 
     if mode_idx == 0:  # single

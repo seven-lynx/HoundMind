@@ -63,6 +63,9 @@ class CanineConfig:
     HEAD_SCAN_SPEED = 70
     SCAN_SAMPLES = 3
     SCAN_WHILE_MOVING = True
+    # Additional scan tuning
+    SCAN_DEBOUNCE_S = 0.05              # ignore jittery repeat reads within this window
+    SCAN_SMOOTHING_ALPHA = 0.4          # EMA smoothing factor for distances
 
     # =====================================================================
     # SOUND RESPONSE
@@ -70,14 +73,17 @@ class CanineConfig:
     SOUND_HEAD_SENSITIVITY = 2.5
     SOUND_BODY_TURN_THRESHOLD = 45
     SOUND_RESPONSE_ENERGY_MIN = 0.4
+    SOUND_COOLDOWN_S = 1.5              # cooldown between sound-driven turns
 
     # =====================================================================
     # REACTIONS (IMU / TOUCH / SOUND)
     # =====================================================================
-    REACTIONS_INTERVAL = 0.5            # seconds between reaction checks
-    REACTIONS_LIFT_THRESHOLD = 25000    # IMU accel (x) above this → lifted
+    REACTIONS_INTERVAL = 0.5            
+    REACTIONS_LIFT_THRESHOLD = 25000    
     REACTIONS_PLACE_THRESHOLD = -25000  # IMU accel (x) below this → placed down
     REACTIONS_FLIP_ROLL_THRESHOLD = 30000  # abs(roll) above this → flipped
+    TOUCH_DEBOUNCE_S = 0.1
+    REACTION_COOLDOWN_S = 1.0
 
     # =====================================================================
     # ENERGY SYSTEM
@@ -93,6 +99,9 @@ class CanineConfig:
     # =====================================================================
     LOW_BATTERY_THRESHOLD = 20
     CRITICAL_BATTERY_THRESHOLD = 10
+    LOW_BATTERY_REDUCE_SPEED_FACTOR = 0.8
+    CRITICAL_BATTERY_REST_BEHAVIOR = True
+    CHARGING_DETECT_MIN_DELTA_V = 0.1
 
     # =====================================================================
     # VOICE
@@ -101,17 +110,24 @@ class CanineConfig:
     VOICE_VOLUME_DEFAULT = 70
     VOICE_VOLUME_EXCITED = 80
     VOICE_VOLUME_QUIET = 40
+    VOICE_TTS_RATE = 1.0
+    VOICE_TTS_PITCH = 1.0
 
     # =====================================================================
     # LOGGING
     # =====================================================================
     LOG_MAX_ENTRIES = 1000
     LOG_STATUS_INTERVAL = 10
+    LOG_LEVEL = "INFO"
+    LOG_FILE_MAX_MB = 10
+    LOG_FILE_BACKUPS = 5
 
     # =====================================================================
     # CONTROL & UI
     # =====================================================================
     INTERRUPT_KEY = "esc"
+    INTERRUPT_LONG_PRESS_S = 1.0
+    UI_STATUS_OVERLAY = False
 
     # =====================================================================
     # GUARD MODE
@@ -123,12 +139,57 @@ class CanineConfig:
         "idle_behavior",
         "smart_patrol",
         "smarter_patrol",
-        "reactions",
         "voice_patrol",
         "guard_mode",
         "whisper_voice_control",
         "find_open_space",
     ]
+
+    # =====================================================================
+    # MOVEMENT / KINEMATICS TUNING
+    # =====================================================================
+    WALK_GAIT = "default"                # placeholder for future gait profiles
+    TURN_BIAS_DEGREES = 0                # corrects systemic turn bias
+    STEP_PAUSE_S = 0.02                  # micro pause between steps
+    SPEED_RAMP_UP_MS = 150
+    SPEED_RAMP_DOWN_MS = 150
+
+    # =====================================================================
+    # OBSTACLE AVOIDANCE DETAILS
+    # =====================================================================
+    OBSTACLE_HYSTERESIS_CM = 3.0
+    OBSTACLE_SIDE_BIAS = 0.0            # negative favors left; positive favors right
+    BACKUP_DISTANCE_SCALE = 1.0         # scales BACKUP_STEPS on emergency
+
+    # =====================================================================
+    # SENSORS / FILTERING
+    # =====================================================================
+    IMU_LPF_ALPHA = 0.3
+    ULTRASONIC_MIN_CM = 3.0
+    ULTRASONIC_MAX_CM = 200.0
+    ULTRASONIC_OUTLIER_REJECT_Z = 2.5
+
+    # =====================================================================
+    # BEHAVIOR ORCHESTRATION
+    # =====================================================================
+    BEHAVIOR_SELECTION_MODE = "weighted"  # or "sequential"
+    BEHAVIOR_WEIGHTS = {                   # used when selection mode = weighted
+        "idle_behavior": 1.0,
+        "smart_patrol": 1.0,
+        "smarter_patrol": 1.0,
+        "voice_patrol": 1.0,
+        "guard_mode": 1.0,
+        "whisper_voice_control": 1.0,
+        "find_open_space": 1.0,
+    }
+    BEHAVIOR_MIN_DWELL_S = 10.0
+
+    # =====================================================================
+    # SAFETY
+    # =====================================================================
+    EMERGENCY_STOP_POSE = "crouch"
+    SAFETY_MAX_TILT_DEG = 45
+    SAFETY_MAX_ROLL_DEG = 45
 
 
 class SimplePreset(CanineConfig):
@@ -155,7 +216,6 @@ class PatrolPreset(CanineConfig):
         "idle_behavior",
         "smart_patrol",
         "smarter_patrol",
-        "reactions",
         "find_open_space",
     ]
 
@@ -165,7 +225,6 @@ class InteractivePreset(CanineConfig):
     ENABLE_EMOTIONAL_SYSTEM = True
     AVAILABLE_BEHAVIORS = [
         "idle_behavior",
-        "reactions",
         "voice_patrol",
         "whisper_voice_control",
         "guard_mode",

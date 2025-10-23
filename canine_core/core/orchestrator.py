@@ -8,7 +8,6 @@ from .bus import EventBus
 from .state import StateStore
 from .services.logging import LoggingService
 from .services.hardware import HardwareService
-from .services.config import load_config
 from ..config.canine_config import PRESETS, CanineConfig
 from .services.sensors import SensorService
 from .services.motion import MotionService
@@ -48,8 +47,13 @@ class LegacyThreadBehavior:
 
 class Orchestrator:
     def __init__(self, config_path: str | None) -> None:
-        # Try YAML first; if missing, fall back to Python config defaults
-        self.config = load_config(config_path or "canine_core/config/canine_core.yaml")
+        # Use new Python-based config with optional preset string
+        # If config_path matches a preset name, use that; otherwise default
+        if isinstance(config_path, str) and config_path.lower() in PRESETS:
+            self.config = PRESETS[config_path.lower()]()
+        else:
+            # Default config (class with sensible defaults)
+            self.config = CanineConfig()
         self.bus = EventBus()
         self.state = StateStore()
         self.logger = LoggingService(prefix="Orchestrator")
@@ -88,13 +92,15 @@ class Orchestrator:
             hardware=self.hardware,
             sensors=sensors,
             emotions=emotions,
+            motion=motion,
+            voice=voice,
             memory=None,
             state=self.state,
             logger=self.logger,
             config=self.config,
             publish=self.bus.publish,
         )
-        # Optionally expose extra services via context if behaviors import them dynamically
+        # Optionally expose extra services on orchestrator for future use
         self.voice = voice
         self.motion = motion
 
@@ -132,8 +138,13 @@ class Orchestrator:
 
     async def run(self) -> None:
         await self.init()
-        # Simple loop over configured behaviors
-        for spec in (self.config.behavior_queue or []):
+        # Determine which behaviors to run:
+        # Prefer explicit behavior_queue if present; otherwise use AVAILABLE_BEHAVIORS
+        queue = getattr(self.config, "behavior_queue", None)
+        if not queue:
+            queue = list(getattr(self.config, "AVAILABLE_BEHAVIORS", ["idle_behavior"]))
+        # Simple loop over configured/available behaviors
+        for spec in queue:
             beh = self._resolve_behavior(spec)
             self._active = beh
             # mypy: _ctx is initialized in init()
@@ -186,13 +197,13 @@ class Orchestrator:
                 await beh.stop()
             history.append(pick)
 
-async def main_async(config_path: str | None = None) -> None:
-    cfg = config_path or "canine_core/config/canine_core.yaml"
-    orch = Orchestrator(cfg)
+async def main_async(config_preset: str | None = None) -> None:
+    # Optionally pass a preset name from PRESETS; defaults to CanineConfig
+    orch = Orchestrator(config_preset)
     await orch.run()
 
-def main(config_path: str | None = None) -> None:
-    asyncio.run(main_async(config_path))
+def main(config_preset: str | None = None) -> None:
+    asyncio.run(main_async(config_preset))
 
 if __name__ == "__main__":
     main()

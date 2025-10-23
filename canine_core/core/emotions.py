@@ -1,3 +1,4 @@
+raise ImportError("Archived module: use canine_core.core.services.emotions.EmotionService instead.")
 #!/usr/bin/env python3
 """
 PiDog Emotion Module

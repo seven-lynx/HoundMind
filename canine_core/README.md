@@ -1,163 +1,162 @@
-# PiDog Modular System 🔧
+# CanineCore 🔧
 
-This directory contains the **modular, composable PiDog system** where you can mix and match behaviors, create custom combinations, and build your own PiDog personality.
+Modern, modular behavior framework for PiDog. CanineCore provides an async orchestrator, shared services, and a clean Behavior interface so you can compose, run, and extend dog behaviors without wiring hardware details in every module.
 
-## 🎯 **What is the Modular System?**
+Independence: CanineCore and PackMind are related but distinct projects. They do not import or call into each other.
 
-This is a **flexible framework** that allows you to:
-- **Mix and match** different behaviors
-- **Create custom combinations** of AI features
-- **Build your own** PiDog personality 
-- **Extend functionality** by adding new modules
-- **Hot-swap behaviors** during runtime
-
-**Key Difference:** Unlike standalone AIs, this system is designed for **customization and extension**.
-
-## 📁 **System Architecture**
+## 📁 System Architecture
 
 ```
-modular_system/
-├── 🧠 core/           # Core system management
-│   ├── master.py      # Module orchestration and control
-│   ├── global_state.py # Centralized state management  
-│   ├── memory.py      # Learning and memory system
-│   ├── emotions.py    # Emotional intelligence
-│   └── state_functions.py # State transitions
-├── 🎭 behaviors/      # Individual behavior modules
-│   ├── smart_patrol.py # Intelligent patrol behavior
-│   ├── voice_patrol.py # Voice-controlled movement
-│   ├── guard_mode.py  # Security and monitoring  
-│   ├── idle_behavior.py # Engaging idle activities
-│   ├── actions.py     # Action primitives
-│   └── reactions.py   # Reactive behaviors
-└── 🛠️ utils/          # Utility functions
-    ├── turn_toward_noise.py # Audio response
-    └── function_list.py # Function references
+canine_core/
+├── core/
+│   ├── orchestrator.py      # Wires services, resolves aliases, runs behaviors
+│   ├── interfaces.py        # Behavior, BehaviorContext, Event contracts
+│   ├── state.py             # Validated StateStore (no legacy global state)
+│   ├── bus.py memory.py emotions.py global_state.py (legacy bridge if present)
+│   └── services/            # sensors.py, motion.py, emotions.py, voice.py, hardware.py, logging.py
+├── behaviors/               # Class-based behaviors (auto-discovered)
+├── config/                  # Defaults + presets
+└── control.py               # Beginner-friendly interactive launcher
 ```
 
-## 🔄 **How It Works**
+## 🔄 How It Works
 
-### 1. **Master Controller** (`core/master.py`)
-- Dynamically loads and switches between behavior modules
-- Manages execution timing and transitions
-- Handles user interrupts and manual control
-- Prevents module conflicts and memory leaks
+1) Orchestrator (`core/orchestrator.py`)
+- Loads behaviors by alias or explicit module:Class
+- Injects shared services via BehaviorContext
+- Manages lifecycle: start → on_event → stop
 
-### 2. **Global State** (`core/global_state.py`)  
-- Tracks active behaviors across all modules
-- Maintains consistent state between switches
-- Provides inter-module communication
-- Stores persistent settings and preferences
+2) State & Services
+- `state.py` provides a validated central store
+- Services expose hardware-safe capabilities (sim-safe where possible)
+- Access through `BehaviorContext` only—avoid direct hardware imports
 
-### 3. **Memory System** (`core/memory.py`)
-- **Short-term memory** for recent interactions
-- **Long-term memory** with persistent storage  
-- **Learning patterns** from user behavior
-- **Automatic cleanup** of old memories
+3) Behaviors
+- Class-based, discoverable via `BEHAVIOR_CLASS` or a `get_behavior()` factory
+- Use MotionService, SensorService, EmotionService, VoiceService
 
-### 4. **Behavior Modules** (`behaviors/`)
-- **Independent implementations** of specific behaviors
-- **Standard interface** for easy integration
-- **Hot-swappable** during runtime
-- **Configurable parameters** for customization
+## 🚀 Run It
 
-## 🚀 **Running the Modular System**
+From the project root:
 
-### **Entry Point:** Use the main launcher
-```bash
-# From project root
-python main.py
+```powershell
+python main.py                # Orchestrator default
+python canine_core/control.py # Interactive control menu
 ```
 
-### **Direct Module Control:**
-```bash  
-# Run master controller directly
-cd modular_system/core
-python master.py
+## 🎮 Interactive Control
+
+- Automatic mode cycles behaviors intelligently
+- Press the interruption key to select behaviors manually
+## What’s inside
+
+- Orchestrator (async) to run one or many behaviors
+- Event bus and validated state store
+- Shared services (sim‑safe): Sensors, Motion, Emotions (RGB), Voice, Hardware, Logging, Config
+- Behavior v2 contract with simple lifecycle start/on_event/stop and auto‑discovery via BEHAVIOR_CLASS
+
+Directory highlights:
+
+```
+canine_core/
+├─ behaviors/           # First‑class behaviors (class‑based)
+├─ config/              # Python config with presets
+├─ core/
+│  ├─ orchestrator.py   # Wires services, resolves aliases, runs behaviors
+│  ├─ interfaces.py     # Behavior, BehaviorContext, Event contracts
+│  ├─ state.py          # Validated StateStore (no legacy global state)
+│  └─ services/         # sensors.py, motion.py, emotions.py, voice.py, hardware.py, logging.py
+└─ control.py           # Beginner‑friendly interactive launcher
 ```
 
-## 🎮 **Interactive Control**
+## Run it (interactive)
 
-The modular system provides **real-time control**:
+```powershell
+python canine_core/control.py
+```
 
-- **Automatic Mode** - Cycles through behaviors intelligently
-- **Manual Selection** - Press interruption key to choose behaviors
-- **Dynamic Switching** - Change behaviors without restarting
-- **State Persistence** - Maintains context between switches
+You’ll be prompted to run a single behavior, a sequence, a random cycle, or a preset. The launcher uses beginner‑friendly aliases that the orchestrator resolves:
 
-## 🧩 **Available Modules**
+- idle_behavior
+- smart_patrol (smarter_patrol is internally mapped here)
+- voice_patrol
+- whisper_voice_control
+- guard_mode
+- find_open_space
+- reactions
 
-### **Core Behaviors:**
-- `smart_patrol` - Intelligent autonomous patrol (includes former "smarter_patrol" features)
-- `voice_patrol` - Voice-controlled navigation  
-- `guard_mode` - Security monitoring and alerts
-- `idle_behavior` - Engaging idle state activities
+## Configuration
 
-### **Interaction Modules:**
-- `whisper_voice_control` - Free-form voice control (wake word optional)
-- `voice_patrol` - Wake-word voice patrol commands
-- `reactions` - Environmental response behaviors
-- `maintenance` - System health and diagnostics
+- Canonical file: `canine_core/config/canine_config.py` (Python class with sensible defaults and presets: simple, patrol, interactive)
+- Presets are provided via `canine_core/config/canine_config.py` (Simple, Patrol, Interactive)
+- Presets expose an `AVAILABLE_BEHAVIORS` list used by `control.py`
+- See the detailed guide: `docs/canine_core_config_guide.md`
 
-## ⚙️ **Configuration**
+Key concepts used by behaviors:
 
-The modular system uses **distributed configuration**:
+- Movement speeds and step counts (WALK_STEPS_*, TURN_STEPS_*, SPEED_*)
+- Obstacle thresholds and scan timing (OBSTACLE_*, HEAD_SCAN_*, OBSTACLE_SCAN_INTERVAL)
+- Voice settings (WAKE_WORD, VOICE_* volumes)
+- Feature toggles (ENABLE_* flags)
 
-### **Global Config** (`../config/canine_config.py`)
-- System-wide settings
-- Hardware parameters  
-- Safety thresholds
+## Behavior contract (v2)
 
-### **Module-Specific Config**
-Each module can have its own configuration within the file.
+Implement a class with the lifecycle and expose it via `BEHAVIOR_CLASS`:
 
-Notes:
-- `smarter_patrol` now aliases `smart_patrol` for a single, unified patrol module.
-- Voice control provides two separate behaviors (voice_patrol, whisper_voice_control) so users can choose their preferred mode.
-
-## 🔧 **Customization & Extension**
-
-### **Adding New Behaviors:**
-1. Create new module in `behaviors/`
-2. Implement `start_behavior()` function
-3. Add to module registry in `master.py`
-4. Test with existing system
-
-### **Custom Combinations:**
 ```python
-# Example: Custom behavior sequence
-def custom_patrol():
-    run_module("smart_patrol", 30)  # 30 seconds
-    run_module("guard_mode", 60)    # 1 minute  
-    run_module("voice_patrol", 45)  # 45 seconds
+from canine_core.core.interfaces import Behavior, BehaviorContext, Event
+
+class MyBehavior(Behavior):
+    async def start(self, ctx: BehaviorContext) -> None:
+        ctx.logger.info("MyBehavior starting")
+        ctx.emotions.set_color((0, 64, 255))
+
+    async def on_event(self, event: Event) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+BEHAVIOR_CLASS = MyBehavior
 ```
 
-## 🔗 **vs. Standalone AIs**
+The orchestrator auto‑discovers behaviors via `BEHAVIOR_CLASS` or a `get_behavior()` factory. It also supports explicit `module:Class` references and friendly aliases.
 
-| **Modular System** | **Standalone AIs** |
-|------------------|--------------------|
-| 🔧 Mix and match behaviors | ✅ Complete programs |
-| 🔧 Highly customizable | ✅ Ready-to-run |
-| 🔧 Extensible framework | ✅ Self-contained |
-| 🔧 Learning and memory | ✅ Quick demos |
-| 🔧 Long-term projects | ✅ Immediate results |
+## Services you can use
 
-## 💡 **When to Use Modular System**
+- SensorService: read distances, basic head sweeps (sim‑safe)
+- MotionService: `act(action, **kwargs)`, `wait()` for actions
+- EmotionService: LED color/effects with safety and an `update(color, effect_name=None)` helper
+- VoiceService: async command stream with optional wake word
+- HardwareService: wraps Pidog/RGB when available; safe no‑ops on dev hosts
+- LoggingService: simple, prefixed logging
 
-- **Custom PiDog personalities** - Build unique behavior combinations
-- **Long-term projects** - Develop and refine over time  
-- **Learning and experimentation** - Try different module combinations
-- **Production use** - Robust, maintainable system architecture
-- **Team development** - Multiple people working on different modules
+Access these via `BehaviorContext` (injected by the orchestrator) to avoid direct hardware imports.
 
-## 🧪 **Development Workflow**
+## Included behaviors
 
-1. **Start with existing modules** - Learn the system
-2. **Customize parameters** - Tune behavior to your needs
-3. **Create custom sequences** - Combine modules uniquely  
-4. **Develop new modules** - Add your own behaviors
-5. **Share and iterate** - Build on community contributions
+- IdleBehavior: subtle ambient actions
+- SmartPatrolBehavior: unified smart/smarter patrol
+- GuardModeBehavior: simple forward proximity alert/scan
+- ReactionsBehavior: quick IMU/touch/sound reactions (config‑driven)
+- FindOpenSpaceBehavior: scan‑select‑move toward open direction
+- VoicePatrolBehavior: wake‑word voice control
+- WhisperVoiceControlBehavior: free‑form voice control (wake word optional)
 
----
+## Migration notes (legacy → CanineCore)
 
-*For ready-to-run complete AI systems, see `../packmind/`* 🤖
+- Removed legacy global state, master.py, memory/emotions/state_functions, and all legacy behaviors
+- No `actions.py` dependency: use MotionService, SensorService, and EmotionService instead
+- `smarter_patrol` consolidated into `smart_patrol` (orchestrator keeps the alias)
+- For a one‑off PiDog method inventory, see `docs/listing_pidog_functions.md`
+
+## Troubleshooting
+
+- On development machines without PiDog hardware, hardware‑backed calls become safe no‑ops and will log a warning on init
+- Voice behavior requires audio stack on the host; disable via `ENABLE_VOICE_COMMANDS=False` or choose a non‑voice preset
+
+## See also
+
+- Config guide: `docs/canine_core_config_guide.md`
+- Function inventory script: `docs/listing_pidog_functions.md`
+- Standalone AI (PackMind): `packmind/` for ready‑to‑run experiences

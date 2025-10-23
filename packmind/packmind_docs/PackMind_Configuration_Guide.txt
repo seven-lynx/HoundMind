@@ -1,0 +1,487 @@
+# PiDog Configuration System Guide
+
+"""
+USAGE INSTRUCTIONS FOR PIDOG CONFIGURATION SYSTEM
+================================================
+
+The PiDog AI system now uses a separate configuration file (packmind_config.py) that allows 
+you to easily customize your PiDog's behavior without touching the main AI code.
+
+## QUICK START
+
+1. Edit the file: packmind/packmind_config.py
+2. Modify values in the PiDogConfig class 
+3. Restart your PackMind script to apply changes
+4. Use preset configurations or create your own
+
+## CONFIGURATION PRESETS
+
+The system includes 4 ready-made configurations:
+
+### DEFAULT MODE (PiDogConfig)
+- All features enabled with balanced settings
+- Good for general use and testing
+
+### SIMPLE MODE (SimpleConfig) 
+- Minimal features, conservative behavior
+- No SLAM mapping, no advanced AI
+- Perfect for basic operation or limited hardware
+
+### ADVANCED MODE (AdvancedConfig)
+- All features enabled, aggressive exploration  
+- Fast movement, close obstacle thresholds
+- Best for demonstrations and outdoor use
+
+### INDOOR PET MODE (IndoorPetConfig)
+- Home-friendly settings with learning
+- Gentle movement, quieter volume
+- Safe distances, emotional responses
+
+### EXPLORER MODE (ExplorerConfig)
+- Focused on mapping and navigation
+- High-frequency SLAM updates
+- Moderate speeds for consistent mapping
+
+## HOW TO USE PRESETS
+
+### Method 1: Voice Commands (Runtime Switching)
+- "PiDog, simple mode" - Switch to SimpleConfig
+- "PiDog, advanced mode" - Switch to AdvancedConfig  
+- "PiDog, indoor mode" - Switch to IndoorPetConfig
+- "PiDog, explorer mode" - Switch to ExplorerConfig
+- "PiDog, show config" - Display current configuration
+
+### Method 2: Edit packmind_config.py Default
+Find this line at the bottom of packmind/packmind_config.py:
+```python
+# Change this to set your default configuration
+DEFAULT_CONFIG = "default"  # Options: default, simple, advanced, indoor, explorer
+```
+
+### Method 3: Custom Configuration
+Create your own configuration class in packmind_config.py:
+```python
+class MyCustomConfig(PiDogConfig):
+    # Your custom settings here
+    SPEED_NORMAL = 90
+    ENABLE_VOICE_COMMANDS = False
+    # etc...
+```
+
+## FEATURE TOGGLES (Enable/Disable Major Systems)
+
+All these settings are found in the packmind_config.py file, in the PiDogConfig class:
+
+### ENABLE_VOICE_COMMANDS = True/False
+- Controls voice recognition with wake word "PiDog"
+- Requires: pip install speech_recognition pyaudio
+- When disabled: No voice commands, saves memory
+
+### ENABLE_SLAM_MAPPING = True/False  
+- Controls advanced house mapping system
+- Requires: pip install numpy
+- When disabled: Uses simple obstacle avoidance instead
+
+### ENABLE_SENSOR_FUSION = True/False
+- Controls advanced localization (IMU + ultrasonic + particle filter)
+- Requires SLAM_MAPPING enabled and numpy
+- When disabled: Uses basic dead reckoning
+
+### ENABLE_INTELLIGENT_SCANNING = True/False
+- Controls 3-way obstacle scanning during movement
+- When disabled: Uses single forward sensor only
+
+### ENABLE_EMOTIONAL_SYSTEM = True/False
+- Controls LED emotions and behavioral responses
+- When disabled: No LED changes, neutral behavior
+
+### ENABLE_LEARNING_SYSTEM = True/False
+- Controls touch preference learning over time
+- When disabled: Static responses to touch
+
+### ENABLE_PATROL_LOGGING = True/False
+- Controls comprehensive activity logging with timestamps
+- When disabled: No log files created, saves storage
+
+### ENABLE_AUTONOMOUS_NAVIGATION = True/False
+- Controls AI pathfinding and exploration
+- Requires SLAM_MAPPING enabled
+- When disabled: Manual movement patterns only
+
+## OBSTACLE AVOIDANCE SETTINGS
+
+### OBSTACLE_IMMEDIATE_THREAT = 20.0 (cm)
+- Distance to trigger immediate stop and avoidance
+- Lower = more cautious, Higher = more adventurous
+
+### OBSTACLE_APPROACHING_THREAT = 35.0 (cm)
+- Distance to prepare for avoidance (slow down)
+- Should be larger than IMMEDIATE_THREAT
+
+### OBSTACLE_EMERGENCY_STOP = 15.0 (cm)
+- Emergency halt distance for safety
+- Should be smaller than IMMEDIATE_THREAT
+
+### OBSTACLE_SAFE_DISTANCE = 40.0 (cm)
+- Minimum distance to consider path "clear"
+- Used for pathfinding decisions
+
+### OBSTACLE_SCAN_INTERVAL = 0.5 (seconds)
+- Time between scans while moving
+- Lower = more responsive, Higher = less CPU usage
+
+## MOVEMENT PARAMETERS
+
+### Turn Steps
+- TURN_STEPS_SMALL = 1    # Quick adjustment
+- TURN_STEPS_NORMAL = 2   # Standard turn
+- TURN_STEPS_LARGE = 4    # Near 180° turn
+
+### Walk Steps  
+- WALK_STEPS_SHORT = 1    # Small forward step
+- WALK_STEPS_NORMAL = 2   # Standard walk
+- WALK_STEPS_LONG = 3     # Longer movement
+
+### BACKUP_STEPS = 3
+- Steps to take when backing up from obstacles
+
+### Movement Speeds (0-255, PiDog servo range)
+- SPEED_SLOW = 80         # Careful movement
+- SPEED_NORMAL = 120      # Standard speed  
+- SPEED_FAST = 200        # Energetic movement
+- SPEED_EMERGENCY = 100   # Emergency maneuvers
+
+### Turn Speeds (should be faster than walk speeds)
+- SPEED_TURN_SLOW = 100   # Turning when walking slow
+- SPEED_TURN_NORMAL = 200 # Turning when walking normal
+- SPEED_TURN_FAST = 220   # Turning when walking fast
+
+### Turn Calibration (at SPEED_TURN_NORMAL=200)
+- TURN_DEGREES_PER_STEP = 15  # ~15° per step
+- TURN_45_DEGREES = 3         # 3 steps ≈ 45°
+- TURN_90_DEGREES = 6         # 6 steps ≈ 90° 
+- TURN_180_DEGREES = 12       # 12 steps ≈ 180°
+
+## BEHAVIOR TIMING
+
+### PATROL_DURATION_MIN/MAX = 30/120 (seconds)
+- How long to stay in patrol behavior
+
+### REST_DURATION = 20 (seconds)
+- How long to rest when tired
+
+### INTERACTION_TIMEOUT = 10 (seconds)
+- How long to wait for user interaction
+
+### VOICE_COMMAND_TIMEOUT = 5 (seconds)
+- Max time between wake word and command
+
+## VOICE SETTINGS
+
+### WAKE_WORD = "pidog"
+- Word to activate voice recognition
+- Change to your preference
+
+### Voice Volumes (0-100)
+- VOICE_VOLUME_DEFAULT = 70
+- VOICE_VOLUME_EXCITED = 80  
+- VOICE_VOLUME_QUIET = 40
+
+## ADVANCED SYSTEM CONTROLS
+
+### Health and performance
+- HEALTH_MONITOR_INTERVAL_S: How often to sample health (seconds)
+- HEALTH_LOAD_PER_CORE_WARN_MULTIPLIER: Load/core threshold for degraded mode
+- HEALTH_TEMP_WARN_C: CPU temperature (C) threshold for degraded mode
+- HEALTH_MEM_USED_WARN_PCT: Memory usage (%) threshold for degraded mode
+- HEALTH_SCAN_INTERVAL_MULTIPLIER | HEALTH_SCAN_INTERVAL_ABS_DELTA: How much to slow scans when degraded
+- HEALTH_ACTIONS: Planned actions when degraded (e.g., "throttle_scans")
+
+### Scanning and sensing
+- SCAN_INTERVAL_MIN | SCAN_INTERVAL_MAX: Allowed bounds for scan cadence
+- SCAN_DYNAMIC_AGGRESSIVENESS (0..1): How aggressively to adjust scan rate
+- SCAN_DEBOUNCE_S: Debounce window to ignore jittery sensor updates
+- SCAN_SMOOTHING_ALPHA (0..1): EMA smoothing factor for distance readings
+- SENSOR_MONITOR_RATE_HZ: Sensor polling rate
+- SENSOR_MONITOR_BACKOFF_ON_ERROR_S: Backoff after sensor errors
+
+### Voice runtime
+- VOICE_WAKE_TIMEOUT_S: Time window to capture a command after wake word
+- VOICE_VAD_SENSITIVITY (0..1): Voice activity detection sensitivity
+- VOICE_MIC_INDEX: Input device index
+- VOICE_LANGUAGE: ASR language code (e.g., en-US)
+- VOICE_NOISE_SUPPRESSION: Enable noise suppression if supported
+
+### Safety / watchdog
+- WATCHDOG_HEARTBEAT_INTERVAL_S: Heartbeat cadence from main loop
+- WATCHDOG_TIMEOUT_S: Time before triggering safety action
+- WATCHDOG_ACTION: Action on timeout (e.g., stop_and_crouch)
+
+### Logging / telemetry
+- LOG_LEVEL: Overall log level (DEBUG/INFO/WARN/ERROR)
+- LOG_FILE_MAX_MB | LOG_FILE_BACKUPS: JSON log rotation settings
+- TELEMETRY_ENABLED: Enable lightweight telemetry export
+- TELEMETRY_SAMPLE_INTERVAL_S: Telemetry sampling cadence
+- TELEMETRY_ENDPOINT: Optional endpoint for telemetry
+
+### Learning / persistence
+- LEARNING_STATE_PATH: Path to persistence file for learning state
+- LEARNING_AUTOSAVE_INTERVAL_S: Autosave interval
+- LEARNING_DECAY: Long-term decay of learned values
+
+### Navigation (optional)
+- NAV_REPLAN_INTERVAL_S: Replanning cadence
+- NAV_GOAL_TOLERANCE_CM: Goal acceptance radius
+- NAV_OBSTACLE_INFLATION_CM: Safety inflation around obstacles
+- NAV_COST_TURN_WEIGHT | NAV_COST_FORWARD_WEIGHT: Motion cost weights
+
+## CONFIGURATION DETAILS
+
+### SimpleConfig Settings
+```python
+class SimpleConfig(PiDogConfig):
+    # Disabled features for simplicity
+    ENABLE_SLAM_MAPPING = False
+    ENABLE_SENSOR_FUSION = False  
+    ENABLE_INTELLIGENT_SCANNING = False
+    ENABLE_AUTONOMOUS_NAVIGATION = False
+    ENABLE_EMOTIONAL_SYSTEM = False
+    ENABLE_LEARNING_SYSTEM = False
+    
+    # Conservative obstacle avoidance
+    OBSTACLE_IMMEDIATE_THREAT = 30.0
+    OBSTACLE_APPROACHING_THREAT = 50.0
+    
+    # Slower, careful movement
+    SPEED_NORMAL = 80
+    SPEED_FAST = 100
+    SPEED_TURN_NORMAL = 120
+    TURN_STEPS_NORMAL = 1
+```
+
+### AdvancedConfig Settings
+```python
+class AdvancedConfig(PiDogConfig):
+    # All features enabled
+    ENABLE_SLAM_MAPPING = True
+    ENABLE_SENSOR_FUSION = True
+    ENABLE_INTELLIGENT_SCANNING = True
+    ENABLE_AUTONOMOUS_NAVIGATION = True
+    ENABLE_EMOTIONAL_SYSTEM = True
+    ENABLE_LEARNING_SYSTEM = True
+    ENABLE_PATROL_LOGGING = True
+    
+    # Aggressive exploration
+    OBSTACLE_IMMEDIATE_THREAT = 15.0
+    OBSTACLE_APPROACHING_THREAT = 25.0
+    
+    # Fast, energetic movement
+    SPEED_NORMAL = 120
+    SPEED_FAST = 200
+    SPEED_TURN_NORMAL = 200
+    SPEED_TURN_FAST = 220
+```
+
+### IndoorPetConfig Settings
+```python
+class IndoorPetConfig(PiDogConfig):
+    # Indoor-friendly features
+    ENABLE_SLAM_MAPPING = True
+    ENABLE_SENSOR_FUSION = False  # Not needed indoors
+    ENABLE_INTELLIGENT_SCANNING = True
+    ENABLE_EMOTIONAL_SYSTEM = True
+    ENABLE_LEARNING_SYSTEM = True
+    ENABLE_PATROL_LOGGING = True
+    ENABLE_AUTONOMOUS_NAVIGATION = False  # Manual control
+    
+    # Safe indoor distances
+    OBSTACLE_IMMEDIATE_THREAT = 25.0
+    OBSTACLE_APPROACHING_THREAT = 40.0
+    
+    # Gentle movement for indoors
+    SPEED_NORMAL = 100
+    SPEED_FAST = 150
+    VOICE_VOLUME_DEFAULT = 50  # Quieter indoors
+    
+    # More responsive to interaction
+    ENERGY_INTERACTION_BOOST = 0.08
+    INTERACTION_TIMEOUT = 15
+```
+
+### ExplorerConfig Settings
+```python
+class ExplorerConfig(PiDogConfig):
+    # Full exploration capabilities
+    ENABLE_SLAM_MAPPING = True
+    ENABLE_SENSOR_FUSION = True
+    ENABLE_INTELLIGENT_SCANNING = True
+    ENABLE_AUTONOMOUS_NAVIGATION = True
+    ENABLE_PATROL_LOGGING = True
+    
+    # Focus on mapping (not emotions)
+    ENABLE_EMOTIONAL_SYSTEM = False
+    ENABLE_LEARNING_SYSTEM = False
+    
+    # Balanced exploration settings
+    OBSTACLE_IMMEDIATE_THREAT = 18.0
+    OBSTACLE_APPROACHING_THREAT = 30.0
+    
+    # Reliable movement for mapping
+    SPEED_NORMAL = 120
+    SPEED_FAST = 180
+    
+    # High-frequency mapping updates
+    SLAM_UPDATE_FREQUENCY = 15
+    LOG_STATUS_INTERVAL = 5
+```
+
+## RUNTIME MODE SWITCHING
+
+You can switch between preset configurations during operation using voice commands:
+
+- "PiDog, simple mode" - Switch to SimpleConfig (minimal features)
+- "PiDog, advanced mode" - Switch to AdvancedConfig (all features)
+- "PiDog, indoor mode" - Switch to IndoorPetConfig (home-friendly)
+- "PiDog, explorer mode" - Switch to ExplorerConfig (mapping focus)
+- "PiDog, show config" - Display current configuration name and key settings
+- "PiDog, status" - Show system status and active features
+
+## SPEED AND TURN CALIBRATION
+
+### Voice Command Testing
+Use these voice commands to test and calibrate movement:
+
+- "PiDog, test walk slow/normal/fast" - Test walking speeds
+- "PiDog, test turn 45/90/180" - Test turn angles
+
+### Speed Calibration Process
+1. Test current speeds: "PiDog, test walk normal"
+2. If too slow: Edit SPEED_NORMAL in packmind_config.py (try 140-150)
+3. If too fast: Edit SPEED_NORMAL in packmind_config.py (try 100-110)
+4. Restart PiDog AI to apply changes
+5. Test turns: "PiDog, test turn 90"
+6. Adjust TURN_90_DEGREES in packmind_config.py if not accurate (5-7 steps typical range)
+7. Update TURN_DEGREES_PER_STEP accordingly
+
+### Natural Movement Guidelines
+- Turn speeds should be faster than walk speeds for natural appearance
+- SPEED_TURN_NORMAL should be 1.5-2x SPEED_NORMAL
+- 3 steps at speed 200 ≈ 45° turn (baseline for calibration)
+- Adjust TURN_DEGREES_PER_STEP in packmind_config.py to match your surface and PiDog
+- All speed settings are in packmind_config.py for easy editing
+
+## CONFIGURATION FILE SETUP
+
+### Initial Setup
+1. Run: `python scripts/setup_pidog.py` (setup assistant with dependency checking)
+2. Edit: `packmind/packmind_config.py` to customize settings
+3. Test: `python packmind/packmind_config.py` (validates configuration)
+4. Run: `python packmind/orchestrator.py`
+
+### Configuration Testing
+```bash
+# Test configuration validity
+python packmind/packmind_config.py
+
+# Test all presets (Python one-liner)
+python - <<PY
+from packmind.packmind_config import load_config, validate_config
+for name in ['default','simple','advanced','indoor','explorer']:
+    print(name, ':', validate_config(load_config(name)))
+PY
+```
+
+### Creating Custom Configurations
+Add your custom configuration class to packmind_config.py:
+
+```python
+class MyCustomConfig(PiDogConfig):
+    """My personalized PiDog settings"""
+    
+    # Override any settings you want to change
+    SPEED_NORMAL = 90
+    OBSTACLE_IMMEDIATE_THREAT = 22.0
+    ENABLE_EMOTIONAL_SYSTEM = False
+    VOICE_VOLUME_DEFAULT = 60
+    
+    # All other settings inherit from PiDogConfig
+```
+
+Then use it by adding to the config_map in load_config():
+```python
+config_map = {
+    # ... existing presets ...
+    "custom": MyCustomConfig,
+}
+```
+
+## TROUBLESHOOTING
+
+### Configuration Issues
+- **Config file not found**: System uses embedded fallback configuration
+- **Invalid settings**: Check `python packmind/packmind_config.py` for validation warnings
+- **Runtime errors**: Use voice command "PiDog, simple mode" for basic operation
+
+### PiDog moves too fast/slow
+- Edit SPEED_NORMAL, SPEED_FAST, SPEED_SLOW in packmind_config.py
+- Use voice test commands to calibrate: "PiDog, test walk normal"
+- Consider surface type (carpet vs hardwood affects speed)
+- Try different presets: "PiDog, simple mode" (slower) or "PiDog, advanced mode" (faster)
+
+### PiDog too cautious/reckless
+- Adjust OBSTACLE_IMMEDIATE_THREAT distance in packmind_config.py
+- Modify OBSTACLE_APPROACHING_THREAT for earlier warnings
+- Try different presets: "PiDog, simple mode" (cautious) or "PiDog, advanced mode" (aggressive)
+
+### Voice commands not working
+- Check ENABLE_VOICE_COMMANDS = True in packmind_config.py
+- Install: pip install speech_recognition pyaudio
+- Adjust WAKE_WORD if needed
+- Test with: "PiDog, status"
+
+### SLAM/Navigation not working
+- Check ENABLE_SLAM_MAPPING = True in packmind_config.py
+- Install: pip install numpy
+- Enable ENABLE_AUTONOMOUS_NAVIGATION for pathfinding
+- Try "PiDog, explorer mode" for mapping-focused behavior
+
+### Performance issues
+- Use SimpleConfig: "PiDog, simple mode"
+- Edit packmind_config.py: Disable ENABLE_PATROL_LOGGING to save storage
+- Edit packmind_config.py: Increase OBSTACLE_SCAN_INTERVAL to reduce CPU usage
+- Edit packmind_config.py: Disable ENABLE_SENSOR_FUSION if not needed
+
+### Memory issues
+- Switch to SimpleConfig preset: "PiDog, simple mode"
+- Edit packmind_config.py: Disable ENABLE_VOICE_COMMANDS
+- Edit packmind_config.py: Disable ENABLE_SLAM_MAPPING
+- Edit packmind_config.py: Set LOG_MAX_ENTRIES to smaller value (e.g., 500)
+
+### Dependency Issues
+- Run setup assistant: `python setup_pidog.py`
+- Install missing packages as recommended
+- Use appropriate preset for your hardware capabilities
+
+## CONFIGURATION VALIDATION
+
+The system automatically validates your configuration and provides warnings for:
+- Speed values exceeding servo limits (0-255)
+- Turn speeds slower than walk speeds (unnatural movement)
+- Inconsistent obstacle detection distances
+- Feature dependencies (e.g., sensor fusion requires SLAM)
+- Performance impact warnings
+
+Run `python packmind/packmind_config.py` to see validation results for all presets.
+
+## SUMMARY
+
+The new configuration system provides:
+- **Easy editing**: All settings in one file (packmind_config.py)
+- **Preset configurations**: 4 ready-made modes for different use cases
+- **Runtime switching**: Change modes via voice commands
+- **Automatic validation**: Warns about configuration issues
+- **Setup assistant**: Helps check dependencies and recommend settings
+- **Fallback system**: Works even if config file is missing
+
+This makes PiDog much easier to customize without touching complex AI code!
+"""

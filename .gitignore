@@ -75,5 +75,15 @@ Thumbs.db
 # Logs
 *.log
 
+# Project runtime artefacts
+logs/
+*.jsonl
+patrol_log_*.txt
+patrol_report_*.json
+house_map_*.pkl
+data/
+recordings/
+tmp/
+
 # Other
 **/~$*

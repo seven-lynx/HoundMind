@@ -1,3 +1,4 @@
+raise ImportError("Archived module: memory responsibilities moved to services/state; remove imports.")
 #!/usr/bin/env python3
 """
 PiDog Memory System (Optimized)

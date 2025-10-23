@@ -122,8 +122,8 @@ def main():
             print(f"   Error testing configuration: {e}")
     
     print("\n🚀 Ready to Start!")
-    print("   Run: python3 advanced_pidog_ai.py")
-    print("   Or:  python advanced_pidog_ai.py")
+    print("   Run: python packmind/orchestrator.py")
+    print("   Or:  python packmind.py")
     print("\n📚 Voice Commands (when enabled):")
     print("   'PiDog, status' - Show current status")
     print("   'PiDog, show config' - Display configuration") 

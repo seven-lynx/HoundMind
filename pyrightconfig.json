@@ -1,0 +1,8 @@
+{
+  "typeCheckingMode": "basic",
+  "reportOptionalMemberAccess": "information",
+  "reportMissingImports": "information",
+  "reportMissingModuleSource": "information",
+  "reportMissingTypeStubs": "none",
+  "exclude": ["**/.venv", "**/build", "**/dist", "**/__pycache__"]
+}

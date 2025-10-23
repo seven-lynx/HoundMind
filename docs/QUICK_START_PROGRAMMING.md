@@ -248,6 +248,6 @@ while True:
 ---
 
 **Next Steps:** 
-- Check `pidog_programming_examples.py` for complete working examples
-- See `api_reference_enhanced.md` for detailed API documentation
-- Run examples with: `python3 pidog_programming_examples.py`
+- Check `../examples/pidog_programming_examples.py` for complete working examples
+- See `api_reference.md` for detailed API documentation
+- Run examples with: `python3 ../examples/pidog_programming_examples.py`

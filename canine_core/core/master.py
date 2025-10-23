@@ -1,3 +1,4 @@
+raise ImportError("Archived module: replaced by canine_core.core.orchestrator and control.py.")
 #!/usr/bin/env python3
 """
 PiDog Master Control Script

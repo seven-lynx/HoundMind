@@ -132,6 +132,86 @@ class PiDogConfig:
     
     LOG_MAX_ENTRIES = 1000            # Maximum log entries in memory
     LOG_STATUS_INTERVAL = 10          # Status log interval (seconds)
+
+    # ============================================================================
+    # SYSTEM HEALTH / PERFORMANCE THRESHOLDS
+    # ============================================================================
+
+    # When system load per core exceeds this multiplier, treat as degraded
+    HEALTH_LOAD_PER_CORE_WARN_MULTIPLIER = 1.5
+    # When CPU temperature exceeds this (Celsius), treat as degraded
+    HEALTH_TEMP_WARN_C = 70.0
+    # When memory used percent exceeds this, treat as degraded
+    HEALTH_MEM_USED_WARN_PCT = 85.0
+    # When degraded, scanning interval will be adjusted conservatively:
+    # new_interval = min(base * MULTIPLIER, base + ABS_DELTA)
+    HEALTH_SCAN_INTERVAL_MULTIPLIER = 2.0
+    HEALTH_SCAN_INTERVAL_ABS_DELTA = 1.0
+
+    # How frequently the HealthMonitor samples and evaluates
+    HEALTH_MONITOR_INTERVAL_S = 5.0
+    # Actions to take under degraded health (informational for now)
+    HEALTH_ACTIONS = ["throttle_scans"]  # future: "reduce_speed", "disable_nonessential"
+    # Factor to reduce speeds when degraded (if applied in code)
+    HEALTH_SPEED_REDUCTION_FACTOR = 0.8
+    # Features to disable when degraded (by name in config toggles)
+    HEALTH_DISABLE_FEATURES = []
+
+    # ============================================================================
+    # SCANNING AND SENSING DYNAMICS
+    # ============================================================================
+    SCAN_INTERVAL_MIN = 0.2          # minimum allowed scan interval (s)
+    SCAN_INTERVAL_MAX = 2.0          # maximum allowed scan interval (s)
+    SCAN_DYNAMIC_AGGRESSIVENESS = 0.5  # 0..1; higher adjusts scan rate more aggressively
+    SCAN_DEBOUNCE_S = 0.05           # ignore new readings within this time window
+    SCAN_SMOOTHING_ALPHA = 0.4       # EMA smoothing for distances (0..1)
+
+    # Sensor monitor cadence and error backoff
+    SENSOR_MONITOR_RATE_HZ = 20.0
+    SENSOR_MONITOR_BACKOFF_ON_ERROR_S = 0.2
+
+    # ============================================================================
+    # VOICE RUNTIME
+    # ============================================================================
+    VOICE_WAKE_TIMEOUT_S = 5.0
+    VOICE_VAD_SENSITIVITY = 0.5      # 0..1
+    VOICE_MIC_INDEX = 0
+    VOICE_LANGUAGE = "en-US"
+    VOICE_NOISE_SUPPRESSION = True
+
+    # ============================================================================
+    # SAFETY / WATCHDOG
+    # ============================================================================
+    WATCHDOG_HEARTBEAT_INTERVAL_S = 0.5
+    WATCHDOG_TIMEOUT_S = 2.0
+    WATCHDOG_ACTION = "stop_and_crouch"  # or "power_down"
+
+    # ============================================================================
+    # LOGGING / TELEMETRY
+    # ============================================================================
+    LOG_LEVEL = "INFO"               # "DEBUG" | "INFO" | "WARN" | "ERROR"
+    LOG_FILE_MAX_MB = 10
+    LOG_FILE_BACKUPS = 5
+
+    TELEMETRY_ENABLED = False
+    TELEMETRY_SAMPLE_INTERVAL_S = 2.0
+    TELEMETRY_ENDPOINT = ""
+
+    # ============================================================================
+    # LEARNING / PERSISTENCE
+    # ============================================================================
+    LEARNING_STATE_PATH = "data/learning_state.json"
+    LEARNING_AUTOSAVE_INTERVAL_S = 30.0
+    LEARNING_DECAY = 0.995
+
+    # ============================================================================
+    # NAVIGATION (optional; used when ENABLE_AUTONOMOUS_NAVIGATION)
+    # ============================================================================
+    NAV_REPLAN_INTERVAL_S = 1.0
+    NAV_GOAL_TOLERANCE_CM = 10.0
+    NAV_OBSTACLE_INFLATION_CM = 10.0
+    NAV_COST_TURN_WEIGHT = 1.2
+    NAV_COST_FORWARD_WEIGHT = 1.0
     
     # ============================================================================
     # ADVANCED FEATURES (when enabled)
@@ -331,8 +411,10 @@ def validate_config(config):
         warnings.append("ENABLE_AUTONOMOUS_NAVIGATION requires ENABLE_SLAM_MAPPING to be True")
     
     # Performance warnings
-    if config.OBSTACLE_SCAN_INTERVAL < 0.2:
-        warnings.append("Very fast scan interval may impact performance")
+    if config.OBSTACLE_SCAN_INTERVAL < getattr(config, 'SCAN_INTERVAL_MIN', 0.2):
+        warnings.append("OBSTACLE_SCAN_INTERVAL below SCAN_INTERVAL_MIN may impact performance")
+    if config.OBSTACLE_SCAN_INTERVAL > getattr(config, 'SCAN_INTERVAL_MAX', 2.0):
+        warnings.append("OBSTACLE_SCAN_INTERVAL above SCAN_INTERVAL_MAX may reduce responsiveness")
     
     if config.LOG_MAX_ENTRIES > 5000:
         warnings.append("Large log size may consume significant memory")
