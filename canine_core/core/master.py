@@ -22,22 +22,20 @@ import importlib
 import keyboard
 import traceback
 import random
-import global_state  # ✅ Integrated state tracking
+from . import global_state  # ✅ Integrated state tracking
 
-# ✅ Define Available Modules
+# ✅ Define Available Modules (Updated for new structure)
 module_names = {
-    "patrol": "PatrolMode",
-    "smart_patrol": "SmartPatrolMode",
-    "smarter_patrol": "SmarterPatrolMode",
-    "voice_patrol": "VoicePatrolMode",
-    "voice_control": "WhisperVoiceControl",
-    "idle_behavior": "IdleBehavior",
-    "emotion": "EmotionHandler",
-    "find_open_space": "FindOpenSpace",
-    "mic_test": "MicTest",
-    "turn_toward_noise": "TurnTowardNoise",
-    "reactions": "Reactions",
-    "actions": "ActionsHandler",
+    "smart_patrol": "src.behaviors.smart_patrol",
+    "smarter_patrol": "src.behaviors.smarter_patrol", 
+    "voice_patrol": "src.behaviors.voice_patrol",
+    "voice_control": "src.behaviors.whisper_voice_control",
+    "idle_behavior": "src.behaviors.idle_behavior",
+    "emotion": "src.core.emotions",
+    "find_open_space": "src.ai.find_open_space",
+    "turn_toward_noise": "src.utils.turn_toward_noise",
+    "reactions": "src.behaviors.reactions",
+    "actions": "src.behaviors.actions",
 }
 
 # ✅ Track Active Threads
@@ -155,7 +153,8 @@ def shuffled_module_queue():
 
     return module_list
 
-if __name__ == "__main__":
+def main():
+    """Main function for the modular system master controller."""
     module_queue = shuffled_module_queue()  # ✅ Ensures non-repetitive selection
 
     while True:
@@ -169,3 +168,6 @@ if __name__ == "__main__":
             recently_used.pop(0)
 
         run_module_for_time(selected_module, duration=10)
+
+if __name__ == "__main__":
+    main()
