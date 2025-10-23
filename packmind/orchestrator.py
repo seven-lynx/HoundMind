@@ -126,16 +126,21 @@ class Orchestrator:
     """Advanced AI behavior system for PiDog with configurable features"""
     
     def __init__(self, config_preset="default"):
-        # Ensure PackMind logging is initialized (idempotent)
-        try:
-            # Initialize logging with config-provided level and rotation
-            setup_packmind_logging(
-                level=getattr(self.config, "LOG_LEVEL", None),
-                max_mb=getattr(self.config, "LOG_FILE_MAX_MB", None),
-                backups=getattr(self.config, "LOG_FILE_BACKUPS", None),
-            )
-        except Exception:
-            pass
+        # Load configuration first so logging can use its settings
+        self.config = load_config(config_preset)
+        warnings = validate_config(self.config)
+        if warnings:
+            print("⚠️ Configuration warnings:")
+            for warning in warnings:
+                print(f"   - {warning}")
+
+        # Ensure PackMind logging is initialized (idempotent) using config values
+        setup_packmind_logging(
+            level=getattr(self.config, "LOG_LEVEL", None),
+            max_mb=getattr(self.config, "LOG_FILE_MAX_MB", None),
+            backups=getattr(self.config, "LOG_FILE_BACKUPS", None),
+        )
+
         # Core context object for state management
         self.context = AIContext()
 
@@ -147,13 +152,6 @@ class Orchestrator:
         self.interaction_count = 0
         self.last_interaction_time = 0.0
         
-        # Load configuration from packmind/packmind_config.py
-        self.config = load_config(config_preset)
-        warnings = validate_config(self.config)
-        if warnings:
-            print("⚠️ Configuration warnings:")
-            for warning in warnings:
-                print(f"   - {warning}")
         
         # Feature availability flags
         self.voice_enabled = VOICE_AVAILABLE and self.config.ENABLE_VOICE_COMMANDS
