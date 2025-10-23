@@ -9,7 +9,7 @@ from .state import StateStore
 from .services.logging import LoggingService
 from .services.hardware import HardwareService
 from .services.config import load_config
-from ..config.pidog_config import PRESETS, CanineConfig
+from ..config.canine_config import PRESETS, CanineConfig
 
 class LegacyThreadBehavior:
     """Adapter to run legacy modules exposing start_behavior() in a thread.

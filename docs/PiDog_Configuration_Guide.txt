@@ -4,12 +4,12 @@
 USAGE INSTRUCTIONS FOR PIDOG CONFIGURATION SYSTEM
 ================================================
 
-The PiDog AI system now uses a separate configuration file (pidog_config.py) that allows 
+The PiDog AI system now uses a separate configuration file (packmind_config.py) that allows 
 you to easily customize your PiDog's behavior without touching the main AI code.
 
 ## QUICK START
 
-1. Edit the file: pidog_config.py
+1. Edit the file: packmind_config.py
 2. Modify values in the PiDogConfig class 
 3. Restart your PiDog AI script to apply changes
 4. Use preset configurations or create your own
@@ -51,8 +51,8 @@ The system includes 4 ready-made configurations:
 - "PiDog, explorer mode" - Switch to ExplorerConfig
 - "PiDog, show config" - Display current configuration
 
-### Method 2: Edit pidog_config.py Default
-Find this line at the bottom of pidog_config.py:
+### Method 2: Edit packmind_config.py Default
+Find this line at the bottom of packmind_config.py:
 ```python
 # Change this to set your default configuration
 DEFAULT_CONFIG = "default"  # Options: default, simple, advanced, indoor, explorer

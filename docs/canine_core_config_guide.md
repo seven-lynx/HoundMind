@@ -1,6 +1,6 @@
 # CanineCore Configuration Guide
 
-This guide explains every option in `canine_core/config/pidog_config.py` and how it affects behaviors.
+This guide explains every option in `canine_core/config/canine_config.py` and how it affects behaviors.
 
 ## Feature toggles
 - ENABLE_VOICE_COMMANDS: Enable voice pipeline (VoiceBehavior/VoiceService).
@@ -88,7 +88,7 @@ Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 - GuardBehavior: GUARD_DETECT_MM, SPEED_SLOW, SPEED_TURN_*; respects ENABLE_EMOTIONAL_SYSTEM.
 
 ## Overriding options
-- Edit `pidog_config.py` to change defaults or extend presets (Simple, Patrol, Interactive).
+- Edit `canine_config.py` to change defaults or extend presets (Simple, Patrol, Interactive).
 - Optional YAML (`canine_core/config/canine_core.yaml`) can override the behavior queue and feature flags if PyYAML is installed.
 
 ## Presets

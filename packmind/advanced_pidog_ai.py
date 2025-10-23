@@ -26,15 +26,15 @@ Run with: python3 advanced_pidog_ai.py
 # ============================================================================
 # CONFIGURATION IMPORT
 # ============================================================================
-# Configuration is now in separate pidog_config.py file for easier editing!
+# Configuration is now in separate packmind_config.py file for easier editing!
 
 try:
-    from pidog_config import load_config, validate_config
+    from packmind_config import load_config, validate_config
     CONFIG_AVAILABLE = True
-    print("📋 Configuration system loaded from pidog_config.py")
+    print("📋 Configuration system loaded from packmind_config.py")
 except ImportError:
     CONFIG_AVAILABLE = False
-    print("⚠️ pidog_config.py not found - using basic embedded config")
+    print("⚠️ packmind_config.py not found - using basic embedded config")
     
     # Fallback basic configuration if separate file not available
     class PiDogConfig:
@@ -2238,7 +2238,7 @@ class AdvancedPiDogAI:
     def _load_config_preset(self, preset_name):
         """Load a configuration preset"""
         if not CONFIG_AVAILABLE:
-            print("⚠️ Cannot load presets - pidog_config.py not available")
+            print("⚠️ Cannot load presets - packmind_config.py not available")
             self.dog.speak("confused_1", volume=self.config.VOICE_VOLUME_DEFAULT)
             return
             
@@ -2346,8 +2346,8 @@ def main():
     # Load default configuration  
     if CONFIG_AVAILABLE:
         config = load_config("default")
-        config_source = "pidog_config.py"
         warnings = validate_config(config)
+        config_source = "packmind_config.py"
     else:
         config = PiDogConfig()
         config_source = "embedded fallback"
@@ -2403,16 +2403,16 @@ def main():
     print()
     print("💡 Configuration Tips:")
     if CONFIG_AVAILABLE:
-        print("   • Edit pidog_config.py file to customize behavior")
+        print("   • Edit packmind_config.py file to customize behavior")
         print("   • Use preset configurations: simple, advanced, indoor, explorer") 
         print("   • Voice commands: 'load simple config', 'load advanced config'")
         print("   • Test settings with voice commands before saving changes")
     else:
-        print("   • Create pidog_config.py file for full configuration options")
-        print("   • Copy from provided pidog_config.py template")
-    print("   • Toggle features on/off with ENABLE_* settings")
-    print("   • Adjust obstacle thresholds, speeds, and timing")
-    print("   • Use voice commands to switch modes during operation")
+        print("   • Create packmind_config.py file for full configuration options")
+        print("   • Copy from provided packmind_config.py template")
+        print("   • Toggle features on/off with ENABLE_* settings")
+        print("   • Adjust obstacle thresholds, speeds, and timing")
+        print("   • Use voice commands to switch modes during operation")
     print()
     
     ai = AdvancedPiDogAI()

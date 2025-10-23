@@ -72,7 +72,7 @@ Pidog/
 # 1. Install dependencies
 pip install -r requirements.txt
 
-# 2. Configure (edit packmind/pidog_config.py if needed)
+# 2. Configure (edit packmind/packmind_config.py if needed)
 
 # 3. Run any complete AI system
 python packmind/advanced_pidog_ai.py
@@ -85,7 +85,7 @@ python packmind/pathfinding.py
 # 1. Install dependencies  
 pip install -r requirements.txt
 
-# 2. Configure (edit config/pidog_config.py if needed)
+# 2. Configure (edit canine_core/config/canine_config.py if needed)
 
 # 3. Choose interactively or run the orchestrator
 python main.py               # Auto (orchestrator default)

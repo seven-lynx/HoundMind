@@ -103,7 +103,7 @@ The modular system provides **real-time control**:
 
 The modular system uses **distributed configuration**:
 
-### **Global Config** (`../config/pidog_config.py`)
+### **Global Config** (`../config/canine_config.py`)
 - System-wide settings
 - Hardware parameters  
 - Safety thresholds

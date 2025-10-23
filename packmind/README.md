@@ -63,7 +63,7 @@ These are **complete, ready-to-run AI programs** that include:
 
 ## ⚙️ **Configuration**
 
-### `pidog_config.py`
+### `packmind_config.py`
 **Centralized configuration for ALL standalone AIs**
 ```python
 class PiDogConfig:
@@ -101,7 +101,7 @@ class PiDogConfig:
 ## 🚦 **Quick Start**
 
 1. **Choose your AI system** based on what you want to demonstrate
-2. **Configure** by editing `pidog_config.py` 
+2. **Configure** by editing `packmind_config.py` 
 3. **Run directly** - no additional setup required!
 
 ```bash

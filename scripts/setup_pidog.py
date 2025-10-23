@@ -15,14 +15,14 @@ def main():
     print()
     
     # Check if config file exists
-    config_exists = os.path.exists("pidog_config.py")
+    config_exists = os.path.exists("packmind_config.py")
     
     if config_exists:
-        print("✅ pidog_config.py found")
+        print("✅ packmind_config.py found")
         
         # Test import
         try:
-            from pidog_config import load_config, validate_config
+            from packmind_config import load_config, validate_config
             print("✅ Configuration system working")
             
             # Test all presets
@@ -50,9 +50,9 @@ def main():
             return False
             
     else:
-        print("❌ pidog_config.py not found")
+        print("❌ packmind_config.py not found")
         print("\n💡 To set up configuration:")
-        print("   1. The pidog_config.py file should be in the same directory")
+        print("   1. The packmind_config.py file should be in the same directory")
         print("   2. Copy it from the provided template")
         print("   3. Edit the PiDogConfig class values as needed")
         return False
@@ -88,7 +88,7 @@ def main():
     
     if config_exists:
         try:
-            from pidog_config import load_config
+            from packmind_config import load_config
             
             # Test configuration loading
             config = load_config("default")

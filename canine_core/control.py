@@ -10,7 +10,7 @@ import asyncio
 from typing import List
 
 from canine_core.core.orchestrator import Orchestrator
-from canine_core.config.pidog_config import PRESETS, CanineConfig
+from canine_core.config.canine_config import PRESETS, CanineConfig
 
 ALIASES = [
     "idle_behavior",
