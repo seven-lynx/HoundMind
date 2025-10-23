@@ -16,6 +16,7 @@ ALIASES = [
     "idle_behavior",
     "smart_patrol",
     "smarter_patrol",
+    "reactions",
     "voice_patrol",
     "guard_mode",
     "whisper_voice_control",

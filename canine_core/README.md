@@ -88,7 +88,7 @@ The modular system provides **real-time control**:
 ## 🧩 **Available Modules**
 
 ### **Core Behaviors:**
-- `smart_patrol` - Intelligent autonomous patrol
+- `smart_patrol` - Intelligent autonomous patrol (includes former "smarter_patrol" features)
 - `voice_patrol` - Voice-controlled navigation  
 - `guard_mode` - Security monitoring and alerts
 - `idle_behavior` - Engaging idle state activities
@@ -110,6 +110,8 @@ The modular system uses **distributed configuration**:
 
 ### **Module-Specific Config**
 Each module can have its own configuration within the file.
+
+Note: `smarter_patrol` now aliases `smart_patrol` for a single, unified patrol module.
 
 ## 🔧 **Customization & Extension**
 

@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-from importlib import import_module
+"""
+Smarter Patrol has been combined into SmartPatrolBehavior.
+This module re-exports the same behavior for backward-compatibility.
+"""
+from __future__ import annotations
 
-def start_behavior():
-    mod = import_module('canine_core.legacy.behaviors.smarter_patrol')
-    return getattr(mod, 'start_behavior')()
+from .smart_patrol import SmartPatrolBehavior as _SmartPatrolBehavior
+
+
+BEHAVIOR_CLASS = _SmartPatrolBehavior

@@ -123,6 +123,7 @@ class CanineConfig:
         "idle_behavior",
         "smart_patrol",
         "smarter_patrol",
+        "reactions",
         "voice_patrol",
         "guard_mode",
         "whisper_voice_control",
@@ -154,6 +155,7 @@ class PatrolPreset(CanineConfig):
         "idle_behavior",
         "smart_patrol",
         "smarter_patrol",
+        "reactions",
         "find_open_space",
     ]
 
@@ -163,6 +165,7 @@ class InteractivePreset(CanineConfig):
     ENABLE_EMOTIONAL_SYSTEM = True
     AVAILABLE_BEHAVIORS = [
         "idle_behavior",
+        "reactions",
         "voice_patrol",
         "whisper_voice_control",
         "guard_mode",

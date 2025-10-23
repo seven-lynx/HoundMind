@@ -56,7 +56,8 @@ class Orchestrator:
         self.aliases: Dict[str, str] = {
             "idle_behavior": "canine_core.behaviors.idle_behavior",
             "smart_patrol": "canine_core.behaviors.smart_patrol",
-            "smarter_patrol": "canine_core.behaviors.smarter_patrol",
+            # smarter_patrol is now combined with smart_patrol
+            "smarter_patrol": "canine_core.behaviors.smart_patrol",
             "voice_patrol": "canine_core.behaviors.voice_patrol",
             "guard_mode": "canine_core.behaviors.guard_mode",
             "whisper_voice_control": "canine_core.behaviors.whisper_voice_control",
