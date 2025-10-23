@@ -94,8 +94,8 @@ The modular system provides **real-time control**:
 - `idle_behavior` - Engaging idle state activities
 
 ### **Interaction Modules:**
-- `whisper_voice_control` - Advanced voice recognition
-- `actions` - Basic movement and action primitives
+- `whisper_voice_control` - Free-form voice control (wake word optional)
+- `voice_patrol` - Wake-word voice patrol commands
 - `reactions` - Environmental response behaviors
 - `maintenance` - System health and diagnostics
 
@@ -111,7 +111,9 @@ The modular system uses **distributed configuration**:
 ### **Module-Specific Config**
 Each module can have its own configuration within the file.
 
-Note: `smarter_patrol` now aliases `smart_patrol` for a single, unified patrol module.
+Notes:
+- `smarter_patrol` now aliases `smart_patrol` for a single, unified patrol module.
+- Voice control provides two separate behaviors (voice_patrol, whisper_voice_control) so users can choose their preferred mode.
 
 ## 🔧 **Customization & Extension**
 

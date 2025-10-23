@@ -10,6 +10,10 @@ from .services.logging import LoggingService
 from .services.hardware import HardwareService
 from .services.config import load_config
 from ..config.canine_config import PRESETS, CanineConfig
+from .services.sensors import SensorService
+from .services.motion import MotionService
+from .services.emotions import EmotionService
+from .services.voice import VoiceService
 
 class LegacyThreadBehavior:
     """Adapter to run legacy modules exposing start_behavior() in a thread.
@@ -73,16 +77,26 @@ class Orchestrator:
         except Exception as e:
             self.logger.warning(f"Hardware init failed on this host: {e}")
         # Build context (services like sensors/emotions/memory could be added later)
+        sensors = SensorService(self.hardware)
+        motion = MotionService(self.hardware)
+        emotions = EmotionService(self.hardware, enabled=getattr(self.config, "ENABLE_EMOTIONAL_SYSTEM", True))
+        voice = VoiceService(
+            wake_word=str(getattr(self.config, "WAKE_WORD", "pidog")),
+            enabled=bool(getattr(self.config, "ENABLE_VOICE_COMMANDS", True)),
+        )
         self._ctx = BehaviorContext(
             hardware=self.hardware,
-            sensors=None,
-            emotions=None,
+            sensors=sensors,
+            emotions=emotions,
             memory=None,
             state=self.state,
             logger=self.logger,
             config=self.config,
             publish=self.bus.publish,
         )
+        # Optionally expose extra services via context if behaviors import them dynamically
+        self.voice = voice
+        self.motion = motion
 
     def _resolve_behavior(self, spec: str) -> Behavior:
         """Resolve a behavior spec into a Behavior instance.
