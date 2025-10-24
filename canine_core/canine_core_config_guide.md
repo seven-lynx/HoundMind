@@ -1,5 +1,7 @@
 # CanineCore Configuration Guide
 
+This guide is part of HoundMind. CanineCore is the modular behaviors/services framework within the HoundMind project for PiDog.
+
 This guide explains every option in `canine_core/config/canine_config.py` and how it affects behaviors. Use it with the interactive launcher `canine_core/control.py`. Presets live in the same file and can be selected in the controller.
 
 ## Feature toggles

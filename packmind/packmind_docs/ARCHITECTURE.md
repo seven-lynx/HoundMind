@@ -1,5 +1,7 @@
 # PackMind Modular Architecture
 
+Note: PackMind is part of HoundMind, the umbrella project for advanced behaviors and AI on PiDog.
+
 This document outlines the target modular architecture for the PackMind subsystem.
 
 ## Goals

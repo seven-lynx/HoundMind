@@ -1,23 +1,17 @@
-# PiDog Guide# The Ultimate PiDog Programming Guide
+# HoundMind — The Ultimate PiDog Programming Guide
 
+This landing page is part of HoundMind, the umbrella project for advanced behaviors and AI on SunFounder PiDog.
 
+The comprehensive programming content lives in these dedicated documents:
 
-This guide is a landing page for programming and operating your SunFounder PiDog. The comprehensive programming content now lives in the following dedicated documents:> A comprehensive programming reference for the SunFounder PiDog robotic dog. This guide focuses on Python coding with detailed examples and complete API documentation.
-
-
-
-- PIDOG_PROGRAMMING_GUIDE.md — Complete programming guide with all APIs, patterns, and templates- Last updated: 2025-10-22
-
-- QUICK_START_PROGRAMMING.md — Copy‑paste friendly quick start and cheat sheets- Target audience: Python developers and robotics enthusiasts
-
-- api_reference.md — Beginner‑friendly API reference for the PiDog SDK- Focus: Complete programming reference with working code examples
-
+- PIDOG_PROGRAMMING_GUIDE.md — Complete programming guide with all APIs, patterns, and templates
+- QUICK_START_PROGRAMMING.md — Copy‑paste friendly quick start and cheat sheets
+- api_reference.md — Beginner‑friendly API reference for the PiDog SDK
 - References: Official documentation and GitHub repository (see Resources)
 
 Additional references:
 
-- packmind/orchestrator.py — Advanced AI orchestrator example---
-
+- packmind/orchestrator.py — Advanced AI orchestrator example
 - examples/pidog_programming_examples.py — Runnable examples with a simple menu
 
 ## Table of Contents
