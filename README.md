@@ -16,7 +16,6 @@ Legacy modules for the old system are stored in the legacy folder, and the entir
 - **PackMind** (`packmind/`): AI orchestrator plus subsystems for mapping (SLAM), navigation (A*), localization (sensor fusion), voice, scanning, obstacle handling, and **new AI services** (face recognition, dynamic balance, enhanced audio).
 - **Docs** (`docs/`): programming guides, API reference, voice setup, and config guides.
 - **Tools** (`tools/`): setup utilities and integration tests (formerly `scripts/`).
-- **System setup scripts** (`scripts/`): OS and dependency install helpers for Ubuntu/RPi.
 - **Examples** (`examples/`): runnable examples.
 - **Legacy** (`legacy/`): archived test modules and examples (not actively maintained)
 
@@ -92,20 +91,31 @@ Tip: On a development PC without hardware, many hardware services fallback to sa
 ```
 HoundMind/
 ├─ main.py                    # CanineCore entry point
+├─ packmind.py                # PackMind launcher
+├─ canine_core.py             # Alt CanineCore launcher
 ├─ canine_core/
-│  ├─ behaviors/
 │  ├─ core/                   # orchestrator, interfaces, services, state
-│  └─ config/
+│  ├─ behaviors/
+│  ├─ config/
+│  ├─ utils/
+│  └─ control.py
 ├─ packmind/
 │  ├─ orchestrator.py         # PackMind entry point
-│  ├─ behaviors/ core/ services/
-│  ├─ mapping/ nav/ localization/ visualization/
-│  └─ packmind_config.py
+│  ├─ core/ behaviors/ services/
+│  ├─ mapping/ nav/ localization/ runtime/ visualization/
+│  ├─ packmind_config.py
+│  └─ packmind_docs/
 ├─ docs/
-├─ scripts/                 # OS/setup helpers (Ubuntu, Vilib)
 ├─ examples/
 ├─ tools/
-└─ legacy/
+├─ data/
+├─ logs/
+├─ legacy/
+├─ CHANGELOG.md
+├─ requirements.txt
+├─ pyrightconfig.json
+├─ LICENSE
+└─ README.md
 
 ## Modules overview
 
@@ -190,7 +200,6 @@ Note: Hardware‑dependent features won’t function fully without PiDog.
 - **CanineCore Checkup (Pi)**: `tools/caninecore_checkup.py` - Import all CanineCore modules; optional minimal head sweep with `--move`
 - **PiDog Hardware Check (Pi)**: `tools/pidog_hardware_check.py` - Direct hardware check (distance, IMU, ears, touch, audio, LED); add `--move` for motion/head sweep
 - **Integration Test**: `tools/test_service_integration.py` - Validate AI services integration
-- **System setup scripts**: `scripts/ubuntu_install.py`, `scripts/ubuntu_vilib_install.py` - Ubuntu/RPi setup helpers
 
 Run PackMind checkup on the Pi:
 ```bash
