@@ -132,7 +132,20 @@ class CanineConfig:
     # =====================================================================
     # GUARD MODE
     # =====================================================================
+    # Legacy absolute distance trigger (kept for compatibility)
     GUARD_DETECT_MM = 100.0  # distance threshold to trigger alert (millimeters)
+    # Continuous scan parameters
+    GUARD_SCAN_YAW_MAX_DEG = 90       # max yaw sweep to either side
+    GUARD_SCAN_STEP_DEG = 15          # step size per sample
+    GUARD_SCAN_SETTLE_S = 0.15        # settle time after head move before read
+    GUARD_BETWEEN_READS_S = 0.05      # tiny pause between successive angle reads
+    # Baseline & deviation detection
+    GUARD_BASELINE_EMA = 0.20         # per-angle EMA smoothing for baseline
+    GUARD_DEVIATION_MM = 120.0        # absolute drop vs baseline to consider approaching
+    GUARD_DEVIATION_PCT = 0.25        # percent drop vs baseline to consider approaching
+    GUARD_CONFIRM_WINDOW = 3          # window of recent samples per angle
+    GUARD_CONFIRM_THRESHOLD = 2       # required positives in window to alert
+    GUARD_ALERT_COOLDOWN_S = 3.0      # cooldown between alerts
 
     # Behavior aliases available for selection in the control script
     AVAILABLE_BEHAVIORS = [
