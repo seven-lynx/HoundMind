@@ -100,6 +100,10 @@ Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 
 Notes: The service is sim-safe and writes locally when running on non-Pi hosts.
 
+Example usage in built-in behaviors (when enabled):
+- Reactions: records touch (`touch_head`, `touch_body`), IMU (`imu_lift`, `imu_place`, `imu_flip`), and sound-induced turns (`sound_turn_left/right`).
+- Smart Patrol: records obstacle events (`retreat`, `approach_forward`) and issued movement commands (`turn_left/right`, `forward`).
+
 ## Battery
 - LOW_BATTERY_THRESHOLD (%): Warn and reduce activity below this level.
 - CRITICAL_BATTERY_THRESHOLD (%): Trigger safe/low-power mode.

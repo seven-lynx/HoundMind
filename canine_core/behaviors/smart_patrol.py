@@ -251,6 +251,12 @@ class SmartPatrolBehavior(Behavior):
                     dog.do_action("bark", speed=SPEED_SLOW)
                     await asyncio.sleep(0.2)
                     dog.do_action("backward", step_count=getattr(cfg, "BACKUP_STEPS", 3), speed=SPEED_EMERGENCY)
+                    # learning: record retreat event
+                    try:
+                        if getattr(ctx, "learning", None) is not None:
+                            ctx.learning.record_obstacle("retreat")
+                    except Exception:
+                        pass
                 elif confirmed and self._alert_cd and self._alert_cd.ready():
                     # micro backoff + small turn toward freer side
                     self._led_state("navigating")
@@ -261,13 +267,32 @@ class SmartPatrolBehavior(Behavior):
                     dog.do_action("backward", step_count=max(1, int(getattr(cfg, "BACKUP_STEPS", 3) // 2)), speed=SPEED_EMERGENCY)
                     dog.wait_all_done()
                     dog.do_action(f"turn_{dir_name}", step_count=turn_steps, speed=SPEED_TURN_NORMAL)
+                    # learning: record forward approach
+                    try:
+                        if getattr(ctx, "learning", None) is not None:
+                            ctx.learning.record_obstacle("approach_forward")
+                    except Exception:
+                        pass
                 elif action.startswith("turn_"):
                     self._led_state("navigating")
                     dir_name = action.replace("turn_", "")
                     dog.do_action(f"turn_{dir_name}", step_count=int(params.get("steps", getattr(cfg, "TURN_STEPS_SMALL", 1))), speed=SPEED_TURN_NORMAL)
+                    # learning: record command turns
+                    try:
+                        if getattr(ctx, "learning", None) is not None:
+                            ctx.learning.record_command(f"turn_{dir_name}")
+                        
+                    except Exception:
+                        pass
                 else:
                     self._led_state("patrolling")
                     dog.do_action("forward", step_count=WALK_STEPS_NORMAL, speed=SPEED_NORMAL)
+                    # learning: record forward move
+                    try:
+                        if getattr(ctx, "learning", None) is not None:
+                            ctx.learning.record_command("forward")
+                    except Exception:
+                        pass
                 dog.wait_all_done()
             except Exception as e:
                 ctx.logger.warning(f"Move failed: {e}")
