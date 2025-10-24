@@ -169,6 +169,71 @@ This is a quick map of the major modules and what they do. Use it to jump into t
 	- `packmind_docs/`: Architecture and configuration guides
 ```
 
+## How modules interact (at a glance)
+
+High-level dataflow and control paths for each system.
+
+### CanineCore interactions
+
+```
+main.py / canine_core/control.py
+	→ core/orchestrator.py
+			↔ behaviors/* (execute(context))
+			↔ core/services/*
+					- sensors.py → periodic reads (distance/ears/touch)
+					- scanning_coordinator.py + scanning.py → head sweeps → distances
+					- energy.py/emotions.py → update state from activity/sensors
+					- motion.py → do_action/forward/turn/head_move
+					- voice.py/audio_processing.py → speak / (optional ASR)
+					- imu.py/balance.py → tilt/fall detection
+					- safety.py → stop/crouch on faults; watchdog limits
+					- logging.py/telemetry.py → logs/HUD updates
+			↔ core/bus.py (internal events)
+			↔ core/watchdog.py (dwell/error caps)
+			← config/* presets (runtime toggles and thresholds)
+Hardware
+	←→ pidog (servos, sensors, LEDs, audio)
+```
+
+Key loop:
+- Sensors → Orchestrator → Behavior decision → Motion/Head → Scanning as needed
+- Energy/Emotions influence speeds/voices; Safety/Watchdog can interrupt
+
+### PackMind interactions
+
+```
+packmind.py / packmind/orchestrator.py
+	→ core/container.py wires services using packmind_config.py
+	→ runtime/sensor_monitor.py → on_reading() → orchestrator
+	→ runtime/scanning_coordinator.py → scanning_service.scan_three_way()
+	→ runtime/voice_runtime.py → _process_voice_command() via voice_service
+	↔ services/*
+			- sensor_service.py → aggregates raw readings
+			- energy_service.py → update energy; provides speed hints
+			- emotion_service.py → compute emotional state
+			- scanning_service.py → head sweeps; returns left/forward/right cm
+			- obstacle_service.py → analyze scans; avoidance strategies
+			- safety_watchdog.py → heartbeat + emergency stop/power_down
+			- health_monitor.py → periodic health samples
+			- face_recognition_service.py → detections → events/emotions
+			- dynamic_balance_service.py → tilt/fall events → safety/emotions
+			- enhanced_audio_processing_service.py → VAD/sound → attention
+			- voice_service.py → speech playback/utilities
+	↔ mapping/ (house_mapping), nav/ (PiDogPathfinder, NavigationController), localization/
+			- SLAM/position feed → nav path/waypoints → orchestrator → motion
+	↔ services/log_service.py and README logging hooks (patrol events)
+	← packmind_config.py (SOUND_*, VOICE_*, SCAN_*, ENERGY_*, NAV_*, WATCHDOG_*, etc.)
+Hardware
+	←→ pidog (sensors/servos/camera/audio)
+```
+
+Key loop:
+- SensorMonitor → Orchestrator: update Energy/Emotions; maybe trigger scans
+- ScanningCoordinator → ScanningService → ObstacleService → avoidance/motion
+- Optional: SLAM/Pathfinding → NavigationController → movement commands
+- VoiceRuntime → VoiceService → Orchestrator command handling
+- Watchdog/Health can interrupt to ensure safety
+
 ## Developer quick start (desktop) 💻
 
 On Windows (PowerShell) or macOS/Linux, you can explore without hardware:
