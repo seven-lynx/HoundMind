@@ -87,8 +87,8 @@ You’ll be prompted to run a single behavior, a sequence, a random cycle, or a 
 
 ## Configuration
 
-- Canonical file: `canine_core/config/canine_config.py` (Python class with sensible defaults and presets: simple, patrol, interactive)
-- Presets are provided via `canine_core/config/canine_config.py` (Simple, Patrol, Interactive)
+- Canonical file: `canine_core/config/canine_config.py` (Python class with sensible defaults and presets: simple, patrol, interactive, safety-first)
+- Presets are provided via `canine_core/config/canine_config.py` (Simple, Patrol, Interactive, Safety-First)
 - Presets expose an `AVAILABLE_BEHAVIORS` list used by `control.py`
 - See the detailed guide: `docs/canine_core_config_guide.md`
 
@@ -98,6 +98,11 @@ Key concepts used by behaviors:
 - Obstacle thresholds and scan timing (OBSTACLE_*, HEAD_SCAN_*, OBSTACLE_SCAN_INTERVAL)
 - Voice settings (WAKE_WORD, VOICE_* volumes)
 - Feature toggles (ENABLE_* flags)
+
+Safety-First preset highlights:
+- Enables Safety, IMU, Battery monitors and default hooks
+- Slower movement, wider safe distances, and "no scan while moving"
+- Narrower head scan range with longer settle time
 
 ## Behavior contract (v2)
 

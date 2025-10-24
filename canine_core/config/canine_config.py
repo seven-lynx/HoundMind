@@ -285,10 +285,78 @@ class InteractivePreset(CanineConfig):
         "guard_mode",
     ]
 
+class SafetyFirstPreset(CanineConfig):
+        # Ensure core safety systems are active
+        ENABLE_SAFETY_SUPERVISOR = True
+        ENABLE_BATTERY_MONITOR = True
+        ENABLE_IMU_MONITOR = True
+        ENABLE_DEFAULT_HOOKS = True
+        # Useful to keep an eye on state when testing safety
+        ENABLE_TELEMETRY = True
+
+        # More conservative obstacle thresholds (centimeters)
+        OBSTACLE_IMMEDIATE_THREAT = 35.0
+        OBSTACLE_APPROACHING_THREAT = 50.0
+        OBSTACLE_EMERGENCY_STOP = 25.0
+        OBSTACLE_SAFE_DISTANCE = 60.0
+        OBSTACLE_SCAN_INTERVAL = 0.6
+
+        # Slow down overall movement
+        SPEED_SLOW = 60
+        SPEED_NORMAL = 80
+        SPEED_FAST = 120
+        SPEED_EMERGENCY = 80
+
+        SPEED_TURN_SLOW = 80
+        SPEED_TURN_NORMAL = 140
+        SPEED_TURN_FAST = 180
+
+        TURN_STEPS_SMALL = 1
+        TURN_STEPS_NORMAL = 1
+        TURN_STEPS_LARGE = 2
+        WALK_STEPS_SHORT = 1
+        WALK_STEPS_NORMAL = 1
+        WALK_STEPS_LONG = 2
+        BACKUP_STEPS = 2
+
+        # Scanning: avoid moving while sweeping; slightly slower, narrower scans
+        SCAN_WHILE_MOVING = False
+        HEAD_SCAN_RANGE = 35
+        HEAD_SCAN_SPEED = 60
+        SCAN_SAMPLES = 3
+        SCAN_DEBOUNCE_S = 0.06
+        SCAN_SMOOTHING_ALPHA = 0.45
+
+        # Patrol / guard scan tuning
+        PATROL_SCAN_YAW_MAX_DEG = 30
+        PATROL_SCAN_STEP_DEG = 15
+        PATROL_SCAN_SETTLE_S = 0.18
+        PATROL_BETWEEN_READS_S = 0.06
+        PATROL_TURN_STEPS_ON_ALERT = 1
+
+        GUARD_SCAN_YAW_MAX_DEG = 75
+        GUARD_SCAN_STEP_DEG = 15
+        GUARD_SCAN_SETTLE_S = 0.18
+        GUARD_BETWEEN_READS_S = 0.06
+
+        # Behavior orchestration: longer minimum dwell and smaller durations
+        BEHAVIOR_MIN_DWELL_S = 12.0
+        PATROL_DURATION_MIN = 20
+        PATROL_DURATION_MAX = 45
+
+        # Available behaviors emphasize low-risk actions
+        AVAILABLE_BEHAVIORS = [
+            "idle_behavior",
+            "smart_patrol",
+            "find_open_space",
+            "guard_mode",
+        ]
+
 
 PRESETS = {
     "simple": SimplePreset,
     "patrol": PatrolPreset,
     "interactive": InteractivePreset,
+    "safety-first": SafetyFirstPreset,
     "default": CanineConfig,
 }

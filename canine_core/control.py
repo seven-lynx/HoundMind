@@ -39,7 +39,7 @@ def main() -> None:
     modes = ["Run a single module", "Run a custom sequence", "Run random cycle", "Run a preset"]
     mode_idx = prompt_menu("Choose a mode:", modes)
 
-    # Build orchestrator (uses CanineConfig by default; presets selectable below)
+    # Build orchestrator (uses CanineConfig by default; for presets we re-create with the selected name)
     orch = Orchestrator(config_path=None)
 
     if mode_idx == 0:  # single
@@ -71,6 +71,8 @@ def main() -> None:
         preset_name = names[idx]
         cfg_cls = PRESETS[preset_name]
         cfg = cfg_cls()
+        # Recreate orchestrator with the preset so its settings apply to services/behavior
+        orch = Orchestrator(config_path=preset_name)
         # Choose available behaviors from preset
         choices = getattr(cfg, 'AVAILABLE_BEHAVIORS', ALIASES)
         print(f"Running preset '{preset_name}' across: {', '.join(choices)}")
