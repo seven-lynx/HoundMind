@@ -247,6 +247,66 @@ All these settings are found in the packmind_config.py file, in the PiDogConfig 
   * Minimum confidence to show recognition feedback
   * Prevents false positive announcements
 
+## DYNAMIC BALANCE SYSTEM
+
+### ENABLE_DYNAMIC_BALANCE = True/False
+- Controls real-time balance monitoring and stability control
+- When enabled: PiDog continuously monitors IMU for balance issues
+- When disabled: No balance processing, saves CPU and memory
+
+### IMU Sampling & Analysis
+- BALANCE_SAMPLE_RATE = 20.0 (Hz)
+  * Rate of IMU sensor readings per second
+  * Higher = more responsive but uses more CPU
+  * Recommended: 15-30 Hz
+
+- BALANCE_CALIBRATION_TIME = 5.0 (seconds)
+  * Duration for initial IMU calibration
+  * Robot must remain stationary during this time
+  * Longer = more accurate calibration
+
+- BALANCE_HISTORY_SIZE = 100 (readings)
+  * Number of IMU readings kept in memory
+  * Used for trend analysis and statistics
+  * Higher = more memory usage but better analysis
+
+- BALANCE_STABILITY_WINDOW = 10 (readings)
+  * Moving window size for stability analysis
+  * Used to detect balance trends and patterns
+  * Recommended: 5-15 readings
+
+### Balance Thresholds (degrees)
+- BALANCE_SLIGHT_TILT_THRESHOLD = 15.0
+  * Minor tilt detection threshold
+  * Above this triggers "slightly tilted" state
+  * Recommended: 10-20 degrees
+
+- BALANCE_UNSTABLE_TILT_THRESHOLD = 25.0
+  * Unstable balance detection threshold
+  * Above this triggers corrective action consideration
+  * Recommended: 20-30 degrees
+
+- BALANCE_CRITICAL_TILT_THRESHOLD = 35.0
+  * Critical tilt requiring immediate action
+  * Above this triggers emergency balance correction
+  * Recommended: 30-45 degrees
+
+### Motion & Correction Settings
+- BALANCE_RAPID_MOTION_THRESHOLD = 5.0 (rad/s)
+  * Angular velocity threshold for rapid motion detection
+  * Combined with tilt for instability detection
+  * Higher = less sensitive to motion
+
+- BALANCE_CORRECTION_COOLDOWN = 2.0 (seconds)
+  * Minimum time between balance corrections
+  * Prevents oscillation and over-correction
+  * Recommended: 1.5-3.0 seconds
+
+### Data Storage
+- BALANCE_DATA_DIR = "data/balance" (path)
+  * Directory where balance session data is stored
+  * Contains: statistics, events, performance metrics
+
 ## ADVANCED SYSTEM CONTROLS
 
 ### Health and performance

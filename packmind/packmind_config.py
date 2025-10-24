@@ -28,6 +28,7 @@ class PiDogConfig:
     ENABLE_PATROL_LOGGING = True      # Comprehensive activity logging
     ENABLE_AUTONOMOUS_NAVIGATION = True # AI pathfinding and exploration (requires SLAM)
     ENABLE_FACE_RECOGNITION = True     # Face detection, recognition, and personality adaptation
+    ENABLE_DYNAMIC_BALANCE = True      # Real-time balance monitoring and stability control
     
     # ============================================================================
     # OBSTACLE AVOIDANCE SETTINGS
@@ -197,6 +198,26 @@ class PiDogConfig:
     FACE_CONFIDENCE_DISPLAY_MIN = 0.7     # Minimum confidence to display recognition
 
     # ============================================================================
+    # DYNAMIC BALANCE SYSTEM
+    # ============================================================================
+    BALANCE_SAMPLE_RATE = 20.0            # IMU sampling rate (Hz)
+    BALANCE_CALIBRATION_TIME = 5.0        # Calibration duration (seconds)
+    BALANCE_HISTORY_SIZE = 100            # Number of readings to keep in memory
+    BALANCE_STABILITY_WINDOW = 10         # Window size for stability analysis
+    BALANCE_DATA_DIR = "data/balance"     # Directory for balance data storage
+    
+    # Balance thresholds (degrees)
+    BALANCE_SLIGHT_TILT_THRESHOLD = 15.0  # Minor tilt detection
+    BALANCE_UNSTABLE_TILT_THRESHOLD = 25.0 # Unstable balance threshold
+    BALANCE_CRITICAL_TILT_THRESHOLD = 35.0 # Critical tilt requiring immediate action
+    
+    # Motion detection
+    BALANCE_RAPID_MOTION_THRESHOLD = 5.0  # Rapid angular velocity threshold (rad/s)
+    
+    # Correction behavior
+    BALANCE_CORRECTION_COOLDOWN = 2.0     # Minimum time between corrections (seconds)
+
+    # ============================================================================
     # SAFETY / WATCHDOG
     # ============================================================================
     WATCHDOG_HEARTBEAT_INTERVAL_S = 0.5
@@ -258,6 +279,7 @@ class SimpleConfig(PiDogConfig):
     ENABLE_EMOTIONAL_SYSTEM = False
     ENABLE_LEARNING_SYSTEM = False
     ENABLE_FACE_RECOGNITION = False  # Simplified mode - no face recognition
+    ENABLE_DYNAMIC_BALANCE = False  # Disabled for simplicity
     
     # Conservative obstacle avoidance
     OBSTACLE_IMMEDIATE_THREAT = 30.0
@@ -285,12 +307,17 @@ class AdvancedConfig(PiDogConfig):
     ENABLE_LEARNING_SYSTEM = True
     ENABLE_PATROL_LOGGING = True
     ENABLE_FACE_RECOGNITION = True  # Full AI capabilities
+    ENABLE_DYNAMIC_BALANCE = True  # Advanced balance monitoring
     
     # Advanced face recognition settings
     FACE_RECOGNITION_THRESHOLD = 0.5  # Lower threshold for better detection
     FACE_DETECTION_INTERVAL = 1.0     # More frequent detection
     FACE_MAX_FACES_PER_FRAME = 5      # Process more faces
     FACE_PERSONALITY_LEARNING_RATE = 0.15  # Faster learning
+    
+    # Enhanced balance monitoring settings
+    BALANCE_SAMPLE_RATE = 30.0  # Higher sampling rate for better response
+    BALANCE_CORRECTION_COOLDOWN = 1.5  # Faster corrections
     
     # Aggressive exploration settings
     OBSTACLE_IMMEDIATE_THREAT = 15.0
@@ -318,6 +345,7 @@ class IndoorPetConfig(PiDogConfig):
     ENABLE_PATROL_LOGGING = True
     ENABLE_AUTONOMOUS_NAVIGATION = False  # Manual control preferred
     ENABLE_FACE_RECOGNITION = True  # Perfect for family interaction
+    ENABLE_DYNAMIC_BALANCE = True  # Safety for indoor play
     
     # Indoor-friendly face recognition settings
     FACE_DETECTION_INTERVAL = 1.5     # Moderate detection frequency
@@ -355,6 +383,7 @@ class ExplorerConfig(PiDogConfig):
     ENABLE_EMOTIONAL_SYSTEM = False
     ENABLE_LEARNING_SYSTEM = False
     ENABLE_FACE_RECOGNITION = False  # Focus on mapping, not social interaction
+    ENABLE_DYNAMIC_BALANCE = True  # Critical for outdoor terrain
     
     # Balanced exploration settings
     OBSTACLE_IMMEDIATE_THREAT = 18.0
