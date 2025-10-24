@@ -115,6 +115,8 @@ class Orchestrator:
             self.hardware,
             logger=self.logger,
             interval_s=float(getattr(self.config, "LOG_STATUS_INTERVAL", 10)),
+            imu=imu,
+            battery=battery,
         ) if bool(getattr(self.config, "ENABLE_TELEMETRY", False)) else None
         sensors_facade = SensorsFacade(self.hardware) if bool(getattr(self.config, "ENABLE_SENSORS_FACADE", True)) else None
         self._ctx = BehaviorContext(
