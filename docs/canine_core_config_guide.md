@@ -1,4 +1,5 @@
 # CanineCore Configuration Guide
+> Author: 7Lynx · Doc Version: 2025.10.24
 
 This is the canonical configuration guide for CanineCore. All references should point here (`docs/canine_core_config_guide.md`).
 

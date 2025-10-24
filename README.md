@@ -1,4 +1,5 @@
 # HoundMind — Advanced Behaviors and AI for SunFounder PiDog
+> Author: 7Lynx · Doc Version: 2025.10.24
 
 HoundMind is the umbrella project that provides two related but completely independent ways to run your PiDog:
 
@@ -7,7 +8,7 @@ HoundMind is the umbrella project that provides two related but completely indep
 
 Use either system. They don’t import or depend on each other.
 
-Legacy modules for the old system are stored in Legacy, and the entire project has been forked at https://github.com/DrMikeKW/Pidog-New_Scripts/
+Legacy modules for the old system are stored in the legacy folder, and the entire project has been forked at https://github.com/DrMikeKW/Pidog-New_Scripts/
 
 ## What's inside
 

@@ -12,7 +12,7 @@ PiDog behaviors and services.
 Usage:
     python main.py
 
-Author: seven-lynx
+Author: 7Lynx
 Version: 2025.10.24
 """
 

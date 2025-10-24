@@ -15,7 +15,7 @@ Features:
 - Calibration systems
 - Path planning integration
 
-Author: seven-lynx
+Author: 7Lynx
 """
 
 import numpy as np

@@ -1,4 +1,5 @@
 # CanineCore 🔧
+> Author: 7Lynx · Doc Version: 2025.10.24
 
 Modern, modular behavior framework for PiDog. CanineCore provides an async orchestrator, shared services, and a clean Behavior interface so you can compose, run, and extend dog behaviors without wiring hardware details in every module.
 

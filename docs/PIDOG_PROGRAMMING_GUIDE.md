@@ -1,4 +1,5 @@
 # Complete PiDog Programming Guide
+> Author: 7Lynx · Doc Version: 2025.10.24
 
 > **The definitive beginner-friendly guide to programming the SunFounder PiDog robotic dog with Python**
 

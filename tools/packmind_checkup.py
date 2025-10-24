@@ -3,7 +3,7 @@
 PackMind Checkup Tool — PiDog runtime verifier
 ==============================================
 
-Author: seven-lynx
+Author: 7Lynx
 Version: 2025.10.24
 
 Run this on the PiDog to quickly verify your environment and PackMind modules after tinkering.

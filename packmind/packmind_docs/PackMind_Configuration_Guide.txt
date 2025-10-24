@@ -1,4 +1,5 @@
 # PiDog Configuration System Guide
+Author: 7Lynx | Doc Version: 2025.10.24
 
 """
 USAGE INSTRUCTIONS FOR PIDOG CONFIGURATION SYSTEM

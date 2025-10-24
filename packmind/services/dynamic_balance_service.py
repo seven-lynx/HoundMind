@@ -13,7 +13,7 @@ Features:
 - Surface adaptation recommendations
 - Balance event logging and statistics
 
-Author: seven-lynx
+Author: 7Lynx
 Version: 2025.10.24.2
 Created: 2024
 """

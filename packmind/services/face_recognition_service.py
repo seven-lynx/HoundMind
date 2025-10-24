@@ -13,7 +13,7 @@ Features:
 - Personality adaptation per person
 - Privacy-conscious local processing
 
-Author: seven-lynx
+Author: 7Lynx
 Version: 2025.10.24.1
 """
 

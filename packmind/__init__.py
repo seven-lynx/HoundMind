@@ -2,7 +2,7 @@
 
 Exports the primary orchestrator and core types/services for external use.
 
-Author: seven-lynx
+Author: 7Lynx
 Version: 2025.10.24
 """
 

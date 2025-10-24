@@ -1,4 +1,5 @@
 # Listing PiDog Functions Safely
+> Author: 7Lynx · Doc Version: 2025.10.24
 
 This short guide shows how to list available methods on a PiDog instance without baking hardware-dependent code into the core library.
 

@@ -20,7 +20,7 @@ Features demonstrated:
 ✓ Energy management system
 ✓ Coordinated multi-part movement
 
-Author: seven-lynx  
+Author: 7Lynx  
 Version: 2025.10.24
 
 Run with: python packmind/orchestrator.py
@@ -29,7 +29,6 @@ Run with: python packmind/orchestrator.py
 # ============================================================================
 # CONFIGURATION IMPORT
 # ============================================================================
-# Configuration is now in packmind/packmind_config.py
 from packmind.packmind_config import load_config, validate_config
 import logging
 logging.getLogger("packmind").info("Configuration system loaded from packmind/packmind_config.py")

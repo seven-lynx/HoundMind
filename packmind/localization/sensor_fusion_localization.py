@@ -13,7 +13,7 @@ Features:
 - Particle filter for probabilistic localization
 - Real-time movement validation and drift correction
 
-Author: seven-lynx
+Author: 7Lynx
 """
 
 import numpy as np

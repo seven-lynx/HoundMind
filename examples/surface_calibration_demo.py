@@ -14,7 +14,7 @@ This script shows how PiDog can automatically detect:
 - Tile (very low friction, slippery)
 - Rough surfaces (high friction, irregular movement)
 
-Author: seven-lynx
+Author: 7Lynx
 """
 
 import time

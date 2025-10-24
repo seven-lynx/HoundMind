@@ -14,7 +14,7 @@ Features:
 - Path visualization
 - Room and landmark highlighting
 
-Author: seven-lynx
+Author: 7Lynx
 """
 
 import json
