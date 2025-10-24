@@ -7,17 +7,16 @@ HoundMind is the umbrella project that provides two related but completely indep
 
 Use either system. They don’t import or depend on each other.
 
-Note: We’ve adopted the name “HoundMind” for the overall project brand. Module/package names (CanineCore, PackMind) remain unchanged for compatibility.
-
 Legacy modules for the old system are stored in Legacy, and the entire project has been forked at https://github.com/DrMikeKW/Pidog-New_Scripts/
 
-## What’s inside
+## What's inside
 
-- CanineCore (`canine_core/`): async orchestrator, services (motion, sensors, emotions, voice), and behavior modules.
-- PackMind (`packmind/`): AI orchestrator plus subsystems for mapping (SLAM), navigation (A*), localization (sensor fusion), voice, scanning, and obstacle handling.
-- Docs (`docs/`): programming guides, API reference, voice setup, and config guides.
-- Examples (`examples/`): runnable examples.
-- Legacy (`legacy/`): archived test modules and examples (not actively maintained)
+- **CanineCore** (`canine_core/`): async orchestrator, services (motion, sensors, emotions, voice), and behavior modules.
+- **PackMind** (`packmind/`): AI orchestrator plus subsystems for mapping (SLAM), navigation (A*), localization (sensor fusion), voice, scanning, obstacle handling, and **new AI services** (face recognition, dynamic balance, enhanced audio).
+- **Docs** (`docs/`): programming guides, API reference, voice setup, and config guides.
+- **Scripts** (`scripts/`): setup tools, integration tests, and utility scripts.
+- **Examples** (`examples/`): runnable examples.
+- **Legacy** (`legacy/`): archived test modules and examples (not actively maintained)
 
 ## Quick install and run on the Raspberry Pi 🧰
 
@@ -74,11 +73,17 @@ Tip: On a development PC without hardware, many hardware services fallback to sa
 
 ## Features at a glance
 
+### Core Features
 - Voice commands with optional wake word (when enabled)
 - Intelligent scanning and obstacle avoidance
 - Behavior orchestration and state handling
 - Emotional LED themes and reactive sounds
 - Optional SLAM mapping, A* navigation, and sensor‑fusion localization (PackMind)
+
+### 🆕 Advanced AI Services (PackMind)
+- **Face Recognition**: Real-time facial detection with personality adaptation and relationship building
+- **Dynamic Balance**: IMU-based balance monitoring with automatic tilt correction and fall prevention
+- **Enhanced Audio Processing**: Multi-source sound tracking, voice activity detection, and intelligent noise filtering
 
 ## Project layout
 
@@ -120,6 +125,19 @@ Note: Hardware‑dependent features won’t function fully without PiDog.
 - Voice Setup: `docs/voice_setup_instructions.md`
 - CanineCore configuration: `docs/canine_core_config_guide.md`
 - PackMind architecture: `packmind/ARCHITECTURE.md`
+- PackMind configuration: `packmind/packmind_docs/PackMind_Configuration_Guide.txt`
+- Integration completion: `INTEGRATION_COMPLETE.md`
+
+## Testing & Tools
+
+- **Setup Tool**: `scripts/setup_pidog.py` - Initial PiDog setup and calibration
+- **Integration Test**: `scripts/test_service_integration.py` - Validate AI services integration
+- **Legacy Tools**: `legacy/ubuntu_install.py` - Ubuntu system setup utilities
+
+Run integration tests:
+```bash
+python scripts/test_service_integration.py
+```
 
 ## Troubleshooting
 

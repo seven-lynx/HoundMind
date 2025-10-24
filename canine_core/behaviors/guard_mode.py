@@ -181,9 +181,11 @@ class GuardBehavior(Behavior):
                     self._baseline_mm[yaw] = new_base
 
                     # Approach detection (distance decreased vs. baseline)
-                    delta = base - dist  # positive means closer than baseline
+                    # Units: dog.read_distance() returns centimeters
+                    # Convert mm threshold to centimeters for comparison
+                    delta = base - dist  # cm; positive means closer than baseline
                     pct = (delta / base) if base > 1e-6 else 0.0
-                    approaching = (delta >= delta_mm) or (pct >= delta_pct)
+                    approaching = (delta >= (delta_mm / 10.0)) or (pct >= delta_pct)
                     # Record vote for this angle
                     votes = self._approach_votes.get(yaw)
                     if votes is None or votes.maxlen != max(1, confirm_window):
@@ -195,7 +197,7 @@ class GuardBehavior(Behavior):
                         now = loop.time()
                         if (now - self._last_alert_time_s) > cooldown_s:
                             ctx.logger.info(
-                                f"Guard: approaching object @ {yaw}° (Δ={delta:.0f}mm, {pct*100:.0f}%, base={base:.0f}, now={dist:.0f})"
+                                f"Guard: approaching object @ {yaw}° (Δ={delta:.0f}cm, {pct*100:.0f}%, base={base:.0f}cm, now={dist:.0f}cm)"
                             )
                             await self._alert()
                             self._last_alert_time_s = now

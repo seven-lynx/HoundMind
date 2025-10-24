@@ -1,6 +1,6 @@
 # PackMind: Standalone PiDog AI 🤖
 
-PackMind is a fully featured, standalone AI for PiDog. It contains its own orchestrator, services, behaviors, and subsystems for mapping, navigation, localization, and visualization.
+PackMind is a fully featured, standalone AI for PiDog. It contains its own orchestrator, services, behaviors, and subsystems for mapping, navigation, localization, visualization, and **advanced AI services** for face recognition, dynamic balance, and enhanced audio processing.
 
 Independence: PackMind and CanineCore are related but distinct projects. PackMind does not import or depend on CanineCore.
 
@@ -30,6 +30,18 @@ Configure behavior and features via `packmind/packmind_config.py` (presets avail
     - ASCII map printing and export tools
     - `from packmind.visualization.map_visualization import MapVisualizer`
 
+- 🔍 **Face Recognition**: `packmind/services/face_recognition_service.py`
+    - Real-time facial detection with personality adaptation
+    - `from packmind.services.face_recognition_service import FaceRecognitionService`
+
+- ⚖️ **Dynamic Balance**: `packmind/services/dynamic_balance_service.py`
+    - IMU-based balance monitoring and tilt correction
+    - `from packmind.services.dynamic_balance_service import DynamicBalanceService`
+
+- 🔊 **Enhanced Audio**: `packmind/services/enhanced_audio_processing_service.py`
+    - Multi-source sound tracking and voice activity detection
+    - `from packmind.services.enhanced_audio_processing_service import EnhancedAudioProcessingService`
+
 Note: Older top-level files like `house_mapping.py` or `pathfinding.py` were moved into these folders. Update imports accordingly.
 
 ## ⚙️ Configuration
@@ -43,6 +55,10 @@ class PiDogConfig:
         ENABLE_SENSOR_FUSION = True
         ENABLE_EMOTIONAL_SYSTEM = True
         ENABLE_AUTONOMOUS_NAVIGATION = False
+        # New AI Services
+        ENABLE_FACE_RECOGNITION = True
+        ENABLE_DYNAMIC_BALANCE = True
+        ENABLE_ENHANCED_AUDIO = True
 ```
 
 ## 📚 Documentation

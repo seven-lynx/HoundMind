@@ -204,7 +204,7 @@ class SmartPatrolBehavior(Behavior):
         self._alert_cd = Cooldown(float(getattr(cfg, "PATROL_ALERT_COOLDOWN_S", 2.0)))
         while self._running:
             fwd, left, right = await self._quick_scan()
-            ctx.logger.info(f"Patrol scan mm fwd={fwd:.0f} left={left:.0f} right={right:.0f}")
+            ctx.logger.info(f"Patrol scan cm fwd={fwd:.0f} left={left:.0f} right={right:.0f}")
             action, params = self._decide(fwd, left, right)
             if dog is None:
                 ctx.logger.info(f"[Sim] patrol action: {action} {params}")
@@ -220,9 +220,10 @@ class SmartPatrolBehavior(Behavior):
                 base_fwd = self._baseline_mm.get(0, fwd)
                 delta_mm = float(getattr(cfg, "PATROL_APPROACH_DEVIATION_MM", 100.0))
                 delta_pct = float(getattr(cfg, "PATROL_APPROACH_DEVIATION_PCT", 0.20))
-                delta = max(0.0, base_fwd - fwd)
+                delta = max(0.0, base_fwd - fwd)  # cm
                 pct = (delta / base_fwd) if base_fwd > 1e-6 else 0.0
-                approaching = (delta >= delta_mm) or (pct >= delta_pct)
+                # Convert mm threshold to cm to compare with readings (which are cm)
+                approaching = (delta >= (delta_mm / 10.0)) or (pct >= delta_pct)
                 # vote window for forward-only
                 vw = self._approach_votes.get(0)
                 if vw is None or vw.maxlen != max(1, int(getattr(cfg, "PATROL_CONFIRM_WINDOW", 3))):
