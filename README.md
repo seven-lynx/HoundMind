@@ -124,9 +124,9 @@ Note: Hardware‑dependent features won’t function fully without PiDog.
 - API Reference: `docs/api_reference.md`
 - Voice Setup: `docs/voice_setup_instructions.md`
 - CanineCore configuration: `docs/canine_core_config_guide.md`
-- PackMind architecture: `packmind/ARCHITECTURE.md`
+- PackMind architecture: `packmind/packmind_docs/ARCHITECTURE.md`
 - PackMind configuration: `packmind/packmind_docs/PackMind_Configuration_Guide.txt`
-- Integration completion: `INTEGRATION_COMPLETE.md`
+  
 
 ## Testing & Tools
 

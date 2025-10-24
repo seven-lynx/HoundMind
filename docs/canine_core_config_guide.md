@@ -1,5 +1,13 @@
 # CanineCore Configuration Guide
 
+This is a copy of the canonical guide located at `canine_core/canine_core_config_guide.md`.
+
+For convenience, the full guide content is included below so links from READMEs remain valid.
+
+---
+
+# CanineCore Configuration Guide
+
 This guide is part of HoundMind. CanineCore is the modular behaviors/services framework within the HoundMind project for PiDog.
 
 This guide explains every option in `canine_core/config/canine_config.py` and how it affects behaviors. Use it with the interactive launcher `canine_core/control.py`. Presets live in the same file and can be selected in the controller.
@@ -52,7 +60,7 @@ Notes: Step counts scale angular/linear distance; speeds are device-specific.
 - HEAD_SCAN_RANGE (deg): Head sweep angle left/right during scans.
 - HEAD_SCAN_SPEED: Speed of head movement during scans.
 - SCAN_SAMPLES: Samples per scan position (future use).
-- SCAN_WHILE_MOVING: Allow concurrent scan + motion (future use).
+- SCAN_WHILE_MOVING: Allow concurrent scan + motion (when safe).
 - SCAN_DEBOUNCE_S (s): Debounce window to ignore jittery repeated readings.
 - SCAN_SMOOTHING_ALPHA (0..1): EMA smoothing factor for ultrasonic distances.
 
@@ -144,10 +152,6 @@ Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 - ULTRASONIC_MIN_CM|MAX_CM: Hard limits for valid readings.
 - ULTRASONIC_OUTLIER_REJECT_Z: Sigma-based outlier rejection.
 
-## Smoke behavior (HardwareSmoke)
-- SMOKE_ALLOW_MOVE (bool): If true, run a minimal movement sequence.
-- SMOKE_SPEED: Speed used for smoke movement checks.
-
 ## Behavior orchestration
 - BEHAVIOR_SELECTION_MODE: "sequential" or "weighted" selection.
 - BEHAVIOR_WEIGHTS: Weights used when mode is weighted.
@@ -157,10 +161,15 @@ Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 - EMERGENCY_STOP_POSE: Pose to assume on emergency stop.
 - SAFETY_MAX_TILT_DEG|ROLL_DEG: Tip angle limits for safety reactions.
 
+## Smoke behavior (HardwareSmoke)
+- SMOKE_ALLOW_MOVE (bool): If true, run a minimal movement sequence.
+- SMOKE_SPEED: Speed used for smoke movement checks.
+
 ## How behaviors use config
 - SmartPatrolBehavior: OBSTACLE_* thresholds, HEAD_SCAN_* values, speeds/steps, OBSTACLE_SCAN_INTERVAL.
 - ReactionsBehavior: REACTIONS_* thresholds/timing, SOUND_BODY_TURN_THRESHOLD, HEAD_SCAN_SPEED, SPEED_*.
 - GuardBehavior: GUARD_DETECT_MM, SPEED_SLOW, SPEED_TURN_*; respects ENABLE_EMOTIONAL_SYSTEM.
+- HardwareSmokeBehavior: uses SMOKE_* flags and reads sensors/IMU/battery/sensors_facade.
 
 ## Presets
 - Edit `canine_core/config/canine_config.py` to change defaults or extend presets (Simple, Patrol, Interactive, Safety-First).
@@ -180,3 +189,5 @@ python canine_core/control.py
 ```
 
 Presets determine which behaviors are in rotation (`AVAILABLE_BEHAVIORS`) as well as default timing windows.
+
+

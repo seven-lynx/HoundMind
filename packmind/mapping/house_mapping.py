@@ -22,7 +22,7 @@ import numpy as np
 import json
 import time
 import math
-from typing import Dict, List, Tuple, Optional, Set
+from typing import Any, Dict, List, Tuple, Optional, Set
 from dataclasses import dataclass, asdict
 from enum import Enum
 import threading
@@ -800,54 +800,53 @@ class PiDogSLAM:
         
         return None
     
-    def _suggest_exploration_direction(self) -> Dict:
+    def _suggest_exploration_direction(self) -> Dict[str, Any]:
         """Suggest best direction for exploration"""
         current_pos = self.house_map.current_position
-        
+
         # Check areas around current position for unexplored regions
         directions = {
             "forward": (0, 1),
-            "left": (1, 0), 
+            "left": (1, 0),
             "right": (-1, 0),
-            "backward": (0, -1)
+            "backward": (0, -1),
         }
-        
-        exploration_scores = {}
-        
+
+        exploration_scores: Dict[str, int] = {}
+
         for direction, (dx, dy) in directions.items():
             score = 0
-            
+
             # Look ahead in this direction
             for distance in range(1, 20):  # Check 20 cells ahead
                 x = int(current_pos.x + dx * distance)
                 y = int(current_pos.y + dy * distance)
-                
-                if (0 <= x < self.house_map.max_size[0] and 
-                    0 <= y < self.house_map.max_size[1]):
-                    
+
+                if (0 <= x < self.house_map.max_size[0] and 0 <= y < self.house_map.max_size[1]):
                     cell = self.house_map.grid[x, y]
-                    
+
                     if cell.cell_type == CellType.UNKNOWN:
                         # Higher score for unknown cells, weighted by distance
                         score += 10  # Bonus for unexplored areas
                     elif cell.cell_type == CellType.FREE:
                         # Small bonus for free cells (accessible)
-                        score += 5   # Good for free movement
+                        score += 5  # Good for free movement
                     elif cell.cell_type == CellType.OBSTACLE:
                         score -= 20  # Penalty for obstacles
                         break
                 else:
                     break
-            
+
             exploration_scores[direction] = score
-        
-        # Find best direction
-        best_direction = max(exploration_scores, key=exploration_scores.get)
-        best_score = exploration_scores[best_direction]
-        
+
+        # Pick the direction with the highest score (tie-breaker is dict order)
+        best_kv = max(exploration_scores.items(), key=lambda kv: kv[1])
+        best_direction = best_kv[0]
+        best_score = best_kv[1]
+
         return {
             "suggested_direction": best_direction,
             "confidence": min(1.0, best_score / 100.0),
             "all_scores": exploration_scores,
-            "reason": "unexplored_area" if best_score > 50 else "open_space"
+            "reason": "unexplored_area" if best_score > 50 else "open_space",
         }

@@ -48,7 +48,6 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 - **Documentation & Testing**:
   - Comprehensive configuration guide updates in `PackMind_Configuration_Guide.txt`
   - Integration test suite in `tools/test_service_integration.py` 
-  - Complete project summary in `INTEGRATION_COMPLETE.md`
   - Updated dependency management in `requirements.txt`
 
 ### Changed
@@ -67,6 +66,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
    - BatteryService (`ENABLE_BATTERY_MONITOR`)
    - TelemetryService (`ENABLE_TELEMETRY`)
  - **Event Bus**: Reintroduced lightweight `canine_core/core/bus.py` for internal pub/sub
+ - **Default Hooks**: Added `canine_core/core/hooks.py` with default event-driven handlers (battery_low/critical, safety_emergency_tilt) and optional enable via `ENABLE_DEFAULT_HOOKS`.
+ - **Sensors Facade**: New `canine_core/core/services/sensors_facade.py` for sim-safe ears (sound) and dual touch wrappers; gated via `ENABLE_SENSORS_FACADE`.
+ - **Telemetry HUD**: Extended `canine_core/core/services/telemetry.py` to include `tilt_deg`, `battery_pct`, and head orientation (yaw/roll/pitch) when available.
+ - **Behavior Watchdog**: Introduced `canine_core/core/watchdog.py` and integrated into orchestrator to cap dwell and stop on consecutive errors; controlled by `ENABLE_BEHAVIOR_WATCHDOG`, `WATCHDOG_MAX_BEHAVIOR_S`, `WATCHDOG_MAX_ERRORS`.
+ - **Safety-First Preset**: New `SafetyFirstPreset` with conservative speeds, wider safe distances, and `SCAN_WHILE_MOVING=False`; added to presets as `"safety-first"` and fully applied in `canine_core/control.py`.
+ - **Hardware Smoke Behavior**: New `canine_core/behaviors/hardware_smoke.py` to perform minimal OK/FAIL checks (distance, IMU, battery, ears/touch); optional limited motion via `SMOKE_ALLOW_MOVE` and `SMOKE_SPEED`.
+ - **Pi-only Hardware Check Tool**: `tools/pidog_hardware_check.py` for direct on-robot validation (distance, IMU, ears, touch, audio, LED); `--move` enables limited motion/head sweep.
 
 ### Technical Metrics
 - **2,236+ lines** of new service code across three major AI systems
