@@ -114,6 +114,9 @@ from packmind.behaviors.idle_behavior import IdleBehavior
 from packmind.behaviors.patrolling_behavior import PatrollingBehavior
 from packmind.services.safety_watchdog import SafetyWatchdog
 from packmind.services.health_monitor import HealthMonitor
+from packmind.services.face_recognition_service import FaceRecognitionService
+from packmind.services.dynamic_balance_service import DynamicBalanceService
+from packmind.services.enhanced_audio_processing_service import EnhancedAudioProcessingService
 
 # Note: No local dummy classes are defined for disabled features.
 """
@@ -390,6 +393,14 @@ class Orchestrator:
         # Scanning service from container
         self.scanning_service = self._container.scanning()
 
+        # Initialize new AI services
+        self.face_recognition_service = FaceRecognitionService(self.config)
+        self.dynamic_balance_service = DynamicBalanceService(self.config)
+        self.enhanced_audio_service = EnhancedAudioProcessingService(self.config)
+
+        # Set up service callbacks and integration
+        self._setup_service_callbacks()
+
     # Compatibility properties mapping legacy attributes to context
     @property
     def dog(self):
@@ -431,6 +442,133 @@ class Orchestrator:
     def current_behavior(self, value: BehaviorState) -> None:
         self.context.behavior_state = value
     
+    def _setup_service_callbacks(self):
+        """Set up integration between services"""
+        try:
+            # Store references to services for integration
+            self._last_face_detection_time = 0
+            self._last_balance_state = None
+            self._last_audio_check_time = 0
+            
+            # Integration will be handled through periodic checks in the main loop
+            self._logger.info("Service integration initialized - will check services periodically")
+                
+        except Exception as e:
+            self._logger.error(f"Error setting up service integration: {e}")
+    
+    def _check_service_integration(self):
+        """Check services for updates and integrate with behaviors"""
+        try:
+            current_time = time.time()
+            
+            # Check face recognition service
+            if (hasattr(self, 'face_recognition_service') and 
+                self.face_recognition_service and 
+                self.config.ENABLE_FACE_RECOGNITION and
+                current_time - self._last_face_detection_time > 2.0):  # Check every 2 seconds
+                
+                try:
+                    results = self.face_recognition_service.detect_and_recognize()
+                    if results and results.get('faces_detected', 0) > 0:
+                        recognized_faces = results.get('recognized_faces', [])
+                        if recognized_faces:
+                            # Someone was recognized - trigger happy emotion
+                            person_name = recognized_faces[0].get('name', 'Unknown')
+                            confidence = recognized_faces[0].get('confidence', 0.0)
+                            self._logger.info(f"Face recognized: {person_name} (confidence: {confidence:.2f})")
+                            self.set_emotion(EmotionalState.HAPPY)
+                            self._log_patrol_event("FACE_RECOGNITION", f"Recognized {person_name}", {
+                                "confidence": confidence
+                            })
+                        else:
+                            # Unknown face detected - trigger excited emotion
+                            self._logger.info("Unknown face detected")
+                            self.set_emotion(EmotionalState.EXCITED)
+                            self._log_patrol_event("FACE_RECOGNITION", "Unknown face detected")
+                    
+                    self._last_face_detection_time = current_time
+                except Exception as e:
+                    self._logger.error(f"Error checking face recognition service: {e}")
+            
+            # Check dynamic balance service
+            if (hasattr(self, 'dynamic_balance_service') and 
+                self.dynamic_balance_service and
+                self.config.ENABLE_DYNAMIC_BALANCE):
+                
+                try:
+                    balance_state, reading = self.dynamic_balance_service.get_current_balance_state()
+                    
+                    # Check for state changes
+                    if balance_state != self._last_balance_state:
+                        from packmind.services.dynamic_balance_service import BalanceState
+                        
+                        if balance_state == BalanceState.CRITICAL:
+                            self._logger.warning("Critical balance detected")
+                            self.set_emotion(EmotionalState.ALERT)
+                            self._log_patrol_event("BALANCE", "Critical balance state", {
+                                "state": balance_state.value,
+                                "roll": reading.roll if reading else None,
+                                "pitch": reading.pitch if reading else None
+                            })
+                        elif balance_state == BalanceState.STABLE and self._last_balance_state in [BalanceState.CRITICAL, BalanceState.UNSTABLE]:
+                            self._logger.info("Balance recovered")
+                            self.set_emotion(EmotionalState.CALM)
+                            self._log_patrol_event("BALANCE", "Balance recovered")
+                        
+                        self._last_balance_state = balance_state
+                        
+                except Exception as e:
+                    self._logger.error(f"Error checking balance service: {e}")
+            
+            # Check enhanced audio service
+            if (hasattr(self, 'enhanced_audio_service') and 
+                self.enhanced_audio_service and
+                self.config.ENABLE_ENHANCED_AUDIO and
+                current_time - self._last_audio_check_time > 1.0):  # Check every second
+                
+                try:
+                    # Check if voice is currently detected
+                    if self.enhanced_audio_service.is_voice_detected():
+                        audio_level = self.enhanced_audio_service.get_current_audio_level()
+                        self._logger.info(f"Voice activity detected: level={audio_level:.3f}")
+                        self.set_emotion(EmotionalState.EXCITED)
+                        self._log_patrol_event("AUDIO", "Voice activity detected", {
+                            "audio_level": audio_level
+                        })
+                    
+                    # Check for loud noises
+                    audio_level = self.enhanced_audio_service.get_current_audio_level()
+                    if audio_level > self.config.AUDIO_LOUD_NOISE_THRESHOLD:
+                        self._logger.warning(f"Loud noise detected: level={audio_level:.3f}")
+                        self.set_emotion(EmotionalState.ALERT)
+                        self._log_patrol_event("AUDIO", "Loud noise detected", {
+                            "audio_level": audio_level
+                        })
+                    
+                    # Check active sound sources
+                    active_sources = self.enhanced_audio_service.get_active_sources()
+                    if active_sources:
+                        for source_id, source in active_sources.items():
+                            if hasattr(self, '_logged_sources'):
+                                if source_id not in self._logged_sources:
+                                    self._logger.info(f"New sound source tracked: {source.source_type.value} at {source.direction_degrees:.0f}°")
+                                    self._log_patrol_event("AUDIO", "New sound source", {
+                                        "source_type": source.source_type.value,
+                                        "direction": source.direction_degrees,
+                                        "intensity": source.intensity
+                                    })
+                                    self._logged_sources.add(source_id)
+                            else:
+                                self._logged_sources = {source_id}
+                    
+                    self._last_audio_check_time = current_time
+                    
+                except Exception as e:
+                    self._logger.error(f"Error checking audio service: {e}")
+                    
+        except Exception as e:
+            self._logger.error(f"Error in service integration check: {e}")
+    
     def initialize(self) -> bool:
         """Initialize PiDog with error handling"""
         try:
@@ -466,6 +604,31 @@ class Orchestrator:
             if self.sensor_localizer:
                 self.sensor_localizer.start_localization()
                 self._log_patrol_event("LOCALIZATION", "Sensor fusion localization started")
+            
+            # Start new AI services
+            if hasattr(self, 'face_recognition_service') and self.config.ENABLE_FACE_RECOGNITION:
+                try:
+                    self.face_recognition_service.start()
+                    self._log_patrol_event("FACE_RECOGNITION", "Face recognition service started")
+                    self._logger.info("Face recognition service started")
+                except Exception as e:
+                    self._logger.error(f"Failed to start face recognition service: {e}")
+            
+            if hasattr(self, 'dynamic_balance_service') and self.config.ENABLE_DYNAMIC_BALANCE:
+                try:
+                    self.dynamic_balance_service.start()
+                    self._log_patrol_event("BALANCE", "Dynamic balance service started")
+                    self._logger.info("Dynamic balance service started")
+                except Exception as e:
+                    self._logger.error(f"Failed to start dynamic balance service: {e}")
+            
+            if hasattr(self, 'enhanced_audio_service') and self.config.ENABLE_ENHANCED_AUDIO:
+                try:
+                    self.enhanced_audio_service.start()
+                    self._log_patrol_event("AUDIO", "Enhanced audio processing service started")
+                    self._logger.info("Enhanced audio processing service started")
+                except Exception as e:
+                    self._logger.error(f"Failed to start enhanced audio service: {e}")
             
             self._logger.info("PiDog AI initialized successfully")
             return True
@@ -715,6 +878,9 @@ class Orchestrator:
             
         # Check for behavior state transitions
         self._evaluate_behavior_transitions(current_time)
+
+        # Check service integration
+        self._check_service_integration()
 
         # Watchdog heartbeat (basic liveness)
         try:
@@ -1543,6 +1709,31 @@ class Orchestrator:
             self._log_patrol_event("LOCALIZATION_SHUTDOWN", "Stopping sensor fusion localization")
             self.sensor_localizer.stop_localization()
             self._logger.info("✓ Sensor fusion localization stopped")
+        
+        # Stop new AI services
+        if hasattr(self, 'face_recognition_service') and self.face_recognition_service:
+            try:
+                self.face_recognition_service.stop()
+                self._log_patrol_event("FACE_RECOGNITION_SHUTDOWN", "Face recognition service stopped")
+                self._logger.info("✓ Face recognition service stopped")
+            except Exception as e:
+                self._logger.error(f"Error stopping face recognition service: {e}")
+        
+        if hasattr(self, 'dynamic_balance_service') and self.dynamic_balance_service:
+            try:
+                self.dynamic_balance_service.stop()
+                self._log_patrol_event("BALANCE_SHUTDOWN", "Dynamic balance service stopped")
+                self._logger.info("✓ Dynamic balance service stopped")
+            except Exception as e:
+                self._logger.error(f"Error stopping dynamic balance service: {e}")
+        
+        if hasattr(self, 'enhanced_audio_service') and self.enhanced_audio_service:
+            try:
+                self.enhanced_audio_service.stop()
+                self._log_patrol_event("AUDIO_SHUTDOWN", "Enhanced audio processing service stopped")
+                self._logger.info("✓ Enhanced audio processing service stopped")
+            except Exception as e:
+                self._logger.error(f"Error stopping enhanced audio service: {e}")
         
         # Generate final patrol report
         try:

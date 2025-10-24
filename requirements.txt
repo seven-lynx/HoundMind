@@ -14,6 +14,8 @@ pydub>=0.25.1
 # Computer vision and image processing
 opencv-python>=4.8.0
 pillow>=9.5.0
+face-recognition>=1.3.0
+dlib>=19.24.0
 
 # Scientific computing and data processing
 numpy>=1.24.0
@@ -28,6 +30,7 @@ tensorflow>=2.12.0
 RPi.GPIO>=0.7.1
 adafruit-circuitpython-servokit>=1.3.15
 adafruit-blinka>=8.20.0
+pidog>=1.0.0
 
 # Communication and networking
 requests>=2.31.0
