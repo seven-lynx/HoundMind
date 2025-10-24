@@ -12,6 +12,7 @@ Hardware-safe: works in simulation when hardware/sensors are unavailable.
 from __future__ import annotations
 import asyncio
 import random
+import time
 from typing import Optional
 
 from canine_core.core.interfaces import Behavior, BehaviorContext, Event
@@ -31,6 +32,10 @@ class ReactionsBehavior(Behavior):
         self._task: Optional[asyncio.Task] = None
         self._running = False
         self._sound: Optional[object] = None
+        # Debounce/cooldown trackers
+        self._last_touch_ts: float = 0.0
+        self._last_imu_ts: float = 0.0
+        self._last_sound_turn_ts: float = 0.0
 
     async def start(self, ctx: BehaviorContext) -> None:
         self._ctx = ctx
@@ -106,6 +111,11 @@ class ReactionsBehavior(Behavior):
             td = getattr(dog, "touchData", None)
             if not td:
                 return
+            # Debounce
+            debounce = float(getattr(self._ctx.config, "TOUCH_DEBOUNCE_S", 0.1))
+            now = time.monotonic()
+            if now - self._last_touch_ts < max(0.0, debounce):
+                return
             # Head touch
             if td[0]:
                 self._emotion((0, 255, 0), "breathe")
@@ -122,6 +132,7 @@ class ReactionsBehavior(Behavior):
                     dog.wait_all_done()
                 except Exception:
                     pass
+            self._last_touch_ts = now
         except Exception:
             return
 
@@ -135,30 +146,41 @@ class ReactionsBehavior(Behavior):
             if not acc:
                 return
             ax, ay, az = acc[0], acc[1], acc[2]
-            # Lift/placement heuristics (very conservative)
-            if ax and ax > 25000:  # lifted
+            # Config thresholds
+            lift_thr = int(getattr(self._ctx.config, "REACTIONS_LIFT_THRESHOLD", 25000))
+            place_thr = int(getattr(self._ctx.config, "REACTIONS_PLACE_THRESHOLD", -25000))
+            flip_thr = int(getattr(self._ctx.config, "REACTIONS_FLIP_ROLL_THRESHOLD", 30000))
+            cd = float(getattr(self._ctx.config, "REACTION_COOLDOWN_S", 1.0))
+            now = time.monotonic()
+            if now - self._last_imu_ts < max(0.0, cd):
+                return
+            # Lift/placement heuristics (config-driven)
+            if ax and ax > lift_thr:  # lifted
                 self._emotion((255, 0, 0), "flash")
                 try:
                     dog.do_action("bark", speed=80)
                     dog.wait_all_done()
                 except Exception:
                     pass
-            elif ax and ax < -25000:  # placed down
+                self._last_imu_ts = now
+            elif ax and ax < place_thr:  # placed down
                 self._emotion((255, 255, 255))
                 try:
                     dog.do_action("sit", speed=60)
                     dog.wait_all_done()
                 except Exception:
                     pass
+                self._last_imu_ts = now
             # Flip detection via roll magnitude
             roll = ay
-            if roll and abs(roll) > 30000:
+            if roll and abs(roll) > flip_thr:
                 self._emotion((0, 0, 255), "breathe")
                 try:
                     dog.do_action("head_tilt", speed=70)
                     dog.wait_all_done()
                 except Exception:
                     pass
+                self._last_imu_ts = now
         except Exception:
             return
 
@@ -175,19 +197,22 @@ class ReactionsBehavior(Behavior):
                 dog.wait_head_done()
                 # Body turn if significant
                 threshold = getattr(self._ctx.config, "SOUND_BODY_TURN_THRESHOLD", 45)
-                if abs(direction) >= threshold:
+                scd = float(getattr(self._ctx.config, "SOUND_COOLDOWN_S", 1.5))
+                now = time.monotonic()
+                if abs(direction) >= threshold and (now - self._last_sound_turn_ts) >= max(0.0, scd):
                     self._emotion((255, 165, 0), "flash")
                     if direction > 0:
                         dog.do_action("turn_right", step_count=1, speed=getattr(self._ctx.config, "SPEED_TURN_NORMAL", 200))
                     else:
                         dog.do_action("turn_left", step_count=1, speed=getattr(self._ctx.config, "SPEED_TURN_NORMAL", 200))
                     dog.wait_all_done()
+                    self._last_sound_turn_ts = now
         except Exception:
             return
 
     async def _loop(self) -> None:
         assert self._ctx is not None
-        interval = 0.5
+        interval = float(getattr(self._ctx.config, "REACTIONS_INTERVAL", 0.5))
         while self._running:
             self._touch()
             self._imu()

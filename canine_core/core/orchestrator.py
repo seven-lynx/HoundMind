@@ -1,7 +1,8 @@
 from __future__ import annotations
 import asyncio
 import importlib
-from typing import Dict, Any
+import random
+from typing import Dict, Any, List, Tuple
 
 from .interfaces import Behavior, BehaviorContext, Event
 from .bus import EventBus
@@ -211,7 +212,31 @@ class Orchestrator:
         # Prefer explicit behavior_queue if present; otherwise use AVAILABLE_BEHAVIORS
         queue = getattr(self.config, "behavior_queue", None)
         if not queue:
-            queue = list(getattr(self.config, "AVAILABLE_BEHAVIORS", ["idle_behavior"]))
+            avail: List[str] = list(getattr(self.config, "AVAILABLE_BEHAVIORS", ["idle_behavior"]))
+            mode = str(getattr(self.config, "BEHAVIOR_SELECTION_MODE", "weighted") or "weighted").lower()
+            if mode == "weighted":
+                # Build a weighted random permutation of available behaviors.
+                # Use Efraimidis-Spirakis: key = -ln(U)/w; sort ascending by key.
+                weights_map: Dict[str, float] = dict(getattr(self.config, "BEHAVIOR_WEIGHTS", {}))
+                items: List[Tuple[float, str]] = []
+                for name in avail:
+                    w = float(weights_map.get(name, 1.0))
+                    if w <= 0.0:
+                        continue  # skip non-positive weights
+                    u = random.random()
+                    # Guard u to (0,1]
+                    if u <= 0.0:
+                        u = 1e-9
+                    import math
+                    key = -math.log(u) / w
+                    items.append((key, name))
+                if not items:
+                    queue = list(avail)
+                else:
+                    items.sort(key=lambda x: x[0])
+                    queue = [name for (_k, name) in items]
+            else:
+                queue = list(avail)
         # Simple loop over configured/available behaviors
         for spec in queue:
             beh = self._resolve_behavior(spec)
