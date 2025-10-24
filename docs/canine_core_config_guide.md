@@ -89,6 +89,17 @@ Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 - ENERGY_REST_RECOVERY: Energy recovery rate in idle.
 - ENERGY_LOW_THRESHOLD|HIGH_THRESHOLD: Boundaries for mood/behavior changes.
 
+## Learning system
+- ENABLE_LEARNING_SYSTEM (bool): When true, CanineCore wires a lightweight LearningService into the behavior context as `ctx.learning`.
+- What it does: Maintains simple JSON-backed counters for categories like interactions, commands, and obstacles.
+- Persistence: Saved to `data/canine_core/learning.json` automatically at intervals and on shutdown.
+- API (for behaviors):
+	- `ctx.learning.record_interaction(key)` / `record_command(key)` / `record_obstacle(key)`
+	- `ctx.learning.get_count(category, key)`
+	- `ctx.learning.top_n(category, n=5)`
+
+Notes: The service is sim-safe and writes locally when running on non-Pi hosts.
+
 ## Battery
 - LOW_BATTERY_THRESHOLD (%): Warn and reduce activity below this level.
 - CRITICAL_BATTERY_THRESHOLD (%): Trigger safe/low-power mode.

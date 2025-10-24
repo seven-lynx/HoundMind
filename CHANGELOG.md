@@ -47,6 +47,7 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
   - Preset-specific optimizations (Advanced: enhanced capabilities, Simple: focused operation)
 
 - **Documentation & Testing**:
+ - **CanineCore LearningService** (`canine_core/core/services/learning.py`): A lightweight, JSON-backed counters service (interactions, commands, obstacles). Wired behind `ENABLE_LEARNING_SYSTEM` and exposed to behaviors via `ctx.learning`; persists to `data/canine_core/learning.json` with periodic autosave.
   - Comprehensive configuration guide updates in `PackMind_Configuration_Guide.txt`
   - Integration test suite in `tools/test_service_integration.py` 
   - Updated dependency management in `requirements.txt`

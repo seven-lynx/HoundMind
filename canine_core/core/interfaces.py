@@ -38,6 +38,8 @@ class BehaviorContext:
     balance: Any | None = None
     audio: Any | None = None
     scanning: Any | None = None
+    # Learning system (optional)
+    learning: Any | None = None
 
 @runtime_checkable
 class Behavior(Protocol):

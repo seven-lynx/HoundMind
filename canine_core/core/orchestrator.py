@@ -25,6 +25,7 @@ from .services.energy import EnergyService
 from .services.balance import BalanceService
 from .services.audio_processing import AudioProcessingService
 from .services.scanning_coordinator import ScanningCoordinator
+from .services.learning import LearningService
 
 class LegacyThreadBehavior:
     """Adapter to run legacy modules exposing start_behavior() in a thread.
@@ -136,6 +137,7 @@ class Orchestrator:
                 self.logger.info("BalanceService disabled (requires IMU)")
         audio = AudioProcessingService() if bool(getattr(self.config, "ENABLE_AUDIO_PROCESSING", False)) else None
         scanning = ScanningCoordinator(self.hardware, sensors, self.bus.publish) if bool(getattr(self.config, "ENABLE_SCANNING_COORDINATOR", False)) else None
+        learning = LearningService(config=self.config, logger=self.logger) if bool(getattr(self.config, "ENABLE_LEARNING_SYSTEM", False)) else None
         self._ctx = BehaviorContext(
             hardware=self.hardware,
             sensors=sensors,
@@ -156,6 +158,7 @@ class Orchestrator:
             balance=balance,
             audio=audio,
             scanning=scanning,
+            learning=learning,
         )
         # Hooks: subscribe default handlers if enabled
         if bool(getattr(self.config, "ENABLE_DEFAULT_HOOKS", True)):
@@ -173,6 +176,7 @@ class Orchestrator:
         self.balance = balance
         self.audio = audio
         self.scanning = scanning
+        self.learning = learning
 
     def _resolve_behavior(self, spec: str) -> Behavior:
         """Resolve a behavior spec into a Behavior instance.
