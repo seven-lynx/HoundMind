@@ -31,8 +31,8 @@ Requirements
 
 ```bash
 cd ~
-git clone https://github.com/seven-lynx/Pidog.git
-cd Pidog
+git clone https://github.com/seven-lynx/HoundMind.git
+cd HoundMind
 ```
 
 2) Install Python dependencies
@@ -83,7 +83,7 @@ Tip: On a development PC without hardware, many hardware services fallback to sa
 ## Project layout
 
 ```
-Pidog/
+HoundMind/
 ├─ main.py                    # CanineCore entry point
 ├─ canine_core/
 │  ├─ behaviors/
