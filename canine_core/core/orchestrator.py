@@ -68,7 +68,7 @@ class Orchestrator:
             self.config = CanineConfig()
         self.bus = EventBus()
         self.state = StateStore()
-        self.logger = LoggingService(prefix="Orchestrator")
+        self.logger = LoggingService(prefix="Orchestrator", config=self.config)
         self.hardware = HardwareService()
         self._ctx = None
         self._active: Behavior | None = None

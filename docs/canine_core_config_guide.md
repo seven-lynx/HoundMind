@@ -77,6 +77,8 @@ Notes: Step counts scale angular/linear distance; speeds are device-specific.
 - TOUCH_DEBOUNCE_S (s): Debounce for touch inputs.
 - REACTION_COOLDOWN_S (s): Cooldown between reaction-triggered actions.
 
+Note: Reactions behavior reads these values directly. Defaults are conservative and simulation-safe.
+
 Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 
 ## Energy system
@@ -155,6 +157,8 @@ Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 - BEHAVIOR_SELECTION_MODE: "sequential" or "weighted" selection.
 - BEHAVIOR_WEIGHTS: Weights used when mode is weighted.
 - BEHAVIOR_MIN_DWELL_S: Minimum time to stay in a behavior.
+
+Note: Weighted selection is implemented; when enabled, the orchestrator builds a weighted random permutation of `AVAILABLE_BEHAVIORS` each cycle using `BEHAVIOR_WEIGHTS` (defaults to 1.0 for unspecified behaviors).
 
 ## Safety
 - EMERGENCY_STOP_POSE: Pose to assume on emergency stop.
