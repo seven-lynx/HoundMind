@@ -1,6 +1,6 @@
 from __future__ import annotations
 import time
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List, Tuple, Optional
 
 
 class ScanningCoordinator:
@@ -9,14 +9,33 @@ class ScanningCoordinator:
     Sim-safe: if hardware isn't available, operations are no-ops and returns empty samples.
     """
 
-    def __init__(self, hardware: Any, sensors: Any, publish: Callable[[str, dict], None]) -> None:
+    def __init__(self, hardware: Any, sensors: Any, publish: Callable[[str, dict], None], cfg: Optional[object] = None) -> None:
         self._hardware = hardware
         self._sensors = sensors
         self._publish = publish
+        self._cfg = cfg
 
     def sweep_samples(self, yaw_max_deg: int = 30, step_deg: int = 15, settle_s: float = 0.12,
                       between_reads_s: float = 0.04, head_speed: int = 60) -> List[Tuple[int, float]]:
         """Perform a simple left-to-right sweep and return [(yaw_deg, distance_cm), ...]."""
+        # If a config object was provided, derive sensible defaults from global SCAN_* and head settings
+        if self._cfg is not None:
+            try:
+                yaw_max_cfg = int(getattr(self._cfg, "HEAD_SCAN_RANGE", yaw_max_deg))
+                samples = max(2, int(getattr(self._cfg, "SCAN_SAMPLES", 3)))
+                # derive step from total samples across [-yaw_max, yaw_max]
+                step_deg = max(1, int(round((2 * abs(yaw_max_cfg)) / (samples - 1))))
+                yaw_max_deg = yaw_max_cfg
+            except Exception:
+                pass
+            try:
+                between_reads_s = float(getattr(self._cfg, "SCAN_DEBOUNCE_S", between_reads_s))
+            except Exception:
+                pass
+            try:
+                head_speed = int(getattr(self._cfg, "HEAD_SCAN_SPEED", head_speed))
+            except Exception:
+                pass
         self._publish("scan_start", {"yaw_max_deg": yaw_max_deg, "step_deg": step_deg})
         dog = getattr(self._hardware, "dog", None)
         out: List[Tuple[int, float]] = []

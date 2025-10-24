@@ -136,7 +136,7 @@ class Orchestrator:
             else:
                 self.logger.info("BalanceService disabled (requires IMU)")
         audio = AudioProcessingService() if bool(getattr(self.config, "ENABLE_AUDIO_PROCESSING", False)) else None
-        scanning = ScanningCoordinator(self.hardware, sensors, self.bus.publish) if bool(getattr(self.config, "ENABLE_SCANNING_COORDINATOR", False)) else None
+        scanning = ScanningCoordinator(self.hardware, sensors, self.bus.publish, cfg=self.config) if bool(getattr(self.config, "ENABLE_SCANNING_COORDINATOR", False)) else None
         learning = LearningService(config=self.config, logger=self.logger) if bool(getattr(self.config, "ENABLE_LEARNING_SYSTEM", False)) else None
         self._ctx = BehaviorContext(
             hardware=self.hardware,
