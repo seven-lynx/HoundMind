@@ -29,7 +29,7 @@ canine_core/
 2) State & Services
 - `state.py` provides a validated central store
 - Services expose hardware-safe capabilities (sim-safe where possible)
-- Access through `BehaviorContext` only—avoid direct hardware imports
+- Access through `BehaviorContext` only-avoid direct hardware imports
 
 3) Behaviors
 - Class-based, discoverable via `BEHAVIOR_CLASS` or a `get_behavior()` factory

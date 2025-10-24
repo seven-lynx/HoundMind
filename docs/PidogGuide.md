@@ -317,19 +317,19 @@ if __name__ == "__main__":
 Below are placeholders for each quick recipe from the "Easy Coding" track. Fill each with steps to run, expected behavior, and variations.
 
 Official tutorials with reference code (verbatim in the links):
-- 1. PiDog Initialization — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b1_init.html
-- 2. Leg Move — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b2_leg_move.html
-- 3. Head Move — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b3_head_move.html
-- 4. Tail Move — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b4_tail_move.html
-- 5. Stop All Actions — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b5_stop_action.html
-- 6. Do Preset Action — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b6_preset_action.html
-- 7. PiDog Speak — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b7_speak.html
-- 8. Read Distance — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b8_read_distance.html
-- 9. PiDog RGB Strip — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b9_rgb.html
-- 10. IMU Read — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b10_imu.html
-- 11. Sound Direction Detect — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b11_sound_direction.html
-- 12. Pat the PiDog’s Head — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b12_dual_touch.html
-- 13. More — https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b13_more.html
+- 1. PiDog Initialization - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b1_init.html
+- 2. Leg Move - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b2_leg_move.html
+- 3. Head Move - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b3_head_move.html
+- 4. Tail Move - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b4_tail_move.html
+- 5. Stop All Actions - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b5_stop_action.html
+- 6. Do Preset Action - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b6_preset_action.html
+- 7. PiDog Speak - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b7_speak.html
+- 8. Read Distance - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b8_read_distance.html
+- 9. PiDog RGB Strip - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b9_rgb.html
+- 10. IMU Read - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b10_imu.html
+- 11. Sound Direction Detect - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b11_sound_direction.html
+- 12. Pat the PiDog’s Head - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b12_dual_touch.html
+- 13. More - https://docs.sunfounder.com/projects/pidog/en/latest/python/py_b13_more.html
 
 #### 13.4.1 Initialization
 Minimal program that brings PiDog to life, shows a few poses, then exits safely.

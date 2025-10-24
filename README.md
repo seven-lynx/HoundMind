@@ -1,6 +1,6 @@
 # Pidog: Advanced Behaviors and AI for SunFounder PiDog 🐶
 
-This repository provides two related—but completely independent—ways to run your PiDog:
+This repository provides two related-but completely independent-ways to run your PiDog:
 
 - CanineCore: a modular behavior framework for composing and interactively running behaviors.
 - PackMind: a standalone AI with its own orchestrator, services, and optional mapping/navigation stack.
@@ -129,6 +129,6 @@ Note: Hardware‑dependent features won’t function fully without PiDog.
 
 See `LICENSE` for details.
 
-—
+-
 
 Built to help you teach, learn, and explore with PiDog.

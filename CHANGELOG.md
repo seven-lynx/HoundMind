@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 
-## [v2025.10.23] - 2025-10-23 — CanineCore stabilization, PackMind docs restructure, and legacy tests archived
+## [v2025.10.23] - 2025-10-23 - CanineCore stabilization, PackMind docs restructure, and legacy tests archived
 
 ### Added
 - Centralized JSON logging in CanineCore via `utils/logging_setup.py` and `core/services/logging.py` with rotation controls (`LOG_FILE_MAX_MB`, `LOG_FILE_BACKUPS`).
