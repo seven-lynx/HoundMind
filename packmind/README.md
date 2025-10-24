@@ -65,7 +65,7 @@ class PiDogConfig:
 
 - PackMind docs: `packmind/packmind_docs/`
     - `ARCHITECTURE.md`
-    - `PackMind_Configuration_Guide.txt`
+    - `../../docs/packmind_config_guide.md`
     - `intelligent_obstacle_avoidance_guide.md`
 - Voice setup: `../docs/voice_setup_instructions.md`
 

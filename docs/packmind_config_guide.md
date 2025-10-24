@@ -1,0 +1,180 @@
+# PackMind Configuration Guide
+> Author: 7Lynx · Doc Version: 2025.10.24
+
+This is the canonical configuration guide for PackMind. All references should point here (`docs/packmind_config_guide.md`).
+
+PackMind is the standalone AI runtime in HoundMind with its own orchestrator, services, and optional mapping/navigation. This guide explains the options in `packmind/packmind_config.py`, how they affect behavior, and how to use presets.
+
+## Presets
+PackMind ships with multiple presets declared in `packmind/packmind_config.py`.
+
+- default (PiDogConfig): Balanced feature set for general use
+- simple (SimpleConfig): Minimal features; conservative movement; no SLAM/nav
+- advanced (AdvancedConfig): All features; faster exploration; tighter obstacle thresholds
+- indoor (IndoorPetConfig): Home‑friendly; quieter volumes; safe distances; learning enabled
+- explorer (ExplorerConfig): Mapping/navigation focus; higher SLAM cadence; moderate speeds
+
+Switching presets:
+- Edit the default: set `DEFAULT_CONFIG` at the bottom of `packmind_config.py`
+- At runtime (if voice enabled): "PiDog, simple mode" | "PiDog, advanced mode" | "PiDog, indoor mode" | "PiDog, explorer mode"
+
+## Feature toggles
+- ENABLE_VOICE_COMMANDS: Voice recognition with wake word (requires `speech_recognition` + `pyaudio`)
+- ENABLE_SLAM_MAPPING: Enable SLAM/house mapping (requires `numpy`)
+- ENABLE_SENSOR_FUSION: Enable fused localization (depends on SLAM)
+- ENABLE_INTELLIGENT_SCANNING: 3‑way obstacle scanning while moving
+- ENABLE_EMOTIONAL_SYSTEM: LED emotions and behavior effects
+- ENABLE_LEARNING_SYSTEM: Touch preference/interaction learning
+- ENABLE_PATROL_LOGGING: Detailed patrol/activity logs
+- ENABLE_AUTONOMOUS_NAVIGATION: Pathfinding and exploration (depends on SLAM)
+
+## Obstacle avoidance
+- OBSTACLE_IMMEDIATE_THREAT (cm): Immediate stop/avoid threshold (forward)
+- OBSTACLE_APPROACHING_THREAT (cm): Pre‑avoid threshold (slow down/prepare)
+- OBSTACLE_EMERGENCY_STOP (cm): Emergency halt safety margin
+- OBSTACLE_SAFE_DISTANCE (cm): Distance considered "clear" for planning
+- OBSTACLE_SCAN_INTERVAL (s): Time between scans while moving
+
+## Movement parameters
+- TURN_STEPS_SMALL | TURN_STEPS_NORMAL | TURN_STEPS_LARGE: Discrete turn step counts
+- WALK_STEPS_SHORT | WALK_STEPS_NORMAL | WALK_STEPS_LONG: Forward step counts
+- BACKUP_STEPS: Steps when retreating
+- SPEED_SLOW | SPEED_NORMAL | SPEED_FAST | SPEED_EMERGENCY: Motion speeds (0‑255)
+- SPEED_TURN_SLOW | SPEED_TURN_NORMAL | SPEED_TURN_FAST: Turn speeds (should be ≥ walk speeds)
+- TURN_DEGREES_PER_STEP | TURN_45_DEGREES | TURN_90_DEGREES | TURN_180_DEGREES: Turn calibration aids
+
+## Behavior timing
+- PATROL_DURATION_MIN | PATROL_DURATION_MAX (s): Patrol dwell suggestion
+- REST_DURATION (s): Rest window when tired
+- INTERACTION_TIMEOUT (s): Interaction UI timeout
+- VOICE_COMMAND_TIMEOUT (s): Time window from wake word to command
+
+## Voice
+- WAKE_WORD: Wake word string (default "pidog")
+- VOICE_VOLUME_DEFAULT | VOICE_VOLUME_EXCITED | VOICE_VOLUME_QUIET (0‑100): Speaking volumes
+
+Voice runtime (ASR) settings used by `runtime/voice_runtime.py`:
+- VOICE_WAKE_TIMEOUT_S (s): Listen timeout for capture
+- VOICE_VAD_SENSITIVITY (0..1): Voice activity detection sensitivity
+- VOICE_MIC_INDEX: Input device index (None/system default if not set)
+- VOICE_LANGUAGE: Recognition language (e.g., en‑US)
+- VOICE_NOISE_SUPPRESSION (bool): Ambient calibration and denoising
+
+## Energy system
+- ENERGY_DECAY_RATE: Per‑tick decay during activity
+- ENERGY_INTERACTION_BOOST: Increment on user interaction/sound
+- ENERGY_REST_RECOVERY: Recovery rate while resting
+- ENERGY_LOW_THRESHOLD | ENERGY_HIGH_THRESHOLD: Thresholds for speed/mood bands
+
+## Scanning
+- HEAD_SCAN_RANGE (deg): Head sweep left/right range
+- HEAD_SCAN_SPEED: Head movement speed during scans
+- SCAN_SAMPLES: Readings per scan position (used for smoothing/robustness)
+- SCAN_DEBOUNCE_S (s): Debounce for repeated readings
+- SCAN_SMOOTHING_ALPHA (0..1): EMA smoothing of ultrasonic distances
+- SCAN_INTERVAL_MIN | SCAN_INTERVAL_MAX (s): Bounds for dynamic scan cadence
+- SCAN_DYNAMIC_AGGRESSIVENESS (0..1): How aggressively to adjust scan rate
+- SENSOR_MONITOR_RATE_HZ: Sensor polling rate
+- SENSOR_MONITOR_BACKOFF_ON_ERROR_S: Backoff sleep after sensor errors
+
+## Sound response
+- SOUND_HEAD_SENSITIVITY: Converts sound direction to head yaw responsiveness
+- SOUND_BODY_TURN_THRESHOLD (deg): Add body turn when yaw exceeds threshold
+- SOUND_RESPONSE_ENERGY_MIN: Minimum energy required to turn body toward sound
+
+## Stuck detection
+- STUCK_TIME_WINDOW (s): Movement history window for stuck detection
+- STUCK_MOVEMENT_THRESHOLD: IMU magnitude threshold for "moving"
+- STUCK_AVOIDANCE_LIMIT: Consecutive low‑movement checks before advanced escape
+
+## Face recognition
+- ENABLE_FACE_RECOGNITION (bool): Enable detection/recognition and person adaptation
+- FACE_RECOGNITION_THRESHOLD (0..1): Similarity threshold (lower=permissive)
+- FACE_DETECTION_INTERVAL (s): Detection cadence
+- FACE_MAX_FACES_PER_FRAME: Max faces per frame
+- FACE_CAMERA_WIDTH | FACE_CAMERA_HEIGHT | FACE_CAMERA_FPS: Camera settings
+- FACE_PERSONALITY_LEARNING_RATE (0..1): Adaptation speed per person
+- FACE_INTERACTION_TIMEOUT (s): Interaction patience window
+- FACE_MEMORY_RETENTION_DAYS (days): Memory horizon
+- FACE_DATA_DIR: On‑disk storage for profiles/encodings/interactions
+- FACE_AUTO_SAVE_INTERVAL (s): Autosave cadence
+- FACE_CONFIDENCE_DISPLAY_MIN (0..1): Min confidence to display recognition feedback
+
+## Dynamic balance
+- ENABLE_DYNAMIC_BALANCE (bool): Enable balance monitoring
+- BALANCE_SAMPLE_RATE (Hz): IMU sampling rate
+- BALANCE_CALIBRATION_TIME (s): Stationary calibration window
+- BALANCE_HISTORY_SIZE (readings): In‑memory sample window
+- BALANCE_STABILITY_WINDOW (readings): Rolling window for stability analysis
+- BALANCE_SLIGHT_TILT_THRESHOLD | BALANCE_UNSTABLE_TILT_THRESHOLD | BALANCE_CRITICAL_TILT_THRESHOLD (deg): Tilt thresholds
+- BALANCE_RAPID_MOTION_THRESHOLD (rad/s): Angular velocity threshold
+- BALANCE_CORRECTION_COOLDOWN (s): Cooldown between corrections
+- BALANCE_DATA_DIR: Storage for balance session data
+
+## Enhanced audio processing
+- ENABLE_ENHANCED_AUDIO (bool): Enable advanced audio pipeline
+- AUDIO_SAMPLE_RATE (Hz) | AUDIO_CHANNELS | AUDIO_CHUNK_SIZE (samples): Audio input settings
+- AUDIO_INPUT_DEVICE_INDEX: Specific input device (None=default)
+- AUDIO_CALIBRATION_TIME (s): Background noise calibration duration
+- AUDIO_HISTORY_SIZE (samples): Analysis history length
+- AUDIO_SILENCE_THRESHOLD (RMS): Silence level
+- AUDIO_LOUD_NOISE_THRESHOLD (RMS): Loud noise level
+- AUDIO_VOICE_FREQ_MIN | AUDIO_VOICE_FREQ_MAX (Hz): Voice band
+- AUDIO_VOICE_THRESHOLD (0..1): Voice energy ratio threshold
+- AUDIO_DIRECTION_HISTORY_SIZE (readings): Direction buffer length
+- AUDIO_DIRECTION_CHANGE_THRESHOLD (deg): Change threshold for events
+- AUDIO_SOURCE_DIRECTION_TOLERANCE (deg): Grouping tolerance for same source
+- AUDIO_SOURCE_TIMEOUT (s): Source expiration window
+- AUDIO_EVENT_HISTORY_SIZE (events): Event history size
+- AUDIO_DATA_DIR: Storage for audio session data
+
+## Health and performance
+- HEALTH_MONITOR_INTERVAL_S (s): Health sampling cadence
+- HEALTH_LOAD_PER_CORE_WARN_MULTIPLIER: CPU load/core threshold for degraded mode
+- HEALTH_TEMP_WARN_C (°C): CPU temp threshold for degraded mode
+- HEALTH_MEM_USED_WARN_PCT (%): Memory usage threshold for degraded mode
+- HEALTH_SCAN_INTERVAL_MULTIPLIER | HEALTH_SCAN_INTERVAL_ABS_DELTA: How much to slow scans when degraded
+- HEALTH_ACTIONS: Planned actions when degraded (e.g., "throttle_scans")
+
+## Safety / watchdog
+- WATCHDOG_HEARTBEAT_INTERVAL_S (s): Heartbeat cadence
+- WATCHDOG_TIMEOUT_S (s): Timeout before safety action
+- WATCHDOG_ACTION: Action on timeout (e.g., `stop_and_crouch`, `power_down`)
+
+## Logging / telemetry
+- LOG_LEVEL: Overall log level (DEBUG/INFO/WARN/ERROR)
+- LOG_FILE_MAX_MB | LOG_FILE_BACKUPS: JSON log rotation
+- TELEMETRY_ENABLED (bool): Enable telemetry export
+- TELEMETRY_SAMPLE_INTERVAL_S (s): Telemetry cadence
+- TELEMETRY_ENDPOINT: Optional remote endpoint
+
+## Learning / persistence
+- LEARNING_STATE_PATH: Path to learning state file
+- LEARNING_AUTOSAVE_INTERVAL_S (s): Autosave cadence
+- LEARNING_DECAY: Long‑term decay factor
+
+## Navigation (optional)
+- NAV_REPLAN_INTERVAL_S (s): Replanning cadence
+- NAV_GOAL_TOLERANCE_CM (cm): Goal acceptance radius
+- NAV_OBSTACLE_INFLATION_CM (cm): Inflation radius for obstacles
+- NAV_COST_TURN_WEIGHT | NAV_COST_FORWARD_WEIGHT: Motion cost weights
+
+## Running PackMind
+Launch PackMind with the default (or selected) config:
+
+```powershell
+python packmind/orchestrator.py
+# or
+python packmind.py
+```
+
+To validate config (optional):
+```powershell
+python packmind/packmind_config.py
+```
+
+## Tips
+- Start with a preset closest to your use case, then tune only what’s needed (e.g., OBSTACLE_SAFE_DISTANCE, SPEED_NORMAL).
+- Increase SCAN_DEBOUNCE_S or SCAN_SMOOTHING_ALPHA in noisy environments.
+- Tune VOICE_VAD_SENSITIVITY and VOICE_WAKE_TIMEOUT_S based on your mic and room.
+- Reduce ENABLE_ENHANCED_AUDIO or SLAM features on low‑power setups.
