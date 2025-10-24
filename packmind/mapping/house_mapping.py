@@ -15,7 +15,7 @@ Features:
 - Calibration systems
 - Path planning integration
 
-Author: PiDog AI System
+Author: seven-lynx
 """
 
 import numpy as np

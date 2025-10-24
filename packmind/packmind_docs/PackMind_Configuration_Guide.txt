@@ -583,10 +583,24 @@ Use these voice commands to test and calibrate movement:
 ## CONFIGURATION FILE SETUP
 
 ### Initial Setup
-1. Run: `python scripts/setup_pidog.py` (setup assistant with dependency checking)
+1. Run: `python tools/setup_pidog.py` (setup assistant with dependency checking)
 2. Edit: `packmind/packmind_config.py` to customize settings
 3. Test: `python packmind/packmind_config.py` (validates configuration)
 4. Run: `python packmind/orchestrator.py`
+
+### PackMind Checkup (on the Pi)
+Use the checkup tool to verify imports and service initialization after you change a module.
+
+```bash
+# Import every PackMind module to catch import errors
+python3 tools/packmind_checkup.py --scope import
+
+# Safe service initialization (no movement)
+python3 tools/packmind_checkup.py --scope services --preset simple
+
+# Include ScanningService head sweep (limited movement)
+python3 tools/packmind_checkup.py --scope services --move --preset simple
+```
 
 ### Configuration Testing
 ```bash

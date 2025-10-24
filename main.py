@@ -13,7 +13,7 @@ Usage:
     python main.py
 
 Author: seven-lynx
-Version: 0.5.1
+Version: 2025.10.24
 """
 
 import sys
@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'canine_core'))
 
 def main():
     """Main entry point for CanineCore."""
-    print("🔧 CanineCore v0.5.1")
+    print("🔧 CanineCore v2025.10.24")
     print("=" * 50)
     print("🎭 Mix and match behaviors | 🧠 Custom AI combinations")
     print("🔄 Hot-swap modules | 💾 Learning and memory")

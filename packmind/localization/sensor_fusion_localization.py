@@ -13,7 +13,7 @@ Features:
 - Particle filter for probabilistic localization
 - Real-time movement validation and drift correction
 
-Author: PiDog AI System
+Author: seven-lynx
 """
 
 import numpy as np

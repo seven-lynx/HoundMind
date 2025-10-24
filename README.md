@@ -14,7 +14,7 @@ Legacy modules for the old system are stored in Legacy, and the entire project h
 - **CanineCore** (`canine_core/`): async orchestrator, services (motion, sensors, emotions, voice), and behavior modules.
 - **PackMind** (`packmind/`): AI orchestrator plus subsystems for mapping (SLAM), navigation (A*), localization (sensor fusion), voice, scanning, obstacle handling, and **new AI services** (face recognition, dynamic balance, enhanced audio).
 - **Docs** (`docs/`): programming guides, API reference, voice setup, and config guides.
-- **Scripts** (`scripts/`): setup tools, integration tests, and utility scripts.
+- **Tools** (`tools/`): setup utilities and integration tests (formerly `scripts/`).
 - **Examples** (`examples/`): runnable examples.
 - **Legacy** (`legacy/`): archived test modules and examples (not actively maintained)
 
@@ -101,7 +101,7 @@ HoundMind/
 │  └─ packmind_config.py
 ├─ docs/
 ├─ examples/
-├─ scripts/
+├─ tools/
 └─ legacy/
 ```
 
@@ -130,13 +130,29 @@ Note: Hardware‑dependent features won’t function fully without PiDog.
 
 ## Testing & Tools
 
-- **Setup Tool**: `scripts/setup_pidog.py` - Initial PiDog setup and calibration
-- **Integration Test**: `scripts/test_service_integration.py` - Validate AI services integration
+- **Setup Tool**: `tools/setup_pidog.py` - Initial PiDog setup and calibration
+- **PackMind Checkup (Pi)**: `tools/packmind_checkup.py` - Import + service smoke tests on the PiDog (no movement)
+	- Use `--move` to include a small ScanningService head sweep (limited motion)
+- **CanineCore Checkup (Pi)**: `tools/caninecore_checkup.py` - Import all CanineCore modules; optional minimal head sweep with `--move`
+- **Integration Test**: `tools/test_service_integration.py` - Validate AI services integration
 - **Legacy Tools**: `legacy/ubuntu_install.py` - Ubuntu system setup utilities
+
+Run PackMind checkup on the Pi:
+```bash
+python3 tools/packmind_checkup.py --scope import     # Import all PackMind modules
+python3 tools/packmind_checkup.py --scope services   # Safe service init (no movement)
+python3 tools/packmind_checkup.py --scope services --move  # Include ScanningService head sweep
+```
+
+Run CanineCore checkup on the Pi:
+```bash
+python3 tools/caninecore_checkup.py --scope import   # Import all CanineCore modules
+python3 tools/caninecore_checkup.py --move           # Optional minimal head sweep
+```
 
 Run integration tests:
 ```bash
-python scripts/test_service_integration.py
+python tools/test_service_integration.py
 ```
 
 ## Troubleshooting

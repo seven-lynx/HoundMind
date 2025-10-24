@@ -11,7 +11,7 @@ This script tests the integration of the three new AI services:
 It validates that they can be initialized, configured, and integrated
 with the PackMind orchestrator without errors.
 
-Run with: python scripts/test_service_integration.py
+Run with: python tools/test_service_integration.py
 """
 
 import sys

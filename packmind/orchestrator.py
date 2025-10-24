@@ -20,6 +20,9 @@ Features demonstrated:
 ✓ Energy management system
 ✓ Coordinated multi-part movement
 
+Author: seven-lynx  
+Version: 2025.10.24
+
 Run with: python packmind/orchestrator.py
 """
 

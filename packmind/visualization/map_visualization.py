@@ -14,7 +14,7 @@ Features:
 - Path visualization
 - Room and landmark highlighting
 
-Author: PiDog AI System
+Author: seven-lynx
 """
 
 import json

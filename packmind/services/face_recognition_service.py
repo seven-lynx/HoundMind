@@ -13,8 +13,8 @@ Features:
 - Personality adaptation per person
 - Privacy-conscious local processing
 
-Author: HoundMind AI Enhancement
-Version: 1.0.0
+Author: seven-lynx
+Version: 2025.10.24.1
 """
 
 import cv2

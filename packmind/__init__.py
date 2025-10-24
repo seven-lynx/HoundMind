@@ -1,7 +1,12 @@
 """PackMind package public API.
 
 Exports the primary orchestrator and core types/services for external use.
+
+Author: seven-lynx
+Version: 2025.10.24
 """
+
+__version__ = "2025.10.24"
 
 from packmind.core.context import AIContext
 from packmind.core.types import BehaviorState, EmotionalState

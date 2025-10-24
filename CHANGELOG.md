@@ -29,11 +29,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
   - 18 configurable parameters covering hardware setup, voice detection, sound tracking
 
 - **Service Integration & Orchestration**:
+- **Tools**:
+  - `tools/packmind_checkup.py`: Pi-only checkup tool to import all PackMind modules and perform safe service smoke tests
+    - New `--move` flag to include a minimal ScanningService head sweep (limited motion)
+  - `tools/caninecore_checkup.py`: Pi-only checkup tool to import all CanineCore modules with an optional `--move` minimal head sweep
   - Full integration of all three services into `packmind/orchestrator.py`
   - Automatic service lifecycle management (startup/shutdown)
   - Real-time event integration with emotional system and behavior logging
   - Thread-safe operation with proper resource management
-  - Hardware abstraction with simulation fallback for development
 
 - **Configuration System Enhancements**:
   - Added `ENABLE_FACE_RECOGNITION`, `ENABLE_DYNAMIC_BALANCE`, `ENABLE_ENHANCED_AUDIO` flags
@@ -43,7 +46,7 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 
 - **Documentation & Testing**:
   - Comprehensive configuration guide updates in `PackMind_Configuration_Guide.txt`
-  - Integration test suite in `scripts/test_service_integration.py` 
+  - Integration test suite in `tools/test_service_integration.py` 
   - Complete project summary in `INTEGRATION_COMPLETE.md`
   - Updated dependency management in `requirements.txt`
 
@@ -55,6 +58,7 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 - **Patrol Event Logging**: All service events automatically logged with metadata
 - **Main AI Loop**: Added periodic service polling in `_ai_behavior_loop` method
 - **Dependencies**: Added face-recognition, dlib, pyaudio, scipy for new services
+ - **Folder Structure**: Renamed `scripts/` to `tools/` and updated documentation and references accordingly
 
 ### Technical Metrics
 - **2,236+ lines** of new service code across three major AI systems
