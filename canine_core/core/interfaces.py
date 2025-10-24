@@ -33,6 +33,11 @@ class BehaviorContext:
     imu: Any | None = None
     telemetry: Any | None = None
     sensors_facade: Any | None = None
+    # Newly added optional services
+    energy: Any | None = None
+    balance: Any | None = None
+    audio: Any | None = None
+    scanning: Any | None = None
 
 @runtime_checkable
 class Behavior(Protocol):

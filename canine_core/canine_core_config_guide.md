@@ -12,6 +12,10 @@ This guide explains every option in `canine_core/config/canine_config.py` and ho
 - ENABLE_EMOTIONAL_SYSTEM: Enable LED emotion themes and effects.
 - ENABLE_LEARNING_SYSTEM: Enable long-term memory (obstacle maps, habits).
 - ENABLE_AUTONOMOUS_NAVIGATION: Enable advanced navigation modes.
+ - ENABLE_ENERGY_SYSTEM: Enable simple energy model (decay/recovery/boosts).
+ - ENABLE_BALANCE_MONITOR: IMU-based stability assessment (requires IMU).
+ - ENABLE_AUDIO_PROCESSING: Optional VAD/noise helpers (webrtcvad if available).
+ - ENABLE_SCANNING_COORDINATOR: Head sweep helper that publishes scan events.
 - ENABLE_SAFETY_SUPERVISOR: Tilt emergency detection and safe pose reactions.
 - ENABLE_BATTERY_MONITOR: Low/critical events and telemetry.
 - ENABLE_IMU_MONITOR: Access accelerometer/gyro and basic tilt checks.

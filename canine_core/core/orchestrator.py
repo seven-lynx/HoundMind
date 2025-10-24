@@ -20,6 +20,10 @@ from .services.telemetry import TelemetryService
 from .hooks import HookRegistry, default_hooks_factory
 from .watchdog import BehaviorWatchdog
 from .services.sensors_facade import SensorsFacade
+from .services.energy import EnergyService
+from .services.balance import BalanceService
+from .services.audio_processing import AudioProcessingService
+from .services.scanning_coordinator import ScanningCoordinator
 
 class LegacyThreadBehavior:
     """Adapter to run legacy modules exposing start_behavior() in a thread.
@@ -121,6 +125,16 @@ class Orchestrator:
             battery=battery,
         ) if bool(getattr(self.config, "ENABLE_TELEMETRY", False)) else None
         sensors_facade = SensorsFacade(self.hardware) if bool(getattr(self.config, "ENABLE_SENSORS_FACADE", True)) else None
+        # Additional optional services with dependency awareness
+        energy = EnergyService(self.config, logger=self.logger) if bool(getattr(self.config, "ENABLE_ENERGY_SYSTEM", False)) else None
+        balance = None
+        if bool(getattr(self.config, "ENABLE_BALANCE_MONITOR", False)):
+            if imu is not None:
+                balance = BalanceService(imu, publish=self.bus.publish, max_tilt_deg=float(getattr(self.config, "SAFETY_MAX_TILT_DEG", 45)))
+            else:
+                self.logger.info("BalanceService disabled (requires IMU)")
+        audio = AudioProcessingService() if bool(getattr(self.config, "ENABLE_AUDIO_PROCESSING", False)) else None
+        scanning = ScanningCoordinator(self.hardware, sensors, self.bus.publish) if bool(getattr(self.config, "ENABLE_SCANNING_COORDINATOR", False)) else None
         self._ctx = BehaviorContext(
             hardware=self.hardware,
             sensors=sensors,
@@ -137,6 +151,10 @@ class Orchestrator:
             imu=imu,
             telemetry=telemetry,
             sensors_facade=sensors_facade,
+            energy=energy,
+            balance=balance,
+            audio=audio,
+            scanning=scanning,
         )
         # Hooks: subscribe default handlers if enabled
         if bool(getattr(self.config, "ENABLE_DEFAULT_HOOKS", True)):
@@ -150,6 +168,10 @@ class Orchestrator:
         self.imu = imu
         self.telemetry = telemetry
         self.sensors_facade = sensors_facade
+        self.energy = energy
+        self.balance = balance
+        self.audio = audio
+        self.scanning = scanning
 
     def _resolve_behavior(self, spec: str) -> Behavior:
         """Resolve a behavior spec into a Behavior instance.

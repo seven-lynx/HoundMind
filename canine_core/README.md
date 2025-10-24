@@ -140,6 +140,10 @@ The orchestrator auto‑discovers behaviors via `BEHAVIOR_CLASS` or a `get_behav
 - NEW — BatteryService: battery read + low/critical event publish (if hardware supports it)
 - NEW — TelemetryService: periodic lightweight snapshots to the logger
 - NEW — SensorsFacade: wrappers for sound direction (ears) and dual touch (sim-safe)
+ - NEW — EnergyService: simple 0..1 energy model with decay/recovery and interaction boosts (optional)
+ - NEW — BalanceService: IMU-based stability assessment with events (optional; requires IMU)
+ - NEW — AudioProcessingService: optional VAD/noise helpers (uses webrtcvad if available)
+ - NEW — ScanningCoordinator: head sweep helper that publishes scan_start/scan_end and samples distances (optional)
 
 Access these via `BehaviorContext` (injected by the orchestrator) to avoid direct hardware imports.
 
