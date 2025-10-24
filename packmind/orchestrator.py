@@ -28,7 +28,8 @@ Run with: python packmind/orchestrator.py
 # ============================================================================
 # Configuration is now in packmind/packmind_config.py
 from packmind.packmind_config import load_config, validate_config
-print("📋 Configuration system loaded from packmind/packmind_config.py")
+import logging
+logging.getLogger("packmind").info("Configuration system loaded from packmind/packmind_config.py")
 
 # ============================================================================
 
@@ -52,10 +53,10 @@ try:
     import speech_recognition as sr
     import pyaudio
     VOICE_AVAILABLE = True
-    print("🎙️ Voice recognition modules available")
+    logging.getLogger("packmind").info("Voice recognition modules available")
 except ImportError:
     VOICE_AVAILABLE = False
-    print("⚠️ Voice recognition modules not available. Install: pip install speech_recognition pyaudio")
+    logging.getLogger("packmind").warning("Voice recognition modules not available. Install: pip install speech_recognition pyaudio")
 
 # SLAM and navigation imports
 try:
@@ -129,11 +130,7 @@ class Orchestrator:
     def __init__(self, config_preset="default"):
         # Load configuration first so logging can use its settings
         self.config = load_config(config_preset)
-        warnings = validate_config(self.config)
-        if warnings:
-            print("⚠️ Configuration warnings:")
-            for warning in warnings:
-                print(f"   - {warning}")
+        _warnings = validate_config(self.config)
 
         # Ensure PackMind logging is initialized (idempotent) using config values
         setup_packmind_logging(
@@ -142,6 +139,10 @@ class Orchestrator:
             backups=getattr(self.config, "LOG_FILE_BACKUPS", None),
         )
         self._logger = logging.getLogger("packmind.orchestrator")
+        # Emit any configuration warnings once logging is ready
+        if _warnings:
+            for w in _warnings:
+                self._logger.warning(f"Config warning: {w}")
 
         # Core context object for state management
         self.context = AIContext()
@@ -231,17 +232,17 @@ class Orchestrator:
             else:
                 self.sensor_localizer = None
                 
-            print("🗺️ SLAM system initialized")
+            self._logger.info("🗺️ SLAM system initialized")
             if self.autonomous_nav_enabled:
-                print("🧭 Pathfinding system initialized")
+                self._logger.info("🧭 Pathfinding system initialized")
             if self.sensor_fusion_enabled:
-                print("📍 Sensor fusion localizer initialized")
+                self._logger.info("📍 Sensor fusion localizer initialized")
         else:
             self.slam_system = None
             self.pathfinder = None
             self.nav_controller = None
             self.sensor_localizer = None
-            print("🔇 Advanced features disabled - using simple obstacle avoidance")
+            self._logger.info("🔇 Advanced features disabled - using simple obstacle avoidance")
         
         # Thread/control
         self.running = False
@@ -745,7 +746,7 @@ class Orchestrator:
                     pass
                 self.last_movement_check = reading.timestamp
         except Exception as e:
-            print(f"⚠️ Sensor processing error: {e}")
+            self._logger.warning(f"⚠️ Sensor processing error: {e}")
 
     # --- Scanning coordinator integration ---
     def _on_scan_results(self, scan_results: Dict[str, float]) -> None:
@@ -793,7 +794,7 @@ class Orchestrator:
                     self._adjust_walking_speed(0.7)
             # Movement tracking handled by sensor monitor cadence
         except Exception as e:
-            print(f"⚠️ Scan processing error: {e}")
+            self._logger.warning(f"⚠️ Scan processing error: {e}")
     
     def _on_health_sample(self, sample: Dict[str, Any]) -> None:
         """Receive periodic system health samples and adjust behavior conservatively.
@@ -851,7 +852,7 @@ class Orchestrator:
     
     def _handle_touch_interaction(self, touch_type: str, timestamp: float):
         """Handle touch with learning and emotional response"""
-        print(f"👋 Touch detected: {touch_type}")
+        self._logger.info(f"👋 Touch detected: {touch_type}")
         
         # Update interaction statistics
         self.interaction_count += 1
@@ -896,7 +897,7 @@ class Orchestrator:
     
     def _handle_emergency_obstacle(self, distance: float, timestamp: float):
         """Handle emergency obstacle detection (very close obstacles)"""
-        print(f"🚨 EMERGENCY: Obstacle at {distance:.1f}cm - immediate stop!")
+        self._logger.warning(f"🚨 EMERGENCY: Obstacle at {distance:.1f}cm - immediate stop!")
         
         # Immediate stop
         self.context.dog.body_stop()
@@ -930,7 +931,7 @@ class Orchestrator:
     
     def _handle_sound_attention(self, direction: int, timestamp: float):
         """ENHANCED: Advanced sound tracking with head movement and body turning"""
-        print(f"👂 Sound from {direction}° - investigating!")
+        self._logger.info(f"👂 Sound from {direction}° - investigating!")
         
         self.attention_target = direction
         self.set_emotion(EmotionalState.ALERT)
@@ -959,7 +960,7 @@ class Orchestrator:
         
         # If sound is significantly to the side, turn body to face it
         if abs(yaw) > 45 and self.context.energy_level > 0.4:
-            print(f"🔄 Turning body to face sound source")
+            self._logger.debug("🔄 Turning body to face sound source")
             if yaw > 0:  # Sound to the left
                 self.context.dog.do_action("turn_left", step_count=1, speed=70)
             else:  # Sound to the right  
@@ -1101,7 +1102,7 @@ class Orchestrator:
             action = nav_command["action"]
             step_count = nav_command.get("step_count", 1)
             
-            print(f"🧭 Navigation command: {action} ({step_count} steps)")
+            self._logger.info(f"🧭 Navigation command: {action} ({step_count} steps)")
             self._log_patrol_event("NAV_COMMAND", f"Executing navigation: {action}", {
                 "action": action,
                 "step_count": step_count,
@@ -1133,7 +1134,7 @@ class Orchestrator:
         
         if scan_age < 2.0 and not forward_clear:
             # Recent scan shows obstacle - use intelligent avoidance
-            print(f"🧠 Using scan data for navigation - obstacle at {self.obstacle_scan_data['forward']:.1f}cm")
+            self._logger.info(f"🧠 Using scan data for navigation - obstacle at {self.obstacle_scan_data['forward']:.1f}cm")
             self._log_patrol_event("PATROL_AVOIDANCE", "Using scan data for obstacle avoidance", {
                 "obstacle_distance": self.obstacle_scan_data['forward'],
                 "avoidance_reason": "predictive_scan_data"
@@ -1156,7 +1157,7 @@ class Orchestrator:
                 if self.obstacle_scan_data['forward'] > 100:
                     base_speed += 10
                 
-                print(f"🚶 Walking forward {step_count} steps (path clear: {self.obstacle_scan_data['forward']:.1f}cm)")
+                self._logger.info(f"🚶 Walking forward {step_count} steps (path clear: {self.obstacle_scan_data['forward']:.1f}cm)")
                 self._log_patrol_event("PATROL_FORWARD", f"Moving forward {step_count} steps", {
                     "step_count": step_count,
                     "speed": min(base_speed, 90),
@@ -1187,7 +1188,7 @@ class Orchestrator:
                     
             else:
                 # Strategic turning based on available space
-                print("🔄 Strategic direction change...")
+                self._logger.info("🔄 Strategic direction change...")
                 self._log_patrol_event("PATROL_DIRECTION_CHANGE", "Executing strategic turn", {
                     "left_clear": left_clear,
                     "right_clear": right_clear,
@@ -1212,7 +1213,7 @@ class Orchestrator:
                     action = "turn_right"
                 else:
                     # Both sides blocked - back up and reassess
-                    print("⚠️ Both sides blocked - backing up")
+                    self._logger.warning("⚠️ Both sides blocked - backing up")
                     self.context.dog.do_action("backward", step_count=2, speed=60)
                     action = random.choice(["turn_left", "turn_right"])  # Try anyway
                 
@@ -1243,7 +1244,7 @@ class Orchestrator:
                 turn_direction = "turn_left" if random.random() > 0.5 else "turn_right"
                 turn_speed = self._get_appropriate_turn_speed()
                 self.dog.do_action(turn_direction, step_count=self.config.TURN_STEPS_NORMAL, speed=turn_speed)
-                print(f"🚧 Simple obstacle avoidance - {turn_direction}")
+                self._logger.info(f"🚧 Simple obstacle avoidance - {turn_direction}")
                 
                 if self.patrol_logging_enabled:
                     self._log_patrol_event("SIMPLE_AVOIDANCE", f"Basic obstacle avoidance: {turn_direction}", {
@@ -1277,7 +1278,7 @@ class Orchestrator:
         """Set emotional state via the EmotionService and log the change."""
         if emotion != self.current_emotion:
             old_emotion = self.current_emotion
-            print(f"😊 Emotion: {emotion.value} (Energy: {self.energy_level:.2f})")
+            self._logger.info(f"😊 Emotion: {emotion.value} (Energy: {self.energy_level:.2f})")
             # Log emotion change
             self._log_patrol_event(
                 "EMOTION_CHANGE",
@@ -1306,7 +1307,7 @@ class Orchestrator:
             old_behavior = self.current_behavior
             time_in_previous = time.time() - self.behavior_start_time
 
-            print(f"🎯 Behavior: {behavior.value}")
+            self._logger.info(f"🎯 Behavior: {behavior.value}")
 
             # Log behavior change
             self._log_patrol_event(
@@ -1347,10 +1348,10 @@ class Orchestrator:
         
         # Adjust for ambient noise
         with microphone as source:
-            print("🎙️ Calibrating microphone for ambient noise...")
+            self._logger.info("🎙️ Calibrating microphone for ambient noise...")
             recognizer.adjust_for_ambient_noise(source)
-            
-        print(f"🎧 Listening for wake word: '{self.wake_word}'...")
+        
+        self._logger.info(f"🎧 Listening for wake word: '{self.wake_word}'...")
         
         while self.running:
             try:
@@ -1364,21 +1365,21 @@ class Orchestrator:
                     text = recognizer.recognize_google(audio).lower()
                     
                     if self.wake_word in text:
-                        print(f"🎯 Wake word detected: '{text}'")
+                        self._logger.info(f"🎯 Wake word detected: '{text}'")
                         self._process_voice_command(text)
                         
                 except sr.UnknownValueError:
                     # Could not understand audio - normal, ignore
                     pass
                 except sr.RequestError as e:
-                    print(f"⚠️ Voice recognition service error: {e}")
+                    self._logger.warning(f"⚠️ Voice recognition service error: {e}")
                     time.sleep(1)
                     
             except sr.WaitTimeoutError:
                 # Normal timeout - continue listening
                 pass
             except Exception as e:
-                print(f"⚠️ Voice recognition error: {e}")
+                self._logger.warning(f"⚠️ Voice recognition error: {e}")
                 time.sleep(1)
     
     def _process_voice_command(self, full_text: str):
@@ -1390,12 +1391,12 @@ class Orchestrator:
         
         if not command_text:
             # Just wake word, acknowledge
-            print("👋 Hello! I'm listening...")
+            self._logger.info("👋 Hello! I'm listening...")
             self.dog.speak("pant", volume=60)
             self.set_emotion(EmotionalState.HAPPY)
             return
             
-        print(f"🎙️ Voice command: '{command_text}'")
+        self._logger.info(f"🎙️ Voice command: '{command_text}'")
         
         # Visual feedback for voice command
         self.dog.rgb_strip.set_mode("boom", "cyan", bps=3.0, brightness=1.0)
@@ -1404,7 +1405,7 @@ class Orchestrator:
         command_executed = False
         for cmd_key, cmd_action in self.voice_commands.items():
             if cmd_key in command_text:
-                print(f"✅ Executing command: {cmd_key}")
+                self._logger.info(f"✅ Executing command: {cmd_key}")
                 try:
                     self._log_patrol_event("VOICE_COMMAND", f"Executing voice command: {cmd_key}", {
                         "command": cmd_key,
@@ -1422,7 +1423,7 @@ class Orchestrator:
                     self._log_patrol_event("VOICE_SUCCESS", f"Voice command executed successfully: {cmd_key}")
                     
                 except Exception as e:
-                    print(f"❌ Command execution error: {e}")
+                    self._logger.error(f"❌ Command execution error: {e}")
                     self._log_patrol_event("VOICE_ERROR", f"Voice command failed: {cmd_key}", {
                         "error": str(e)
                     })
@@ -1430,7 +1431,7 @@ class Orchestrator:
                 break
         
         if not command_executed:
-            print(f"❓ Unknown command: '{command_text}'")
+            self._logger.warning(f"❓ Unknown command: '{command_text}'")
             self.dog.speak("confused_1", volume=60)
             self.set_emotion(EmotionalState.CONFUSED)
             
@@ -1443,7 +1444,7 @@ class Orchestrator:
         self.dog.speak("woohoo", volume=80)
         self.set_emotion(EmotionalState.EXCITED)
         self.energy_level = min(1.0, self.energy_level + 0.2)  # Boost energy
-        print("😊 PiDog is very happy!")
+        self._logger.info("😊 PiDog is very happy!")
     
     def _scold_response(self):
         """Response to 'bad dog' command"""  
@@ -1451,7 +1452,7 @@ class Orchestrator:
         self.dog.speak("snoring", volume=40)
         self.set_emotion(EmotionalState.TIRED)
         self.energy_level = max(0.1, self.energy_level - 0.3)  # Reduce energy
-        print("😔 PiDog feels sad...")
+        self._logger.info("😔 PiDog feels sad...")
     
     def _voice_sit(self):
         """Voice command: sit"""
@@ -1526,7 +1527,7 @@ class Orchestrator:
 
     def _shutdown(self):
         """Safely shutdown the AI system"""
-        print("🛑 Initiating patrol system shutdown...")
+        self._logger.info("🛑 Initiating patrol system shutdown...")
         
         # Log shutdown initiation
         self._log_patrol_event("SYSTEM_SHUTDOWN", "Patrol system shutdown initiated")
@@ -1535,13 +1536,13 @@ class Orchestrator:
         if self.slam_system:
             self._log_patrol_event("SLAM_SHUTDOWN", "Saving house map and stopping SLAM")
             self.slam_system.stop()
-            print("✓ House map saved")
+            self._logger.info("✓ House map saved")
             
         # Stop sensor fusion localization
         if self.sensor_localizer:
             self._log_patrol_event("LOCALIZATION_SHUTDOWN", "Stopping sensor fusion localization")
             self.sensor_localizer.stop_localization()
-            print("✓ Sensor fusion localization stopped")
+            self._logger.info("✓ Sensor fusion localization stopped")
         
         # Generate final patrol report
         try:
@@ -1552,14 +1553,14 @@ class Orchestrator:
             with open(report_file, 'w', encoding='utf-8') as f:
                 json.dump(report, f, indent=2)
             
-            print(f"📊 Patrol report saved: {report_file}")
+            self._logger.info(f"📊 Patrol report saved: {report_file}")
             try:
                 from typing import cast
                 total_events = len(self.log_service.dump())
             except Exception:
                 total_events = len(self.patrol_log)
-            print(f"📋 Total events logged: {total_events}")
-            print(f"⏱️ Total patrol time: {report['session_info']['total_duration']:.1f}s")
+            self._logger.info(f"📋 Total events logged: {total_events}")
+            self._logger.info(f"⏱️ Total patrol time: {report['session_info']['total_duration']:.1f}s")
             
             self._log_patrol_event("REPORT_GENERATED", f"Final patrol report saved to {report_file}", {
                 "total_events": len(self.patrol_log),
@@ -1567,7 +1568,7 @@ class Orchestrator:
             })
             
         except Exception as e:
-            print(f"⚠️ Error generating patrol report: {e}")
+            self._logger.warning(f"⚠️ Error generating patrol report: {e}")
         
         self.running = False
         
@@ -1601,13 +1602,13 @@ class Orchestrator:
         
         if self.dog:
             try:
-                print("🛌 Returning to rest position...")
+                self._logger.info("🛌 Returning to rest position...")
                 self._log_patrol_event("PHYSICAL_SHUTDOWN", "Returning PiDog to rest position")
                 
                 self.dog.rgb_strip.set_mode("breath", "black")  # Turn off LEDs
                 self.dog.stop_and_lie()
                 self.dog.close()
-                print("✓ AI system shutdown complete")
+                self._logger.info("✓ AI system shutdown complete")
                 
                 # Final log entry
                 if self.log_file_path:
@@ -1617,7 +1618,7 @@ class Orchestrator:
                         f.write(f"\n[{time.strftime('%H:%M:%S')}] ========== PATROL SESSION ENDED ==========\n")
                     
             except Exception as e:
-                print(f"⚠️ Shutdown error: {e}")
+                self._logger.warning(f"⚠️ Shutdown error: {e}")
     
     def _update_slam_with_imu(self, reading: SensorReading):
         """Update SLAM position using sensor fusion localization"""
@@ -1657,10 +1658,10 @@ class Orchestrator:
             method: Calibration method ("wall_follow", "corner_seek", "landmark_align")
         """
         if not self.slam_system:
-            print("❌ SLAM system not available for calibration")
+            self._logger.warning("❌ SLAM system not available for calibration")
             return False
         
-        print(f"🎯 Starting position calibration using {method}...")
+        self._logger.info(f"🎯 Starting position calibration using {method}...")
         self._log_patrol_event("CALIBRATION_START", f"Position calibration started: {method}")
         
         if method == "wall_follow":
@@ -1670,12 +1671,12 @@ class Orchestrator:
         elif method == "landmark_align":
             return self._calibrate_landmark_align()
         else:
-            print(f"❌ Unknown calibration method: {method}")
+            self._logger.warning(f"❌ Unknown calibration method: {method}")
             return False
     
     def _calibrate_wall_follow(self) -> bool:
         """Calibrate position by following a wall to establish reference"""
-        print("🧱 Wall following calibration...")
+        self._logger.info("🧱 Wall following calibration...")
         
         # Perform 360-degree scan to find walls
         wall_distances = {}
@@ -1692,13 +1693,13 @@ class Orchestrator:
         self.dog.head_move([[0, 0, 0]], speed=90)
         
         if not wall_distances:
-            print("❌ No walls found for calibration")
+            self._logger.warning("❌ No walls found for calibration")
             return False
         
         # Find closest wall
         closest_angle, wall_distance = min(wall_distances.items(), key=lambda x: x[1])
         
-        print(f"🎯 Closest wall at {closest_angle}°, distance {wall_distance:.1f}cm")
+        self._logger.info(f"🎯 Closest wall at {closest_angle}°, distance {wall_distance:.1f}cm")
         
         # Move toward wall for reference alignment
         if wall_distance > 30:
@@ -1728,12 +1729,12 @@ class Orchestrator:
                 "new_confidence": current_pos.confidence
             })
         
-        print("✓ Wall calibration completed")
+        self._logger.info("✓ Wall calibration completed")
         return True
     
     def _calibrate_corner_seek(self) -> bool:
         """Calibrate by finding and aligning with room corners"""
-        print("📐 Corner seeking calibration...")
+        self._logger.info("📐 Corner seeking calibration...")
         
         # Look for corner patterns in current scan data
         corners_found = 0
@@ -1764,31 +1765,31 @@ class Orchestrator:
                     "scan_data": scan_data
                 })
             
-            print(f"✓ Corner calibration completed ({corners_found} corners)")
+            self._logger.info(f"✓ Corner calibration completed ({corners_found} corners)")
             return True
         else:
-            print("❌ No clear corners found")
+            self._logger.warning("❌ No clear corners found")
             return False
     
     def _calibrate_landmark_align(self) -> bool:
         """Calibrate using known landmarks from the map"""
         if not self.slam_system or not self.slam_system.house_map.landmarks:
-            print("❌ No landmarks available for calibration")
+            self._logger.warning("❌ No landmarks available for calibration")
             return False
         
-        print("🎯 Landmark alignment calibration...")
+        self._logger.info("🎯 Landmark alignment calibration...")
         
         # Get nearby landmarks
         nav_info = self.slam_system.get_navigation_info()
         nearby_landmarks = nav_info.get("nearby_landmarks", [])
         
         if not nearby_landmarks:
-            print("❌ No nearby landmarks for calibration")
+            self._logger.warning("❌ No nearby landmarks for calibration")
             return False
         
         # Use closest landmark for alignment
         closest_landmark = nearby_landmarks[0]
-        print(f"🎯 Aligning with landmark: {closest_landmark['type']} at {closest_landmark['distance']:.1f}cm")
+        self._logger.info(f"🎯 Aligning with landmark: {closest_landmark['type']} at {closest_landmark['distance']:.1f}cm")
         
         # This would involve more complex landmark recognition and alignment
         # For now, just increase position confidence based on landmark proximity
@@ -1802,19 +1803,19 @@ class Orchestrator:
                 "new_confidence": current_pos.confidence
             })
         
-        print("✓ Landmark calibration completed")
+        self._logger.info("✓ Landmark calibration completed")
         return True
     
     def _start_autonomous_exploration(self):
         """Start autonomous exploration mode"""
         if not self.nav_controller:
-            print("❌ Navigation system not available")
+            self._logger.warning("❌ Navigation system not available")
             self.dog.speak("confused_1", volume=60)
             return
         
         success = self.nav_controller.start_exploration_mode()
         if success:
-            print("🔍 Autonomous exploration started")
+            self._logger.info("🔍 Autonomous exploration started")
             self.dog.speak("woohoo", volume=70)
             self.set_emotion(EmotionalState.EXCITED)
             self.set_behavior(BehaviorState.EXPLORING)
@@ -1823,7 +1824,7 @@ class Orchestrator:
                 "nav_status": self.nav_controller.get_navigation_status() if self.nav_controller else None
             })
         else:
-            print("❌ Could not start exploration")
+            self._logger.warning("❌ Could not start exploration")
             self.dog.speak("confused_2", volume=60)
     
     def _stop_navigation(self):
@@ -1832,7 +1833,7 @@ class Orchestrator:
             return
         
         self.nav_controller.stop_navigation()
-        print("🛑 Navigation stopped")
+        self._logger.info("🛑 Navigation stopped")
         self.dog.speak("single_bark_1", volume=60)
         
         self._log_patrol_event("NAV_STOP", "Navigation manually stopped")
@@ -1840,7 +1841,7 @@ class Orchestrator:
     def _navigate_to_nearest_room(self):
         """Navigate to the nearest identified room"""
         if not self.nav_controller or not self.slam_system:
-            print("❌ Navigation system not available")
+            self._logger.warning("❌ Navigation system not available")
             return
         
         # Find nearest room
@@ -1861,7 +1862,7 @@ class Orchestrator:
             success = self.nav_controller.navigate_to_room(nearest_room)
             if success:
                 room_info = self.slam_system.house_map.rooms[nearest_room]
-                print(f"🏠 Navigating to {room_info.room_type} (Room {nearest_room})")
+                self._logger.info(f"🏠 Navigating to {room_info.room_type} (Room {nearest_room})")
                 self.dog.speak("single_bark_2", volume=70)
                 self.set_behavior(BehaviorState.EXPLORING)
                 
@@ -1870,16 +1871,16 @@ class Orchestrator:
                     "distance": min_distance * self.slam_system.house_map.cell_size_cm
                 })
             else:
-                print("❌ Could not navigate to room")
+                self._logger.warning("❌ Could not navigate to room")
                 self.dog.speak("confused_1", volume=60)
         else:
-            print("❌ No rooms identified yet")
+            self._logger.warning("❌ No rooms identified yet")
             self.dog.speak("confused_2", volume=60)
     
     def _show_map_visualization(self):
         """Show visual representation of the current map"""
         if not self.slam_system:
-            print("❌ SLAM system not available for map visualization")
+            self._logger.warning("❌ SLAM system not available for map visualization")
             return
         
         try:
@@ -1891,7 +1892,7 @@ class Orchestrator:
             
             visualizer = MapVisualizer(self.slam_system.house_map)
             
-            print("\n🗺️ Current House Map:")
+            self._logger.info("🗺️ Current House Map:")
             visualizer.print_map(show_colors=True)
             visualizer.print_room_summary()
             visualizer.print_landmark_summary()
@@ -1909,20 +1910,20 @@ class Orchestrator:
             })
             
         except ImportError:
-            print("❌ Map visualization not available")
+            self._logger.warning("❌ Map visualization not available")
             self.dog.speak("confused_1", volume=60)
         except Exception as e:
-            print(f"❌ Map visualization error: {e}")
+            self._logger.error(f"❌ Map visualization error: {e}")
             self.dog.speak("confused_2", volume=60)
     
     def _calibrate_sensors(self):
         """Calibrate sensor fusion system"""
         if not self.sensor_localizer:
-            print("❌ Sensor fusion not available")
+            self._logger.warning("❌ Sensor fusion not available")
             self.dog.speak("confused_1", volume=60)
             return
         
-        print("🎯 Starting sensor calibration - keep PiDog stationary for 5 seconds...")
+        self._logger.info("🎯 Starting sensor calibration - keep PiDog stationary for 5 seconds...")
         self.dog.speak("single_bark_1", volume=60)
         
         # Set behavior to calibrating
@@ -1938,19 +1939,19 @@ class Orchestrator:
             success = self.sensor_localizer.calibrate_stationary(duration=5.0)
             
             if success:
-                print("✓ Sensor calibration completed")
+                self._logger.info("✓ Sensor calibration completed")
                 self.dog.speak("woohoo", volume=70)
                 self.set_emotion(EmotionalState.HAPPY)
                 
                 self._log_patrol_event("CALIBRATION_SUCCESS", "Sensor calibration completed successfully")
             else:
-                print("❌ Sensor calibration failed")
+                self._logger.warning("❌ Sensor calibration failed")
                 self.dog.speak("confused_2", volume=60)
                 
                 self._log_patrol_event("CALIBRATION_FAILED", "Sensor calibration failed")
                 
         except Exception as e:
-            print(f"❌ Calibration error: {e}")
+            self._logger.error(f"❌ Calibration error: {e}")
             self.dog.speak("confused_1", volume=60)
             
             self._log_patrol_event("CALIBRATION_ERROR", f"Sensor calibration error: {e}")
@@ -1960,109 +1961,109 @@ class Orchestrator:
     
     def print_status(self):
         """Print current AI status"""
-        print(f"\n=== PiDog AI Status ===")
-        print(f"Emotion: {self.current_emotion.value}")
-        print(f"Behavior: {self.current_behavior.value}")
-        print(f"Energy: {self.energy_level:.2f}")
-        print(f"Interactions: {self.interaction_count}")
-        print(f"Touch preferences: {self.touch_preferences}")
-        print(f"Attention target: {self.attention_target}°" if self.attention_target else "None")
-        print(f"Recent obstacles: {len(self.obstacle_memory)}")
-        print(f"Voice enabled: {self.voice_enabled}")
-        print(f"Last voice command: {time.time() - self.last_voice_command_time:.1f}s ago")
-        print(f"Walking state: {self.is_walking}")
-        print(f"Scan data: F:{self.obstacle_scan_data['forward']:.1f} L:{self.obstacle_scan_data['left']:.1f} R:{self.obstacle_scan_data['right']:.1f}")
-        print(f"Avoidance history: {len(self.avoidance_history)} recent")
-        print(f"Stuck counter: {self.stuck_counter}")
+        self._logger.info(f"=== PiDog AI Status ===")
+        self._logger.info(f"Emotion: {self.current_emotion.value}")
+        self._logger.info(f"Behavior: {self.current_behavior.value}")
+        self._logger.info(f"Energy: {self.energy_level:.2f}")
+        self._logger.info(f"Interactions: {self.interaction_count}")
+        self._logger.info(f"Touch preferences: {self.touch_preferences}")
+        self._logger.info(f"Attention target: {self.attention_target}°" if self.attention_target else "None")
+        self._logger.info(f"Recent obstacles: {len(self.obstacle_memory)}")
+        self._logger.info(f"Voice enabled: {self.voice_enabled}")
+        self._logger.info(f"Last voice command: {time.time() - self.last_voice_command_time:.1f}s ago")
+        self._logger.info(f"Walking state: {self.is_walking}")
+        self._logger.info(f"Scan data: F:{self.obstacle_scan_data['forward']:.1f} L:{self.obstacle_scan_data['left']:.1f} R:{self.obstacle_scan_data['right']:.1f}")
+        self._logger.info(f"Avoidance history: {len(self.avoidance_history)} recent")
+        self._logger.info(f"Stuck counter: {self.stuck_counter}")
         try:
             total_events = len(self.log_service.dump())
         except Exception:
             total_events = len(self.patrol_log)
-        print(f"Patrol log entries: {total_events}")
-        print(f"Patrol log file: {self.log_file_path}")
+        self._logger.info(f"Patrol log entries: {total_events}")
+        self._logger.info(f"Patrol log file: {self.log_file_path}")
         
         # SLAM system status
         if self.slam_system:
             try:
                 map_summary = self.slam_system.get_navigation_info()
                 current_pos = self.slam_system.house_map.get_position()
-                print(f"SLAM enabled: {self.slam_enabled}")
-                print(f"Map position: ({current_pos.x:.1f}, {current_pos.y:.1f}) @ {current_pos.heading:.1f}°")
-                print(f"Position confidence: {current_pos.confidence:.3f}")
+                self._logger.info(f"SLAM enabled: {self.slam_enabled}")
+                self._logger.info(f"Map position: ({current_pos.x:.1f}, {current_pos.y:.1f}) @ {current_pos.heading:.1f}°")
+                self._logger.info(f"Position confidence: {current_pos.confidence:.3f}")
                 if map_summary.get("room_info"):
                     room_info = map_summary["room_info"]
-                    print(f"Current room: {room_info['room_type']} ({room_info['size_m2']:.1f}m²)")
-                print(f"Landmarks nearby: {len(map_summary.get('nearby_landmarks', []))}")
+                    self._logger.info(f"Current room: {room_info['room_type']} ({room_info['size_m2']:.1f}m²)")
+                self._logger.info(f"Landmarks nearby: {len(map_summary.get('nearby_landmarks', []))}")
                 nav_suggestion = map_summary.get("suggested_direction", {})
                 if nav_suggestion:
-                    print(f"Suggested direction: {nav_suggestion.get('suggested_direction', 'none')} (confidence: {nav_suggestion.get('confidence', 0.0):.2f})")
+                    self._logger.info(f"Suggested direction: {nav_suggestion.get('suggested_direction', 'none')} (confidence: {nav_suggestion.get('confidence', 0.0):.2f})")
                 
                 # Sensor fusion status
                 if self.sensor_localizer:
                     loc_status = self.sensor_localizer.get_localization_status()
                     pf_data = loc_status.get("particle_filter", {})
-                    print(f"Sensor fusion: Active")
-                    print(f"  Surface type: {loc_status.get('surface_type', 'unknown')}")
-                    print(f"  Particle filter confidence: {pf_data.get('confidence', 0.0):.3f}")
-                    print(f"  Recent ultrasonic scans: {loc_status.get('recent_scans', 0)}")
-                    print(f"  Motion samples: {loc_status.get('motion_samples', 0)}")
+                    self._logger.info(f"Sensor fusion: Active")
+                    self._logger.info(f"  Surface type: {loc_status.get('surface_type', 'unknown')}")
+                    self._logger.info(f"  Particle filter confidence: {pf_data.get('confidence', 0.0):.3f}")
+                    self._logger.info(f"  Recent ultrasonic scans: {loc_status.get('recent_scans', 0)}")
+                    self._logger.info(f"  Motion samples: {loc_status.get('motion_samples', 0)}")
                 
             except Exception as e:
-                print(f"SLAM status error: {e}")
+                self._logger.warning(f"SLAM status error: {e}")
         else:
-            print(f"SLAM enabled: {self.slam_enabled}")
+            self._logger.info(f"SLAM enabled: {self.slam_enabled}")
             
-        print(f"======================")
+        self._logger.info(f"======================")
 
     def print_configuration(self):
         """Print current configuration settings"""
-        print(f"\n=== PiDog Configuration ===")
-        print(f"Mode: {'Advanced' if self.slam_enabled else 'Simple'}")
+        self._logger.info(f"=== PiDog Configuration ===")
+        self._logger.info(f"Mode: {'Advanced' if self.slam_enabled else 'Simple'}")
         
-        print(f"\n--- Feature Toggles ---")
-        print(f"Voice Commands: {self.config.ENABLE_VOICE_COMMANDS}")
-        print(f"SLAM Mapping: {self.config.ENABLE_SLAM_MAPPING}")
-        print(f"Sensor Fusion: {self.config.ENABLE_SENSOR_FUSION}")
-        print(f"Intelligent Scanning: {self.config.ENABLE_INTELLIGENT_SCANNING}")
-        print(f"Emotional System: {self.config.ENABLE_EMOTIONAL_SYSTEM}")
-        print(f"Learning System: {self.config.ENABLE_LEARNING_SYSTEM}")
-        print(f"Patrol Logging: {self.config.ENABLE_PATROL_LOGGING}")
-        print(f"Autonomous Navigation: {self.config.ENABLE_AUTONOMOUS_NAVIGATION}")
+        self._logger.info(f"--- Feature Toggles ---")
+        self._logger.info(f"Voice Commands: {self.config.ENABLE_VOICE_COMMANDS}")
+        self._logger.info(f"SLAM Mapping: {self.config.ENABLE_SLAM_MAPPING}")
+        self._logger.info(f"Sensor Fusion: {self.config.ENABLE_SENSOR_FUSION}")
+        self._logger.info(f"Intelligent Scanning: {self.config.ENABLE_INTELLIGENT_SCANNING}")
+        self._logger.info(f"Emotional System: {self.config.ENABLE_EMOTIONAL_SYSTEM}")
+        self._logger.info(f"Learning System: {self.config.ENABLE_LEARNING_SYSTEM}")
+        self._logger.info(f"Patrol Logging: {self.config.ENABLE_PATROL_LOGGING}")
+        self._logger.info(f"Autonomous Navigation: {self.config.ENABLE_AUTONOMOUS_NAVIGATION}")
         
-        print(f"\n--- Obstacle Avoidance ---")
-        print(f"Immediate Threat: {self.config.OBSTACLE_IMMEDIATE_THREAT}cm")
-        print(f"Approaching Threat: {self.config.OBSTACLE_APPROACHING_THREAT}cm") 
-        print(f"Emergency Stop: {self.config.OBSTACLE_EMERGENCY_STOP}cm")
-        print(f"Safe Distance: {self.config.OBSTACLE_SAFE_DISTANCE}cm")
-        print(f"Scan Interval: {self.config.OBSTACLE_SCAN_INTERVAL}s")
+        self._logger.info(f"--- Obstacle Avoidance ---")
+        self._logger.info(f"Immediate Threat: {self.config.OBSTACLE_IMMEDIATE_THREAT}cm")
+        self._logger.info(f"Approaching Threat: {self.config.OBSTACLE_APPROACHING_THREAT}cm") 
+        self._logger.info(f"Emergency Stop: {self.config.OBSTACLE_EMERGENCY_STOP}cm")
+        self._logger.info(f"Safe Distance: {self.config.OBSTACLE_SAFE_DISTANCE}cm")
+        self._logger.info(f"Scan Interval: {self.config.OBSTACLE_SCAN_INTERVAL}s")
         
-        print(f"\n--- Movement Parameters ---")
-        print(f"Turn Steps - Small: {self.config.TURN_STEPS_SMALL}, Normal: {self.config.TURN_STEPS_NORMAL}, Large: {self.config.TURN_STEPS_LARGE}")
-        print(f"Walk Steps - Short: {self.config.WALK_STEPS_SHORT}, Normal: {self.config.WALK_STEPS_NORMAL}, Long: {self.config.WALK_STEPS_LONG}")
-        print(f"Backup Steps: {self.config.BACKUP_STEPS}")
-        print(f"Walk Speeds - Slow: {self.config.SPEED_SLOW}, Normal: {self.config.SPEED_NORMAL}, Fast: {self.config.SPEED_FAST}")
-        print(f"Turn Speeds - Slow: {self.config.SPEED_TURN_SLOW}, Normal: {self.config.SPEED_TURN_NORMAL}, Fast: {self.config.SPEED_TURN_FAST}")
-        print(f"Emergency Speed: {self.config.SPEED_EMERGENCY}")
+        self._logger.info(f"--- Movement Parameters ---")
+        self._logger.info(f"Turn Steps - Small: {self.config.TURN_STEPS_SMALL}, Normal: {self.config.TURN_STEPS_NORMAL}, Large: {self.config.TURN_STEPS_LARGE}")
+        self._logger.info(f"Walk Steps - Short: {self.config.WALK_STEPS_SHORT}, Normal: {self.config.WALK_STEPS_NORMAL}, Long: {self.config.WALK_STEPS_LONG}")
+        self._logger.info(f"Backup Steps: {self.config.BACKUP_STEPS}")
+        self._logger.info(f"Walk Speeds - Slow: {self.config.SPEED_SLOW}, Normal: {self.config.SPEED_NORMAL}, Fast: {self.config.SPEED_FAST}")
+        self._logger.info(f"Turn Speeds - Slow: {self.config.SPEED_TURN_SLOW}, Normal: {self.config.SPEED_TURN_NORMAL}, Fast: {self.config.SPEED_TURN_FAST}")
+        self._logger.info(f"Emergency Speed: {self.config.SPEED_EMERGENCY}")
         
-        print(f"\n--- Turn Calibration ---")
-        print(f"Degrees per step: {self.config.TURN_DEGREES_PER_STEP}° (at speed {self.config.SPEED_TURN_NORMAL})")
-        print(f"Turn angles - 45°: {self.config.TURN_45_DEGREES} steps, 90°: {self.config.TURN_90_DEGREES} steps, 180°: {self.config.TURN_180_DEGREES} steps")
+        self._logger.info(f"--- Turn Calibration ---")
+        self._logger.info(f"Degrees per step: {self.config.TURN_DEGREES_PER_STEP}° (at speed {self.config.SPEED_TURN_NORMAL})")
+        self._logger.info(f"Turn angles - 45°: {self.config.TURN_45_DEGREES} steps, 90°: {self.config.TURN_90_DEGREES} steps, 180°: {self.config.TURN_180_DEGREES} steps")
         
-        print(f"\n--- Behavior Timing ---")
-        print(f"Patrol Duration: {self.config.PATROL_DURATION_MIN}-{self.config.PATROL_DURATION_MAX}s")
-        print(f"Rest Duration: {self.config.REST_DURATION}s")
-        print(f"Interaction Timeout: {self.config.INTERACTION_TIMEOUT}s")
+        self._logger.info(f"--- Behavior Timing ---")
+        self._logger.info(f"Patrol Duration: {self.config.PATROL_DURATION_MIN}-{self.config.PATROL_DURATION_MAX}s")
+        self._logger.info(f"Rest Duration: {self.config.REST_DURATION}s")
+        self._logger.info(f"Interaction Timeout: {self.config.INTERACTION_TIMEOUT}s")
         
-        print(f"\n--- Voice Settings ---")
-        print(f"Wake Word: '{self.config.WAKE_WORD}'")
-        print(f"Default Volume: {self.config.VOICE_VOLUME_DEFAULT}")
-        print(f"Voice Timeout: {self.config.VOICE_COMMAND_TIMEOUT}s")
+        self._logger.info(f"--- Voice Settings ---")
+        self._logger.info(f"Wake Word: '{self.config.WAKE_WORD}'")
+        self._logger.info(f"Default Volume: {self.config.VOICE_VOLUME_DEFAULT}")
+        self._logger.info(f"Voice Timeout: {self.config.VOICE_COMMAND_TIMEOUT}s")
         
-        print(f"===========================")
+        self._logger.info(f"===========================")
 
     def _toggle_simple_mode(self):
         """Switch to simple mode - disable advanced features"""
-        print("🔄 Switching to Simple Mode...")
+        self._logger.info("🔄 Switching to Simple Mode...")
         
         # Disable advanced features
         self.slam_enabled = False
@@ -2084,15 +2085,15 @@ class Orchestrator:
         })
         
         self.dog.speak("single_bark_1", volume=self.config.VOICE_VOLUME_DEFAULT)
-        print("✓ Simple Mode activated - using basic obstacle avoidance")
+        self._logger.info("✓ Simple Mode activated - using basic obstacle avoidance")
 
     def _toggle_advanced_mode(self):
         """Switch to advanced mode - enable available features"""
-        print("🔄 Switching to Advanced Mode...")
+        self._logger.info("🔄 Switching to Advanced Mode...")
         
         # Check if dependencies are available
         if not MAPPING_AVAILABLE:
-            print("⚠️ Cannot enable Advanced Mode - missing dependencies (numpy)")
+            self._logger.warning("⚠️ Cannot enable Advanced Mode - missing dependencies (numpy)")
             self.dog.speak("confused_1", volume=self.config.VOICE_VOLUME_DEFAULT)
             return
             
@@ -2124,12 +2125,12 @@ class Orchestrator:
         })
         
         self.dog.speak("woohoo", volume=self.config.VOICE_VOLUME_DEFAULT)
-        print("✓ Advanced Mode activated - full AI capabilities enabled")
+        self._logger.info("✓ Advanced Mode activated - full AI capabilities enabled")
     
     def _load_config_preset(self, preset_name):
         """Load a configuration preset"""
         try:
-            print(f"🔄 Loading {preset_name} configuration preset...")
+            self._logger.info(f"🔄 Loading {preset_name} configuration preset...")
             
             # Load new configuration
             new_config = load_config(preset_name)
@@ -2137,9 +2138,8 @@ class Orchestrator:
             # Validate new configuration
             warnings = validate_config(new_config)
             if warnings:
-                print("⚠️ Configuration warnings:")
                 for warning in warnings:
-                    print(f"   - {warning}")
+                    self._logger.warning(f"Config warning: {warning}")
             
             # Apply new configuration
             try:
@@ -2171,18 +2171,18 @@ class Orchestrator:
             })
             
             self.dog.speak("single_bark_1", volume=self.config.VOICE_VOLUME_DEFAULT)
-            print(f"✓ {preset_name.title()} configuration loaded successfully")
-            print(f"   SLAM: {'✓' if self.slam_enabled else '✗'}")
-            print(f"   Speed Normal: {self.config.SPEED_NORMAL}")
-            print(f"   Obstacle Threshold: {self.config.OBSTACLE_IMMEDIATE_THREAT}cm")
+            self._logger.info(f"✓ {preset_name.title()} configuration loaded successfully")
+            self._logger.info(f"   SLAM: {'✓' if self.slam_enabled else '✗'}")
+            self._logger.info(f"   Speed Normal: {self.config.SPEED_NORMAL}")
+            self._logger.info(f"   Obstacle Threshold: {self.config.OBSTACLE_IMMEDIATE_THREAT}cm")
             
         except Exception as e:
-            print(f"✗ Failed to load {preset_name} preset: {e}")
+            self._logger.error(f"✗ Failed to load {preset_name} preset: {e}")
             self.dog.speak("confused_2", volume=self.config.VOICE_VOLUME_DEFAULT)
     
     def _test_walk_speed(self, speed_mode):
         """Test walk speed calibration"""
-        print(f"🧪 Testing {speed_mode} walk speed...")
+        self._logger.info(f"🧪 Testing {speed_mode} walk speed...")
         
         if speed_mode == "slow":
             speed = self.config.SPEED_SLOW
@@ -2193,7 +2193,7 @@ class Orchestrator:
         else:
             return
             
-        print(f"   Walking {self.config.WALK_STEPS_NORMAL} steps at speed {speed}")
+        self._logger.info(f"   Walking {self.config.WALK_STEPS_NORMAL} steps at speed {speed}")
         self.dog.do_action("forward", step_count=self.config.WALK_STEPS_NORMAL, speed=speed)
         
         self._log_patrol_event("SPEED_TEST", f"Walk speed test: {speed_mode}", {
@@ -2204,7 +2204,7 @@ class Orchestrator:
     
     def _test_turn_angle(self, degrees):
         """Test turn angle calibration"""
-        print(f"🧪 Testing {degrees}° turn...")
+        self._logger.info(f"🧪 Testing {degrees}° turn...")
         
         if degrees == 45:
             steps = self.config.TURN_45_DEGREES
@@ -2218,7 +2218,7 @@ class Orchestrator:
         speed = self.config.SPEED_TURN_NORMAL
         direction = "turn_left" if random.random() > 0.5 else "turn_right"
         
-        print(f"   Turning {direction} {steps} steps at speed {speed} (should be {degrees}°)")
+        self._logger.info(f"   Turning {direction} {steps} steps at speed {speed} (should be {degrees}°)")
         self.dog.do_action(direction, step_count=steps, speed=speed)
         
         self._log_patrol_event("TURN_TEST", f"Turn angle test: {degrees}°", {
@@ -2236,72 +2236,73 @@ def main():
     config = load_config("default")
     warnings = validate_config(config)
     config_source = "packmind/packmind_config.py"
+    logger = logging.getLogger("packmind.orchestrator")
     
-    print("🤖 Advanced PiDog AI Behavior System")
-    print("====================================")
-    print(f"📋 Configuration: {config_source}")
+    logger.info("🤖 Advanced PiDog AI Behavior System")
+    logger.info("====================================")
+    logger.info(f"📋 Configuration: {config_source}")
     if warnings:
-        print("⚠️ Configuration warnings detected")
-    print()
-    print("Features:")
-    print("• 🧠 Emotional state system with LED feedback")
-    print("• 📚 Learning touch preferences") 
-    print("• ⚡ Energy management and fatigue")
-    print("• 🚧 Smart obstacle avoidance with memory")
-    print("• 👂 Enhanced sound direction tracking & body turning")
-    print("• 🚶 Intelligent patrol behavior with predictive obstacle avoidance")
-    print("• 🔍 3-way ultrasonic scanning (forward/left/right) during movement")
-    print("• 🧠 Smart pathfinding - turns toward most open direction")
-    print("• 🔄 Anti-stuck system with multiple escape strategies")
-    print("• 🎙️ Voice commands with 'PiDog' wake word")
-    print("• 🎯 Advanced behavior state machine")
-    print("• 📊 Comprehensive patrol logging with timestamped events")
-    print("• 📝 Automatic patrol report generation")
+        logger.warning("⚠️ Configuration warnings detected")
+    logger.info("")
+    logger.info("Features:")
+    logger.info("• 🧠 Emotional state system with LED feedback")
+    logger.info("• 📚 Learning touch preferences") 
+    logger.info("• ⚡ Energy management and fatigue")
+    logger.info("• 🚧 Smart obstacle avoidance with memory")
+    logger.info("• 👂 Enhanced sound direction tracking & body turning")
+    logger.info("• 🚶 Intelligent patrol behavior with predictive obstacle avoidance")
+    logger.info("• 🔍 3-way ultrasonic scanning (forward/left/right) during movement")
+    logger.info("• 🧠 Smart pathfinding - turns toward most open direction")
+    logger.info("• 🔄 Anti-stuck system with multiple escape strategies")
+    logger.info("• 🎙️ Voice commands with 'PiDog' wake word")
+    logger.info("• 🎯 Advanced behavior state machine")
+    logger.info("• 📊 Comprehensive patrol logging with timestamped events")
+    logger.info("• 📝 Automatic patrol report generation")
     if MAPPING_AVAILABLE:
-        print("• 🗺️ SLAM house mapping with persistent map storage")
-        print("• 📍 Sensor fusion localization (IMU + ultrasonic + particle filter)")
-        print("• 🏃 Surface type detection and adaptive movement calibration")
-        print("• 🎯 Multiple calibration methods (wall-follow, corner-seek, sensor-cal)")
-        print("• 🧠 Landmark detection and room identification")
-        print("• 🔍 Ultrasonic triangulation for position correction")
-    print("• � Multi-sensor fusion with movement analysis")
-    print()
+        logger.info("• 🗺️ SLAM house mapping with persistent map storage")
+        logger.info("• 📍 Sensor fusion localization (IMU + ultrasonic + particle filter)")
+        logger.info("• 🏃 Surface type detection and adaptive movement calibration")
+        logger.info("• 🎯 Multiple calibration methods (wall-follow, corner-seek, sensor-cal)")
+        logger.info("• 🧠 Landmark detection and room identification")
+        logger.info("• 🔍 Ultrasonic triangulation for position correction")
+    logger.info("• Multi-sensor fusion with movement analysis")
+    logger.info("")
     if VOICE_AVAILABLE:
-        print("🎙️ Voice Commands Available:")
-        print("   Say 'PiDog' + command:")
-        print("   • 'sit', 'stand', 'lie down', 'walk'")
-        print("   • 'turn left', 'turn right', 'wag tail'")  
-        print("   • 'shake head', 'nod', 'stretch'")
-        print("   • 'play', 'explore', 'patrol', 'rest'")
-        print("   • 'good dog' (praise), 'bad dog' (scold)")
-        print("   • 'stop' (emergency)")
+        logger.info("🎙️ Voice Commands Available:")
+        logger.info("   Say 'PiDog' + command:")
+        logger.info("   • 'sit', 'stand', 'lie down', 'walk'")
+        logger.info("   • 'turn left', 'turn right', 'wag tail'")  
+        logger.info("   • 'shake head', 'nod', 'stretch'")
+        logger.info("   • 'play', 'explore', 'patrol', 'rest'")
+        logger.info("   • 'good dog' (praise), 'bad dog' (scold)")
+        logger.info("   • 'stop' (emergency)")
         if MAPPING_AVAILABLE:
-            print("   • 'calibrate' (wall follow), 'find corner' (corner seek)")
-            print("   • 'calibrate sensors' (IMU baseline calibration)")
-            print("   • 'explore' (autonomous exploration), 'go to room'")
-            print("   • 'show map' (display current map), 'stop navigation'")
-            print("   • 'status' (detailed info including localization data)")
+            logger.info("   • 'calibrate' (wall follow), 'find corner' (corner seek)")
+            logger.info("   • 'calibrate sensors' (IMU baseline calibration)")
+            logger.info("   • 'explore' (autonomous exploration), 'go to room'")
+            logger.info("   • 'show map' (display current map), 'stop navigation'")
+            logger.info("   • 'status' (detailed info including localization data)")
     else:
-        print("🔇 Voice commands disabled (install: pip install speech_recognition pyaudio)")
+        logger.info("🔇 Voice commands disabled (install: pip install speech_recognition pyaudio)")
     
-    print()
-    print("💡 Configuration Tips:")
-    print("   • Edit packmind/packmind_config.py to customize behavior")
-    print("   • Use preset configurations: simple, advanced, indoor, explorer") 
-    print("   • Voice commands: 'load simple config', 'load advanced config'")
-    print("   • Test settings with voice commands before saving changes")
-    print()
+    logger.info("")
+    logger.info("💡 Configuration Tips:")
+    logger.info("   • Edit packmind/packmind_config.py to customize behavior")
+    logger.info("   • Use preset configurations: simple, advanced, indoor, explorer") 
+    logger.info("   • Voice commands: 'load simple config', 'load advanced config'")
+    logger.info("   • Test settings with voice commands before saving changes")
+    logger.info("")
     
     ai = Orchestrator()
     
     try:
         success = ai.start_ai_system()
         if not success:
-            print("Failed to start AI system")
+            logger.error("Failed to start AI system")
             return 1
             
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger.error(f"Unexpected error: {e}")
         return 1
     
     return 0
