@@ -99,7 +99,8 @@ class FaceRecognitionService:
         # Recognition parameters
         self.recognition_threshold = self.config.get("FACE_RECOGNITION_THRESHOLD", 0.6)
         self.detection_interval = self.config.get("FACE_DETECTION_INTERVAL", 2.0)  # seconds
-        self.max_faces_per_frame = self.config.get("MAX_FACES_PER_FRAME", 3)
+        # Configurable limits and camera settings
+        self.max_faces_per_frame = self.config.get("FACE_MAX_FACES_PER_FRAME", 3)
         
         # Storage paths
         self.data_dir = Path(self.config.get("FACE_DATA_DIR", "data/faces"))
@@ -167,9 +168,15 @@ class FaceRecognitionService:
                 raise RuntimeError("Could not open camera")
                 
             # Set camera properties for better performance
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            self.camera.set(cv2.CAP_PROP_FPS, 15)
+            width = int(self.config.get("FACE_CAMERA_WIDTH", 640))
+            height = int(self.config.get("FACE_CAMERA_HEIGHT", 480))
+            fps = int(self.config.get("FACE_CAMERA_FPS", 15))
+            try:
+                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                self.camera.set(cv2.CAP_PROP_FPS, fps)
+            except Exception:
+                pass
             
             self.logger.info("Camera initialized successfully")
         except Exception as e:

@@ -116,12 +116,17 @@ class ObstacleService:
         self.current_strategy_index = (self.current_strategy_index + 1) % len(self.avoidance_strategies)
         self.avoidance_history = []
 
-    def track_movement(self, context: AIContext) -> None:
+    def track_movement(self, context: AIContext, config) -> None:
         ax, ay, az = context.dog.accData
         mag = abs(ax) + abs(ay) + abs(az)
         now = time.time()
         self.movement_history.append((now, mag))
-        self.movement_history = [(t, m) for t, m in self.movement_history if now - t < 5.0]
+        # Keep only recent movement samples within configured window
+        try:
+            window_s = float(getattr(config, "STUCK_TIME_WINDOW", 5.0))
+        except Exception:
+            window_s = 5.0
+        self.movement_history = [(t, m) for t, m in self.movement_history if now - t < window_s]
 
     def check_if_stuck(self, context: AIContext, config) -> None:
         if context.behavior_state not in [BehaviorState.PATROLLING, BehaviorState.EXPLORING]:
@@ -131,9 +136,17 @@ class ObstacleService:
             return
         recent = [m for _, m in self.movement_history[-10:]]
         avg = sum(recent) / len(recent)
-        if avg < 1000:
+        try:
+            movement_threshold = float(getattr(config, "STUCK_MOVEMENT_THRESHOLD", 1000.0))
+        except Exception:
+            movement_threshold = 1000.0
+        try:
+            limit = int(getattr(config, "STUCK_AVOIDANCE_LIMIT", 5))
+        except Exception:
+            limit = 5
+        if avg < movement_threshold:
             self.stuck_counter += 1
-            if self.stuck_counter > 5:
+            if self.stuck_counter > limit:
                 self._execute_advanced_avoidance_strategy(context, config)
                 self.stuck_counter = 0
         else:

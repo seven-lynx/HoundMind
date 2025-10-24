@@ -20,11 +20,23 @@ class VoiceRuntime:
         voice_service: Any,
         wake_word: str,
         on_command: Callable[[str], None],
+        mic_index: Optional[int] = None,
+        wake_timeout_s: float = 5.0,
+        vad_sensitivity: float = 0.5,
+        language: str = "en-US",
+        noise_suppression: bool = True,
+        command_timeout_s: float = 5.0,
         logger: Optional[Any] = None,
     ) -> None:
         self.voice_service = voice_service
         self.wake_word = (wake_word or "pidog").lower()
         self.on_command = on_command
+        self.mic_index = mic_index
+        self.wake_timeout_s = float(wake_timeout_s)
+        self.vad_sensitivity = max(0.0, min(1.0, float(vad_sensitivity)))
+        self.language = language or "en-US"
+        self.noise_suppression = bool(noise_suppression)
+        self.command_timeout_s = float(command_timeout_s)
         self.logger = logger
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -57,21 +69,34 @@ class VoiceRuntime:
             return
 
         recognizer = sr.Recognizer()
-        microphone = sr.Microphone()
+        microphone = sr.Microphone(device_index=self.mic_index) if self.mic_index is not None else sr.Microphone()
         with microphone as source:
             try:
-                recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                if self.noise_suppression:
+                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                # Map VAD sensitivity (0..1) to an energy threshold range
+                base = 100.0
+                recognizer.dynamic_energy_threshold = True
+                recognizer.energy_threshold = base + (1.0 - self.vad_sensitivity) * 900.0
             except Exception:
                 pass
 
         if self.logger:
-            self.logger.info(f"Listening for wake word: '{self.wake_word}'")
+            cfg = {
+                "mic_index": self.mic_index,
+                "timeout_s": self.wake_timeout_s,
+                "vad_sensitivity": self.vad_sensitivity,
+                "language": self.language,
+                "noise_suppression": self.noise_suppression,
+                "phrase_time_limit": self.command_timeout_s,
+            }
+            self.logger.info(f"Listening for wake word: '{self.wake_word}' with {cfg}")
 
         while self._running:
             try:
-                with sr.Microphone() as source:
-                    audio = recognizer.listen(source, timeout=3, phrase_time_limit=4)
-                text = recognizer.recognize_google(audio).lower()
+                with (sr.Microphone(device_index=self.mic_index) if self.mic_index is not None else sr.Microphone()) as source:
+                    audio = recognizer.listen(source, timeout=self.wake_timeout_s, phrase_time_limit=self.command_timeout_s)
+                text = recognizer.recognize_google(audio, language=self.language).lower()
                 if self.wake_word in text:
                     if self.logger:
                         self.logger.debug(f"Wake word heard: {text}")

@@ -198,6 +198,8 @@ class Orchestrator:
         self.movement_history = []  # Track if actually moving to detect being stuck
         self.avoidance_strategies = ['turn_smart', 'backup_turn', 'zigzag', 'reverse_escape']
         self.current_strategy_index = 0
+        # Watchdog housekeeping
+        self._last_watchdog_beat = 0.0
         
         # Walking state tracking
         self.is_walking = False
@@ -369,7 +371,7 @@ class Orchestrator:
         # Safety watchdog (heartbeat-based)
         self.watchdog = SafetyWatchdog(timeout_s=float(getattr(self.config, "WATCHDOG_TIMEOUT_S", 3.0)), logger=None)
         # Initialize DI container for selected services
-        self._container = ServiceContainer(self.context)
+        self._container = ServiceContainer(self.context, self.config)
         self._container.build_defaults()
         self.obstacle_service = self._container.obstacle()
         self.voice_service = VoiceService()
@@ -653,6 +655,7 @@ class Orchestrator:
                 read_once=self._read_sensors_once,
                 on_reading=self._on_sensor_reading,
                 rate_hz=float(getattr(self.config, "SENSOR_MONITOR_RATE_HZ", 20.0)),
+                backoff_on_error_s=float(getattr(self.config, "SENSOR_MONITOR_BACKOFF_ON_ERROR_S", 0.0)),
                 logger=self._logger,
             )
             self._sensor_monitor.start()
@@ -663,12 +666,30 @@ class Orchestrator:
         if self.intelligent_scanning_enabled:
             self._logger.info("Starting intelligent obstacle scanning system...")
             try:
+                # Map config to scanning parameters
+                try:
+                    _range = int(getattr(self.config, "HEAD_SCAN_RANGE", 50))
+                except Exception:
+                    _range = 50
+                try:
+                    _samples = int(getattr(self.config, "SCAN_SAMPLES", 3))
+                except Exception:
+                    _samples = 3
+                try:
+                    _settle = float(getattr(self.config, "SCAN_DEBOUNCE_S", 0.3))
+                except Exception:
+                    _settle = 0.3
+
                 self._scan_coordinator = ScanningCoordinator(
                     scanning_service=self.scanning_service,
                     should_scan=self._should_perform_scan,
                     on_scan=self._on_scan_results,
                     interval_s=0.2,  # 5Hz polling of scan predicate
                     logger=self._logger,
+                    left_deg=_range,
+                    right_deg=_range,
+                    settle_s=_settle,
+                    samples=_samples,
                 )
                 self._scan_coordinator.start()
             except Exception as e:
@@ -692,6 +713,12 @@ class Orchestrator:
                     voice_service=self.voice_service,
                     wake_word=self.wake_word,
                     on_command=self._process_voice_command,
+                    mic_index=int(getattr(self.config, "VOICE_MIC_INDEX", 0)),
+                    wake_timeout_s=float(getattr(self.config, "VOICE_WAKE_TIMEOUT_S", 5.0)),
+                    vad_sensitivity=float(getattr(self.config, "VOICE_VAD_SENSITIVITY", 0.5)),
+                    language=str(getattr(self.config, "VOICE_LANGUAGE", "en-US")),
+                    noise_suppression=bool(getattr(self.config, "VOICE_NOISE_SUPPRESSION", True)),
+                    command_timeout_s=float(getattr(self.config, "VOICE_COMMAND_TIMEOUT", 5.0)),
                     logger=self._logger,
                 )
                 self._voice_runtime.start()
@@ -784,7 +811,20 @@ class Orchestrator:
         """Use ScanningService and update mapping/localization/logging."""
         self._logger.debug("Performing 3-way obstacle scan...")
         self._log_patrol_event("SCAN_START", "Beginning 3-way ultrasonic scan")
-        scan_results = self.scanning_service.scan_three_way(left_deg=50, right_deg=50, settle_s=0.3, samples=3)
+        # Use configured scan parameters
+        try:
+            _range = int(getattr(self.config, "HEAD_SCAN_RANGE", 50))
+        except Exception:
+            _range = 50
+        try:
+            _samples = int(getattr(self.config, "SCAN_SAMPLES", 3))
+        except Exception:
+            _samples = 3
+        try:
+            _settle = float(getattr(self.config, "SCAN_DEBOUNCE_S", 0.3))
+        except Exception:
+            _settle = 0.3
+        scan_results = self.scanning_service.scan_three_way(left_deg=_range, right_deg=_range, settle_s=_settle, samples=_samples)
         self._log_patrol_event("SCAN_COMPLETE", "3-way scan completed", {
             "scan_results": scan_results,
             "threats_detected": [d for d, dist in scan_results.items() if dist < 40],
@@ -884,9 +924,37 @@ class Orchestrator:
         # Check service integration
         self._check_service_integration()
 
-        # Watchdog heartbeat (basic liveness)
+        # Watchdog heartbeat and timeout action (config-driven)
         try:
-            self.watchdog.heartbeat()
+            hb_interval = float(getattr(self.config, "WATCHDOG_HEARTBEAT_INTERVAL_S", 0.5))
+        except Exception:
+            hb_interval = 0.5
+        try:
+            action = str(getattr(self.config, "WATCHDOG_ACTION", "stop_and_crouch"))
+        except Exception:
+            action = "stop_and_crouch"
+        try:
+            if (current_time - self._last_watchdog_beat) >= hb_interval:
+                self.watchdog.heartbeat()
+                self._last_watchdog_beat = current_time
+            # Check timeout and take configured safety action
+            if self.watchdog.is_timed_out():
+                self._logger.warning("⚠️ Watchdog timeout detected - executing safety action")
+                try:
+                    self.watchdog.arm_emergency()
+                except Exception:
+                    pass
+                try:
+                    self.watchdog.emergency_stop(self.context.dog)
+                except Exception:
+                    pass
+                if action == "power_down":
+                    try:
+                        # Attempt a graceful power down if supported
+                        if hasattr(self.context.dog, "power_down"):
+                            self.context.dog.power_down()
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -908,7 +976,7 @@ class Orchestrator:
             # Movement tracking and stuck detection at ~5Hz
             if reading.timestamp - self.last_movement_check > 0.2:
                 try:
-                    self.obstacle_service.track_movement(self.context)
+                    self.obstacle_service.track_movement(self.context, self.config)
                     self.obstacle_service.check_if_stuck(self.context, self.config)
                 except Exception:
                     pass
@@ -1098,56 +1166,88 @@ class Orchestrator:
         self.set_behavior(BehaviorState.AVOIDING)
     
     def _handle_sound_attention(self, direction: int, timestamp: float):
-        """ENHANCED: Advanced sound tracking with head movement and body turning"""
+        """ENHANCED: Advanced sound tracking with head movement and body turning (config-driven)."""
         self._logger.info(f"👂 Sound from {direction}° - investigating!")
-        
+
         self.attention_target = direction
         self.set_emotion(EmotionalState.ALERT)
-        
+
+        # Configurable parameters
+        try:
+            sensitivity = float(getattr(self.config, "SOUND_HEAD_SENSITIVITY", 2.5))
+        except Exception:
+            sensitivity = 2.5
+        try:
+            body_turn_threshold = float(getattr(self.config, "SOUND_BODY_TURN_THRESHOLD", 45.0))
+        except Exception:
+            body_turn_threshold = 45.0
+        try:
+            energy_min = float(getattr(self.config, "SOUND_RESPONSE_ENERGY_MIN", 0.4))
+        except Exception:
+            energy_min = 0.4
+
         # Log sound detection
-        self._log_patrol_event("SOUND_DETECTED", f"Sound detected from {direction}°", {
-            "sound_direction": direction,
-            "previous_attention": self.attention_target,
-            "response_planned": "head_and_body_turn" if abs(direction) > 45 else "head_turn_only"
-        })
-        
+        self._log_patrol_event(
+            "SOUND_DETECTED",
+            f"Sound detected from {direction}°",
+            {
+                "sound_direction": direction,
+                "previous_attention": self.attention_target,
+                "response_planned": "head_and_body_turn" if abs(direction) > body_turn_threshold else "head_turn_only",
+                "sensitivity": sensitivity,
+                "threshold": body_turn_threshold,
+            },
+        )
+
         # Calculate head movement
         profile = self.emotion_profiles[self.context.current_emotion]
         responsiveness = profile.head_responsiveness * self.context.energy_level
-        
-        # Convert sound direction to head yaw (more responsive)
+
+        # Convert sound direction to head yaw using configured sensitivity
         if direction > 180:
-            yaw = max(-80, (direction - 360) / 2.5)  # Increased range and sensitivity
+            yaw = (direction - 360) / max(0.1, sensitivity)
         else:
-            yaw = min(80, direction / 2.5)
-            
+            yaw = direction / max(0.1, sensitivity)
+        yaw = max(-80, min(80, yaw))
         yaw *= responsiveness
-        
-        # ENHANCED: Turn head first, then body if sound is far to the side
+
+        # Turn head first, then body if sound is far to the side and enough energy
         self.context.dog.head_move([[int(yaw), 0, 0]], speed=int(70 + responsiveness * 30))
-        
-        # If sound is significantly to the side, turn body to face it
-        if abs(yaw) > 45 and self.context.energy_level > 0.4:
+
+        if abs(yaw) > body_turn_threshold and self.context.energy_level > energy_min:
             self._logger.debug("🔄 Turning body to face sound source")
             if yaw > 0:  # Sound to the left
                 self.context.dog.do_action("turn_left", step_count=1, speed=70)
-            else:  # Sound to the right  
+            else:  # Sound to the right
                 self.context.dog.do_action("turn_right", step_count=1, speed=70)
-            
+
             # Reset head to center after body turn
             time.sleep(1)  # Wait for body turn
             self.context.dog.head_move([[0, 0, 0]], speed=60)
-        
-        # ENHANCED: More varied vocal responses
+
+        # Vocal responses with configurable volumes
+        try:
+            vol_default = int(getattr(self.config, "VOICE_VOLUME_DEFAULT", 70))
+        except Exception:
+            vol_default = 70
+        try:
+            vol_excited = int(getattr(self.config, "VOICE_VOLUME_EXCITED", 80))
+        except Exception:
+            vol_excited = 80
+        try:
+            vol_quiet = int(getattr(self.config, "VOICE_VOLUME_QUIET", 40))
+        except Exception:
+            vol_quiet = 40
+
         if self.context.current_emotion == EmotionalState.EXCITED:
             sounds = ["woohoo", "single_bark_2"]
-            self.context.dog.speak(random.choice(sounds), volume=80)
+            self.context.dog.speak(random.choice(sounds), volume=vol_excited)
         elif self.context.current_emotion == EmotionalState.ALERT:
             sounds = ["single_bark_1", "pant"]
-            self.context.dog.speak(random.choice(sounds), volume=70)
+            self.context.dog.speak(random.choice(sounds), volume=vol_default)
         elif self.context.current_emotion == EmotionalState.CONFUSED:
-            self.context.dog.speak("confused_1", volume=60)
-            
+            self.context.dog.speak("confused_1", volume=vol_quiet)
+
         # Switch to investigating behavior
         if self.context.behavior_state in [BehaviorState.IDLE, BehaviorState.PATROLLING]:
             self.set_behavior(BehaviorState.EXPLORING)
@@ -1155,7 +1255,7 @@ class Orchestrator:
     def _update_energy_level(self, reading: SensorReading, timestamp: float):
         """Delegate to EnergyService for energy accounting."""
         try:
-            self.energy_service.update(self.context, reading, timestamp)
+            self.energy_service.update(self.context, reading, timestamp, self.config)
         except Exception:
             # Preserve previous behavior on hosts without full services
             time_factor = 0.001

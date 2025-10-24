@@ -19,12 +19,22 @@ class ScanningCoordinator:
         on_scan: Callable[[Dict[str, float]], None],
         interval_s: float = 0.5,
         logger: Optional[Any] = None,
+        *,
+        left_deg: Optional[int] = None,
+        right_deg: Optional[int] = None,
+        settle_s: Optional[float] = None,
+        samples: Optional[int] = None,
     ) -> None:
         self.scanning_service = scanning_service
         self.should_scan = should_scan
         self.on_scan = on_scan
         self.interval_s = max(0.1, float(interval_s))
         self.logger = logger
+        # Optional scan parameters (fallback to internal defaults if None)
+        self._left_deg = left_deg
+        self._right_deg = right_deg
+        self._settle_s = settle_s
+        self._samples = samples
         self._running = False
         self._thread: Optional[threading.Thread] = None
 
@@ -51,7 +61,12 @@ class ScanningCoordinator:
                 if self.should_scan():
                     if self.logger:
                         self.logger.debug("Performing 3-way scan")
-                    scan = self.scanning_service.scan_three_way(left_deg=50, right_deg=50, settle_s=0.3, samples=3)
+                    scan = self.scanning_service.scan_three_way(
+                        left_deg=self._left_deg if self._left_deg is not None else 50,
+                        right_deg=self._right_deg if self._right_deg is not None else 50,
+                        settle_s=self._settle_s if self._settle_s is not None else 0.3,
+                        samples=self._samples if self._samples is not None else 3,
+                    )
                     self.on_scan(scan)
             except Exception as e:  # pragma: no cover
                 if self.logger:

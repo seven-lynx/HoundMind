@@ -16,8 +16,9 @@ class ServiceContainer:
     Keeps a per-context set of service instances.
     """
 
-    def __init__(self, context: AIContext) -> None:
+    def __init__(self, context: AIContext, config: Any | None = None) -> None:
         self._ctx = context
+        self._config = config
         self._services: Dict[str, Any] = {}
 
     def build_defaults(self) -> None:
@@ -27,7 +28,17 @@ class ServiceContainer:
         self._services["log"] = LogService()
         self._services["voice"] = VoiceService()
         self._services["obstacle"] = ObstacleService()
-        self._services["scanning"] = ScanningService(self._ctx, head_scan_speed=90, scan_samples=3)
+        # Use config-derived scanning parameters when available
+        head_speed = 90
+        samples = 3
+        cfg = getattr(self, "_config", None)
+        try:
+            if cfg is not None:
+                head_speed = int(getattr(cfg, "HEAD_SCAN_SPEED", head_speed))
+                samples = int(getattr(cfg, "SCAN_SAMPLES", samples))
+        except Exception:
+            pass
+        self._services["scanning"] = ScanningService(self._ctx, head_scan_speed=head_speed, scan_samples=samples)
 
     def get(self, name: str) -> Any:
         return self._services.get(name)
