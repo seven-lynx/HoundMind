@@ -112,6 +112,7 @@ def services_smoke_tests(allow_move: bool) -> bool:
         from canine_core.core.services.safety import SafetyService
         from canine_core.core.services.battery import BatteryService
         from canine_core.core.services.telemetry import TelemetryService
+        from canine_core.core.services.sensors_facade import SensorsFacade
 
         # Hardware init (may fail on non-Pi or without peripherals)
         try:
@@ -132,7 +133,8 @@ def services_smoke_tests(allow_move: bool) -> bool:
         safety = SafetyService(hw, imu, publish=lambda *_: None)
         battery = BatteryService(hw, publish=lambda *_: None)
         telemetry = TelemetryService(hw, logger=SimpleNamespace(info=lambda *_: None))
-        print(f"{OK} Sensor/Motion/Emotions/Voice/IMU/Safety/Battery/Telemetry instantiated")
+        sensors_facade = SensorsFacade(hw)
+        print(f"{OK} Sensor/Motion/Emotions/Voice/IMU/Safety/Battery/Telemetry/SensorsFacade instantiated")
 
         # Non-moving checks
         emotions.update((0, 128, 255))
@@ -177,6 +179,37 @@ def services_smoke_tests(allow_move: bool) -> bool:
             print(f"{OK} TelemetryService.maybe_log()")
         except Exception as e:
             print(f"{FAIL} TelemetryService.maybe_log(): {e}")
+            ok = False
+
+        # SensorsFacade checks
+        try:
+            sd = sensors_facade.sound_detected()
+            if sd is None:
+                print(f"{OK} SensorsFacade.sound_detected(): unavailable on this host")
+            else:
+                print(f"{OK} SensorsFacade.sound_detected() = {sd}")
+        except Exception as e:
+            print(f"{FAIL} SensorsFacade.sound_detected(): {e}")
+            ok = False
+
+        try:
+            deg = sensors_facade.sound_direction_deg()
+            if deg is None:
+                print(f"{OK} SensorsFacade.sound_direction_deg(): unavailable or no detection")
+            else:
+                print(f"{OK} SensorsFacade.sound_direction_deg() = {deg}°")
+        except Exception as e:
+            print(f"{FAIL} SensorsFacade.sound_direction_deg(): {e}")
+            ok = False
+
+        try:
+            tv = sensors_facade.touch_read()
+            if tv is None:
+                print(f"{OK} SensorsFacade.touch_read(): unavailable on this host")
+            else:
+                print(f"{OK} SensorsFacade.touch_read() = {tv}")
+        except Exception as e:
+            print(f"{FAIL} SensorsFacade.touch_read(): {e}")
             ok = False
 
         # Stop voice cleanly

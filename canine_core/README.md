@@ -134,6 +134,7 @@ The orchestrator auto‑discovers behaviors via `BEHAVIOR_CLASS` or a `get_behav
 - NEW — SafetyService: tilt emergency detection with safe pose and event publish
 - NEW — BatteryService: battery read + low/critical event publish (if hardware supports it)
 - NEW — TelemetryService: periodic lightweight snapshots to the logger
+- NEW — SensorsFacade: wrappers for sound direction (ears) and dual touch (sim-safe)
 
 Access these via `BehaviorContext` (injected by the orchestrator) to avoid direct hardware imports.
 

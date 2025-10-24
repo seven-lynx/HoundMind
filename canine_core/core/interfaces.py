@@ -32,6 +32,7 @@ class BehaviorContext:
     battery: Any | None = None
     imu: Any | None = None
     telemetry: Any | None = None
+    sensors_facade: Any | None = None
 
 @runtime_checkable
 class Behavior(Protocol):

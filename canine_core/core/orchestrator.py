@@ -18,6 +18,7 @@ from .services.safety import SafetyService
 from .services.battery import BatteryService
 from .services.telemetry import TelemetryService
 from .hooks import HookRegistry, default_hooks_factory
+from .services.sensors_facade import SensorsFacade
 
 class LegacyThreadBehavior:
     """Adapter to run legacy modules exposing start_behavior() in a thread.
@@ -115,6 +116,7 @@ class Orchestrator:
             logger=self.logger,
             interval_s=float(getattr(self.config, "LOG_STATUS_INTERVAL", 10)),
         ) if bool(getattr(self.config, "ENABLE_TELEMETRY", False)) else None
+        sensors_facade = SensorsFacade(self.hardware) if bool(getattr(self.config, "ENABLE_SENSORS_FACADE", True)) else None
         self._ctx = BehaviorContext(
             hardware=self.hardware,
             sensors=sensors,
@@ -130,6 +132,7 @@ class Orchestrator:
             battery=battery,
             imu=imu,
             telemetry=telemetry,
+            sensors_facade=sensors_facade,
         )
         # Hooks: subscribe default handlers if enabled
         if bool(getattr(self.config, "ENABLE_DEFAULT_HOOKS", True)):
@@ -142,6 +145,7 @@ class Orchestrator:
         self.battery = battery
         self.imu = imu
         self.telemetry = telemetry
+        self.sensors_facade = sensors_facade
 
     def _resolve_behavior(self, spec: str) -> Behavior:
         """Resolve a behavior spec into a Behavior instance.
