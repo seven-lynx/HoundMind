@@ -16,6 +16,7 @@ Legacy modules for the old system are stored in the legacy folder, and the entir
 - **PackMind** (`packmind/`): AI orchestrator plus subsystems for mapping (SLAM), navigation (A*), localization (sensor fusion), voice, scanning, obstacle handling, and **new AI services** (face recognition, dynamic balance, enhanced audio).
 - **Docs** (`docs/`): programming guides, API reference, voice setup, and config guides.
 - **Tools** (`tools/`): setup utilities and integration tests (formerly `scripts/`).
+- **System setup scripts** (`scripts/`): OS and dependency install helpers for Ubuntu/RPi.
 - **Examples** (`examples/`): runnable examples.
 - **Legacy** (`legacy/`): archived test modules and examples (not actively maintained)
 
@@ -101,9 +102,61 @@ HoundMind/
 │  ├─ mapping/ nav/ localization/ visualization/
 │  └─ packmind_config.py
 ├─ docs/
+├─ scripts/                 # OS/setup helpers (Ubuntu, Vilib)
 ├─ examples/
 ├─ tools/
 └─ legacy/
+
+## Modules overview
+
+This is a quick map of the major modules and what they do. Use it to jump into the parts you care about.
+
+- Top-level launchers
+	- `main.py`: Starts CanineCore’s orchestrator with your chosen config/preset.
+	- `packmind.py`: Convenience wrapper to start PackMind’s AI orchestrator.
+	- `canine_core.py`: Thin helper for launching CanineCore on some setups.
+
+- CanineCore (`canine_core/`)
+	- `core/orchestrator.py`: Async behavior loop, service lifecycle, watchdog, event bus.
+	- `core/interfaces.py`: Shared data structures/types for behaviors and services.
+	- `core/state.py`, `core/memory.py`, `core/emotions.py`: State model, short-term memory, emotion helpers.
+	- `core/bus.py`: Lightweight pub/sub for internal events.
+	- `core/watchdog.py`: Behavior watchdog (dwell cap and error thresholds).
+	- `core/services/`: Modular service layer
+		- `motion.py`: Walking/turning/head control abstractions
+		- `sensors.py`, `sensors_facade.py`: Distance, ears, touch and safe facades
+		- `scanning.py`, `scanning_coordinator.py`: Head sweep and scan coordination
+		- `energy.py`, `emotions.py`: Energy accounting and emotion state
+		- `imu.py`, `balance.py`: IMU readings and balance monitoring
+		- `safety.py`: Safety supervisor and actions
+		- `voice.py`, `audio_processing.py`: Speech playback/recognition hooks
+		- `logging.py`, `telemetry.py`, `learning.py`, `hardware.py`, `battery.py`
+	- `behaviors/`: Behavior modules (patrol, guard, play, rest, etc.)
+	- `config/`: Python-based config and presets (Simple, Patrol, Interactive, Safety-first)
+	- `control.py`: Interactive behavior menu/runner
+	- `utils/`: Logging setup and misc helpers
+
+- PackMind (`packmind/`)
+	- `orchestrator.py`: Standalone AI orchestrator: behaviors, scanning, emotions, optional mapping/nav
+	- `core/`: Dependency injection and runtime context
+		- `container.py`: Service wiring from config
+		- `context.py`, `types.py`, `registry.py`: AI context, shared types, service registry
+	- `services/`: AI services
+		- `energy_service.py`, `emotion_service.py`: Energy and emotions
+		- `scanning_service.py`, `obstacle_service.py`: Head sweeps, obstacle analysis and avoidance
+		- `safety_watchdog.py`, `health_monitor.py`: Liveness and health sampling
+		- `face_recognition_service.py`: Face detection/recognition and person memory
+		- `dynamic_balance_service.py`: IMU-driven balance analysis and correction triggers
+		- `enhanced_audio_processing_service.py`: Sound source tracking and VAD
+		- `sensor_service.py`, `calibration_service.py`, `voice_service.py`, `log_service.py`
+	- `runtime/`:
+		- `sensor_monitor.py`: Periodic sensor polling with error backoff
+		- `scanning_coordinator.py`: Intelligent obstacle scanning loop
+		- `voice_runtime.py`: Wake-word + command capture loop (configurable mic/timeouts/VAD)
+	- `mapping/`, `nav/`, `localization/`, `visualization/`: House map, pathfinding (A*), sensor fusion, plotting
+	- `behaviors/`: High-level PackMind behaviors (exploring, patrolling, interacting, etc.)
+	- `packmind_config.py`: Tunable settings (SOUND_*, VOICE_*, SCAN_*, ENERGY_*, NAV_*, WATCHDOG_*, etc.)
+	- `packmind_docs/`: Architecture and configuration guides
 ```
 
 ## Developer quick start (desktop) 💻
@@ -137,7 +190,7 @@ Note: Hardware‑dependent features won’t function fully without PiDog.
 - **CanineCore Checkup (Pi)**: `tools/caninecore_checkup.py` - Import all CanineCore modules; optional minimal head sweep with `--move`
 - **PiDog Hardware Check (Pi)**: `tools/pidog_hardware_check.py` - Direct hardware check (distance, IMU, ears, touch, audio, LED); add `--move` for motion/head sweep
 - **Integration Test**: `tools/test_service_integration.py` - Validate AI services integration
-- **Legacy Tools**: `legacy/ubuntu_install.py` - Ubuntu system setup utilities
+- **System setup scripts**: `scripts/ubuntu_install.py`, `scripts/ubuntu_vilib_install.py` - Ubuntu/RPi setup helpers
 
 Run PackMind checkup on the Pi:
 ```bash
