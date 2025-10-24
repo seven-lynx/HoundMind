@@ -12,6 +12,7 @@ from typing import Optional
 from collections import deque
 
 from canine_core.core.interfaces import Behavior, BehaviorContext, Event
+from canine_core.core.services.scanning import ScanningService
 
 
 class GuardBehavior(Behavior):
@@ -26,6 +27,7 @@ class GuardBehavior(Behavior):
         self._scan_dir: int = 1  # +1 forward sweep, -1 backward sweep
         self._last_alert_time_s: float = 0.0
         self._approach_votes: dict[int, deque[bool]] = {}
+        self._scanner: Optional[ScanningService] = None
 
     async def start(self, ctx: BehaviorContext) -> None:
         self._ctx = ctx
@@ -50,6 +52,11 @@ class GuardBehavior(Behavior):
         except Exception:
             pass
         ctx.logger.info("GuardBehavior starting")
+        # init scanner service
+        try:
+            self._scanner = ScanningService(ctx.hardware, ctx.logger)
+        except Exception:
+            self._scanner = None
         self._task = asyncio.create_task(self._loop())
 
     async def on_event(self, event: Event) -> None:
@@ -92,20 +99,14 @@ class GuardBehavior(Behavior):
             return 1000.0
 
     async def _move_head_and_read(self, yaw_deg: int, settle_s: float, move_speed: int) -> float:
-        """Move head yaw then read distance. Falls back to immediate read if motion unsupported."""
+        """Delegate to ScanningService with safe fallback."""
         assert self._ctx is not None
-        dog = getattr(self._ctx.hardware, "dog", None)
-        if dog is not None and hasattr(dog, "head_move"):
+        if self._scanner is not None:
             try:
-                # Clamp yaw to typical safe range for the head
-                yaw_cmd = max(-80, min(80, int(yaw_deg)))
-                dog.head_move([[yaw_cmd, 0, 0]], speed=int(move_speed))
-                await asyncio.sleep(settle_s)
-                return self._read_distance()
+                return await self._scanner.move_and_read(yaw_deg, settle_s, move_speed)
             except Exception:
-                # Fall back to a simple read if head movement fails
                 pass
-        # No head movement available
+        # fallback
         await asyncio.sleep(max(0.0, settle_s * 0.5))
         return self._read_distance()
 

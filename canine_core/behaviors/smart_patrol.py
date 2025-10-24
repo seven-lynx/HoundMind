@@ -15,6 +15,7 @@ from typing import Optional, Tuple
 from collections import deque
 
 from canine_core.utils.detection import Ema, VoteWindow, Cooldown
+from canine_core.core.services.scanning import ScanningService
 
 from canine_core.core.interfaces import Behavior, BehaviorContext, Event
 
@@ -31,6 +32,7 @@ class SmartPatrolBehavior(Behavior):
         self._approach_votes: dict[int, deque[bool]] = {}
         self._scan_dir: int = 1
         self._alert_cd: Optional[Cooldown] = None
+        self._scanner: Optional[ScanningService] = None
 
     async def start(self, ctx: BehaviorContext) -> None:
         self._ctx = ctx
@@ -58,6 +60,10 @@ class SmartPatrolBehavior(Behavior):
             except Exception:
                 pass
         ctx.logger.info("SmartPatrol starting")
+        try:
+            self._scanner = ScanningService(ctx.hardware, ctx.logger)
+        except Exception:
+            self._scanner = None
         self._task = asyncio.create_task(self._loop())
 
     async def on_event(self, event: Event) -> None:
@@ -87,20 +93,20 @@ class SmartPatrolBehavior(Behavior):
 
     # --- internal helpers ---
     async def _move_head_and_read(self, yaw_deg: int, settle_s: float, move_speed: int) -> float:
-        """Move head yaw then read distance; fall back to immediate read if motion unsupported."""
+        """Delegate to ScanningService; safe fallback to immediate read on failure."""
         assert self._ctx is not None
+        if self._scanner is not None:
+            try:
+                return await self._scanner.move_and_read(yaw_deg, settle_s, move_speed)
+            except Exception:
+                pass
         dog = getattr(self._ctx.hardware, "dog", None)
+        await asyncio.sleep(max(0.0, settle_s * 0.5))
         if dog is None:
-            await asyncio.sleep(max(0.0, settle_s * 0.5))
             return 1000.0
         try:
-            yaw_cmd = max(-80, min(80, int(yaw_deg)))
-            dog.head_move([[yaw_cmd, 0, 0]], speed=move_speed)
-            await asyncio.sleep(settle_s)
             return float(dog.read_distance() or 1000.0)
-        except Exception as e:
-            self._ctx.logger.warning(f"Head move/read failed: {e}")
-            await asyncio.sleep(max(0.0, settle_s * 0.5))
+        except Exception:
             return 1000.0
 
     async def _quick_scan(self) -> Tuple[float, float, float]:
@@ -118,22 +124,26 @@ class SmartPatrolBehavior(Behavior):
         # angles: left, right, forward
         angles = [-yaw_max, yaw_max, 0]
         out: dict[int, float] = {}
-        for yaw in angles:
-            dist = await self._move_head_and_read(yaw, settle_s, move_speed)
+        if self._scanner is not None:
+            try:
+                out = await self._scanner.scan_sequence(angles, settle_s, between_s, move_speed, center_end=True)
+            except Exception:
+                out = {}
+        if not out:
+            # fallback per-angle read
+            for yaw in angles:
+                dist = await self._move_head_and_read(yaw, settle_s, move_speed)
+                out[yaw] = dist
+                await asyncio.sleep(between_s)
+        fwd, left, right = out.get(0, 1000.0), out.get(-yaw_max, 1000.0), out.get(yaw_max, 1000.0)
+        # update baselines
+        for yaw, dist in out.items():
             base = self._baseline_mm.get(yaw)
             if base is None:
                 self._baseline_mm[yaw] = dist
             else:
                 new_base = (1.0 - ema_alpha) * base + ema_alpha * dist
                 self._baseline_mm[yaw] = new_base
-            out[yaw] = dist
-            await asyncio.sleep(between_s)
-        # center head at end (best effort)
-        try:
-            await self._move_head_and_read(0, max(0.05, settle_s * 0.5), move_speed)
-        except Exception:
-            pass
-        fwd, left, right = out.get(0, 1000.0), out.get(-yaw_max, 1000.0), out.get(yaw_max, 1000.0)
         return (fwd, left, right)
 
     def _decide(self, fwd: float, left: float, right: float) -> tuple[str, dict]:
