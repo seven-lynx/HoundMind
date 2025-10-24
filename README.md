@@ -1,11 +1,13 @@
-# Pidog: Advanced Behaviors and AI for SunFounder PiDog 🐶
+# HoundMind — Advanced Behaviors and AI for SunFounder PiDog 🐶
 
-This repository provides two related but completely independent ways to run your PiDog:
+HoundMind is the umbrella project that provides two related but completely independent ways to run your PiDog:
 
 - CanineCore: a modular behavior framework for composing and interactively running behaviors.
 - PackMind: a standalone AI with its own orchestrator, services, and optional mapping/navigation stack.
 
 Use either system. They don’t import or depend on each other.
+
+Note: We’ve adopted the name “HoundMind” for the overall project brand. Module/package names (CanineCore, PackMind) remain unchanged for compatibility.
 
 Legacy modules for the old system are stored in Legacy, and the entire project has been forked at https://github.com/DrMikeKW/Pidog-New_Scripts/
 
