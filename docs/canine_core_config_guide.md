@@ -1,12 +1,6 @@
 # CanineCore Configuration Guide
 
-This is a copy of the canonical guide located at `canine_core/canine_core_config_guide.md`.
-
-For convenience, the full guide content is included below so links from READMEs remain valid.
-
----
-
-# CanineCore Configuration Guide
+This is the canonical configuration guide for CanineCore. All references should point here (`docs/canine_core_config_guide.md`).
 
 This guide is part of HoundMind. CanineCore is the modular behaviors/services framework within the HoundMind project for PiDog.
 

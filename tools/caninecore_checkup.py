@@ -113,6 +113,16 @@ def services_smoke_tests(allow_move: bool) -> bool:
         from canine_core.core.services.battery import BatteryService
         from canine_core.core.services.telemetry import TelemetryService
         from canine_core.core.services.sensors_facade import SensorsFacade
+        # New optional services
+        from canine_core.core.services.energy import EnergyService
+        from canine_core.core.services.balance import BalanceService
+        from canine_core.core.services.audio_processing import AudioProcessingService
+        from canine_core.core.services.scanning_coordinator import ScanningCoordinator
+        # Config (for defaults used by EnergyService)
+        try:
+            from canine_core.config.canine_config import CanineConfig  # type: ignore
+        except Exception:
+            CanineConfig = type("TmpCfg", (), {})  # fallback minimal cfg
 
         # Hardware init (may fail on non-Pi or without peripherals)
         try:
@@ -134,11 +144,46 @@ def services_smoke_tests(allow_move: bool) -> bool:
         battery = BatteryService(hw, publish=lambda *_: None)
         telemetry = TelemetryService(hw, logger=SimpleNamespace(info=lambda *_: None))
         sensors_facade = SensorsFacade(hw)
-        print(f"{OK} Sensor/Motion/Emotions/Voice/IMU/Safety/Battery/Telemetry/SensorsFacade instantiated")
+        # Optional services (sim-safe)
+        energy = EnergyService(CanineConfig, logger=SimpleNamespace(info=lambda *_: None))
+        balance = BalanceService(imu, publish=lambda *_: None, max_tilt_deg=45.0)
+        audio_proc = AudioProcessingService()
+        scanning = ScanningCoordinator(hw, sensors, publish=lambda *_: None)
+        print(f"{OK} Sensor/Motion/Emotions/Voice/IMU/Safety/Battery/Telemetry/SensorsFacade/Energy/Balance/AudioProc/ScanningCoord instantiated")
 
         # Non-moving checks
         emotions.update((0, 128, 255))
         print(f"{OK} EmotionService.update()")
+
+        # Energy ticks
+        try:
+            lvl_before = energy.level
+            energy.tick_active()
+            energy.tick_rest()
+            lvl_after = energy.level
+            print(f"{OK} EnergyService.tick_*() level {lvl_before:.2f}→{lvl_after:.2f}")
+        except Exception as e:
+            print(f"{FAIL} EnergyService.tick_*(): {e}")
+            ok = False
+
+        # Balance assess (IMU required; sim-safe if not present)
+        try:
+            state = balance.assess()
+            if state is None:
+                print(f"{OK} BalanceService.assess(): unavailable (no IMU)")
+            else:
+                print(f"{OK} BalanceService.assess() = {state}")
+        except Exception as e:
+            print(f"{FAIL} BalanceService.assess(): {e}")
+            ok = False
+
+        # Audio processing VAD availability
+        try:
+            vad = audio_proc.has_vad()
+            print(f"{OK} AudioProcessingService.has_vad() = {vad}")
+        except Exception as e:
+            print(f"{FAIL} AudioProcessingService.has_vad(): {e}")
+            ok = False
 
         # Optional limited motion/head sweep via sensors
         if allow_move:
@@ -157,6 +202,15 @@ def services_smoke_tests(allow_move: bool) -> bool:
                 print(f"{OK} MotionService.act('stand') + wait")
             except Exception as e:
                 print(f"{FAIL} MotionService.act('stand'): {e}")
+                ok = False
+
+        # ScanningCoordinator minimal sweep (movement only when allowed)
+        if allow_move:
+            try:
+                samples = scanning.sweep_samples(yaw_max_deg=15, step_deg=15, head_speed=50)
+                print(f"{OK} ScanningCoordinator.sweep_samples(): {len(samples)} points")
+            except Exception as e:
+                print(f"{FAIL} ScanningCoordinator.sweep_samples(): {e}")
                 ok = False
 
         # Quick safety/battery/telemetry checks

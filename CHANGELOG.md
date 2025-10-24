@@ -32,8 +32,8 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 - **Tools**:
   - `tools/packmind_checkup.py`: Pi-only checkup tool to import all PackMind modules and perform safe service smoke tests
     - New `--move` flag to include a minimal ScanningService head sweep (limited motion)
-  - `tools/caninecore_checkup.py`: Pi-only checkup tool to import all CanineCore modules; now supports `--scope services` to instantiate core services and `--move` for a minimal head sweep
-  - CanineCore services checkup now includes IMU, Safety, Battery, and Telemetry instantiation tests
+  - `tools/caninecore_checkup.py`: Pi-only checkup tool to import all CanineCore modules; supports `--scope services` to instantiate core services and `--move` for a minimal head sweep
+  - CanineCore services checkup extended to instantiate optional services: EnergyService, BalanceService, AudioProcessingService, and ScanningCoordinator, in addition to IMU, Safety, Battery, Telemetry, and SensorsFacade
   - Full integration of all three services into `packmind/orchestrator.py`
   - Automatic service lifecycle management (startup/shutdown)
   - Real-time event integration with emotional system and behavior logging
@@ -41,6 +41,7 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 
 - **Configuration System Enhancements**:
   - Added `ENABLE_FACE_RECOGNITION`, `ENABLE_DYNAMIC_BALANCE`, `ENABLE_ENHANCED_AUDIO` flags
+  - CanineCore config: added `ENABLE_ENERGY_SYSTEM`, `ENABLE_BALANCE_MONITOR`, `ENABLE_AUDIO_PROCESSING`, `ENABLE_SCANNING_COORDINATOR` toggles with safe defaults
   - Specialized preset configurations for all four modes (Simple/Advanced/Indoor/Explorer)
   - 41 new configuration parameters with detailed documentation
   - Preset-specific optimizations (Advanced: enhanced capabilities, Simple: focused operation)
@@ -73,6 +74,10 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
  - **Safety-First Preset**: New `SafetyFirstPreset` with conservative speeds, wider safe distances, and `SCAN_WHILE_MOVING=False`; added to presets as `"safety-first"` and fully applied in `canine_core/control.py`.
  - **Hardware Smoke Behavior**: New `canine_core/behaviors/hardware_smoke.py` to perform minimal OK/FAIL checks (distance, IMU, battery, ears/touch); optional limited motion via `SMOKE_ALLOW_MOVE` and `SMOKE_SPEED`.
  - **Pi-only Hardware Check Tool**: `tools/pidog_hardware_check.py` for direct on-robot validation (distance, IMU, ears, touch, audio, LED); `--move` enables limited motion/head sweep.
+ - **Documentation canonicalization**: Consolidated duplicates; `docs/` is now the canonical location for configuration and API guides. Updated pointers:
+   - `canine_core/canine_core_config_guide.md` now points to `docs/canine_core_config_guide.md`
+   - `packmind/packmind_docs/api_reference.md` now points to `docs/api_reference.md`
+   - Verified root `README.md` references target `docs/` paths
 
 ### Technical Metrics
 - **2,236+ lines** of new service code across three major AI systems
