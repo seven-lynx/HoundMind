@@ -152,6 +152,7 @@ Access these via `BehaviorContext` (injected by the orchestrator) to avoid direc
 - FindOpenSpaceBehavior: scan‑select‑move toward open direction
 - VoicePatrolBehavior: wake‑word voice control
 - WhisperVoiceControlBehavior: free‑form voice control (wake word optional)
+ - HardwareSmokeBehavior: minimal OK/FAIL checks for sensors, IMU, battery, ears/touch, and optional limited motion
 
 ## Migration notes (legacy → CanineCore)
 

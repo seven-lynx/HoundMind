@@ -80,6 +80,7 @@ class Orchestrator:
             "find_open_space": "canine_core.behaviors.find_open_space",
             "reactions": "canine_core.behaviors.reactions",
             "event_hooks_demo": "canine_core.behaviors.event_hooks_demo",
+            "hardware_smoke": "canine_core.behaviors.hardware_smoke",
         }
 
     async def init(self) -> None:

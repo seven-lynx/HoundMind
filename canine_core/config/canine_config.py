@@ -198,6 +198,7 @@ class CanineConfig:
         "whisper_voice_control",
         "find_open_space",
         "event_hooks_demo",
+        "hardware_smoke",
     ]
 
     # =====================================================================
@@ -245,6 +246,12 @@ class CanineConfig:
     EMERGENCY_STOP_POSE = "crouch"
     SAFETY_MAX_TILT_DEG = 45
     SAFETY_MAX_ROLL_DEG = 45
+
+    # =====================================================================
+    # SMOKE BEHAVIOR (hardware quick-check)
+    # =====================================================================
+    SMOKE_ALLOW_MOVE = False
+    SMOKE_SPEED = 60
 
 
 class SimplePreset(CanineConfig):

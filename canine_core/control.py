@@ -20,6 +20,7 @@ ALIASES = [
     "guard_mode",
     "whisper_voice_control",
     "find_open_space",
+    "hardware_smoke",
 ]
 
 
