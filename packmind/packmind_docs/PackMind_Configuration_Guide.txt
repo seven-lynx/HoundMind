@@ -187,6 +187,66 @@ All these settings are found in the packmind_config.py file, in the PiDogConfig 
 - VOICE_VOLUME_EXCITED = 80  
 - VOICE_VOLUME_QUIET = 40
 
+## FACE RECOGNITION SYSTEM
+
+### ENABLE_FACE_RECOGNITION = True/False
+- Controls face detection, recognition, and personality adaptation
+- When enabled: PiDog recognizes family members and adapts behavior
+- When disabled: No face processing, saves CPU and memory
+
+### Core Recognition Settings
+- FACE_RECOGNITION_THRESHOLD = 0.6 (0.0-1.0)
+  * Similarity threshold for recognizing faces
+  * Lower = more permissive (may recognize strangers)
+  * Higher = more strict (may not recognize family members)
+  * Recommended: 0.5-0.7
+
+- FACE_DETECTION_INTERVAL = 2.0 (seconds)
+  * Time between face detection attempts
+  * Lower = more responsive, Higher = saves CPU
+  * Recommended: 1.0-3.0 seconds
+
+- FACE_MAX_FACES_PER_FRAME = 3
+  * Maximum faces to process per camera frame
+  * Higher = detects more people but uses more CPU
+  * Recommended: 2-5 faces
+
+### Camera Settings
+- FACE_CAMERA_WIDTH = 640 (pixels)
+- FACE_CAMERA_HEIGHT = 480 (pixels)  
+- FACE_CAMERA_FPS = 15 (frames per second)
+  * Camera resolution and frame rate
+  * Higher = better quality but more CPU usage
+  * Recommended: 640x480 @ 15fps for balance
+
+### Personality & Learning
+- FACE_PERSONALITY_LEARNING_RATE = 0.1 (0.0-1.0)
+  * How quickly PiDog adapts to individual preferences
+  * Higher = faster adaptation, Lower = more stable personality
+  * Recommended: 0.05-0.2
+
+- FACE_INTERACTION_TIMEOUT = 30 (seconds)
+  * How long to wait for interaction before giving up
+  * Affects patience during play and training sessions
+
+- FACE_MEMORY_RETENTION_DAYS = 365 (days)
+  * How long to remember interaction history
+  * Longer = better long-term relationships but more storage
+
+### Data Storage
+- FACE_DATA_DIR = "data/faces" (path)
+  * Directory where face data and profiles are stored
+  * Contains: profiles.json, encodings.pkl, interactions.json
+
+- FACE_AUTO_SAVE_INTERVAL = 300 (seconds)
+  * How often to automatically save face data
+  * Shorter = less data loss risk, more disk activity
+
+### Display & Confidence
+- FACE_CONFIDENCE_DISPLAY_MIN = 0.7 (0.0-1.0)
+  * Minimum confidence to show recognition feedback
+  * Prevents false positive announcements
+
 ## ADVANCED SYSTEM CONTROLS
 
 ### Health and performance

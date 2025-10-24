@@ -27,6 +27,7 @@ class PiDogConfig:
     ENABLE_LEARNING_SYSTEM = True     # Learn touch preferences over time
     ENABLE_PATROL_LOGGING = True      # Comprehensive activity logging
     ENABLE_AUTONOMOUS_NAVIGATION = True # AI pathfinding and exploration (requires SLAM)
+    ENABLE_FACE_RECOGNITION = True     # Face detection, recognition, and personality adaptation
     
     # ============================================================================
     # OBSTACLE AVOIDANCE SETTINGS
@@ -180,6 +181,22 @@ class PiDogConfig:
     VOICE_NOISE_SUPPRESSION = True
 
     # ============================================================================
+    # FACE RECOGNITION SYSTEM
+    # ============================================================================
+    FACE_RECOGNITION_THRESHOLD = 0.6      # Similarity threshold for recognition (0.0-1.0)
+    FACE_DETECTION_INTERVAL = 2.0         # Seconds between face detection attempts
+    FACE_MAX_FACES_PER_FRAME = 3          # Maximum faces to process per frame
+    FACE_CAMERA_WIDTH = 640               # Camera resolution width
+    FACE_CAMERA_HEIGHT = 480              # Camera resolution height
+    FACE_CAMERA_FPS = 15                  # Camera frames per second
+    FACE_DATA_DIR = "data/faces"          # Directory for face data storage
+    FACE_AUTO_SAVE_INTERVAL = 300         # Auto-save interval (seconds)
+    FACE_INTERACTION_TIMEOUT = 30         # Seconds before interaction times out
+    FACE_PERSONALITY_LEARNING_RATE = 0.1  # Rate of personality trait adaptation (0.0-1.0)
+    FACE_MEMORY_RETENTION_DAYS = 365      # Days to retain interaction history
+    FACE_CONFIDENCE_DISPLAY_MIN = 0.7     # Minimum confidence to display recognition
+
+    # ============================================================================
     # SAFETY / WATCHDOG
     # ============================================================================
     WATCHDOG_HEARTBEAT_INTERVAL_S = 0.5
@@ -240,6 +257,7 @@ class SimpleConfig(PiDogConfig):
     ENABLE_AUTONOMOUS_NAVIGATION = False
     ENABLE_EMOTIONAL_SYSTEM = False
     ENABLE_LEARNING_SYSTEM = False
+    ENABLE_FACE_RECOGNITION = False  # Simplified mode - no face recognition
     
     # Conservative obstacle avoidance
     OBSTACLE_IMMEDIATE_THREAT = 30.0
@@ -266,6 +284,13 @@ class AdvancedConfig(PiDogConfig):
     ENABLE_EMOTIONAL_SYSTEM = True
     ENABLE_LEARNING_SYSTEM = True
     ENABLE_PATROL_LOGGING = True
+    ENABLE_FACE_RECOGNITION = True  # Full AI capabilities
+    
+    # Advanced face recognition settings
+    FACE_RECOGNITION_THRESHOLD = 0.5  # Lower threshold for better detection
+    FACE_DETECTION_INTERVAL = 1.0     # More frequent detection
+    FACE_MAX_FACES_PER_FRAME = 5      # Process more faces
+    FACE_PERSONALITY_LEARNING_RATE = 0.15  # Faster learning
     
     # Aggressive exploration settings
     OBSTACLE_IMMEDIATE_THREAT = 15.0
@@ -292,6 +317,12 @@ class IndoorPetConfig(PiDogConfig):
     ENABLE_LEARNING_SYSTEM = True
     ENABLE_PATROL_LOGGING = True
     ENABLE_AUTONOMOUS_NAVIGATION = False  # Manual control preferred
+    ENABLE_FACE_RECOGNITION = True  # Perfect for family interaction
+    
+    # Indoor-friendly face recognition settings
+    FACE_DETECTION_INTERVAL = 1.5     # Moderate detection frequency
+    FACE_PERSONALITY_LEARNING_RATE = 0.12  # Good learning for family bonds
+    FACE_INTERACTION_TIMEOUT = 45     # Longer interaction timeouts for family time
     
     # Safe indoor distances
     OBSTACLE_IMMEDIATE_THREAT = 25.0
@@ -323,6 +354,7 @@ class ExplorerConfig(PiDogConfig):
     # Moderate emotional responses (focus on exploration)
     ENABLE_EMOTIONAL_SYSTEM = False
     ENABLE_LEARNING_SYSTEM = False
+    ENABLE_FACE_RECOGNITION = False  # Focus on mapping, not social interaction
     
     # Balanced exploration settings
     OBSTACLE_IMMEDIATE_THREAT = 18.0
