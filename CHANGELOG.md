@@ -79,6 +79,12 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
    - `packmind/packmind_docs/api_reference.md` now points to `docs/api_reference.md`
    - Verified root `README.md` references target `docs/` paths
 
+ - **CanineCore Behavior/Runtime improvements**:
+   - Reactions Behavior now reads thresholds and cooldowns from config (`REACTIONS_*`, `TOUCH_DEBOUNCE_S`, `REACTION_COOLDOWN_S`, `SOUND_COOLDOWN_S`).
+   - Orchestrator supports weighted behavior ordering when `BEHAVIOR_SELECTION_MODE="weighted"` using `BEHAVIOR_WEIGHTS`.
+   - LoggingService consumes `LOG_LEVEL`, `LOG_FILE_MAX_MB`, and `LOG_FILE_BACKUPS` from config for JSONL rotation.
+   - Smart Patrol adds a minimal intelligent scanning heuristic (narrow/widen sweep based on forward baseline vs `OBSTACLE_SAFE_DISTANCE`) when `ENABLE_INTELLIGENT_SCANNING` is true.
+
 ### Technical Metrics
 - **2,236+ lines** of new service code across three major AI systems
 - **41 new configuration parameters** with comprehensive documentation
