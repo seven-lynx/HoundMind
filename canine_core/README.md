@@ -130,6 +130,10 @@ The orchestrator auto‑discovers behaviors via `BEHAVIOR_CLASS` or a `get_behav
 - VoiceService: async command stream with optional wake word
 - HardwareService: wraps Pidog/RGB when available; safe no‑ops on dev hosts
 - LoggingService: simple, prefixed logging
+- NEW — IMUService: optional accelerometer/gyro readings; simple tilt checks
+- NEW — SafetyService: tilt emergency detection with safe pose and event publish
+- NEW — BatteryService: battery read + low/critical event publish (if hardware supports it)
+- NEW — TelemetryService: periodic lightweight snapshots to the logger
 
 Access these via `BehaviorContext` (injected by the orchestrator) to avoid direct hardware imports.
 

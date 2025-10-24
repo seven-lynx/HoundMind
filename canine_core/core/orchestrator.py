@@ -13,6 +13,10 @@ from .services.sensors import SensorService
 from .services.motion import MotionService
 from .services.emotions import EmotionService
 from .services.voice import VoiceService
+from .services.imu import IMUService
+from .services.safety import SafetyService
+from .services.battery import BatteryService
+from .services.telemetry import TelemetryService
 
 class LegacyThreadBehavior:
     """Adapter to run legacy modules exposing start_behavior() in a thread.
@@ -88,6 +92,26 @@ class Orchestrator:
             wake_word=str(getattr(self.config, "WAKE_WORD", "pidog")),
             enabled=bool(getattr(self.config, "ENABLE_VOICE_COMMANDS", True)),
         )
+        # Optional services controlled by flags
+        imu = IMUService(self.hardware) if bool(getattr(self.config, "ENABLE_IMU_MONITOR", True)) else None
+        safety = SafetyService(
+            self.hardware,
+            imu,
+            publish=self.bus.publish,
+            max_tilt_deg=float(getattr(self.config, "SAFETY_MAX_TILT_DEG", 45)),
+            emergency_pose=str(getattr(self.config, "EMERGENCY_STOP_POSE", "crouch")),
+        ) if bool(getattr(self.config, "ENABLE_SAFETY_SUPERVISOR", True)) else None
+        battery = BatteryService(
+            self.hardware,
+            publish=self.bus.publish,
+            low_pct=float(getattr(self.config, "LOW_BATTERY_THRESHOLD", 20)),
+            critical_pct=float(getattr(self.config, "CRITICAL_BATTERY_THRESHOLD", 10)),
+        ) if bool(getattr(self.config, "ENABLE_BATTERY_MONITOR", True)) else None
+        telemetry = TelemetryService(
+            self.hardware,
+            logger=self.logger,
+            interval_s=float(getattr(self.config, "LOG_STATUS_INTERVAL", 10)),
+        ) if bool(getattr(self.config, "ENABLE_TELEMETRY", False)) else None
         self._ctx = BehaviorContext(
             hardware=self.hardware,
             sensors=sensors,
@@ -99,10 +123,18 @@ class Orchestrator:
             logger=self.logger,
             config=self.config,
             publish=self.bus.publish,
+            safety=safety,
+            battery=battery,
+            imu=imu,
+            telemetry=telemetry,
         )
         # Optionally expose extra services on orchestrator for future use
         self.voice = voice
         self.motion = motion
+        self.safety = safety
+        self.battery = battery
+        self.imu = imu
+        self.telemetry = telemetry
 
     def _resolve_behavior(self, spec: str) -> Behavior:
         """Resolve a behavior spec into a Behavior instance.

@@ -1,4 +1,4 @@
-# HoundMind — Advanced Behaviors and AI for SunFounder PiDog 🐶
+# HoundMind — Advanced Behaviors and AI for SunFounder PiDog
 
 HoundMind is the umbrella project that provides two related but completely independent ways to run your PiDog:
 

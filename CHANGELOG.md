@@ -33,6 +33,7 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
   - `tools/packmind_checkup.py`: Pi-only checkup tool to import all PackMind modules and perform safe service smoke tests
     - New `--move` flag to include a minimal ScanningService head sweep (limited motion)
   - `tools/caninecore_checkup.py`: Pi-only checkup tool to import all CanineCore modules; now supports `--scope services` to instantiate core services and `--move` for a minimal head sweep
+  - CanineCore services checkup now includes IMU, Safety, Battery, and Telemetry instantiation tests
   - Full integration of all three services into `packmind/orchestrator.py`
   - Automatic service lifecycle management (startup/shutdown)
   - Real-time event integration with emotional system and behavior logging
@@ -60,6 +61,12 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 - **Dependencies**: Added face-recognition, dlib, pyaudio, scipy for new services
  - **Folder Structure**: Renamed `scripts/` to `tools/` and updated documentation and references accordingly
  - **CanineCore Units**: Standardized distance units to centimeters (cm) in `canine_core/core/services/sensors.py`, `scanning.py`, and behavior docs (`behaviors/smart_patrol.py`); variable renamed `_baseline_mm` → `_baseline_cm`.
+ - **CanineCore Modular Services**: Added optional services with `ENABLE_*` toggles in `canine_core/config/canine_config.py` and wired into orchestrator:
+   - IMUService (`ENABLE_IMU_MONITOR`)
+   - SafetyService (`ENABLE_SAFETY_SUPERVISOR`)
+   - BatteryService (`ENABLE_BATTERY_MONITOR`)
+   - TelemetryService (`ENABLE_TELEMETRY`)
+ - **Event Bus**: Reintroduced lightweight `canine_core/core/bus.py` for internal pub/sub
 
 ### Technical Metrics
 - **2,236+ lines** of new service code across three major AI systems

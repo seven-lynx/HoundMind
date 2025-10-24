@@ -27,6 +27,11 @@ class BehaviorContext:
     logger: Logger
     config: Any
     publish: Any  # callable[[Event], None]
+    # Optional services (may be None if disabled)
+    safety: Any | None = None
+    battery: Any | None = None
+    imu: Any | None = None
+    telemetry: Any | None = None
 
 @runtime_checkable
 class Behavior(Protocol):

@@ -108,6 +108,10 @@ def services_smoke_tests(allow_move: bool) -> bool:
         from canine_core.core.services.motion import MotionService
         from canine_core.core.services.emotions import EmotionService
         from canine_core.core.services.voice import VoiceService
+        from canine_core.core.services.imu import IMUService
+        from canine_core.core.services.safety import SafetyService
+        from canine_core.core.services.battery import BatteryService
+        from canine_core.core.services.telemetry import TelemetryService
 
         # Hardware init (may fail on non-Pi or without peripherals)
         try:
@@ -124,7 +128,11 @@ def services_smoke_tests(allow_move: bool) -> bool:
         motion = MotionService(hw)
         emotions = EmotionService(hw, enabled=True)
         voice = VoiceService()
-        print(f"{OK} SensorService, MotionService, EmotionService, VoiceService instantiated")
+        imu = IMUService(hw)
+        safety = SafetyService(hw, imu, publish=lambda *_: None)
+        battery = BatteryService(hw, publish=lambda *_: None)
+        telemetry = TelemetryService(hw, logger=SimpleNamespace(info=lambda *_: None))
+        print(f"{OK} Sensor/Motion/Emotions/Voice/IMU/Safety/Battery/Telemetry instantiated")
 
         # Non-moving checks
         emotions.update((0, 128, 255))
@@ -148,6 +156,28 @@ def services_smoke_tests(allow_move: bool) -> bool:
             except Exception as e:
                 print(f"{FAIL} MotionService.act('stand'): {e}")
                 ok = False
+
+        # Quick safety/battery/telemetry checks
+        try:
+            safety.periodic_check()
+            print(f"{OK} SafetyService.periodic_check()")
+        except Exception as e:
+            print(f"{FAIL} SafetyService.periodic_check(): {e}")
+            ok = False
+
+        try:
+            _ = battery.check_and_publish()
+            print(f"{OK} BatteryService.check_and_publish()")
+        except Exception as e:
+            print(f"{FAIL} BatteryService.check_and_publish(): {e}")
+            ok = False
+
+        try:
+            telemetry.maybe_log()
+            print(f"{OK} TelemetryService.maybe_log()")
+        except Exception as e:
+            print(f"{FAIL} TelemetryService.maybe_log(): {e}")
+            ok = False
 
         # Stop voice cleanly
         try:

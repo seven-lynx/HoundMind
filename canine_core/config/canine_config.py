@@ -11,6 +11,11 @@ class CanineConfig:
     # FEATURE TOGGLES
     # =====================================================================
     ENABLE_VOICE_COMMANDS = True
+    # New modular services toggles
+    ENABLE_SAFETY_SUPERVISOR = True
+    ENABLE_BATTERY_MONITOR = True
+    ENABLE_IMU_MONITOR = True
+    ENABLE_TELEMETRY = False
     ENABLE_SLAM_MAPPING = True
     ENABLE_SENSOR_FUSION = True
     ENABLE_INTELLIGENT_SCANNING = True
