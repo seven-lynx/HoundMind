@@ -75,6 +75,19 @@ Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 
 ## Guard Mode
 - GUARD_DETECT_MM (mm): Forward distance to trigger alert/bark/scan.
+- GUARD_SCAN_YAW_MAX_DEG / GUARD_SCAN_STEP_DEG / GUARD_SCAN_SETTLE_S / GUARD_BETWEEN_READS_S: Head scan parameters.
+- GUARD_BASELINE_EMA: EMA smoothing for per-angle baselines.
+- GUARD_DEVIATION_MM / GUARD_DEVIATION_PCT: Approaching detection thresholds vs baseline.
+- GUARD_CONFIRM_WINDOW / GUARD_CONFIRM_THRESHOLD: N-of-M confirmation window/threshold.
+- GUARD_ALERT_COOLDOWN_S: Minimum time between alerts.
+
+## Patrol (Smart Patrol)
+- PATROL_SCAN_YAW_MAX_DEG / PATROL_SCAN_STEP_DEG / PATROL_SCAN_SETTLE_S / PATROL_BETWEEN_READS_S: Fast head scans during patrol.
+- PATROL_BASELINE_EMA: EMA smoothing for per-angle baselines.
+- PATROL_APPROACH_DEVIATION_MM / PATROL_APPROACH_DEVIATION_PCT: Forward approaching thresholds vs baseline.
+- PATROL_CONFIRM_WINDOW / PATROL_CONFIRM_THRESHOLD: N-of-M confirmation for approach.
+- PATROL_ALERT_COOLDOWN_S: Cooldown between reactive maneuvers.
+- PATROL_TURN_STEPS_ON_ALERT: Small in-place turn steps when approach confirmed.
 
 ## Voice
 - WAKE_WORD: Voice wake keyword (engine-dependent).

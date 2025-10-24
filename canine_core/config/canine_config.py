@@ -147,6 +147,22 @@ class CanineConfig:
     GUARD_CONFIRM_THRESHOLD = 2       # required positives in window to alert
     GUARD_ALERT_COOLDOWN_S = 3.0      # cooldown between alerts
 
+    # =====================================================================
+    # PATROL (SMART PATROL)
+    # =====================================================================
+    # Lightweight head scans at patrol cadence with approach confirmation
+    PATROL_SCAN_YAW_MAX_DEG = 45       # smaller than guard for quicker cycles
+    PATROL_SCAN_STEP_DEG = 15          # sample granularity
+    PATROL_SCAN_SETTLE_S = 0.12        # settle after head move before read
+    PATROL_BETWEEN_READS_S = 0.04      # pause between reads
+    PATROL_BASELINE_EMA = 0.25         # smoothing for per-angle baseline
+    PATROL_APPROACH_DEVIATION_MM = 100.0  # absolute drop vs baseline
+    PATROL_APPROACH_DEVIATION_PCT = 0.20  # percent drop vs baseline
+    PATROL_CONFIRM_WINDOW = 3          # N-of-M confirmation window
+    PATROL_CONFIRM_THRESHOLD = 2       # positives needed to confirm
+    PATROL_ALERT_COOLDOWN_S = 2.0      # cooldown between reactive maneuvers
+    PATROL_TURN_STEPS_ON_ALERT = 1     # small in-place turn when approaching
+
     # Behavior aliases available for selection in the control script
     AVAILABLE_BEHAVIORS = [
         "idle_behavior",

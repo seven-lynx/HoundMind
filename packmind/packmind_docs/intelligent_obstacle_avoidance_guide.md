@@ -2,7 +2,7 @@
 
 ## 🎯 Overview
 
-The enhanced PiDog AI now features a sophisticated obstacle avoidance system that makes your PiDog incredibly smart at navigating complex environments without getting stuck!
+The enhanced PackMind AI now features a sophisticated obstacle avoidance system that makes your PiDog incredibly smart at navigating complex environments without getting stuck!
 
 ## 🔍 **3-Way Scanning System**
 

@@ -12,6 +12,9 @@ Configuration-driven: uses speeds and thresholds from CanineConfig.
 from __future__ import annotations
 import asyncio
 from typing import Optional, Tuple
+from collections import deque
+
+from canine_core.utils.detection import Ema, VoteWindow, Cooldown
 
 from canine_core.core.interfaces import Behavior, BehaviorContext, Event
 
@@ -23,6 +26,11 @@ class SmartPatrolBehavior(Behavior):
         self._ctx: Optional[BehaviorContext] = None
         self._task: Optional[asyncio.Task] = None
         self._running = False
+        # Scan/baseline state
+        self._baseline_mm: dict[int, float] = {}
+        self._approach_votes: dict[int, deque[bool]] = {}
+        self._scan_dir: int = 1
+        self._alert_cd: Optional[Cooldown] = None
 
     async def start(self, ctx: BehaviorContext) -> None:
         self._ctx = ctx
@@ -78,32 +86,55 @@ class SmartPatrolBehavior(Behavior):
             self._ctx.logger.info("SmartPatrol stopped")
 
     # --- internal helpers ---
-    def _scan(self) -> Tuple[float, float, float]:
-        """Return (forward_mm, left_mm, right_mm). If no hardware, return large distances.
-        """
+    async def _move_head_and_read(self, yaw_deg: int, settle_s: float, move_speed: int) -> float:
+        """Move head yaw then read distance; fall back to immediate read if motion unsupported."""
         assert self._ctx is not None
         dog = getattr(self._ctx.hardware, "dog", None)
         if dog is None:
-            return (1000.0, 1000.0, 1000.0)
+            await asyncio.sleep(max(0.0, settle_s * 0.5))
+            return 1000.0
         try:
-            # look left
-            head_range = getattr(self._ctx.config, "HEAD_SCAN_RANGE", 45)
-            head_speed = getattr(self._ctx.config, "HEAD_SCAN_SPEED", 70)
-            dog.head_move([[-head_range, 0, 0]], speed=head_speed)
-            dog.wait_head_done()
-            left = float(dog.read_distance() or 1000.0)
-            # look right
-            dog.head_move([[head_range, 0, 0]], speed=head_speed)
-            dog.wait_head_done()
-            right = float(dog.read_distance() or 1000.0)
-            # reset forward and read
-            dog.head_move([[0, 0, 0]], speed=head_speed)
-            dog.wait_head_done()
-            fwd = float(dog.read_distance() or 1000.0)
-            return (fwd, left, right)
+            yaw_cmd = max(-80, min(80, int(yaw_deg)))
+            dog.head_move([[yaw_cmd, 0, 0]], speed=move_speed)
+            await asyncio.sleep(settle_s)
+            return float(dog.read_distance() or 1000.0)
         except Exception as e:
-            self._ctx.logger.warning(f"Scan failed: {e}")
-            return (1000.0, 1000.0, 1000.0)
+            self._ctx.logger.warning(f"Head move/read failed: {e}")
+            await asyncio.sleep(max(0.0, settle_s * 0.5))
+            return 1000.0
+
+    async def _quick_scan(self) -> Tuple[float, float, float]:
+        """Scan left, right, and forward; update per-angle EMA baselines and votes.
+        Returns distances in mm (fwd, left, right).
+        """
+        assert self._ctx is not None
+        cfg = self._ctx.config
+        yaw_max = int(getattr(cfg, "PATROL_SCAN_YAW_MAX_DEG", 45))
+        settle_s = float(getattr(cfg, "PATROL_SCAN_SETTLE_S", 0.12))
+        between_s = float(getattr(cfg, "PATROL_BETWEEN_READS_S", 0.04))
+        ema_alpha = float(getattr(cfg, "PATROL_BASELINE_EMA", 0.25))
+        move_speed = int(getattr(cfg, "HEAD_SCAN_SPEED", 70))
+
+        # angles: left, right, forward
+        angles = [-yaw_max, yaw_max, 0]
+        out: dict[int, float] = {}
+        for yaw in angles:
+            dist = await self._move_head_and_read(yaw, settle_s, move_speed)
+            base = self._baseline_mm.get(yaw)
+            if base is None:
+                self._baseline_mm[yaw] = dist
+            else:
+                new_base = (1.0 - ema_alpha) * base + ema_alpha * dist
+                self._baseline_mm[yaw] = new_base
+            out[yaw] = dist
+            await asyncio.sleep(between_s)
+        # center head at end (best effort)
+        try:
+            await self._move_head_and_read(0, max(0.05, settle_s * 0.5), move_speed)
+        except Exception:
+            pass
+        fwd, left, right = out.get(0, 1000.0), out.get(-yaw_max, 1000.0), out.get(yaw_max, 1000.0)
+        return (fwd, left, right)
 
     def _decide(self, fwd: float, left: float, right: float) -> tuple[str, dict]:
         """Decide next action.
@@ -159,9 +190,11 @@ class SmartPatrolBehavior(Behavior):
         dog = getattr(ctx.hardware, "dog", None)
         cfg = ctx.config
         scan_delay = max(0.2, float(getattr(cfg, "OBSTACLE_SCAN_INTERVAL", 0.5)))
+        # cooldown for approach-triggered maneuvers
+        self._alert_cd = Cooldown(float(getattr(cfg, "PATROL_ALERT_COOLDOWN_S", 2.0)))
         while self._running:
-            fwd, left, right = self._scan()
-            ctx.logger.info(f"Scan mm fwd={fwd:.0f} left={left:.0f} right={right:.0f}")
+            fwd, left, right = await self._quick_scan()
+            ctx.logger.info(f"Patrol scan mm fwd={fwd:.0f} left={left:.0f} right={right:.0f}")
             action, params = self._decide(fwd, left, right)
             if dog is None:
                 ctx.logger.info(f"[Sim] patrol action: {action} {params}")
@@ -173,11 +206,36 @@ class SmartPatrolBehavior(Behavior):
                 SPEED_TURN_NORMAL = getattr(cfg, "SPEED_TURN_NORMAL", 200)
                 WALK_STEPS_NORMAL = getattr(cfg, "WALK_STEPS_NORMAL", 2)
                 SPEED_NORMAL = getattr(cfg, "SPEED_NORMAL", 120)
+                # Approach detection on forward angle using baseline
+                base_fwd = self._baseline_mm.get(0, fwd)
+                delta_mm = float(getattr(cfg, "PATROL_APPROACH_DEVIATION_MM", 100.0))
+                delta_pct = float(getattr(cfg, "PATROL_APPROACH_DEVIATION_PCT", 0.20))
+                delta = max(0.0, base_fwd - fwd)
+                pct = (delta / base_fwd) if base_fwd > 1e-6 else 0.0
+                approaching = (delta >= delta_mm) or (pct >= delta_pct)
+                # vote window for forward-only
+                vw = self._approach_votes.get(0)
+                if vw is None or vw.maxlen != max(1, int(getattr(cfg, "PATROL_CONFIRM_WINDOW", 3))):
+                    vw = deque(maxlen=max(1, int(getattr(cfg, "PATROL_CONFIRM_WINDOW", 3))))
+                    self._approach_votes[0] = vw
+                vw.append(bool(approaching))
+                confirmed = sum(1 for v in vw if v) >= int(getattr(cfg, "PATROL_CONFIRM_THRESHOLD", 2))
+
                 if action == "retreat":
                     self._led_state("obstacle")
                     dog.do_action("bark", speed=SPEED_SLOW)
                     await asyncio.sleep(0.2)
                     dog.do_action("backward", step_count=getattr(cfg, "BACKUP_STEPS", 3), speed=SPEED_EMERGENCY)
+                elif confirmed and self._alert_cd and self._alert_cd.ready():
+                    # micro backoff + small turn toward freer side
+                    self._led_state("navigating")
+                    self._alert_cd.touch()
+                    turn_steps = int(getattr(cfg, "PATROL_TURN_STEPS_ON_ALERT", 1))
+                    # choose freer side by comparing left/right
+                    dir_name = "left" if left > right else "right"
+                    dog.do_action("backward", step_count=max(1, int(getattr(cfg, "BACKUP_STEPS", 3) // 2)), speed=SPEED_EMERGENCY)
+                    dog.wait_all_done()
+                    dog.do_action(f"turn_{dir_name}", step_count=turn_steps, speed=SPEED_TURN_NORMAL)
                 elif action.startswith("turn_"):
                     self._led_state("navigating")
                     dir_name = action.replace("turn_", "")
