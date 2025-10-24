@@ -62,6 +62,8 @@ Notes: Step counts scale angular/linear distance; speeds are device-specific.
 - SCAN_WHILE_MOVING: Allow concurrent scan + motion (when safe).
 - SCAN_DEBOUNCE_S (s): Debounce window to ignore jittery repeated readings.
 - SCAN_SMOOTHING_ALPHA (0..1): EMA smoothing factor for ultrasonic distances.
+ 
+Note: When `ENABLE_INTELLIGENT_SCANNING` is true, Smart Patrol narrows the head sweep when the forward baseline distance is comfortably above `OBSTACLE_SAFE_DISTANCE`, and widens it otherwise. This reduces scan time in clear corridors while retaining wider sweeps near obstacles.
 
 ## Sound response
 - SOUND_HEAD_SENSITIVITY: Head responsiveness to sound (future use).

@@ -115,7 +115,21 @@ class SmartPatrolBehavior(Behavior):
         """
         assert self._ctx is not None
         cfg = self._ctx.config
-        yaw_max = int(getattr(cfg, "PATROL_SCAN_YAW_MAX_DEG", 45))
+        yaw_max_cfg = int(getattr(cfg, "PATROL_SCAN_YAW_MAX_DEG", 45))
+        yaw_max = yaw_max_cfg
+        # Intelligent scanning: narrow sweep when path is clear, widen when not
+        try:
+            if bool(getattr(cfg, "ENABLE_INTELLIGENT_SCANNING", False)):
+                base_fwd = self._baseline_cm.get(0)
+                safe_cm = float(getattr(cfg, "OBSTACLE_SAFE_DISTANCE", 40.0))
+                if base_fwd is not None:
+                    # If the forward baseline is comfortably above safe distance, narrow sweep to 30°
+                    if base_fwd >= (safe_cm + 20.0):
+                        yaw_max = min(yaw_max_cfg, 30)
+                    else:
+                        yaw_max = yaw_max_cfg
+        except Exception:
+            yaw_max = yaw_max_cfg
         settle_s = float(getattr(cfg, "PATROL_SCAN_SETTLE_S", 0.12))
         between_s = float(getattr(cfg, "PATROL_BETWEEN_READS_S", 0.04))
         ema_alpha = float(getattr(cfg, "PATROL_BASELINE_EMA", 0.25))
