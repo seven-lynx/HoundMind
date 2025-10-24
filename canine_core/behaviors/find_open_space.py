@@ -62,7 +62,8 @@ class FindOpenSpaceBehavior(Behavior):
         settle_s = float(getattr(cfg, "OPEN_SPACE_SCAN_SETTLE_S", 0.12))
         between_s = float(getattr(cfg, "OPEN_SPACE_BETWEEN_READS_S", 0.04))
         min_gap_width = int(getattr(cfg, "OPEN_SPACE_MIN_GAP_WIDTH_DEG", 30))
-        min_score = float(getattr(cfg, "OPEN_SPACE_MIN_SCORE_MM", 600.0))
+        min_score_mm = float(getattr(cfg, "OPEN_SPACE_MIN_SCORE_MM", 600.0))
+        min_score_cm = (min_score_mm / 10.0)
         confirm_window = int(getattr(cfg, "OPEN_SPACE_CONFIRM_WINDOW", 2))
         confirm_threshold = int(getattr(cfg, "OPEN_SPACE_CONFIRM_THRESHOLD", 2))
 
@@ -79,18 +80,18 @@ class FindOpenSpaceBehavior(Behavior):
             return a
 
         def find_best_cluster(angles: List[int], dists: dict[int, float]) -> Tuple[int, float, int, int]:
-            """Return (center_angle, score, start_idx, end_idx). Score = width_deg * avg_mm.
+            """Return (center_angle, score, start_idx, end_idx). Score = width_deg * avg_cm.
             If no cluster matches min requirements, fallback to max distance angle with score=dist.
             """
             best = (0, -1.0, 0, 0)
             i = 0
             n = len(angles)
             while i < n:
-                if dists.get(angles[i], 0.0) >= min_score:
+                if dists.get(angles[i], 0.0) >= min_score_cm:
                     j = i
                     total = 0.0
                     count = 0
-                    while j < n and dists.get(angles[j], 0.0) >= min_score:
+                    while j < n and dists.get(angles[j], 0.0) >= min_score_cm:
                         total += dists.get(angles[j], 0.0)
                         count += 1
                         j += 1
