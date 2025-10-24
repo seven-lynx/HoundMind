@@ -29,6 +29,7 @@ class PiDogConfig:
     ENABLE_AUTONOMOUS_NAVIGATION = True # AI pathfinding and exploration (requires SLAM)
     ENABLE_FACE_RECOGNITION = True     # Face detection, recognition, and personality adaptation
     ENABLE_DYNAMIC_BALANCE = True      # Real-time balance monitoring and stability control
+    ENABLE_ENHANCED_AUDIO = True       # Multi-source sound tracking and intelligent localization
     
     # ============================================================================
     # OBSTACLE AVOIDANCE SETTINGS
@@ -218,6 +219,38 @@ class PiDogConfig:
     BALANCE_CORRECTION_COOLDOWN = 2.0     # Minimum time between corrections (seconds)
 
     # ============================================================================
+    # ENHANCED AUDIO PROCESSING SYSTEM
+    # ============================================================================
+    
+    # Audio hardware settings
+    AUDIO_SAMPLE_RATE = 44100             # Audio sample rate (Hz)
+    AUDIO_CHANNELS = 1                    # Number of audio channels (1=mono, 2=stereo)
+    AUDIO_CHUNK_SIZE = 1024               # Audio buffer chunk size (samples)
+    AUDIO_BUFFER_DURATION = 2.0           # Audio buffer duration (seconds)
+    AUDIO_INPUT_DEVICE_INDEX = None       # Audio input device (None=default)
+    
+    # Audio analysis settings
+    AUDIO_CALIBRATION_TIME = 3.0          # Background noise calibration time (seconds)
+    AUDIO_HISTORY_SIZE = 200              # Number of audio samples to keep in memory
+    AUDIO_SILENCE_THRESHOLD = 0.01        # RMS threshold for silence detection
+    AUDIO_LOUD_NOISE_THRESHOLD = 0.5      # RMS threshold for loud noise events
+    
+    # Voice detection settings
+    AUDIO_VOICE_FREQ_MIN = 85.0           # Minimum voice frequency (Hz)
+    AUDIO_VOICE_FREQ_MAX = 255.0          # Maximum voice frequency (Hz) 
+    AUDIO_VOICE_THRESHOLD = 0.3           # Voice energy ratio threshold (0.0-1.0)
+    
+    # Sound source tracking
+    AUDIO_DIRECTION_HISTORY_SIZE = 50     # Number of direction readings to keep
+    AUDIO_DIRECTION_CHANGE_THRESHOLD = 15.0 # Degrees for significant direction change
+    AUDIO_SOURCE_DIRECTION_TOLERANCE = 30.0 # Degrees tolerance for same source
+    AUDIO_SOURCE_TIMEOUT = 5.0            # Seconds before source is considered lost
+    
+    # Event logging
+    AUDIO_EVENT_HISTORY_SIZE = 500        # Number of audio events to keep in memory
+    AUDIO_DATA_DIR = "data/audio"         # Directory for audio session data storage
+
+    # ============================================================================
     # SAFETY / WATCHDOG
     # ============================================================================
     WATCHDOG_HEARTBEAT_INTERVAL_S = 0.5
@@ -280,6 +313,7 @@ class SimpleConfig(PiDogConfig):
     ENABLE_LEARNING_SYSTEM = False
     ENABLE_FACE_RECOGNITION = False  # Simplified mode - no face recognition
     ENABLE_DYNAMIC_BALANCE = False  # Disabled for simplicity
+    ENABLE_ENHANCED_AUDIO = False  # Basic audio only
     
     # Conservative obstacle avoidance
     OBSTACLE_IMMEDIATE_THREAT = 30.0
@@ -308,6 +342,7 @@ class AdvancedConfig(PiDogConfig):
     ENABLE_PATROL_LOGGING = True
     ENABLE_FACE_RECOGNITION = True  # Full AI capabilities
     ENABLE_DYNAMIC_BALANCE = True  # Advanced balance monitoring
+    ENABLE_ENHANCED_AUDIO = True  # Full audio processing capabilities
     
     # Advanced face recognition settings
     FACE_RECOGNITION_THRESHOLD = 0.5  # Lower threshold for better detection
@@ -318,6 +353,11 @@ class AdvancedConfig(PiDogConfig):
     # Enhanced balance monitoring settings
     BALANCE_SAMPLE_RATE = 30.0  # Higher sampling rate for better response
     BALANCE_CORRECTION_COOLDOWN = 1.5  # Faster corrections
+    
+    # Advanced audio processing settings
+    AUDIO_SAMPLE_RATE = 48000  # Higher quality audio
+    AUDIO_CALIBRATION_TIME = 2.0  # Faster calibration
+    AUDIO_VOICE_THRESHOLD = 0.25  # More sensitive voice detection
     
     # Aggressive exploration settings
     OBSTACLE_IMMEDIATE_THREAT = 15.0
@@ -346,6 +386,7 @@ class IndoorPetConfig(PiDogConfig):
     ENABLE_AUTONOMOUS_NAVIGATION = False  # Manual control preferred
     ENABLE_FACE_RECOGNITION = True  # Perfect for family interaction
     ENABLE_DYNAMIC_BALANCE = True  # Safety for indoor play
+    ENABLE_ENHANCED_AUDIO = True  # Family voice recognition and interaction
     
     # Indoor-friendly face recognition settings
     FACE_DETECTION_INTERVAL = 1.5     # Moderate detection frequency
@@ -384,6 +425,7 @@ class ExplorerConfig(PiDogConfig):
     ENABLE_LEARNING_SYSTEM = False
     ENABLE_FACE_RECOGNITION = False  # Focus on mapping, not social interaction
     ENABLE_DYNAMIC_BALANCE = True  # Critical for outdoor terrain
+    ENABLE_ENHANCED_AUDIO = True  # Environmental sound awareness for outdoor exploration
     
     # Balanced exploration settings
     OBSTACLE_IMMEDIATE_THREAT = 18.0

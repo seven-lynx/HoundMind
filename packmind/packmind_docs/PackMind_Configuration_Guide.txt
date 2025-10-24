@@ -307,6 +307,96 @@ All these settings are found in the packmind_config.py file, in the PiDogConfig 
   * Directory where balance session data is stored
   * Contains: statistics, events, performance metrics
 
+## ENHANCED AUDIO PROCESSING SYSTEM
+
+### ENABLE_ENHANCED_AUDIO = True/False
+- Controls multi-source sound tracking and intelligent localization
+- When enabled: Advanced audio analysis, direction detection, voice classification
+- When disabled: Basic audio only, saves significant CPU and memory
+
+### Audio Hardware Configuration
+- AUDIO_SAMPLE_RATE = 44100 (Hz)
+  * Audio sampling rate for microphone input
+  * Higher = better quality but more CPU usage
+  * Recommended: 22050 (basic), 44100 (standard), 48000 (high quality)
+
+- AUDIO_CHANNELS = 1 (channels)
+  * Number of audio channels (1=mono, 2=stereo)
+  * Most applications use mono for direction detection
+
+- AUDIO_CHUNK_SIZE = 1024 (samples)
+  * Audio buffer chunk size for processing
+  * Lower = less latency, Higher = more efficient
+  * Recommended: 512-2048 samples
+
+- AUDIO_INPUT_DEVICE_INDEX = None
+  * Specific audio input device to use (None=system default)
+  * Use None unless you have multiple microphones
+
+### Audio Analysis Settings
+- AUDIO_CALIBRATION_TIME = 3.0 (seconds)
+  * Duration for background noise calibration at startup
+  * Robot must be in quiet environment during calibration
+  * Longer = more accurate noise baseline
+
+- AUDIO_HISTORY_SIZE = 200 (samples)
+  * Number of audio samples kept in memory for analysis
+  * Used for trend detection and statistics
+  * Higher = better analysis but more memory usage
+
+- AUDIO_SILENCE_THRESHOLD = 0.01 (RMS level)
+  * Audio level below which sound is considered silence
+  * Auto-adjusted based on background noise calibration
+  * Manual adjustment: higher = less sensitive to quiet sounds
+
+- AUDIO_LOUD_NOISE_THRESHOLD = 0.5 (RMS level)
+  * Audio level above which sound is considered "loud noise"
+  * Triggers special loud noise event detection
+  * Recommended: 0.3-0.8 depending on environment
+
+### Voice Detection & Classification
+- AUDIO_VOICE_FREQ_MIN = 85.0 (Hz)
+- AUDIO_VOICE_FREQ_MAX = 255.0 (Hz)  
+  * Frequency range for human voice detection
+  * Used to distinguish voice from other sounds
+  * Standard adult voice range: 85-255 Hz
+
+- AUDIO_VOICE_THRESHOLD = 0.3 (0.0-1.0)
+  * Voice energy ratio threshold for voice detection
+  * Higher = more strict voice detection
+  * Lower = more permissive, may detect non-voice as voice
+
+### Sound Source Tracking
+- AUDIO_DIRECTION_HISTORY_SIZE = 50 (readings)
+  * Number of direction readings to keep for trend analysis
+  * Used to track moving sound sources
+  * Higher = better tracking but more memory
+
+- AUDIO_DIRECTION_CHANGE_THRESHOLD = 15.0 (degrees)
+  * Minimum direction change to trigger "direction changed" event
+  * Prevents excessive notifications for small movements
+  * Recommended: 10-20 degrees
+
+- AUDIO_SOURCE_DIRECTION_TOLERANCE = 30.0 (degrees)
+  * Angular tolerance for considering sounds from "same source"
+  * Sounds within this range are grouped together
+  * Recommended: 20-40 degrees depending on precision needs
+
+- AUDIO_SOURCE_TIMEOUT = 5.0 (seconds)
+  * Time after which a sound source is considered "lost"
+  * Prevents indefinite tracking of disappeared sources
+  * Recommended: 3-10 seconds
+
+### Data Storage & Events
+- AUDIO_EVENT_HISTORY_SIZE = 500 (events)
+  * Number of audio events to keep in memory
+  * Includes: voice detections, source tracking, loud noises
+  * Higher = more complete history but more memory
+
+- AUDIO_DATA_DIR = "data/audio" (path)
+  * Directory where audio session data is stored
+  * Contains: statistics, events, calibration data, performance metrics
+
 ## ADVANCED SYSTEM CONTROLS
 
 ### Health and performance
