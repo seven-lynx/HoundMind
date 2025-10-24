@@ -89,6 +89,14 @@ Tuning tips: Increase thresholds to reduce false triggers on bumpy surfaces.
 - PATROL_ALERT_COOLDOWN_S: Cooldown between reactive maneuvers.
 - PATROL_TURN_STEPS_ON_ALERT: Small in-place turn steps when approach confirmed.
 
+## Open Space (Find Open Space)
+- OPEN_SPACE_SCAN_YAW_MAX_DEG / OPEN_SPACE_SCAN_STEP_DEG / OPEN_SPACE_SCAN_SETTLE_S / OPEN_SPACE_BETWEEN_READS_S: Head scan parameters for detecting gaps.
+- OPEN_SPACE_MIN_GAP_WIDTH_DEG: Minimum contiguous angular width to qualify as a navigable gap.
+- OPEN_SPACE_MIN_SCORE_MM: Minimum per-angle distance (mm) for angles to count toward the gap.
+- OPEN_SPACE_CONFIRM_WINDOW / OPEN_SPACE_CONFIRM_THRESHOLD: N-of-M confirmation across quick rescans.
+- OPEN_SPACE_FORWARD_STEPS: Number of forward steps after turning toward the gap.
+- OPEN_SPACE_TURN_SPEED: Turn speed override (falls back to SPEED_TURN_NORMAL).
+
 ## Voice
 - WAKE_WORD: Voice wake keyword (engine-dependent).
 - VOICE_VOLUME_DEFAULT|EXCITED|QUIET: Output volume profiles (if supported).

@@ -163,6 +163,20 @@ class CanineConfig:
     PATROL_ALERT_COOLDOWN_S = 2.0      # cooldown between reactive maneuvers
     PATROL_TURN_STEPS_ON_ALERT = 1     # small in-place turn when approaching
 
+    # =====================================================================
+    # OPEN SPACE (FIND_OPEN_SPACE)
+    # =====================================================================
+    OPEN_SPACE_SCAN_YAW_MAX_DEG = 60     # scan a wider arc than patrol
+    OPEN_SPACE_SCAN_STEP_DEG = 15
+    OPEN_SPACE_SCAN_SETTLE_S = 0.12
+    OPEN_SPACE_BETWEEN_READS_S = 0.04
+    OPEN_SPACE_MIN_GAP_WIDTH_DEG = 30    # contiguous width required to consider a gap
+    OPEN_SPACE_MIN_SCORE_MM = 600.0      # min distance per angle to count toward a gap (mm)
+    OPEN_SPACE_CONFIRM_WINDOW = 2        # number of quick scans
+    OPEN_SPACE_CONFIRM_THRESHOLD = 2     # require same pick across scans
+    OPEN_SPACE_FORWARD_STEPS = 2         # advance after turning toward best gap
+    OPEN_SPACE_TURN_SPEED = 200          # turn speed override (falls back to SPEED_TURN_NORMAL)
+
     # Behavior aliases available for selection in the control script
     AVAILABLE_BEHAVIORS = [
         "idle_behavior",
