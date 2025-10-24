@@ -19,9 +19,9 @@ class Logger(Protocol):
 class BehaviorContext:
     hardware: Any
     sensors: Any
-    emotions: Any
+    emotions: Any | None
     motion: Any
-    voice: Any
+    voice: Any | None
     memory: Any
     state: Any
     logger: Logger

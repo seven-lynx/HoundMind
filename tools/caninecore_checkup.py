@@ -118,6 +118,7 @@ def services_smoke_tests(allow_move: bool) -> bool:
         from canine_core.core.services.balance import BalanceService
         from canine_core.core.services.audio_processing import AudioProcessingService
         from canine_core.core.services.scanning_coordinator import ScanningCoordinator
+        from canine_core.core.services.learning import LearningService
         # Config (for defaults used by EnergyService)
         try:
             from canine_core.config.canine_config import CanineConfig  # type: ignore
@@ -149,7 +150,8 @@ def services_smoke_tests(allow_move: bool) -> bool:
         balance = BalanceService(imu, publish=lambda *_: None, max_tilt_deg=45.0)
         audio_proc = AudioProcessingService()
         scanning = ScanningCoordinator(hw, sensors, publish=lambda *_: None)
-        print(f"{OK} Sensor/Motion/Emotions/Voice/IMU/Safety/Battery/Telemetry/SensorsFacade/Energy/Balance/AudioProc/ScanningCoord instantiated")
+        learning = LearningService(config=CanineConfig, logger=SimpleNamespace(info=lambda *_: None))
+        print(f"{OK} Sensor/Motion/Emotions/Voice/IMU/Safety/Battery/Telemetry/SensorsFacade/Energy/Balance/AudioProc/ScanningCoord/Learning instantiated")
 
         # Non-moving checks
         emotions.update((0, 128, 255))
@@ -164,6 +166,17 @@ def services_smoke_tests(allow_move: bool) -> bool:
             print(f"{OK} EnergyService.tick_*() level {lvl_before:.2f}→{lvl_after:.2f}")
         except Exception as e:
             print(f"{FAIL} EnergyService.tick_*(): {e}")
+            ok = False
+
+        # Learning counters
+        try:
+            learning.record_interaction("checkup_touch")
+            snap = learning.snapshot()
+            # print only top keys to keep output brief
+            cats = ", ".join(k for k in snap.keys())
+            print(f"{OK} LearningService.snapshot() categories: {cats}")
+        except Exception as e:
+            print(f"{FAIL} LearningService: {e}")
             ok = False
 
         # Balance assess (IMU required; sim-safe if not present)

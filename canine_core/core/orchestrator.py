@@ -99,11 +99,15 @@ class Orchestrator:
         # Build context (services like sensors/emotions/memory could be added later)
         sensors = SensorService(self.hardware)
         motion = MotionService(self.hardware)
-        emotions = EmotionService(self.hardware, enabled=getattr(self.config, "ENABLE_EMOTIONAL_SYSTEM", True))
-        voice = VoiceService(
-            wake_word=str(getattr(self.config, "WAKE_WORD", "pidog")),
-            enabled=bool(getattr(self.config, "ENABLE_VOICE_COMMANDS", True)),
-        )
+        emotions = None
+        if bool(getattr(self.config, "ENABLE_EMOTIONAL_SYSTEM", True)):
+            emotions = EmotionService(self.hardware, enabled=True)
+        voice = None
+        if bool(getattr(self.config, "ENABLE_VOICE_COMMANDS", True)):
+            voice = VoiceService(
+                wake_word=str(getattr(self.config, "WAKE_WORD", "pidog")),
+                enabled=True,
+            )
         # Optional services controlled by flags
         imu = IMUService(self.hardware) if bool(getattr(self.config, "ENABLE_IMU_MONITOR", True)) else None
         safety = SafetyService(
