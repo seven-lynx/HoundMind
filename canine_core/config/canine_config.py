@@ -16,6 +16,7 @@ class CanineConfig:
     ENABLE_BATTERY_MONITOR = True
     ENABLE_IMU_MONITOR = True
     ENABLE_TELEMETRY = False
+    ENABLE_DEFAULT_HOOKS = True
     ENABLE_SLAM_MAPPING = True
     ENABLE_SENSOR_FUSION = True
     ENABLE_INTELLIGENT_SCANNING = True
@@ -191,6 +192,7 @@ class CanineConfig:
         "guard_mode",
         "whisper_voice_control",
         "find_open_space",
+        "event_hooks_demo",
     ]
 
     # =====================================================================

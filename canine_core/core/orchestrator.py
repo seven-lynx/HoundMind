@@ -17,6 +17,7 @@ from .services.imu import IMUService
 from .services.safety import SafetyService
 from .services.battery import BatteryService
 from .services.telemetry import TelemetryService
+from .hooks import HookRegistry, default_hooks_factory
 
 class LegacyThreadBehavior:
     """Adapter to run legacy modules exposing start_behavior() in a thread.
@@ -64,6 +65,7 @@ class Orchestrator:
         self.hardware = HardwareService()
         self._ctx = None
         self._active: Behavior | None = None
+        self.hooks: HookRegistry | None = None
         # alias map for beginner-friendly names
         self.aliases: Dict[str, str] = {
             "idle_behavior": "canine_core.behaviors.idle_behavior",
@@ -75,6 +77,7 @@ class Orchestrator:
             "whisper_voice_control": "canine_core.behaviors.whisper_voice_control",
             "find_open_space": "canine_core.behaviors.find_open_space",
             "reactions": "canine_core.behaviors.reactions",
+            "event_hooks_demo": "canine_core.behaviors.event_hooks_demo",
         }
 
     async def init(self) -> None:
@@ -128,6 +131,10 @@ class Orchestrator:
             imu=imu,
             telemetry=telemetry,
         )
+        # Hooks: subscribe default handlers if enabled
+        if bool(getattr(self.config, "ENABLE_DEFAULT_HOOKS", True)):
+            self.hooks = HookRegistry(self.bus.publish, self.bus.subscribe)
+            self.hooks.register_many(default_hooks_factory(self._ctx))
         # Optionally expose extra services on orchestrator for future use
         self.voice = voice
         self.motion = motion
