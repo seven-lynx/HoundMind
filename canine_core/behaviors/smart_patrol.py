@@ -27,8 +27,8 @@ class SmartPatrolBehavior(Behavior):
         self._ctx: Optional[BehaviorContext] = None
         self._task: Optional[asyncio.Task] = None
         self._running = False
-        # Scan/baseline state
-        self._baseline_mm: dict[int, float] = {}
+        # Scan/baseline state (centimeters)
+        self._baseline_cm: dict[int, float] = {}
         self._approach_votes: dict[int, deque[bool]] = {}
         self._scan_dir: int = 1
         self._alert_cd: Optional[Cooldown] = None
@@ -111,7 +111,7 @@ class SmartPatrolBehavior(Behavior):
 
     async def _quick_scan(self) -> Tuple[float, float, float]:
         """Scan left, right, and forward; update per-angle EMA baselines and votes.
-        Returns distances in mm (fwd, left, right).
+        Returns distances in centimeters (cm) as (fwd, left, right).
         """
         assert self._ctx is not None
         cfg = self._ctx.config
@@ -136,14 +136,14 @@ class SmartPatrolBehavior(Behavior):
                 out[yaw] = dist
                 await asyncio.sleep(between_s)
         fwd, left, right = out.get(0, 1000.0), out.get(-yaw_max, 1000.0), out.get(yaw_max, 1000.0)
-        # update baselines
+        # update baselines (cm)
         for yaw, dist in out.items():
-            base = self._baseline_mm.get(yaw)
+            base = self._baseline_cm.get(yaw)
             if base is None:
-                self._baseline_mm[yaw] = dist
+                self._baseline_cm[yaw] = dist
             else:
                 new_base = (1.0 - ema_alpha) * base + ema_alpha * dist
-                self._baseline_mm[yaw] = new_base
+                self._baseline_cm[yaw] = new_base
         return (fwd, left, right)
 
     def _decide(self, fwd: float, left: float, right: float) -> tuple[str, dict]:
@@ -216,8 +216,8 @@ class SmartPatrolBehavior(Behavior):
                 SPEED_TURN_NORMAL = getattr(cfg, "SPEED_TURN_NORMAL", 200)
                 WALK_STEPS_NORMAL = getattr(cfg, "WALK_STEPS_NORMAL", 2)
                 SPEED_NORMAL = getattr(cfg, "SPEED_NORMAL", 120)
-                # Approach detection on forward angle using baseline
-                base_fwd = self._baseline_mm.get(0, fwd)
+                # Approach detection on forward angle using baseline (cm)
+                base_fwd = self._baseline_cm.get(0, fwd)
                 delta_mm = float(getattr(cfg, "PATROL_APPROACH_DEVIATION_MM", 100.0))
                 delta_pct = float(getattr(cfg, "PATROL_APPROACH_DEVIATION_PCT", 0.20))
                 delta = max(0.0, base_fwd - fwd)  # cm

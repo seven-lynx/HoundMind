@@ -10,6 +10,8 @@ Run this on the PiDog to quickly verify your environment and CanineCore modules 
 
 Scopes:
 - import: Import all canine_core packages and modules (default)
+- services: Instantiate core services (hardware, sensors, motion, emotions, voice)
+- all: Do both; combine with --move for limited hardware motion tests
 
 Examples (on the Pi):
   python3 tools/caninecore_checkup.py --scope import
@@ -29,6 +31,7 @@ import platform
 import sys
 import time
 import traceback
+from types import SimpleNamespace
 
 OK = "✓"
 FAIL = "✗"
@@ -93,6 +96,90 @@ def import_caninecore_modules() -> bool:
     return all_ok
 
 
+def services_smoke_tests(allow_move: bool) -> bool:
+    _print_header("Services smoke tests")
+    ok = True
+    dog = None
+    hw = None
+    try:
+        # Lazy imports to avoid errors if package missing
+        from canine_core.core.services.hardware import HardwareService
+        from canine_core.core.services.sensors import SensorService
+        from canine_core.core.services.motion import MotionService
+        from canine_core.core.services.emotions import EmotionService
+        from canine_core.core.services.voice import VoiceService
+
+        # Hardware init (may fail on non-Pi or without peripherals)
+        try:
+            hw = HardwareService()
+            hw.init()
+            dog = getattr(hw, "dog", None)
+            print(f"{OK} HardwareService.init()")
+        except Exception as e:
+            print(f"{FAIL} HardwareService.init(): {e} — continuing with dummy hardware")
+            hw = SimpleNamespace(dog=None, rgb=None)
+
+        # Instantiate services
+        sensors = SensorService(hw)
+        motion = MotionService(hw)
+        emotions = EmotionService(hw, enabled=True)
+        voice = VoiceService()
+        print(f"{OK} SensorService, MotionService, EmotionService, VoiceService instantiated")
+
+        # Non-moving checks
+        emotions.update((0, 128, 255))
+        print(f"{OK} EmotionService.update()")
+
+        # Optional limited motion/head sweep via sensors
+        if allow_move:
+            try:
+                dists = awaitable_read_distances(sensors, head_range=15, head_speed=50)
+                print(f"{OK} SensorService.read_distances(): fwd={dists[0]:.0f}cm left={dists[1]:.0f}cm right={dists[2]:.0f}cm")
+            except Exception as e:
+                print(f"{FAIL} SensorService.read_distances() move test: {e}")
+                ok = False
+
+        # Try a lightweight motion action only if movement allowed
+        if allow_move and dog is not None:
+            try:
+                motion.act("stand", speed=80)
+                motion.wait()
+                print(f"{OK} MotionService.act('stand') + wait")
+            except Exception as e:
+                print(f"{FAIL} MotionService.act('stand'): {e}")
+                ok = False
+
+        # Stop voice cleanly
+        try:
+            voice.stop()
+        except Exception:
+            pass
+    except Exception as e:
+        print(f"{FAIL} services test failed: {e}")
+        traceback.print_exc(limit=1)
+        ok = False
+    finally:
+        try:
+            if hw and hasattr(hw, "close"):
+                hw.close()
+        except Exception:
+            pass
+    return ok
+
+
+def awaitable_read_distances(sensors, head_range: int, head_speed: int):
+    """Helper to call possibly-async sensors.read_distances from sync context."""
+    try:
+        import asyncio
+        coro = sensors.read_distances(head_range=head_range, head_speed=head_speed)
+        if asyncio.iscoroutine(coro):
+            return asyncio.run(coro)
+        return coro
+    except RuntimeError:
+        # If already in an event loop (rare for this script), fall back to a simple call
+        return sensors.read_distances(head_range=head_range, head_speed=head_speed)
+
+
 def minimal_head_sweep() -> bool:
     _print_header("Minimal head sweep (--move)")
     try:
@@ -132,9 +219,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="CanineCore Checkup Tool (PiDog)")
     parser.add_argument(
         "--scope",
-        choices=["import", "all"],
+        choices=["import", "services", "all"],
         default="import",
-        help="What to verify: module imports or both (imports + optional --move)",
+        help="What to verify: 'import', 'services', or 'all' (combine with --move to allow motion)",
     )
     parser.add_argument(
         "--move",
@@ -149,7 +236,11 @@ def main(argv: list[str] | None = None) -> int:
     if not pidog_ok and args.move:
         print("Warning: pidog not available — movement test will be skipped")
 
-    overall_ok &= import_caninecore_modules()
+    if args.scope in ("import", "all"):
+        overall_ok &= import_caninecore_modules()
+
+    if args.scope in ("services", "all"):
+        overall_ok &= services_smoke_tests(allow_move=args.move)
 
     if args.move and args.scope in ("all", "import"):
         overall_ok &= minimal_head_sweep()

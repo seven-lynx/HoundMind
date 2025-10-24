@@ -32,7 +32,7 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 - **Tools**:
   - `tools/packmind_checkup.py`: Pi-only checkup tool to import all PackMind modules and perform safe service smoke tests
     - New `--move` flag to include a minimal ScanningService head sweep (limited motion)
-  - `tools/caninecore_checkup.py`: Pi-only checkup tool to import all CanineCore modules with an optional `--move` minimal head sweep
+  - `tools/caninecore_checkup.py`: Pi-only checkup tool to import all CanineCore modules; now supports `--scope services` to instantiate core services and `--move` for a minimal head sweep
   - Full integration of all three services into `packmind/orchestrator.py`
   - Automatic service lifecycle management (startup/shutdown)
   - Real-time event integration with emotional system and behavior logging
@@ -59,6 +59,7 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 - **Main AI Loop**: Added periodic service polling in `_ai_behavior_loop` method
 - **Dependencies**: Added face-recognition, dlib, pyaudio, scipy for new services
  - **Folder Structure**: Renamed `scripts/` to `tools/` and updated documentation and references accordingly
+ - **CanineCore Units**: Standardized distance units to centimeters (cm) in `canine_core/core/services/sensors.py`, `scanning.py`, and behavior docs (`behaviors/smart_patrol.py`); variable renamed `_baseline_mm` → `_baseline_cm`.
 
 ### Technical Metrics
 - **2,236+ lines** of new service code across three major AI systems

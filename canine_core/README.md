@@ -124,7 +124,7 @@ The orchestrator auto‑discovers behaviors via `BEHAVIOR_CLASS` or a `get_behav
 
 ## Services you can use
 
-- SensorService: read distances, basic head sweeps (sim‑safe)
+- SensorService: read distances in centimeters (cm), basic head sweeps (sim‑safe)
 - MotionService: `act(action, **kwargs)`, `wait()` for actions
 - EmotionService: LED color/effects with safety and an `update(color, effect_name=None)` helper
 - VoiceService: async command stream with optional wake word
@@ -154,6 +154,16 @@ Access these via `BehaviorContext` (injected by the orchestrator) to avoid direc
 
 - On development machines without PiDog hardware, hardware‑backed calls become safe no‑ops and will log a warning on init
 - Voice behavior requires audio stack on the host; disable via `ENABLE_VOICE_COMMANDS=False` or choose a non‑voice preset
+
+## Quick Pi checkup
+
+Run on the PiDog to verify CanineCore installs and basic hardware access:
+
+```powershell
+python tools/caninecore_checkup.py --scope import
+python tools/caninecore_checkup.py --scope services               # instantiate services
+python tools/caninecore_checkup.py --scope all --move             # include limited motion/head sweep
+```
 
 ## See also
 

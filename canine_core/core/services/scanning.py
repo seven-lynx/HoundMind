@@ -3,7 +3,7 @@ ScanningService: shared, hardware-safe head scanning utilities.
 
 Features:
 - Clamp head yaw to safe limits and move head
-- Read distance after settle time, with graceful fallback if hardware absent
+- Read distance (in centimeters) after settle time, with graceful fallback if hardware absent
 - Scan a sequence of angles and return angle->distance map
 
 All methods are cooperative (async) and avoid blocking the event loop.
@@ -63,7 +63,7 @@ class ScanningService:
         move_speed: int,
         center_end: bool = True,
     ) -> Dict[int, float]:
-        """Scan a list of yaw angles (deg). Returns {angle: distance_mm}.
+        """Scan a list of yaw angles (deg). Returns {angle: distance_cm}.
 
         Angles are clamped per sample but keys are the requested angles.
         """

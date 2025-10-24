@@ -1,17 +1,18 @@
+raise ImportError("Archived module: replaced by canine_core.core.orchestrator and control.py.")
 #!/usr/bin/env python3
 """
 PiDog Master Control Script
 ==================================
 This script serves as the central controller for PiDog’s behavior system, managing 
-module execution and state-based transitions.
+module execution, state-based transitions, and real-time decision-making.
 
 Key Features:
 ✅ Dynamically loads and executes behavior modules.
-✅ Allows manual module selection with keyboard interruption (`spacebar`).
-✅ Implements a shuffled queue for random module selection (to ensure variety).
-✅ Tracks active threads and prevents thread accumulation.
+✅ Allows manual module selection with user-configurable keyboard interruption.
+✅ Implements a **shuffled queue** with memory to reduce back-to-back repetitions.
+✅ Tracks active threads and prevents accumulation.
 ✅ Logs errors with detailed traceback for debugging.
-✅ Compatible with `global_state.py` for PiDog’s state-aware execution.
+✅ Uses `global_state.py` for **state-aware execution**, ensuring PiDog adapts dynamically.
 
 7-lynx
 """
@@ -22,26 +23,25 @@ import importlib
 import keyboard
 import traceback
 import random
-import global_state  # ✅ Integrated state tracking
+from . import global_state  # ✅ Integrated state tracking
 
-# ✅ Define Available Modules
+# ✅ Define Available Modules (Updated for new structure)
 module_names = {
-    "patrol": "PatrolMode",
-    "smart_patrol": "SmartPatrolMode",
-    "smarter_patrol": "SmarterPatrolMode",
-    "voice_patrol": "VoicePatrolMode",
-    "voice_control": "WhisperVoiceControl",
-    "idle_behavior": "IdleBehavior",  # ✅ Added new modules
-    "emotion": "EmotionHandler",
-    "find_open_space": "FindOpenSpace",
-    "mic_test": "MicTest",
-    "turn_toward_noise": "TurnTowardNoise",
-    "reactions": "Reactions",
-    "actions": "ActionsHandler",
+    "smart_patrol": "src.behaviors.smart_patrol",
+    "smarter_patrol": "src.behaviors.smarter_patrol", 
+    "voice_patrol": "src.behaviors.voice_patrol",
+    "voice_control": "src.behaviors.whisper_voice_control",
+    "idle_behavior": "src.behaviors.idle_behavior",
+    "emotion": "src.core.emotions",
+    "find_open_space": "src.ai.find_open_space",
+    "turn_toward_noise": "src.utils.turn_toward_noise",
+    "reactions": "src.behaviors.reactions",
+    "actions": "src.behaviors.actions",
 }
 
 # ✅ Track Active Threads
 active_threads = []
+recently_used = []  # ✅ Prevents repeating recent modules
 
 def load_module(module_name):
     """
@@ -55,11 +55,13 @@ def load_module(module_name):
     """
     try:
         module = importlib.import_module(module_name)
-        return getattr(module, "start_behavior")
+        if hasattr(module, "start_behavior"):  # ✅ Validate function exists
+            return module.start_behavior
+        else:
+            print(f"⚠️ WARNING: '{module_name}' does not have 'start_behavior'. Check implementation.")
+            return None
     except ModuleNotFoundError:
         print(f"❌ ERROR: Module '{module_name}' not found! Skipping.")
-    except AttributeError:
-        print(f"⚠️ WARNING: '{module_name}' does not have 'start_behavior'. Check implementation.")
     except Exception as e:
         print(f"⚠️ Unexpected error while loading '{module_name}': {e}")
         traceback.print_exc()
@@ -77,6 +79,9 @@ def run_module_for_time(module_name, duration):
     if not behavior_function:
         return
 
+    global_state.active_mode = module_name  # ✅ Track the active module globally
+    print(f"🚀 Running {module_name} (Active Mode: {global_state.active_mode})")
+
     # ✅ Track and manage active threads
     thread = threading.Thread(target=behavior_function, daemon=True)
     active_threads.append(thread)
@@ -84,22 +89,24 @@ def run_module_for_time(module_name, duration):
 
     start_time = time.time()
     while time.time() - start_time < duration:
-        if keyboard.is_pressed('space'):  # ✅ Interrupt with spacebar
+        if keyboard.is_pressed(global_state.interrupt_key):  # ✅ Customizable interruption key
             print("\n🔴 INTERRUPTED! Select a new module.")
             thread.join()  # ✅ Graceful shutdown before switching
             active_threads.remove(thread)
+            global_state.active_mode = "idle"  # ✅ Reset active state
             select_module_manually()
             return
         time.sleep(0.1)
 
     print(f"⏳ {module_name} completed.")
     active_threads.remove(thread)
+    global_state.active_mode = "idle"  # ✅ Reset active mode after completion
 
 def select_module_manually():
     """
     Displays a numbered list of available modules and allows user selection with timeout.
 
-    If no selection is made within 30 seconds, auto-selection resumes.
+    If no selection is made within **30 seconds**, auto-selection resumes.
     """
     print("\n🚀 Available Modules:")
     module_list = list(module_names.keys())
@@ -130,19 +137,25 @@ def select_module_manually():
 
     print("\n⏳ Timeout reached. Resuming automatic module selection...")
 
-# ✅ Implement a Shuffled Queue for Module Selection
+# ✅ Enhanced Random Module Selection
 def shuffled_module_queue():
     """
-    Generates a shuffled queue of modules to ensure variety.
+    Generates a shuffled queue of modules, ensuring variety while avoiding repetition.
 
     Returns:
     - (list) A shuffled list of module names.
     """
     module_list = list(module_names.keys())
     random.shuffle(module_list)
+
+    # ✅ Prevent back-to-back repetition by ensuring variety
+    while module_list[0] in recently_used:
+        random.shuffle(module_list)
+
     return module_list
 
-if __name__ == "__main__":
+def main():
+    """Main function for the modular system master controller."""
     module_queue = shuffled_module_queue()  # ✅ Ensures non-repetitive selection
 
     while True:
@@ -150,4 +163,12 @@ if __name__ == "__main__":
             module_queue = shuffled_module_queue()
 
         selected_module = module_queue.pop(0)  # ✅ Select from queue
+
+        recently_used.append(selected_module)
+        if len(recently_used) > 3:  # ✅ Keep a short-term history of last 3 modules
+            recently_used.pop(0)
+
         run_module_for_time(selected_module, duration=10)
+
+if __name__ == "__main__":
+    main()

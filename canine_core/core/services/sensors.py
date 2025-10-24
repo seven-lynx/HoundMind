@@ -3,13 +3,16 @@ from typing import Any, Tuple
 
 
 class SensorService:
-    """Thin wrapper around hardware sensors with sim-safe defaults."""
+    """Thin wrapper around hardware sensors with sim-safe defaults.
+
+    Distances are returned in centimeters (cm).
+    """
 
     def __init__(self, hardware: Any) -> None:
         self.hardware = hardware
 
     def read_distances(self, head_range: int = 45, head_speed: int = 70) -> Tuple[float, float, float]:
-        """Return forward, left, right distances in mm.
+        """Return forward, left, right distances in centimeters (cm).
         Falls back to large distances if hardware isn't available or fails.
         """
         dog = getattr(self.hardware, "dog", None)
