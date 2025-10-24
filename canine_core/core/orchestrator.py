@@ -18,6 +18,7 @@ from .services.safety import SafetyService
 from .services.battery import BatteryService
 from .services.telemetry import TelemetryService
 from .hooks import HookRegistry, default_hooks_factory
+from .watchdog import BehaviorWatchdog
 from .services.sensors_facade import SensorsFacade
 
 class LegacyThreadBehavior:
@@ -194,36 +195,119 @@ class Orchestrator:
             self._active = beh
             # mypy: _ctx is initialized in init()
             assert self._ctx is not None
-            await beh.start(self._ctx)
-            # Run each behavior for a fixed duration for now (10s), later policy-based
+            # Start behavior with watchdog enforcement
+            enable_wd = bool(getattr(self.config, "ENABLE_BEHAVIOR_WATCHDOG", True))
+            max_sec = float(getattr(self.config, "WATCHDOG_MAX_BEHAVIOR_S", 45.0))
+            base_dur = float(getattr(self.config, "BEHAVIOR_MIN_DWELL_S", 10.0))
+            dur = min(base_dur, max_sec) if enable_wd else base_dur
+            name = getattr(beh, "name", str(spec))
+            wd = BehaviorWatchdog(max_dwell_s=dur if enable_wd else 0.0,
+                                   max_errors=int(getattr(self.config, "WATCHDOG_MAX_ERRORS", 1)),
+                                   logger=self.logger) if enable_wd else None
+            # Start
             try:
-                await asyncio.sleep(10)
+                await beh.start(self._ctx)
+            except Exception as e:
+                self.logger.error(f"Behavior {name} start() failed: {e}")
+                if wd:
+                    wd.record_error("start", e)
+            if wd:
+                wd.start(name)
+            # Sleep in small slices to allow early stop if watchdog triggers
+            try:
+                slept = 0.0
+                slice_s = 0.5
+                total = dur
+                while total <= 0 or slept < total:
+                    if wd and wd.should_stop():
+                        self.logger.info(f"Watchdog stopping {name} after {wd.elapsed_s:.1f}s")
+                        break
+                    await asyncio.sleep(slice_s)
+                    slept += slice_s
             except asyncio.CancelledError:
                 pass
-            await beh.stop()
+            # Stop
+            try:
+                await beh.stop()
+            except Exception as e:
+                self.logger.error(f"Behavior {name} stop() failed: {e}")
+                if wd:
+                    wd.record_error("stop", e)
         self.logger.info("Orchestration loop complete")
 
     async def run_single(self, spec: str, duration: float = 15.0) -> None:
         await self.init()
         beh = self._resolve_behavior(spec)
         assert self._ctx is not None
-        await beh.start(self._ctx)
+        enable_wd = bool(getattr(self.config, "ENABLE_BEHAVIOR_WATCHDOG", True))
+        max_sec = float(getattr(self.config, "WATCHDOG_MAX_BEHAVIOR_S", 45.0))
+        dur = min(duration, max_sec) if enable_wd else duration
+        name = getattr(beh, "name", str(spec))
+        wd = BehaviorWatchdog(max_dwell_s=dur if enable_wd else 0.0,
+                               max_errors=int(getattr(self.config, "WATCHDOG_MAX_ERRORS", 1)),
+                               logger=self.logger) if enable_wd else None
         try:
-            await asyncio.sleep(duration)
+            await beh.start(self._ctx)
+        except Exception as e:
+            self.logger.error(f"Behavior {name} start() failed: {e}")
+            if wd:
+                wd.record_error("start", e)
+        if wd:
+            wd.start(name)
+        try:
+            slept = 0.0
+            slice_s = 0.5
+            while dur <= 0 or slept < dur:
+                if wd and wd.should_stop():
+                    self.logger.info(f"Watchdog stopping {name} after {wd.elapsed_s:.1f}s")
+                    break
+                await asyncio.sleep(slice_s)
+                slept += slice_s
         finally:
-            await beh.stop()
+            try:
+                await beh.stop()
+            except Exception as e:
+                self.logger.error(f"Behavior {name} stop() failed: {e}")
+                if wd:
+                    wd.record_error("stop", e)
 
     async def run_sequence(self, specs: list[str], durations: list[float] | None = None) -> None:
         await self.init()
         durations = durations or [15.0] * len(specs)
-        for spec, dur in zip(specs, durations):
+        for spec, dur_in in zip(specs, durations):
             beh = self._resolve_behavior(spec)
             assert self._ctx is not None
-            await beh.start(self._ctx)
+            enable_wd = bool(getattr(self.config, "ENABLE_BEHAVIOR_WATCHDOG", True))
+            max_sec = float(getattr(self.config, "WATCHDOG_MAX_BEHAVIOR_S", 45.0))
+            dur = min(dur_in, max_sec) if enable_wd else float(dur_in)
+            name = getattr(beh, "name", str(spec))
+            wd = BehaviorWatchdog(max_dwell_s=dur if enable_wd else 0.0,
+                                   max_errors=int(getattr(self.config, "WATCHDOG_MAX_ERRORS", 1)),
+                                   logger=self.logger) if enable_wd else None
             try:
-                await asyncio.sleep(dur)
+                await beh.start(self._ctx)
+            except Exception as e:
+                self.logger.error(f"Behavior {name} start() failed: {e}")
+                if wd:
+                    wd.record_error("start", e)
+            if wd:
+                wd.start(name)
+            try:
+                slept = 0.0
+                slice_s = 0.5
+                while dur <= 0 or slept < dur:
+                    if wd and wd.should_stop():
+                        self.logger.info(f"Watchdog stopping {name} after {wd.elapsed_s:.1f}s")
+                        break
+                    await asyncio.sleep(slice_s)
+                    slept += slice_s
             finally:
-                await beh.stop()
+                try:
+                    await beh.stop()
+                except Exception as e:
+                    self.logger.error(f"Behavior {name} stop() failed: {e}")
+                    if wd:
+                        wd.record_error("stop", e)
 
     async def run_random_cycle(self, choices: list[str], min_sec: float = 20, max_sec: float = 45) -> None:
         import random
@@ -231,15 +315,41 @@ class Orchestrator:
         history: list[str] = []
         while True:
             pick = random.choice([c for c in choices if c not in history[-2:]] or choices)
-            dur = random.randint(int(min_sec), int(max_sec))
+            dur_pick = random.randint(int(min_sec), int(max_sec))
             beh = self._resolve_behavior(pick)
             assert self._ctx is not None
-            await beh.start(self._ctx)
-            self.logger.info(f"Running {pick} for {dur}s")
+            enable_wd = bool(getattr(self.config, "ENABLE_BEHAVIOR_WATCHDOG", True))
+            cap = float(getattr(self.config, "WATCHDOG_MAX_BEHAVIOR_S", 45.0))
+            dur = min(float(dur_pick), cap) if enable_wd else float(dur_pick)
+            name = getattr(beh, "name", str(pick))
+            wd = BehaviorWatchdog(max_dwell_s=dur if enable_wd else 0.0,
+                                   max_errors=int(getattr(self.config, "WATCHDOG_MAX_ERRORS", 1)),
+                                   logger=self.logger) if enable_wd else None
             try:
-                await asyncio.sleep(dur)
+                await beh.start(self._ctx)
+            except Exception as e:
+                self.logger.error(f"Behavior {name} start() failed: {e}")
+                if wd:
+                    wd.record_error("start", e)
+            if wd:
+                wd.start(name)
+            self.logger.info(f"Running {pick} for up to {dur:.1f}s")
+            try:
+                slept = 0.0
+                slice_s = 0.5
+                while dur <= 0 or slept < dur:
+                    if wd and wd.should_stop():
+                        self.logger.info(f"Watchdog stopping {name} after {wd.elapsed_s:.1f}s")
+                        break
+                    await asyncio.sleep(slice_s)
+                    slept += slice_s
             finally:
-                await beh.stop()
+                try:
+                    await beh.stop()
+                except Exception as e:
+                    self.logger.error(f"Behavior {name} stop() failed: {e}")
+                    if wd:
+                        wd.record_error("stop", e)
             history.append(pick)
 
 async def main_async(config_preset: str | None = None) -> None:

@@ -24,6 +24,10 @@ class CanineConfig:
     ENABLE_EMOTIONAL_SYSTEM = True
     ENABLE_LEARNING_SYSTEM = True
     ENABLE_AUTONOMOUS_NAVIGATION = True
+    # Watchdog for behaviors
+    ENABLE_BEHAVIOR_WATCHDOG = True
+    WATCHDOG_MAX_BEHAVIOR_S = 45.0
+    WATCHDOG_MAX_ERRORS = 1
 
     # =====================================================================
     # OBSTACLE AVOIDANCE
