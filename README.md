@@ -134,6 +134,7 @@ Note: Hardware‑dependent features won’t function fully without PiDog.
 - **PackMind Checkup (Pi)**: `tools/packmind_checkup.py` - Import + service smoke tests on the PiDog (no movement)
 	- Use `--move` to include a small ScanningService head sweep (limited motion)
 - **CanineCore Checkup (Pi)**: `tools/caninecore_checkup.py` - Import all CanineCore modules; optional minimal head sweep with `--move`
+- **PiDog Hardware Check (Pi)**: `tools/pidog_hardware_check.py` - Direct hardware check (distance, IMU, ears, touch, audio, LED); add `--move` for motion/head sweep
 - **Integration Test**: `tools/test_service_integration.py` - Validate AI services integration
 - **Legacy Tools**: `legacy/ubuntu_install.py` - Ubuntu system setup utilities
 
@@ -149,6 +150,13 @@ Run CanineCore checkup on the Pi:
 python3 tools/caninecore_checkup.py --scope import   # Import all CanineCore modules
 python3 tools/caninecore_checkup.py --move           # Optional minimal head sweep
 ```
+
+Run PiDog hardware check on the Pi:
+```bash
+python3 tools/pidog_hardware_check.py                # Sensors only (no movement)
+python3 tools/pidog_hardware_check.py --move         # Include motion/head sweep
+python3 tools/pidog_hardware_check.py --scope audio  # Only test audio
+``` 
 
 Run integration tests:
 ```bash
