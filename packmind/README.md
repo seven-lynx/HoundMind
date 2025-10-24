@@ -55,7 +55,22 @@ class PiDogConfig:
 
 For general PiDog programming resources, see `../docs/`.
 
-## 🔗 vs. CanineCore (for clarity)
+## � Feature gates at a glance
+
+PackMind features are toggled via `packmind/packmind_config.py` presets or custom values:
+
+- Voice commands: `ENABLE_VOICE_COMMANDS`
+- SLAM mapping: `ENABLE_SLAM_MAPPING`
+- Sensor fusion: `ENABLE_SENSOR_FUSION`
+- Intelligent scanning: `ENABLE_INTELLIGENT_SCANNING`
+- Emotional system: `ENABLE_EMOTIONAL_SYSTEM`
+- Learning: `ENABLE_LEARNING_SYSTEM`
+- Patrol logging: `ENABLE_PATROL_LOGGING`
+- Autonomous navigation: `ENABLE_AUTONOMOUS_NAVIGATION`
+
+Logging can be tuned via `LOG_LEVEL`, `LOG_FILE_MAX_MB`, and `LOG_FILE_BACKUPS`.
+
+## �🔗 vs. CanineCore (for clarity)
 
 | PackMind (this) | CanineCore |
 |---|---|

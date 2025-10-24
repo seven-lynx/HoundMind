@@ -41,6 +41,7 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any
 import os
+import logging
 
 # Optional feature imports (actual enabling is controlled by loaded config)
 VOICE_AVAILABLE = False
@@ -83,11 +84,11 @@ try:
             from sensor_fusion_localization import SensorFusionLocalizer, SurfaceType
 
     MAPPING_AVAILABLE = True
-    print("🗺️ Mapping/navigation modules available")
+    logging.getLogger("packmind").info("Mapping/navigation modules available")
 except ImportError as e:
     MAPPING_AVAILABLE = False
-    print(f"⚠️ Mapping/navigation modules not available: {e}")
-    print("   Install: pip install numpy")
+    logging.getLogger("packmind").warning(f"Mapping/navigation modules not available: {e}")
+    logging.getLogger("packmind").info("Install: pip install numpy")
 
 from packmind.core.context import AIContext
 from packmind.behaviors.base_behavior import BaseBehavior
@@ -140,6 +141,7 @@ class Orchestrator:
             max_mb=getattr(self.config, "LOG_FILE_MAX_MB", None),
             backups=getattr(self.config, "LOG_FILE_BACKUPS", None),
         )
+        self._logger = logging.getLogger("packmind.orchestrator")
 
         # Core context object for state management
         self.context = AIContext()
@@ -431,8 +433,13 @@ class Orchestrator:
     def initialize(self) -> bool:
         """Initialize PiDog with error handling"""
         try:
-            print("🤖 Initializing Advanced PiDog AI...")
-            self.context.dog = Pidog()
+            self._logger.info("Initializing Advanced PiDog AI...")
+            try:
+                self.context.dog = Pidog()
+            except Exception as hw_err:
+                self._logger.error(f"Pidog hardware init failed: {hw_err}")
+                self._log_patrol_event("ERROR", f"Hardware init failed: {hw_err}")
+                return False
             
             # Startup sequence
             self.context.dog.do_action("stand", speed=60)
@@ -459,11 +466,11 @@ class Orchestrator:
                 self.sensor_localizer.start_localization()
                 self._log_patrol_event("LOCALIZATION", "Sensor fusion localization started")
             
-            print("✓ PiDog AI initialized successfully")
+            self._logger.info("PiDog AI initialized successfully")
             return True
             
         except Exception as e:
-            print(f"✗ Initialization failed: {e}")
+            self._logger.error(f"Initialization failed: {e}")
             self._log_patrol_event("ERROR", f"Initialization failed: {e}")
             return False
     
@@ -480,56 +487,56 @@ class Orchestrator:
                 read_once=self._read_sensors_once,
                 on_reading=self._on_sensor_reading,
                 rate_hz=float(getattr(self.config, "SENSOR_MONITOR_RATE_HZ", 20.0)),
-                logger=None,
+                logger=self._logger,
             )
             self._sensor_monitor.start()
         except Exception as e:
-            print(f"⚠️ Sensor monitor unavailable: {e}")
+            self._logger.warning(f"Sensor monitor unavailable: {e}")
         
         # Start intelligent scanning thread (if enabled)
         if self.intelligent_scanning_enabled:
-            print("🔍 Starting intelligent obstacle scanning system...")
+            self._logger.info("Starting intelligent obstacle scanning system...")
             try:
                 self._scan_coordinator = ScanningCoordinator(
                     scanning_service=self.scanning_service,
                     should_scan=self._should_perform_scan,
                     on_scan=self._on_scan_results,
                     interval_s=0.2,  # 5Hz polling of scan predicate
-                    logger=None,
+                    logger=self._logger,
                 )
                 self._scan_coordinator.start()
             except Exception as e:
-                print(f"⚠️ Scanning coordinator unavailable: {e}")
+                self._logger.warning(f"Scanning coordinator unavailable: {e}")
         else:
-            print("🔇 Intelligent scanning disabled by configuration")
+            self._logger.info("Intelligent scanning disabled by configuration")
 
         # Start health monitor (configurable interval)
         try:
             self._health_monitor = HealthMonitor(interval_s=float(getattr(self.config, "HEALTH_MONITOR_INTERVAL_S", 5.0)), on_sample=self._on_health_sample)
             self._health_monitor.start()
         except Exception as e:
-            print(f"⚠️ Health monitor unavailable: {e}")
+            self._logger.warning(f"Health monitor unavailable: {e}")
         
         # Start voice recognition runtime if available
         if self.voice_enabled:
-            print("🎙️ Starting voice recognition system...")
-            print(f"💡 Say '{self.wake_word}' followed by a command")
+            self._logger.info("Starting voice recognition system...")
+            self._logger.info(f"Say '{self.wake_word}' followed by a command")
             try:
                 self._voice_runtime = VoiceRuntime(
                     voice_service=self.voice_service,
                     wake_word=self.wake_word,
                     on_command=self._process_voice_command,
-                    logger=None,
+                    logger=self._logger,
                 )
                 self._voice_runtime.start()
             except Exception as e:
-                print(f"🔇 Voice recognition unavailable: {e}")
+                self._logger.warning(f"Voice recognition unavailable: {e}")
         else:
-            print("🔇 Voice recognition disabled (missing dependencies)")
+            self._logger.info("Voice recognition disabled (missing dependencies)")
         
         try:
-            print("🧠 AI system active - Press Ctrl+C to stop")
-            print("💡 Try touching, making sounds, or putting objects nearby...")
+            self._logger.info("AI system active - Press Ctrl+C to stop")
+            self._logger.info("Try touching, making sounds, or putting objects nearby...")
             
             # Main AI loop
             while self.running:
@@ -537,7 +544,7 @@ class Orchestrator:
                 time.sleep(0.1)  # 10Hz main loop
                 
         except KeyboardInterrupt:
-            print("\n🛑 AI system stopping...")
+            self._logger.info("AI system stopping...")
         finally:
             self._shutdown()
             
@@ -609,7 +616,7 @@ class Orchestrator:
     
     def _perform_three_way_scan(self):
         """Use ScanningService and update mapping/localization/logging."""
-        print("🔍 Performing 3-way obstacle scan...")
+        self._logger.debug("Performing 3-way obstacle scan...")
         self._log_patrol_event("SCAN_START", "Beginning 3-way ultrasonic scan")
         scan_results = self.scanning_service.scan_three_way(left_deg=50, right_deg=50, settle_s=0.3, samples=3)
         self._log_patrol_event("SCAN_COMPLETE", "3-way scan completed", {
@@ -639,7 +646,7 @@ class Orchestrator:
         """Adjust current walking speed (placeholder for implementation)"""
         # This would require more complex action queue management
         # For now, just note the speed adjustment
-        print(f"🐌 Reducing movement speed to {int(speed_factor*100)}%")
+        self._logger.info(f"Reducing movement speed to {int(speed_factor*100)}%")
     
     def _get_appropriate_turn_speed(self):
         """Get appropriate turn speed based on current energy and activity level"""
