@@ -23,12 +23,15 @@ from typing import Dict, List, Tuple, Optional
 
 # Support both package and script execution imports
 try:
-    from packmind.mapping.house_mapping import HouseMap, CellType, Position  # absolute within package
+    from packmind.mapping.home_mapping import HouseMap, CellType, Position  # preferred import
 except Exception:
     try:
-        from mapping.house_mapping import HouseMap, CellType, Position  # relative folder execution
+        from mapping.home_mapping import HouseMap, CellType, Position  # relative folder execution
     except Exception:
-        from house_mapping import HouseMap, CellType, Position  # legacy same-folder execution
+        try:
+            raise ImportError("Home mapping module not found")
+        except Exception:
+            from home_mapping import HouseMap, CellType, Position
 
 
 class MapVisualizer:

@@ -26,6 +26,7 @@ from .services.balance import BalanceService
 from .services.audio_processing import AudioProcessingService
 from .services.scanning_coordinator import ScanningCoordinator
 from .services.learning import LearningService
+from .services.orientation import OrientationService
 
 class LegacyThreadBehavior:
     """Adapter to run legacy modules exposing start_behavior() in a thread.
@@ -131,6 +132,16 @@ class Orchestrator:
             battery=battery,
         ) if bool(getattr(self.config, "ENABLE_TELEMETRY", False)) else None
         sensors_facade = SensorsFacade(self.hardware) if bool(getattr(self.config, "ENABLE_SENSORS_FACADE", True)) else None
+        orientation = None
+        if bool(getattr(self.config, "ENABLE_ORIENTATION_SERVICE", True)):
+            if imu is not None:
+                orientation = OrientationService(imu, config=self.config)
+                try:
+                    orientation.start()
+                except Exception as e:
+                    self.logger.warning(f"OrientationService failed to start: {e}")
+            else:
+                self.logger.info("OrientationService disabled (requires IMU)")
         # Additional optional services with dependency awareness
         energy = EnergyService(self.config, logger=self.logger) if bool(getattr(self.config, "ENABLE_ENERGY_SYSTEM", False)) else None
         balance = None
@@ -163,6 +174,7 @@ class Orchestrator:
             audio=audio,
             scanning=scanning,
             learning=learning,
+            orientation=orientation,
         )
         # Hooks: subscribe default handlers if enabled
         if bool(getattr(self.config, "ENABLE_DEFAULT_HOOKS", True)):
@@ -181,6 +193,7 @@ class Orchestrator:
         self.audio = audio
         self.scanning = scanning
         self.learning = learning
+        self.orientation = orientation
 
     def _resolve_behavior(self, spec: str) -> Behavior:
         """Resolve a behavior spec into a Behavior instance.

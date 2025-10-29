@@ -1,5 +1,5 @@
 # CanineCore 🔧
-> Author: 7Lynx · Doc Version: 2025.10.24
+> Author: 7Lynx · Doc Version: 2025.10.29
 
 Modern, modular behavior framework for PiDog. CanineCore provides an async orchestrator, shared services, and a clean Behavior interface so you can compose, run, and extend dog behaviors without wiring hardware details in every module.
 
@@ -132,6 +132,8 @@ The orchestrator auto‑discovers behaviors via `BEHAVIOR_CLASS` or a `get_behav
 
 - SensorService: read distances in centimeters (cm), basic head sweeps (sim‑safe)
 - MotionService: `act(action, **kwargs)`, `wait()` for actions
+    - New: `turn_by_angle(degrees, speed, ctx, tolerance_deg=5.0, timeout_s=3.0)`
+        - Uses `ctx.orientation` for IMU-based precise turning when available, otherwise falls back to fixed-step turning using `TURN_DEGREES_PER_STEP`.
 - EmotionService: LED color/effects with safety and an `update(color, effect_name=None)` helper
 - VoiceService: async command stream with optional wake word
 - HardwareService: wraps Pidog/RGB when available; safe no‑ops on dev hosts

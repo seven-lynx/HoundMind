@@ -1,4 +1,27 @@
 # Changelog
+## [v2025.10.29] - 2025-10-29 - IMU Orientation (Yaw) integration and precise turns
+
+### Added
+- PackMind OrientationService: optional IMU-based heading integration (gyro Z → heading degrees). Controlled by `ENABLE_ORIENTATION_SERVICE` with tunables `ORIENTATION_GYRO_SCALE`, `ORIENTATION_BIAS_Z`, `ORIENTATION_TURN_TOLERANCE_DEG`, `ORIENTATION_MAX_TURN_TIME_S`.
+- CanineCore OrientationService: mirrored optional module under `canine_core/core/services/orientation.py`; enabled via `ENABLE_ORIENTATION_SERVICE` with `ORIENTATION_GYRO_SCALE`, `ORIENTATION_BIAS_Z`, `ORIENTATION_CALIBRATION_S`, `ORIENTATION_TURN_TOLERANCE_DEG`, `ORIENTATION_MAX_TURN_TIME_S`.
+- BehaviorContext now exposes `ctx.orientation` (CanineCore) for behaviors to read heading when available.
+ - MotionService helper: `turn_by_angle(degrees, speed, ctx, tolerance_deg, timeout_s)` for IMU-based precise turning with step-based fallback.
+ - Turn Calibration Tool: `tools/turn_calibration.py` measures degrees-per-step via IMU and updates configs automatically.
+ - Localization active recovery: orchestrator monitors sensor-fusion confidence and performs brief ultrasonic sweep(s) to re-weight the particle filter when confidence is low. Configurable via `LOCALIZATION_*` keys in `packmind_config.py`.
+ - IMU Turn Sanity Tool: `tools/imu_turn_test.py` to rotate ±90° via closed-loop IMU control and report final angular error.
+ - Structural features: basic opening detection in the map (constricted gap with flanking obstacles) and A* cost bias to prefer paths that pass near detected openings.
+ - Safe path detection: corridor-like passage detection (formerly "hallways") with centerline segments exposed as `safe_paths`; pathfinding prefers staying centered within these passages for smoother room-to-room travel.
+
+### Changed
+- PackMind obstacle avoidance uses IMU-based turn-by-angle when orientation is enabled; falls back to fixed step turns when disabled.
+- Orchestrators wire and start OrientationService when enabled and IMU is present.
+
+### Documentation
+- Updated `docs/packmind_config_guide.md` and `docs/canine_core_config_guide.md` with a new "Orientation (IMU yaw)" section documenting flags and tuning.
+ - Added guidance for the turn calibration tool and `TURN_DPS_BY_SPEED` mapping (CanineCore).
+ - Documented localization recovery settings and how to run the IMU turn sanity test.
+
+# Changelog
 
 All notable changes to this project will be documented in this file.
 

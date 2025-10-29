@@ -20,7 +20,7 @@ import heapq
 import math
 from typing import List, Tuple, Optional, Dict, Set
 from dataclasses import dataclass
-from packmind.mapping.house_mapping import HouseMap, CellType, Position
+from packmind.mapping.home_mapping import HouseMap, CellType, Position
 
 
 @dataclass
@@ -277,6 +277,29 @@ class PiDogPathfinder:
             if obstacle_nearby:
                 base_cost *= 2.0  # Double cost near obstacles
         
+        # Prefer traveling via detected openings (encourage room-to-room transitions)
+        try:
+            openings = getattr(self.house_map, "openings", None)
+            if openings is None:
+                openings = getattr(self.house_map, "doorways", None)  # fallback
+            if openings:
+                if self._near_any_opening(x, y, radius=2):
+                    base_cost *= 0.7  # lower cost near doorways
+        except Exception:
+            pass
+
+        # Prefer staying centered within detected safe paths (hallway-like passages)
+        try:
+            if hasattr(self.house_map, "safe_paths") and self.house_map.safe_paths:
+                dist = self._distance_to_any_safe_path(x, y)
+                if dist is not None:
+                    if dist <= 1.0:
+                        base_cost *= 0.7  # strong preference near centerline
+                    elif dist <= 2.0:
+                        base_cost *= 0.85
+        except Exception:
+            pass
+        
         # Reduce cost based on confidence (prefer well-mapped areas)
         confidence_bonus = cell.confidence * 0.5
         return max(0.1, base_cost - confidence_bonus)
@@ -292,6 +315,35 @@ class PiDogPathfinder:
                     return True
         
         return False
+
+    def _distance_to_any_safe_path(self, x: int, y: int) -> Optional[float]:
+        """Return min perpendicular distance in cells to any safe path centerline, if available."""
+        try:
+            sps = getattr(self.house_map, "safe_paths", None)
+        except Exception:
+            sps = None
+        if not sps:
+            return None
+        px, py = float(x), float(y)
+        best = None
+        for sp in sps.values():
+            x1, y1 = float(sp.start.x), float(sp.start.y)
+            x2, y2 = float(sp.end.x), float(sp.end.y)
+            # Handle degenerate case
+            dx = x2 - x1
+            dy = y2 - y1
+            seg_len2 = dx*dx + dy*dy
+            if seg_len2 <= 1e-6:
+                d = math.hypot(px - x1, py - y1)
+            else:
+                # Project point onto segment
+                t = ((px - x1) * dx + (py - y1) * dy) / seg_len2
+                t = max(0.0, min(1.0, t))
+                proj_x = x1 + t * dx
+                proj_y = y1 + t * dy
+                d = math.hypot(px - proj_x, py - proj_y)
+            best = d if best is None else min(best, d)
+        return best
     
     def _heuristic(self, x1: int, y1: int, x2: int, y2: int) -> float:
         """Calculate heuristic distance (Euclidean distance)"""
@@ -390,6 +442,22 @@ class PiDogPathfinder:
                         score += 1.0 / (1.0 + distance * 0.5)
         
         return score
+
+    def _near_any_opening(self, x: int, y: int, radius: int = 2) -> bool:
+        try:
+            dws = getattr(self.house_map, "openings", None)
+            if dws is None:
+                dws = getattr(self.house_map, "doorways", {})
+        except Exception:
+            dws = {}
+        if not dws:
+            return False
+        for dw in dws.values():
+            dx = abs(int(dw.position.x) - x)
+            dy = abs(int(dw.position.y) - y)
+            if dx <= radius and dy <= radius:
+                return True
+        return False
 
 
 class NavigationController:

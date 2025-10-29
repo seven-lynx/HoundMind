@@ -1,5 +1,5 @@
 # CanineCore Configuration Guide
-> Author: 7Lynx · Doc Version: 2025.10.24
+> Author: 7Lynx · Doc Version: 2025.10.29
 
 This is the canonical configuration guide for CanineCore. All references should point here (`docs/canine_core_config_guide.md`).
 
@@ -38,7 +38,17 @@ Recommended ranges: 15–80 cm depending on environment; start with defaults.
 
 ## Movement parameters
 - TURN_STEPS_SMALL|NORMAL|LARGE: Step counts for turning granularity.
+- TURN_DEGREES_PER_STEP: Approximate degrees of rotation per single step (used only when orientation is disabled or unavailable).
+ - TURN_DPS_BY_SPEED: Optional mapping {speed:int -> deg/step:float} used by fallback turning to account for speed-dependent step size; auto-filled by the calibration tool.
 - WALK_STEPS_SHORT|NORMAL|LONG: Step counts for forward movements.
+## Turn calibration tool
+Run `python tools/turn_calibration.py` on the PiDog. It will:
+- Use the IMU to measure degrees-per-step at your configured turn speeds
+- Update `TURN_DEGREES_PER_STEP` and populate `TURN_DPS_BY_SPEED` for CanineCore
+- Update PackMind’s `TURN_DEGREES_PER_STEP` and derived step counts (45/90/180)
+
+Notes:
+- Orientation-enabled turning is already speed-agnostic (closed loop using IMU). The calibration only affects the fallback step-based path when orientation is disabled.
 - BACKUP_STEPS: Steps when retreating after an obstacle.
 - SPEED_SLOW|NORMAL|FAST: General motion speeds.
 - SPEED_EMERGENCY: Speed for retreats and emergency moves.
@@ -169,6 +179,18 @@ Example usage in built-in behaviors (when enabled):
 - IMU_LPF_ALPHA: Low-pass filter for IMU noise reduction.
 - ULTRASONIC_MIN_CM|MAX_CM: Hard limits for valid readings.
 - ULTRASONIC_OUTLIER_REJECT_Z: Sigma-based outlier rejection.
+
+## Orientation (IMU yaw)
+- ENABLE_ORIENTATION_SERVICE (bool): Enable background yaw integration from IMU gyro Z.
+- ORIENTATION_GYRO_SCALE: Scale factor converting gyro Z units to deg/s.
+- ORIENTATION_BIAS_Z: Bias to subtract from gyro Z (drift compensation).
+- ORIENTATION_CALIBRATION_S (s): Optional stationary calibration window at startup to estimate bias.
+- ORIENTATION_TURN_TOLERANCE_DEG (deg): Allowed error for turn-by-angle helper logic.
+- ORIENTATION_MAX_TURN_TIME_S (s): Safety timeout for IMU-based turning loops.
+
+Notes:
+- When enabled and IMU is available, `BehaviorContext` exposes `ctx.orientation` with `get_heading()`.
+- Behaviors and services may use heading for more precise turning or logging, falling back to step-based turning if disabled.
 
 ## Behavior orchestration
 - BEHAVIOR_SELECTION_MODE: "sequential" or "weighted" selection.

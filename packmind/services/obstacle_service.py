@@ -84,8 +84,22 @@ class ObstacleService:
                 direction = "turn_left"
             steps = config.TURN_STEPS_NORMAL
         dog.body_stop()
-        dog.do_action(direction, step_count=steps, speed=turn_speed)
-        dog.wait_all_done()
+        # If orientation integration is enabled and heading is available, perform precise turn by angle
+        use_imu_turn = bool(getattr(config, "ENABLE_ORIENTATION_SERVICE", True)) and hasattr(context, "current_heading")
+        if use_imu_turn:
+            try:
+                degrees_per_step = float(getattr(config, "TURN_DEGREES_PER_STEP", 15.0))
+            except Exception:
+                degrees_per_step = 15.0
+            target_deg = float(steps) * degrees_per_step
+            if direction == "turn_right":
+                target_deg = -target_deg
+            tol = float(getattr(config, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+            timeout_s = float(getattr(config, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+            self._turn_by_angle(context, target_deg, speed=turn_speed, tolerance_deg=tol, timeout_s=timeout_s)
+        else:
+            dog.do_action(direction, step_count=steps, speed=turn_speed)
+            dog.wait_all_done()
 
     def _execute_advanced_avoidance_strategy(self, context: AIContext, config) -> None:
         dog = context.dog
@@ -151,3 +165,29 @@ class ObstacleService:
                 self.stuck_counter = 0
         else:
             self.stuck_counter = 0
+
+    def _turn_by_angle(self, context: AIContext, degrees: float, speed: int, tolerance_deg: float = 5.0, timeout_s: float = 3.0) -> None:
+        """Rotate by target degrees using context.current_heading feedback (if available)."""
+        dog = context.dog
+        if dog is None:
+            return
+        try:
+            start = float(getattr(context, "current_heading", 0.0))
+            def ang_diff(a: float, b: float) -> float:
+                d = (a - b + 180.0) % 360.0 - 180.0
+                return d
+            end_time = time.time() + float(timeout_s)
+            while time.time() < end_time:
+                current = float(getattr(context, "current_heading", 0.0))
+                delta = ang_diff(current, start)
+                remaining = float(degrees) - delta
+                if abs(remaining) <= float(tolerance_deg):
+                    break
+                step_dir = "turn_left" if remaining > 0 else "turn_right"
+                try:
+                    dog.do_action(step_dir, step_count=1, speed=int(speed))
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        except Exception:
+            pass

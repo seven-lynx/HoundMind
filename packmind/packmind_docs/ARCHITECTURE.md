@@ -1,5 +1,5 @@
 # PackMind Modular Architecture
-> Author: 7Lynx · Doc Version: 2025.10.24
+> Author: 7Lynx · Doc Version: 2025.10.29
 
 Note: PackMind is part of HoundMind, the umbrella project for advanced behaviors and AI on PiDog.
 

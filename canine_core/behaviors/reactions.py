@@ -228,11 +228,15 @@ class ReactionsBehavior(Behavior):
                 now = time.monotonic()
                 if abs(direction) >= threshold and (now - self._last_sound_turn_ts) >= max(0.0, scd):
                     self._emotion((255, 165, 0), "flash")
-                    if direction > 0:
-                        dog.do_action("turn_right", step_count=1, speed=getattr(self._ctx.config, "SPEED_TURN_NORMAL", 200))
-                    else:
-                        dog.do_action("turn_left", step_count=1, speed=getattr(self._ctx.config, "SPEED_TURN_NORMAL", 200))
-                    dog.wait_all_done()
+                    try:
+                        dps = float(getattr(self._ctx.config, "TURN_DEGREES_PER_STEP", 15.0))
+                    except Exception:
+                        dps = 15.0
+                    deg = -dps if direction > 0 else dps  # right positive -> negative degrees
+                    spd = int(getattr(self._ctx.config, "SPEED_TURN_NORMAL", 200))
+                    tol = float(getattr(self._ctx.config, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+                    tout = float(getattr(self._ctx.config, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+                    self._ctx.motion.turn_by_angle(float(deg), spd, self._ctx, tolerance_deg=tol, timeout_s=tout)
                     self._last_sound_turn_ts = now
                     # learning: record sound-induced turn
                     try:

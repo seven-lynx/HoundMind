@@ -15,6 +15,8 @@ class CanineConfig:
     ENABLE_SAFETY_SUPERVISOR = True
     ENABLE_BATTERY_MONITOR = True
     ENABLE_IMU_MONITOR = True
+    # Optional orientation/yaw integration (IMU-based heading)
+    ENABLE_ORIENTATION_SERVICE = True
     ENABLE_TELEMETRY = False
     ENABLE_DEFAULT_HOOKS = True
     ENABLE_SENSORS_FACADE = True
@@ -48,6 +50,8 @@ class CanineConfig:
     TURN_STEPS_SMALL = 1
     TURN_STEPS_NORMAL = 2
     TURN_STEPS_LARGE = 4
+    # Approximate degrees per single turn step (fallback when orientation is disabled)
+    TURN_DEGREES_PER_STEP = 15.0
     WALK_STEPS_SHORT = 1
     WALK_STEPS_NORMAL = 2
     WALK_STEPS_LONG = 3
@@ -61,6 +65,10 @@ class CanineConfig:
     SPEED_TURN_SLOW = 100
     SPEED_TURN_NORMAL = 200
     SPEED_TURN_FAST = 220
+
+    # Orientation-assisted turning (when ENABLE_ORIENTATION_SERVICE)
+    ORIENTATION_TURN_TOLERANCE_DEG = 4.0
+    ORIENTATION_MAX_TURN_TIME_S = 2.5
 
     # =====================================================================
     # BEHAVIOR TIMING
@@ -225,6 +233,10 @@ class CanineConfig:
     # SENSORS / FILTERING
     # =====================================================================
     IMU_LPF_ALPHA = 0.3
+    # Orientation heading integration tuning
+    ORIENTATION_GYRO_SCALE = 1.0           # scale gyro units -> deg/s
+    ORIENTATION_BIAS_Z = 0.0               # bias to subtract from gyro Z
+    ORIENTATION_CALIBRATION_S = 0.0        # optional bias calibration at start
     ULTRASONIC_MIN_CM = 3.0
     ULTRASONIC_MAX_CM = 200.0
     ULTRASONIC_OUTLIER_REJECT_Z = 2.5

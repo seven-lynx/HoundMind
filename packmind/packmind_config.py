@@ -30,6 +30,7 @@ class PiDogConfig:
     ENABLE_FACE_RECOGNITION = True     # Face detection, recognition, and personality adaptation
     ENABLE_DYNAMIC_BALANCE = True      # Real-time balance monitoring and stability control
     ENABLE_ENHANCED_AUDIO = True       # Multi-source sound tracking and intelligent localization
+    ENABLE_ORIENTATION_SERVICE = True  # Integrate IMU yaw to track heading
     
     # ============================================================================
     # OBSTACLE AVOIDANCE SETTINGS
@@ -93,6 +94,25 @@ class PiDogConfig:
     HEAD_SCAN_SPEED = 70              # Head movement speed
     SCAN_SAMPLES = 3                  # Number of distance readings to average
     SCAN_WHILE_MOVING = True          # Perform scans during movement
+    # Orientation/Yaw integration
+    ORIENTATION_GYRO_SCALE = 1.0      # Scale units to deg/s for gyro Z
+    ORIENTATION_BIAS_Z = 0.0          # Bias to subtract from gyro Z
+    ORIENTATION_TURN_TOLERANCE_DEG = 5.0
+    ORIENTATION_MAX_TURN_TIME_S = 3.0
+
+    # ============================================================================
+    # LOCALIZATION / ACTIVE RECOVERY
+    # ============================================================================
+    # When ENABLE_SENSOR_FUSION is True, PackMind can actively recover localization
+    # confidence by performing a short ultrasonic sweep and updating the particle
+    # filter. These settings control when and how that happens.
+    LOCALIZATION_ACTIVE_RECOVERY = True     # Perform recovery sweeps when confidence is low
+    LOCALIZATION_CONFIDENCE_LOW = 0.35      # Threshold (0..1) to trigger recovery
+    LOCALIZATION_RECOVERY_MIN_INTERVAL_S = 8.0  # Min seconds between recovery attempts
+    LOCALIZATION_RECOVERY_SWEEPS = 1        # Number of sweep passes per attempt
+    LOCALIZATION_RECOVERY_SWEEP_LEFT = 50   # Left sweep limit (deg)
+    LOCALIZATION_RECOVERY_SWEEP_RIGHT = 50  # Right sweep limit (deg)
+    LOCALIZATION_RECOVERY_STEP_DEG = 10     # Sweep step size (deg)
     
     # ============================================================================
     # SOUND RESPONSE

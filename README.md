@@ -1,5 +1,5 @@
 # HoundMind — Advanced Behaviors and AI for SunFounder PiDog
-> Author: 7Lynx · Doc Version: 2025.10.24
+> Author: 7Lynx · Doc Version: 2025.10.29
 
 HoundMind is the umbrella project that provides two related but completely independent ways to run your PiDog:
 

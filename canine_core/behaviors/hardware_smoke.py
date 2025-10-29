@@ -109,9 +109,13 @@ class HardwareSmokeBehavior(Behavior):
                 self._ok = False
                 log.error(f"[smoke] forward failed: {e}")
             try:
-                ctx.motion.act("turn_left", step_count=1, speed=max(50, speed))
-                ctx.motion.wait()
-                log.info("[smoke] turn_left(1) OK")
+                # Use small IMU-assisted turn when available, fallback to step-based internally
+                try:
+                    dps = float(getattr(ctx.config, "TURN_DEGREES_PER_STEP", 15.0))
+                except Exception:
+                    dps = 15.0
+                ctx.motion.turn_by_angle(dps, max(50, speed), ctx)
+                log.info("[smoke] turn_left(~1 step) OK")
             except Exception as e:
                 self._ok = False
                 log.error(f"[smoke] turn_left failed: {e}")

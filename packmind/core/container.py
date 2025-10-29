@@ -8,6 +8,7 @@ from packmind.services.log_service import LogService
 from packmind.services.voice_service import VoiceService
 from packmind.services.obstacle_service import ObstacleService
 from packmind.services.scanning_service import ScanningService
+from packmind.services.orientation_service import OrientationService
 
 
 class ServiceContainer:
@@ -39,6 +40,15 @@ class ServiceContainer:
         except Exception:
             pass
         self._services["scanning"] = ScanningService(self._ctx, head_scan_speed=head_speed, scan_samples=samples)
+        # Optional orientation (IMU yaw integration)
+        enable_orientation = True
+        try:
+            if self._config is not None:
+                enable_orientation = bool(getattr(self._config, "ENABLE_ORIENTATION_SERVICE", True))
+        except Exception:
+            pass
+        if enable_orientation:
+            self._services["orientation"] = OrientationService(self._ctx, self._config)
 
     def get(self, name: str) -> Any:
         return self._services.get(name)
@@ -64,3 +74,6 @@ class ServiceContainer:
 
     def log(self) -> LogService:
         return self._services["log"]
+
+    def orientation(self) -> OrientationService:
+        return self._services["orientation"]

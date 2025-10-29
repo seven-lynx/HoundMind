@@ -40,6 +40,8 @@ class BehaviorContext:
     scanning: Any | None = None
     # Learning system (optional)
     learning: Any | None = None
+    # Orientation (IMU-derived heading); optional
+    orientation: Any | None = None
 
 @runtime_checkable
 class Behavior(Protocol):

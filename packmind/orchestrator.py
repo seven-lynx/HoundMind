@@ -21,7 +21,7 @@ Features demonstrated:
 ✓ Coordinated multi-part movement
 
 Author: 7Lynx  
-Version: 2025.10.24
+Version: 2025.10.29
 
 Run with: python packmind/orchestrator.py
 """
@@ -63,12 +63,12 @@ except ImportError:
 # SLAM and navigation imports
 try:
     try:
-        from packmind.mapping.house_mapping import PiDogSLAM, CellType
+        from packmind.mapping.home_mapping import PiDogSLAM, CellType
     except Exception:
         try:
-            from mapping.house_mapping import PiDogSLAM, CellType
+            from mapping.home_mapping import PiDogSLAM, CellType
         except Exception:
-            from house_mapping import PiDogSLAM, CellType
+            from home_mapping import PiDogSLAM, CellType
 
     try:
         from packmind.nav.pathfinding import PiDogPathfinder, NavigationController
@@ -250,6 +250,8 @@ class Orchestrator:
             self.nav_controller = None
             self.sensor_localizer = None
             self._logger.info("🔇 Advanced features disabled - using simple obstacle avoidance")
+        # Localization recovery state
+        self._last_localization_recovery_time = 0.0
         
         # Thread/control
         self.running = False
@@ -374,6 +376,11 @@ class Orchestrator:
         self._container = ServiceContainer(self.context, self.config)
         self._container.build_defaults()
         self.obstacle_service = self._container.obstacle()
+        # Orientation service (if enabled in config)
+        try:
+            self.orientation_service = self._container.orientation()
+        except Exception:
+            self.orientation_service = None
         self.voice_service = VoiceService()
         self.voice_service.set_wake_word(self.wake_word)
         # Register current voice commands with the voice service
@@ -602,7 +609,7 @@ class Orchestrator:
             # Start SLAM system
             if self.slam_system:
                 self.slam_system.start()
-                self._log_patrol_event("SLAM", "House mapping system started")
+            self._log_patrol_event("SLAM", "Home mapping system started")
                 
             # Start sensor fusion localization
             if self.sensor_localizer:
@@ -734,6 +741,11 @@ class Orchestrator:
             # Main AI loop
             while self.running:
                 self._ai_behavior_loop()
+                # Periodic localization health check and active recovery (fast no-op if disabled)
+                try:
+                    self._check_localization_health()
+                except Exception:
+                    pass
                 time.sleep(0.1)  # 10Hz main loop
                 
         except KeyboardInterrupt:
@@ -845,6 +857,118 @@ class Orchestrator:
                     "map_confidence": nav_info.get("suggested_direction", {}).get("confidence", 0.0),
                 })
         return scan_results
+
+    def _check_localization_health(self) -> None:
+        """Monitor localization confidence and trigger an active recovery sweep when low.
+
+        Fast no-op when fusion disabled or recovery disabled.
+        """
+        # Preconditions
+        if not self.sensor_localizer:
+            return
+        try:
+            if not bool(getattr(self.config, "LOCALIZATION_ACTIVE_RECOVERY", True)):
+                return
+        except Exception:
+            # If config missing, default to enabled
+            pass
+        # Sample localization status
+        status = {}
+        try:
+            status = self.sensor_localizer.get_localization_status()
+        except Exception:
+            return
+        pf = status.get("particle_filter", {}) if isinstance(status, dict) else {}
+        conf = float(pf.get("confidence", 0.0)) if isinstance(pf, dict) else 0.0
+        # Thresholds and pacing
+        try:
+            low_thr = float(getattr(self.config, "LOCALIZATION_CONFIDENCE_LOW", 0.35))
+        except Exception:
+            low_thr = 0.35
+        try:
+            min_iv = float(getattr(self.config, "LOCALIZATION_RECOVERY_MIN_INTERVAL_S", 8.0))
+        except Exception:
+            min_iv = 8.0
+        now = time.time()
+        if conf < low_thr and (now - self._last_localization_recovery_time) >= min_iv:
+            self._perform_localization_recovery(status_before=status)
+            self._last_localization_recovery_time = now
+
+    def _perform_localization_recovery(self, *, status_before: Optional[dict] = None) -> None:
+        """Perform a short ultrasonic sweep and update the particle filter to recover confidence."""
+        if not self.sensor_localizer:
+            return
+        if not hasattr(self, "scanning_service") or self.scanning_service is None:
+            # Cannot sweep without scanning service
+            return
+        # Parameters
+        try:
+            left = int(getattr(self.config, "LOCALIZATION_RECOVERY_SWEEP_LEFT", getattr(self.config, "HEAD_SCAN_RANGE", 50)))
+        except Exception:
+            left = 50
+        try:
+            right = int(getattr(self.config, "LOCALIZATION_RECOVERY_SWEEP_RIGHT", getattr(self.config, "HEAD_SCAN_RANGE", 50)))
+        except Exception:
+            right = 50
+        try:
+            step = int(getattr(self.config, "LOCALIZATION_RECOVERY_STEP_DEG", 10))
+        except Exception:
+            step = 10
+        try:
+            sweeps = int(getattr(self.config, "LOCALIZATION_RECOVERY_SWEEPS", 1))
+        except Exception:
+            sweeps = 1
+
+        # Build angle list from -right .. +left inclusive
+        angles = []
+        a = -int(right)
+        end = int(left)
+        step = max(1, int(step))
+        while a <= end:
+            angles.append(int(a))
+            a += step
+        if angles and angles[-1] != end:
+            angles.append(end)
+
+        self._log_patrol_event("LOCALIZATION_RECOVERY", "Starting active relocalization sweep", {
+            "angles": angles,
+            "sweeps": sweeps,
+            "status_before": status_before or {},
+        })
+        # Perform sweeps and feed readings
+        for _ in range(max(1, sweeps)):
+            try:
+                samples = self.scanning_service.sweep_scan(angles)
+            except Exception:
+                samples = {}
+            # samples: Dict[int, float] as angle->distance
+            for k, dist in samples.items():
+                try:
+                    ang = float(k)
+                except Exception:
+                    # keys may already be ints
+                    ang = float(k) if isinstance(k, (int, float)) else 0.0
+                try:
+                    d = float(dist)
+                except Exception:
+                    continue
+                if d <= 0:
+                    continue
+                try:
+                    self.sensor_localizer.update_ultrasonic(d, ang)
+                except Exception:
+                    pass
+            # Small pause between sweeps
+            time.sleep(0.2)
+
+        # Report after status
+        try:
+            after = self.sensor_localizer.get_localization_status()
+        except Exception:
+            after = None
+        self._log_patrol_event("LOCALIZATION_RECOVERY_DONE", "Active relocalization completed", {
+            "status_after": after or {},
+        })
     
     # Deprecated: legacy scan/avoid/stuck helpers removed in favor of ObstacleService
     
@@ -972,6 +1096,12 @@ class Orchestrator:
 
     def _on_sensor_reading(self, reading: SensorReading) -> None:
         try:
+            # Update heading estimate first (if available)
+            try:
+                if self.orientation_service is not None:
+                    self.orientation_service.update_from_reading(reading)
+            except Exception:
+                pass
             self._process_sensor_data(reading)
             # Movement tracking and stuck detection at ~5Hz
             if reading.timestamp - self.last_movement_check > 0.2:
@@ -1216,13 +1346,24 @@ class Orchestrator:
 
         if abs(yaw) > body_turn_threshold and self.context.energy_level > energy_min:
             self._logger.debug("🔄 Turning body to face sound source")
-            if yaw > 0:  # Sound to the left
-                self.context.dog.do_action("turn_left", step_count=1, speed=70)
-            else:  # Sound to the right
-                self.context.dog.do_action("turn_right", step_count=1, speed=70)
+            # Use IMU-based small turn when available; fallback to one step
+            try:
+                dps = float(getattr(self.config, "TURN_DEGREES_PER_STEP", 15.0))
+            except Exception:
+                dps = 15.0
+            deg = float(dps if yaw > 0 else -dps)
+            tol = float(getattr(self.config, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+            tout = float(getattr(self.config, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+            if getattr(self, "orientation_service", None) is not None:
+                self._turn_by_angle(deg, 70, tolerance_deg=tol, timeout_s=tout)
+            else:
+                if yaw > 0:
+                    self.context.dog.do_action("turn_left", step_count=1, speed=70)
+                else:
+                    self.context.dog.do_action("turn_right", step_count=1, speed=70)
 
-            # Reset head to center after body turn
-            time.sleep(1)  # Wait for body turn
+            # Reset head to center after turn
+            time.sleep(1)
             self.context.dog.head_move([[0, 0, 0]], speed=60)
 
         # Vocal responses with configurable volumes
@@ -1496,7 +1637,18 @@ class Orchestrator:
                     step_count = random.randint(1, 2)
                 
                 speed = int(50 + self.context.energy_level * 35)
-                self.context.dog.do_action(action, step_count=step_count, speed=speed)
+                # If turning and IMU orientation is available, prefer angle-based turning
+                if action in ("turn_left", "turn_right") and getattr(self, "orientation_service", None) is not None:
+                    try:
+                        dps = float(getattr(self.config, "TURN_DEGREES_PER_STEP", 15.0))
+                    except Exception:
+                        dps = 15.0
+                    deg = float(step_count) * dps * (1.0 if action == "turn_left" else -1.0)
+                    tol = float(getattr(self.config, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+                    tout = float(getattr(self.config, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+                    self._turn_by_angle(deg, speed, tolerance_deg=tol, timeout_s=tout)
+                else:
+                    self.context.dog.do_action(action, step_count=step_count, speed=speed)
                 
                 # Note: Movement tracking now handled by sensor fusion localization
     
@@ -1511,7 +1663,17 @@ class Orchestrator:
                 # Simple avoidance - just turn and try again
                 turn_direction = "turn_left" if random.random() > 0.5 else "turn_right"
                 turn_speed = self._get_appropriate_turn_speed()
-                self.dog.do_action(turn_direction, step_count=self.config.TURN_STEPS_NORMAL, speed=turn_speed)
+                if getattr(self, "orientation_service", None) is not None:
+                    try:
+                        dps = float(getattr(self.config, "TURN_DEGREES_PER_STEP", 15.0))
+                    except Exception:
+                        dps = 15.0
+                    deg = float(getattr(self.config, "TURN_STEPS_NORMAL", 2)) * dps * (1.0 if turn_direction == "turn_left" else -1.0)
+                    tol = float(getattr(self.config, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+                    tout = float(getattr(self.config, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+                    self._turn_by_angle(deg, turn_speed, tolerance_deg=tol, timeout_s=tout)
+                else:
+                    self.dog.do_action(turn_direction, step_count=self.config.TURN_STEPS_NORMAL, speed=turn_speed)
                 self._logger.info(f"🚧 Simple obstacle avoidance - {turn_direction}")
                 
                 if self.patrol_logging_enabled:
@@ -1749,14 +1911,43 @@ class Orchestrator:
         self.is_walking = True
         self.last_walk_command_time = time.time()
         turn_speed = self._get_appropriate_turn_speed()
-        self.dog.do_action("turn_left", step_count=self.config.TURN_45_DEGREES, speed=turn_speed)
+        # Prefer IMU-based angle turn when available; fallback to steps
+        try:
+            dps = float(getattr(self.config, "TURN_DEGREES_PER_STEP", 15.0))
+        except Exception:
+            dps = 15.0
+        try:
+            steps_45 = int(getattr(self.config, "TURN_45_DEGREES", 3))
+        except Exception:
+            steps_45 = 3
+        deg = float(steps_45) * dps
+        tol = float(getattr(self.config, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+        tout = float(getattr(self.config, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+        if getattr(self, "orientation_service", None) is not None:
+            self._turn_by_angle(deg, turn_speed, tolerance_deg=tol, timeout_s=tout)
+        else:
+            self.dog.do_action("turn_left", step_count=steps_45, speed=turn_speed)
         
     def _voice_turn_right(self):
         """Voice command: turn right"""
         self.is_walking = True  
         self.last_walk_command_time = time.time()
         turn_speed = self._get_appropriate_turn_speed()
-        self.dog.do_action("turn_right", step_count=self.config.TURN_45_DEGREES, speed=turn_speed)
+        try:
+            dps = float(getattr(self.config, "TURN_DEGREES_PER_STEP", 15.0))
+        except Exception:
+            dps = 15.0
+        try:
+            steps_45 = int(getattr(self.config, "TURN_45_DEGREES", 3))
+        except Exception:
+            steps_45 = 3
+        deg = -float(steps_45) * dps
+        tol = float(getattr(self.config, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+        tout = float(getattr(self.config, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+        if getattr(self, "orientation_service", None) is not None:
+            self._turn_by_angle(deg, turn_speed, tolerance_deg=tol, timeout_s=tout)
+        else:
+            self.dog.do_action("turn_right", step_count=steps_45, speed=turn_speed)
     
     def generate_patrol_report(self) -> dict:
         """Generate comprehensive patrol report via LogService."""
@@ -2498,29 +2689,60 @@ class Orchestrator:
     def _test_turn_angle(self, degrees):
         """Test turn angle calibration"""
         self._logger.info(f"🧪 Testing {degrees}° turn...")
-        
-        if degrees == 45:
-            steps = self.config.TURN_45_DEGREES
-        elif degrees == 90:
-            steps = self.config.TURN_90_DEGREES
-        elif degrees == 180:
-            steps = self.config.TURN_180_DEGREES
+        # Prefer IMU-based precise turning if orientation service is available
+        if getattr(self, "orientation_service", None) is not None and bool(getattr(self.config, "ENABLE_ORIENTATION_SERVICE", True)):
+            speed = int(getattr(self.config, "SPEED_TURN_NORMAL", 200))
+            tol = float(getattr(self.config, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+            timeout_s = float(getattr(self.config, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+            self._turn_by_angle(degrees=float(degrees), speed=speed, tolerance_deg=tol, timeout_s=timeout_s)
         else:
-            return
-            
-        speed = self.config.SPEED_TURN_NORMAL
-        direction = "turn_left" if random.random() > 0.5 else "turn_right"
-        
-        self._logger.info(f"   Turning {direction} {steps} steps at speed {speed} (should be {degrees}°)")
-        self.dog.do_action(direction, step_count=steps, speed=speed)
+            if degrees == 45:
+                steps = self.config.TURN_45_DEGREES
+            elif degrees == 90:
+                steps = self.config.TURN_90_DEGREES
+            elif degrees == 180:
+                steps = self.config.TURN_180_DEGREES
+            else:
+                return
+            speed = self.config.SPEED_TURN_NORMAL
+            direction = "turn_left" if random.random() > 0.5 else "turn_right"
+            self._logger.info(f"   Turning {direction} {steps} steps at speed {speed} (should be {degrees}°)")
+            self.dog.do_action(direction, step_count=steps, speed=speed)
         
         self._log_patrol_event("TURN_TEST", f"Turn angle test: {degrees}°", {
             "target_degrees": degrees,
-            "step_count": steps,
-            "speed": speed,
-            "direction": direction,
-            "expected_degrees_per_step": self.config.TURN_DEGREES_PER_STEP
+            "method": "imu" if getattr(self, "orientation_service", None) is not None else "steps",
         })
+
+    def _turn_by_angle(self, degrees: float, speed: int, tolerance_deg: float = 5.0, timeout_s: float = 3.0) -> None:
+        """Rotate in place by a target angle using IMU heading feedback."""
+        try:
+            orientation = getattr(self, "orientation_service", None)
+            if orientation is None:
+                return
+            start = float(getattr(self.context, "current_heading", 0.0))
+            target_delta = float(degrees)
+            # Normalize to [-180, 180] for shortest path
+            def ang_diff(a: float, b: float) -> float:
+                d = (a - b + 180.0) % 360.0 - 180.0
+                return d
+            end_time = time.time() + float(timeout_s)
+            direction = "turn_left" if target_delta >= 0 else "turn_right"
+            while time.time() < end_time:
+                current = float(getattr(self.context, "current_heading", 0.0))
+                delta = ang_diff(current, start)
+                remaining = target_delta - delta
+                if abs(remaining) <= float(tolerance_deg):
+                    break
+                step_dir = "turn_left" if remaining > 0 else "turn_right"
+                # small discrete step; leverage existing step action
+                try:
+                    self.dog.do_action(step_dir, step_count=1, speed=int(speed))
+                except Exception:
+                    pass
+                time.sleep(0.1)
+        except Exception:
+            pass
 
 
 def main():

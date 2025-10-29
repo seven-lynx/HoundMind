@@ -1,5 +1,5 @@
 # Complete PiDog API Reference - BEGINNER FRIENDLY! 
-> Author: 7Lynx · Doc Version: 2025.10.24
+> Author: 7Lynx · Doc Version: 2025.10.29
 
 🎓 **For Complete Beginners:** This is your "dictionary" of all PiDog commands!
 

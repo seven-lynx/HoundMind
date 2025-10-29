@@ -150,12 +150,10 @@ class FindOpenSpaceBehavior(Behavior):
 
             try:
                 if abs(center_angle) > 0:
-                    steps_turn = turn_steps_normal if abs(center_angle) >= 30 else turn_steps_small
-                    if center_angle < 0:
-                        dog.do_action('turn_left', step_count=steps_turn, speed=turn_speed)
-                    else:
-                        dog.do_action('turn_right', step_count=steps_turn, speed=turn_speed)
-                    dog.wait_all_done()
+                    # Prefer precise IMU-based turning toward the chosen angle; fallback handled by MotionService
+                    tol = float(getattr(cfg, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+                    tout = float(getattr(cfg, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+                    ctx.motion.turn_by_angle(float(center_angle), turn_speed, ctx, tolerance_deg=tol, timeout_s=tout)
                 dog.do_action('forward', step_count=forward_steps, speed=forward_speed)
                 dog.wait_all_done()
             except Exception as e:

@@ -1,5 +1,5 @@
 # PiDog Quick Start Programming Guide
-> Author: 7Lynx · Doc Version: 2025.10.24
+> Author: 7Lynx · Doc Version: 2025.10.29
 
 Get started programming your PiDog in 5 minutes with these essential code patterns.
 

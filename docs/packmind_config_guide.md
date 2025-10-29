@@ -1,5 +1,5 @@
 # PackMind Configuration Guide
-> Author: 7Lynx · Doc Version: 2025.10.24
+> Author: 7Lynx · Doc Version: 2025.10.29
 
 This is the canonical configuration guide for PackMind. All references should point here (`docs/packmind_config_guide.md`).
 
@@ -42,6 +42,40 @@ Switching presets:
 - SPEED_SLOW | SPEED_NORMAL | SPEED_FAST | SPEED_EMERGENCY: Motion speeds (0‑255)
 - SPEED_TURN_SLOW | SPEED_TURN_NORMAL | SPEED_TURN_FAST: Turn speeds (should be ≥ walk speeds)
 - TURN_DEGREES_PER_STEP | TURN_45_DEGREES | TURN_90_DEGREES | TURN_180_DEGREES: Turn calibration aids
+
+## Orientation (IMU yaw)
+- ENABLE_ORIENTATION_SERVICE (bool): Enable IMU-based heading integration (gyro Z → heading degrees).
+- ORIENTATION_GYRO_SCALE: Scale factor converting gyro Z units to deg/s.
+- ORIENTATION_BIAS_Z: Bias to subtract from gyro Z (drift compensation).
+- ORIENTATION_TURN_TOLERANCE_DEG: Allowed error when turning by angle.
+- ORIENTATION_MAX_TURN_TIME_S: Safety timeout for turn-by-angle loops.
+
+Notes:
+- When enabled, the orchestrator updates an internal `current_heading` each sensor tick.
+- Obstacle avoidance can use precise IMU-based turning instead of fixed steps.
+- If disabled or heading unavailable, the system falls back to step-based turns using `TURN_DEGREES_PER_STEP`.
+- Real-world turning can vary with speed and surface; the IMU closed-loop approach compensates for this automatically. Only the fallback step path depends on `TURN_DEGREES_PER_STEP` calibration.
+
+## Turn calibration tool
+- Run `python tools/turn_calibration.py` on the PiDog to auto-calibrate turning.
+- The tool measures degrees-per-step at your configured speeds and updates:
+	- PackMind: `TURN_DEGREES_PER_STEP` and derived `TURN_45_DEGREES`/`TURN_90_DEGREES`/`TURN_180_DEGREES`
+	- CanineCore: `TURN_DEGREES_PER_STEP` and `TURN_DPS_BY_SPEED`
+
+## Localization and recovery (sensor fusion)
+When SLAM and sensor fusion are enabled, PackMind maintains a probabilistic pose estimate (particle filter) and monitors confidence. If confidence dips, it can actively recover by sweeping the ultrasonic sensor and re-weighting the filter.
+
+Settings in `packmind_config.py`:
+- `LOCALIZATION_ACTIVE_RECOVERY` (bool): Enable automatic recovery sweeps on low confidence.
+- `LOCALIZATION_CONFIDENCE_LOW` (0..1): Confidence threshold to trigger recovery (default 0.35).
+- `LOCALIZATION_RECOVERY_MIN_INTERVAL_S` (s): Minimum time between recovery attempts.
+- `LOCALIZATION_RECOVERY_SWEEPS`: How many sweep passes per attempt.
+- `LOCALIZATION_RECOVERY_SWEEP_LEFT` / `LOCALIZATION_RECOVERY_SWEEP_RIGHT` (deg): Sweep bounds.
+- `LOCALIZATION_RECOVERY_STEP_DEG` (deg): Sweep step size.
+
+Behavior:
+- During the main loop, if confidence is below the threshold and the minimum interval has elapsed, the orchestrator performs a short head sweep and feeds the bearing‑tagged distances back into the localizer.
+- This helps the filter converge again without user input and slightly increases near‑term scan density.
 
 ## Behavior timing
 - PATROL_DURATION_MIN | PATROL_DURATION_MAX (s): Patrol dwell suggestion
@@ -172,6 +206,12 @@ To validate config (optional):
 ```powershell
 python packmind/packmind_config.py
 ```
+
+IMU turn sanity check (optional):
+```powershell
+python tools/imu_turn_test.py
+```
+This rotates +90° then -90° using IMU closed‑loop and prints the final angular error for quick validation after calibration.
 
 ## Tips
 - Start with a preset closest to your use case, then tune only what’s needed (e.g., OBSTACLE_SAFE_DISTANCE, SPEED_NORMAL).

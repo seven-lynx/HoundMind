@@ -14,7 +14,7 @@ Features:
 - Balance event logging and statistics
 
 Author: 7Lynx
-Version: 2025.10.24.2
+Version: 2025.10.29
 Created: 2024
 """
 

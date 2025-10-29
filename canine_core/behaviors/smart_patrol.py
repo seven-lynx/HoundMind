@@ -266,7 +266,15 @@ class SmartPatrolBehavior(Behavior):
                     dir_name = "left" if left > right else "right"
                     dog.do_action("backward", step_count=max(1, int(getattr(cfg, "BACKUP_STEPS", 3) // 2)), speed=SPEED_EMERGENCY)
                     dog.wait_all_done()
-                    dog.do_action(f"turn_{dir_name}", step_count=turn_steps, speed=SPEED_TURN_NORMAL)
+                    # IMU-assisted precise turn when available; fallback handled in MotionService
+                    try:
+                        dps = float(getattr(cfg, "TURN_DEGREES_PER_STEP", 15.0))
+                    except Exception:
+                        dps = 15.0
+                    deg = float(turn_steps) * dps * (1.0 if dir_name == "left" else -1.0)
+                    tol = float(getattr(cfg, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+                    tout = float(getattr(cfg, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+                    ctx.motion.turn_by_angle(deg, SPEED_TURN_NORMAL, ctx, tolerance_deg=tol, timeout_s=tout)
                     # learning: record forward approach
                     try:
                         if getattr(ctx, "learning", None) is not None:
@@ -276,7 +284,15 @@ class SmartPatrolBehavior(Behavior):
                 elif action.startswith("turn_"):
                     self._led_state("navigating")
                     dir_name = action.replace("turn_", "")
-                    dog.do_action(f"turn_{dir_name}", step_count=int(params.get("steps", getattr(cfg, "TURN_STEPS_SMALL", 1))), speed=SPEED_TURN_NORMAL)
+                    steps = int(params.get("steps", getattr(cfg, "TURN_STEPS_SMALL", 1)))
+                    try:
+                        dps = float(getattr(cfg, "TURN_DEGREES_PER_STEP", 15.0))
+                    except Exception:
+                        dps = 15.0
+                    deg = float(steps) * dps * (1.0 if dir_name == "left" else -1.0)
+                    tol = float(getattr(cfg, "ORIENTATION_TURN_TOLERANCE_DEG", 5.0))
+                    tout = float(getattr(cfg, "ORIENTATION_MAX_TURN_TIME_S", 3.0))
+                    ctx.motion.turn_by_angle(deg, SPEED_TURN_NORMAL, ctx, tolerance_deg=tol, timeout_s=tout)
                     # learning: record command turns
                     try:
                         if getattr(ctx, "learning", None) is not None:

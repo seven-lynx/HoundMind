@@ -1,9 +1,8 @@
 # Complete PiDog Programming Guide
-> Author: 7Lynx · Doc Version: 2025.10.24
+> Author: 7Lynx · Doc Version: 2025.10.29
 
 > **The definitive beginner-friendly guide to programming the SunFounder PiDog robotic dog with Python**
-
-- Last updated: 2025-10-22
+ 
 - Target audience: **Complete beginners to advanced programmers**
 - Prerequisites: **No prior robotics experience required!** Basic Python helpful but not essential
 - Hardware: SunFounder PiDog robotic dog (fully assembled)
