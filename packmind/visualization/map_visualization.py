@@ -23,21 +23,21 @@ from typing import Dict, List, Tuple, Optional
 
 # Support both package and script execution imports
 try:
-    from packmind.mapping.home_mapping import HouseMap, CellType, Position  # preferred import
+    from packmind.mapping.home_mapping import HomeMap, CellType, Position  # preferred import
 except Exception:
     try:
-        from mapping.home_mapping import HouseMap, CellType, Position  # relative folder execution
+        from mapping.home_mapping import HomeMap, CellType, Position  # relative folder execution
     except Exception:
         try:
             raise ImportError("Home mapping module not found")
         except Exception:
-            from home_mapping import HouseMap, CellType, Position
+            from home_mapping import HomeMap, CellType, Position
 
 
 class MapVisualizer:
     """Visualization system for PiDog house maps"""
     
-    def __init__(self, house_map: HouseMap):
+    def __init__(self, house_map: HomeMap):
         self.house_map = house_map
         
         # ASCII characters for different cell types
@@ -45,9 +45,6 @@ class MapVisualizer:
             CellType.UNKNOWN: '.',
             CellType.FREE: ' ',
             CellType.OBSTACLE: '█',
-            CellType.DYNAMIC: '▓',
-            CellType.LANDMARK: '◊',
-            CellType.ROOM_CENTER: '●'
         }
         
         # Colors for terminal display (ANSI escape codes)
@@ -55,9 +52,6 @@ class MapVisualizer:
             CellType.UNKNOWN: '\033[90m',  # Dark gray
             CellType.FREE: '\033[97m',     # White
             CellType.OBSTACLE: '\033[91m', # Red
-            CellType.DYNAMIC: '\033[93m',  # Yellow
-            CellType.LANDMARK: '\033[94m', # Blue
-            CellType.ROOM_CENTER: '\033[92m'  # Green
         }
         
         self.reset_color = '\033[0m'
@@ -147,11 +141,9 @@ class MapVisualizer:
             ("🤖", "Robot Position"),
             ("→", "Navigation Path"),
             ("█", "Obstacles"),
-            ("▓", "Dynamic Objects"),
-            ("◊", "Landmarks"),
-            ("●", "Room Centers"),
             (" ", "Free Space"),
-            (".", "Unknown")
+            (".", "Unknown"),
+            ("*", "Anchor/Visual Tag")
         ]
         
         for i, (char, description) in enumerate(legend_items):
@@ -163,43 +155,19 @@ class MapVisualizer:
         if len(legend_items) % 2 == 1:
             print()  # Final newline if odd number of legend items
     
-    def print_room_summary(self):
-        """Print summary of detected rooms"""
-        if not self.house_map.rooms:
-            print("🏠 No rooms detected yet")
+    def print_anchor_summary(self):
+        """Print summary of detected visual anchors (AprilTags, QR codes, etc.)"""
+        anchors = getattr(self.house_map, 'anchors', {})
+        if not anchors:
+            print("🔖 No visual anchors detected yet")
             return
-        
-        print(f"\n🏠 Detected Rooms ({len(self.house_map.rooms)}):")
+        print(f"\n🔖 Detected Anchors ({len(anchors)}):")
         print("-" * 50)
-        
-        for room_id, room in self.house_map.rooms.items():
-            center_x, center_y = room.center.x, room.center.y
-            width = (room.bounds[2] - room.bounds[0]) * self.house_map.cell_size_cm / 100
-            height = (room.bounds[3] - room.bounds[1]) * self.house_map.cell_size_cm / 100
-            
-            print(f"Room {room_id}: {room.room_type.title()}")
-            print(f"  Center: ({center_x:.1f}, {center_y:.1f})")
-            print(f"  Size: {room.estimated_size:.1f}m² ({width:.1f}m × {height:.1f}m)")
-            print(f"  Confidence: {room.confidence:.2f}")
-            print()
+        for anchor_id, pos in anchors.items():
+            print(f"Anchor {anchor_id}: ({pos.x:.1f}, {pos.y:.1f}) heading={getattr(pos, 'heading', 0.0):.1f}° confidence={getattr(pos, 'confidence', 1.0):.2f}")
+        print()
     
-    def print_landmark_summary(self):
-        """Print summary of detected landmarks"""
-        if not self.house_map.landmarks:
-            print("🎯 No landmarks detected yet")
-            return
-        
-        print(f"\n🎯 Detected Landmarks ({len(self.house_map.landmarks)}):")
-        print("-" * 50)
-        
-        for landmark_id, landmark in self.house_map.landmarks.items():
-            pos_x, pos_y = landmark.position.x, landmark.position.y
-            
-            print(f"Landmark {landmark_id}: {landmark.landmark_type}")
-            print(f"  Position: ({pos_x:.1f}, {pos_y:.1f})")
-            print(f"  Description: {landmark.description}")
-            print(f"  Confidence: {landmark.confidence:.2f}")
-            print()
+    # Landmarks are now handled as anchors or semantic labels
     
     def export_to_json(self, filename: str) -> bool:
         """
@@ -240,27 +208,10 @@ class MapVisualizer:
                 },
                 "summary": map_summary,
                 "cells": occupied_cells,
-                "rooms": {
-                    str(room_id): {
-                        "id": room.room_id,
-                        "type": room.room_type,
-                        "center": {"x": room.center.x, "y": room.center.y},
-                        "bounds": room.bounds,
-                        "size_m2": room.estimated_size,
-                        "confidence": room.confidence
-                    }
-                    for room_id, room in self.house_map.rooms.items()
-                },
-                "landmarks": {
-                    str(landmark_id): {
-                        "id": landmark_id,
-                        "type": landmark.landmark_type,
-                        "position": {"x": landmark.position.x, "y": landmark.position.y},
-                        "description": landmark.description,
-                        "confidence": landmark.confidence
-                    }
-                    for landmark_id, landmark in self.house_map.landmarks.items()
-                }
+                "anchors": [
+                    {"id": anchor_id, "x": pos.x, "y": pos.y, "heading": getattr(pos, 'heading', 0.0), "confidence": getattr(pos, 'confidence', 1.0)}
+                    for anchor_id, pos in getattr(self.house_map, 'anchors', {}).items()
+                ]
             }
             
             # Write to file
@@ -348,24 +299,13 @@ class MapVisualizer:
                 report_lines.append(f"{cell_type.replace('_', ' ').title()}: {count} cells")
         report_lines.append("")
         
-        # Rooms
-        if self.house_map.rooms:
-            report_lines.append(f"Detected Rooms ({len(self.house_map.rooms)}):")
+        # Anchors
+        anchors = getattr(self.house_map, 'anchors', {})
+        if anchors:
+            report_lines.append(f"Detected Anchors ({len(anchors)}):")
             report_lines.append("-" * 20)
-            for room_id, room in self.house_map.rooms.items():
-                report_lines.append(f"Room {room_id}: {room.room_type.title()}")
-                report_lines.append(f"  Size: {room.estimated_size:.1f}m²")
-                report_lines.append(f"  Confidence: {room.confidence:.2f}")
-            report_lines.append("")
-        
-        # Landmarks
-        if self.house_map.landmarks:
-            report_lines.append(f"Detected Landmarks ({len(self.house_map.landmarks)}):")
-            report_lines.append("-" * 20)
-            for landmark_id, landmark in self.house_map.landmarks.items():
-                report_lines.append(f"Landmark {landmark_id}: {landmark.landmark_type}")
-                report_lines.append(f"  Position: ({landmark.position.x:.1f}, {landmark.position.y:.1f})")
-                report_lines.append(f"  Confidence: {landmark.confidence:.2f}")
+            for anchor_id, pos in anchors.items():
+                report_lines.append(f"Anchor {anchor_id}: ({pos.x:.1f}, {pos.y:.1f}) heading={getattr(pos, 'heading', 0.0):.1f}° confidence={getattr(pos, 'confidence', 1.0):.2f}")
             report_lines.append("")
         
         return "\n".join(report_lines)
@@ -428,7 +368,7 @@ class LiveMapDisplay:
         self.running = False
 
 
-def create_map_visualizer(house_map: HouseMap) -> MapVisualizer:
+def create_map_visualizer(house_map) -> MapVisualizer:
     """
     Factory function to create a map visualizer
     
@@ -442,7 +382,7 @@ def create_map_visualizer(house_map: HouseMap) -> MapVisualizer:
 
 
 # Example usage functions
-def demo_visualization(house_map: HouseMap):
+def demo_visualization(house_map):
     """Demo the visualization system"""
     visualizer = MapVisualizer(house_map)
     
@@ -453,8 +393,7 @@ def demo_visualization(house_map: HouseMap):
     visualizer.print_map()
     
     # Show summaries
-    visualizer.print_room_summary()
-    visualizer.print_landmark_summary()
+    visualizer.print_anchor_summary()
     
     # Export examples
     timestamp = int(time.time())

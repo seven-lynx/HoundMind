@@ -20,7 +20,7 @@ import heapq
 import math
 from typing import List, Tuple, Optional, Dict, Set
 from dataclasses import dataclass
-from packmind.mapping.home_mapping import HouseMap, CellType, Position
+from packmind.mapping.home_mapping import HomeMap, CellType, Position
 
 
 @dataclass
@@ -39,25 +39,19 @@ class PathNode:
 
 class PiDogPathfinder:
     """A* pathfinding system for PiDog navigation"""
-    
-    def __init__(self, house_map: HouseMap):
+    def __init__(self, house_map: HomeMap):
         self.house_map = house_map
         self.current_path: List[Tuple[int, int]] = []
         self.path_index = 0
-        
         # Pathfinding parameters
         self.diagonal_cost = 1.414  # sqrt(2)
         self.straight_cost = 1.0
         self.obstacle_buffer = 2  # Cells to buffer around obstacles
-        
-        # Movement costs for different cell types
+        # Movement costs for different cell types (only valid CellType members)
         self.movement_costs = {
             CellType.FREE: 1.0,
             CellType.UNKNOWN: 2.0,  # Higher cost for unexplored areas
             CellType.OBSTACLE: float('inf'),  # Impassable
-            CellType.DYNAMIC: 5.0,  # Higher cost, but passable (might move)
-            CellType.LANDMARK: 1.5,  # Slightly higher cost
-            CellType.ROOM_CENTER: 0.8  # Lower cost - prefer room centers
         }
     
     def find_path(self, start_pos: Tuple[int, int], goal_pos: Tuple[int, int]) -> List[Tuple[int, int]]:
@@ -148,47 +142,7 @@ class PiDogPathfinder:
         
         return []  # No path found
     
-    def navigate_to_room(self, target_room_id: int) -> List[Tuple[int, int]]:
-        """
-        Navigate to a specific room
-        
-        Args:
-            target_room_id: ID of the target room
-            
-        Returns:
-            Path to the room center, empty if room not found
-        """
-        if target_room_id not in self.house_map.rooms:
-            return []
-        
-        target_room = self.house_map.rooms[target_room_id]
-        current_pos = self.house_map.get_position()
-        
-        start_pos = (int(current_pos.x), int(current_pos.y))
-        goal_pos = (int(target_room.center.x), int(target_room.center.y))
-        
-        return self.find_path(start_pos, goal_pos)
-    
-    def navigate_to_landmark(self, landmark_id: int) -> List[Tuple[int, int]]:
-        """
-        Navigate to a specific landmark
-        
-        Args:
-            landmark_id: ID of the target landmark
-            
-        Returns:
-            Path to the landmark, empty if landmark not found
-        """
-        if landmark_id not in self.house_map.landmarks:
-            return []
-        
-        target_landmark = self.house_map.landmarks[landmark_id]
-        current_pos = self.house_map.get_position()
-        
-        start_pos = (int(current_pos.x), int(current_pos.y))
-        goal_pos = (int(target_landmark.position.x), int(target_landmark.position.y))
-        
-        return self.find_path(start_pos, goal_pos)
+    # Room and landmark navigation removed (legacy). Use anchor/semantic APIs if needed.
     
     def find_exploration_target(self, exploration_radius: int = 50) -> Optional[Tuple[int, int]]:
         """

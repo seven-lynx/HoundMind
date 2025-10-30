@@ -1,27 +1,29 @@
+
 # HoundMind — Advanced Behaviors and AI for SunFounder PiDog
-> Author: 7Lynx · Doc Version: 2025.10.29
+> Author: 7Lynx · Doc Version: 2025.10.29b
 
-HoundMind is the umbrella project that provides two related but completely independent ways to run your PiDog:
 
-- CanineCore: a modular behavior framework for composing and interactively running behaviors.
-- PackMind: a standalone AI with its own orchestrator, services, and optional mapping/navigation stack.
+HoundMind is a next-generation AI and behavior framework for the SunFounder PiDog, featuring:
 
-Use either system. They don’t import or depend on each other.
+- **CanineCore**: Modular async orchestrator and behavior system for composing, running, and extending behaviors and services.
+- **PackMind**: Standalone AI orchestrator with advanced mapping, navigation, sensor fusion, and intelligent services.
 
-Legacy modules for the old system are stored in the legacy folder, and the entire project has been forked at https://github.com/DrMikeKW/Pidog-New_Scripts/
+Both systems are independent—choose the one that fits your needs. All legacy mapping/navigation logic has been fully removed and replaced with a modern, sensor-fusion-based HomeMap system. Legacy modules are archived in the `legacy/` folder.
+
 
 ## What's inside
 
-- **CanineCore** (`canine_core/`): async orchestrator, services (motion, sensors, emotions, voice), and behavior modules.
-- **PackMind** (`packmind/`): AI orchestrator plus subsystems for mapping (SLAM), navigation (A*), localization (sensor fusion), voice, scanning, obstacle handling, and **new AI services** (face recognition, dynamic balance, enhanced audio).
-- **Docs** (`docs/`): programming guides, API reference, voice setup, and config guides.
-- **Tools** (`tools/`): setup utilities and integration tests (formerly `scripts/`).
-- **Examples** (`examples/`): runnable examples.
-- **Legacy** (`legacy/`): archived test modules and examples (not actively maintained)
+- **CanineCore** (`canine_core/`): Async orchestrator, modular services (motion, sensors, emotions, voice), and composable behavior modules.
+- **PackMind** (`packmind/`): AI orchestrator with advanced mapping (HomeMap), navigation (A*), sensor fusion, localization, face recognition, dynamic balance, enhanced audio, and more.
+- **Docs** (`docs/`): Programming guides, API reference, config guides, and architecture docs.
+- **Tools** (`tools/`): Setup utilities and integration tests.
+- **Examples** (`examples/`): Runnable code examples.
+- **Legacy** (`legacy/`): Archived modules (pre-2025, not maintained).
+
 
 ## Quick install and run on the Raspberry Pi 🧰
 
-Requirements
+Requirements 
 
 - Raspberry Pi with PiDog assembled and powered
 - Raspberry Pi OS (Bookworm or compatible), Python 3.9+
@@ -41,6 +43,7 @@ cd HoundMind
 pip3 install -r requirements.txt
 ```
 
+
 Optional: enable voice features
 
 ```bash
@@ -48,9 +51,10 @@ sudo apt update && sudo apt install -y portaudio19-dev python3-pyaudio
 pip3 install speech_recognition pyaudio
 ```
 
+
 3) Run one of the systems
 
-PackMind (standalone AI)
+**PackMind (standalone AI, with advanced mapping/navigation):**
 
 ```bash
 python3 packmind/orchestrator.py
@@ -58,7 +62,7 @@ python3 packmind/orchestrator.py
 python3 packmind.py
 ```
 
-CanineCore (modular behaviors)
+**CanineCore (modular behaviors):**
 
 ```bash
 python3 main.py                # Orchestrator default
@@ -67,24 +71,33 @@ python3 canine_core/control.py # Interactive behavior menu
 
 Tip: On a development PC without hardware, many hardware services fallback to safe no-ops. Camera/audio/servos still require proper setup when you move to the Pi.
 
+
 ## Which should I choose?
 
-- PackMind: batteries‑included AI demo that coordinates sensing, emotions, scanning, and optional mapping/navigation.
-- CanineCore: clean, composable framework to mix and match behaviors and services; ideal for building your own modules.
+- **PackMind**: Full-featured AI demo with advanced mapping (HomeMap), navigation, sensor fusion, and intelligent services. Ideal for autonomous exploration, navigation, and advanced behaviors.
+- **CanineCore**: Clean, composable framework for building your own behaviors and services. Great for custom projects and interactive control.
 
 ## Features at a glance
+
 
 ### Core Features
 - Voice commands with optional wake word (when enabled)
 - Intelligent scanning and obstacle avoidance
 - Behavior orchestration and state handling
 - Emotional LED themes and reactive sounds
-- Optional SLAM mapping, A* navigation, and sensor‑fusion localization (PackMind)
+- **Modern HomeMap mapping/navigation** (PackMind):
+	- Openings and safe_paths for robust navigation
+	- Bayesian occupancy grid with dynamic obstacle fading
+	- Visual anchors and semantic map labels
+	- Sensor fusion (camera, IMU, distance, touch, sound)
+	- Advanced map visualization and export
+- A* navigation and sensor-fusion localization
 
 ### 🆕 Advanced AI Services (PackMind)
 - **Face Recognition**: Real-time facial detection with personality adaptation and relationship building
 - **Dynamic Balance**: IMU-based balance monitoring with automatic tilt correction and fall prevention
 - **Enhanced Audio Processing**: Multi-source sound tracking, voice activity detection, and intelligent noise filtering
+
 
 ## Project layout
 
@@ -117,9 +130,10 @@ HoundMind/
 ├─ LICENSE
 └─ README.md
 
+
 ## Modules overview
 
-This is a quick map of the major modules and what they do. Use it to jump into the parts you care about.
+This is a quick map of the major modules and what they do. All mapping/navigation logic is now based on the new HomeMap system—no legacy code remains.
 
 - Top-level launchers
 	- `main.py`: Starts CanineCore’s orchestrator with your chosen config/preset.
@@ -163,15 +177,20 @@ This is a quick map of the major modules and what they do. Use it to jump into t
 		- `sensor_monitor.py`: Periodic sensor polling with error backoff
 		- `scanning_coordinator.py`: Intelligent obstacle scanning loop
 		- `voice_runtime.py`: Wake-word + command capture loop (configurable mic/timeouts/VAD)
-	- `mapping/`, `nav/`, `localization/`, `visualization/`: House map, pathfinding (A*), sensor fusion, plotting
+		- `mapping/`, `nav/`, `localization/`, `visualization/`: 
+			- `mapping/home_mapping.py`: HomeMap class (openings, safe_paths, anchors, semantic labels, sensor fusion)
+			- `nav/pathfinding.py`: A* pathfinding using HomeMap
+			- `localization/`: Sensor-fusion localization
+			- `visualization/map_visualization.py`: Advanced map visualization and export
 	- `behaviors/`: High-level PackMind behaviors (exploring, patrolling, interacting, etc.)
 	- `packmind_config.py`: Tunable settings (SOUND_*, VOICE_*, SCAN_*, ENERGY_*, NAV_*, WATCHDOG_*, etc.)
 	- `packmind_docs/`: Architecture and configuration guides
 ```
 
+
 ## How modules interact (at a glance)
 
-High-level dataflow and control paths for each system.
+High-level dataflow and control paths for each system. All navigation and mapping now use HomeMap and advanced sensor fusion.
 
 ### CanineCore interactions
 
@@ -219,8 +238,10 @@ packmind.py / packmind/orchestrator.py
 			- dynamic_balance_service.py → tilt/fall events → safety/emotions
 			- enhanced_audio_processing_service.py → VAD/sound → attention
 			- voice_service.py → speech playback/utilities
-	↔ mapping/ (house_mapping), nav/ (PiDogPathfinder, NavigationController), localization/
-			- SLAM/position feed → nav path/waypoints → orchestrator → motion
+    ↔ mapping/ (home_mapping), nav/ (A* pathfinding), localization/
+	    - HomeMap (openings, safe_paths, anchors, semantic labels, sensor fusion)
+	    - Map queries and updates via HomeMap API
+	    - Pathfinding and navigation use HomeMap exclusively
 	↔ services/log_service.py and README logging hooks (patrol events)
 	← packmind_config.py (SOUND_*, VOICE_*, SCAN_*, ENERGY_*, NAV_*, WATCHDOG_*, etc.)
 Hardware
@@ -246,6 +267,7 @@ python packmind/orchestrator.py # PackMind
 
 Note: Hardware‑dependent features won’t function fully without PiDog.
 
+
 ## Documentation
 
 - Programming Guide: `docs/PIDOG_PROGRAMMING_GUIDE.md`
@@ -254,8 +276,8 @@ Note: Hardware‑dependent features won’t function fully without PiDog.
 - Voice Setup: `docs/voice_setup_instructions.md`
 - CanineCore configuration: `docs/canine_core_config_guide.md`
 - PackMind architecture: `packmind/packmind_docs/ARCHITECTURE.md`
- - PackMind configuration: `docs/packmind_config_guide.md`
-  
+- PackMind configuration: `docs/packmind_config_guide.md`
+- **Mapping & Navigation**: See `packmind/mapping/home_mapping.py` and `packmind/packmind_docs/intelligent_obstacle_avoidance_guide.md` for advanced HomeMap usage and API details.
 
 ## Testing & Tools
 
@@ -291,16 +313,35 @@ Run integration tests:
 python tools/test_service_integration.py
 ```
 
+
 ## Troubleshooting
 
 - If `pidog` imports fail on the Pi, install the official SunFounder libraries and verify servo calibration.
 - For voice issues, confirm `portaudio19-dev` and `pyaudio` are installed and a default input device is set.
 - On desktops without hardware, expect safe no‑ops for hardware calls.
+- For mapping/navigation issues, ensure your configuration in `packmind/packmind_config.py` enables the correct HomeMap features and that all sensors are properly connected. See the config guide for details.
 
 ## License
 
 See `LICENSE` for details.
 
--
+
+---
+
+## Modern Mapping & Navigation (PackMind)
+
+All mapping and navigation in PackMind is now powered by the HomeMap system:
+
+- **Openings**: Automatically detected and user-registered doorways, passages, and exits.
+- **Safe Paths**: Dynamically updated, sensor-fused paths through the environment, avoiding obstacles and hazards.
+- **Anchors**: Visual or semantic map anchors for robust localization and behavior triggers.
+- **Semantic Labels**: User- or AI-assigned labels for map regions (e.g., "kitchen", "charging station").
+- **Sensor Fusion**: Combines camera, IMU, distance, touch, and sound for robust mapping and navigation.
+- **Dynamic Obstacle Fading**: Temporary obstacles fade over time for adaptive path planning.
+- **Advanced Visualization**: Export and visualize maps with all features, anchors, and safe paths.
+
+See the API reference and mapping guide for usage patterns and advanced queries.
+
+---
 
 Built to help you teach, learn, and explore with PiDog.

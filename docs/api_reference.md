@@ -1,5 +1,6 @@
-# Complete PiDog API Reference - BEGINNER FRIENDLY! 
-> Author: 7Lynx · Doc Version: 2025.10.29
+
+# Complete PiDog & HoundMind API Reference (2025.10.29b)
+> Author: 7Lynx · Doc Version: 2025.10.29b
 
 🎓 **For Complete Beginners:** This is your "dictionary" of all PiDog commands!
 
@@ -17,7 +18,72 @@ Think of this like a menu at a restaurant:
 
 ---
 
+
 ## 🤖 Core PiDog Class - Your Robot Controller
+---
+
+## 🗺️ HomeMap Mapping & Navigation API (PackMind)
+
+**All mapping and navigation in PackMind is now powered by the HomeMap system.**
+
+### HomeMap Class
+
+```python
+from packmind.mapping.home_mapping import HomeMap, Position, SafePath
+
+home_map = HomeMap(config)
+```
+
+### Key Methods & Features
+
+| Method | Description |
+|--------|-------------|
+| `update_cell_from_sensor(position, sensor_data)` | Update map cell with new sensor reading (distance, camera, etc.) |
+| `fade_dynamic_obstacles()` | Gradually fade temporary obstacles for adaptive planning |
+| `register_anchor(position, label)` | Add a visual/semantic anchor for localization or behavior triggers |
+| `set_cell_label(position, label)` | Assign a semantic label to a map cell (e.g., "kitchen") |
+| `fuse_sensor_data(position, sensor_dict)` | Fuse multiple sensor readings for robust mapping |
+| `find_openings()` | Return list of detected or registered openings (doorways, passages) |
+| `find_safe_paths(start, goal)` | Compute safe, sensor-fused paths between points |
+| `export_map_image(filename)` | Save a visualization of the current map |
+| `get_anchors()` | List all anchors and their labels |
+| `get_cell_label(position)` | Get the semantic label for a cell |
+| `query_region(label)` | Get all cells/positions with a given semantic label |
+
+### Data Structures
+
+- **Position**: (x, y, theta) or (row, col) depending on config
+- **SafePath**: List of Position objects representing a safe, traversable path
+- **Anchor**: Named/typed map marker for localization or behavior
+
+### Usage Example
+
+```python
+from packmind.mapping.home_mapping import HomeMap, Position
+
+home_map = HomeMap(config)
+pos = Position(x=5, y=10)
+sensor_data = {"distance": 42, "camera": "open"}
+home_map.update_cell_from_sensor(pos, sensor_data)
+home_map.fade_dynamic_obstacles()
+home_map.register_anchor(pos, label="charging_station")
+openings = home_map.find_openings()
+safe_path = home_map.find_safe_paths(start, goal)
+home_map.export_map_image("map.png")
+```
+
+### Advanced Features
+
+- **Bayesian occupancy grid** for robust mapping
+- **Dynamic obstacle fading** for adaptive navigation
+- **Visual/semantic anchors** for localization and behavior
+- **Sensor fusion**: camera, IMU, distance, touch, sound
+- **Semantic map labels** for region-based behaviors
+- **Advanced query API** for custom navigation and behavior logic
+
+See `packmind/mapping/home_mapping.py` and the mapping guide for full details.
+
+---
 
 ### Creating Your PiDog Controller (Constructor)
 
@@ -483,4 +549,14 @@ def show_buffer_status(dog):
     print(f"Exit flag: {dog.exit_flag}")
 ```
 
-This completes the comprehensive PiDog API reference with all methods, parameters, return values, and practical usage examples based on the actual source code.
+---
+
+## 🗺️ Modern Mapping & Navigation (PackMind)
+
+All mapping/navigation logic is now based on the HomeMap system. Legacy classes (HouseMap, PiDogSLAM, etc.) are fully removed. Use the HomeMap API for all map, path, and anchor operations.
+
+See the mapping guide and `packmind/mapping/home_mapping.py` for advanced usage and extension.
+
+---
+
+This completes the comprehensive PiDog & HoundMind API reference, including all new mapping/navigation features and usage patterns.

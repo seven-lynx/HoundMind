@@ -63,12 +63,12 @@ except ImportError:
 # SLAM and navigation imports
 try:
     try:
-        from packmind.mapping.home_mapping import PiDogSLAM, CellType
+        from packmind.mapping.home_mapping import HomeMap, CellType
     except Exception:
         try:
-            from mapping.home_mapping import PiDogSLAM, CellType
+            from mapping.home_mapping import HomeMap, CellType
         except Exception:
-            from home_mapping import PiDogSLAM, CellType
+            from home_mapping import HomeMap, CellType
 
     try:
         from packmind.nav.pathfinding import PiDogPathfinder, NavigationController
@@ -224,28 +224,25 @@ class Orchestrator:
             self.patrol_session_id = None
             self.log_file_path = None
         
-        # SLAM mapping system (configurable)
+        # Mapping system (configurable)
         if self.slam_enabled:
-            self.slam_system = PiDogSLAM(f"house_map_{self.patrol_session_id}.pkl")
-            self.pathfinder = PiDogPathfinder(self.slam_system.house_map)
+            self.home_map = HomeMap()
+            self.pathfinder = PiDogPathfinder(self.home_map)
             if self.autonomous_nav_enabled:
                 self.nav_controller = NavigationController(self.pathfinder)
             else:
-                # Navigation disabled; leave controller unset
                 self.nav_controller = None
-                
             if self.sensor_fusion_enabled:
-                self.sensor_localizer = SensorFusionLocalizer(self.slam_system.house_map)
+                self.sensor_localizer = SensorFusionLocalizer(self.home_map)
             else:
                 self.sensor_localizer = None
-                
-            self._logger.info("🗺️ SLAM system initialized")
+            self._logger.info("🗺️ HomeMap mapping system initialized")
             if self.autonomous_nav_enabled:
                 self._logger.info("🧭 Pathfinding system initialized")
             if self.sensor_fusion_enabled:
                 self._logger.info("📍 Sensor fusion localizer initialized")
         else:
-            self.slam_system = None
+            self.home_map = None
             self.pathfinder = None
             self.nav_controller = None
             self.sensor_localizer = None
@@ -606,9 +603,7 @@ class Orchestrator:
                 "slam_enabled": self.slam_enabled
             })
             
-            # Start SLAM system
-            if self.slam_system:
-                self.slam_system.start()
+            # Start mapping system (no legacy SLAM system)
             self._log_patrol_event("SLAM", "Home mapping system started")
                 
             # Start sensor fusion localization
@@ -841,21 +836,12 @@ class Orchestrator:
             "scan_results": scan_results,
             "threats_detected": [d for d, dist in scan_results.items() if dist < 40],
         })
-        if self.slam_system:
-            self.slam_system.update_from_scan(scan_results)
-            if self.sensor_localizer:
-                angle_mapping = {'forward': 0.0, 'left': 45.0, 'right': -45.0}
-                for direction, distance in scan_results.items():
-                    if distance > 0 and direction in angle_mapping:
-                        self.sensor_localizer.update_ultrasonic(distance, angle_mapping[direction])
-            nav_info = self.slam_system.get_navigation_info()
-            if nav_info:
-                self._log_patrol_event("SLAM_NAV", "Navigation info updated", {
-                    "current_room": nav_info.get("room_info"),
-                    "nearby_landmarks": len(nav_info.get("nearby_landmarks", [])),
-                    "suggested_direction": nav_info.get("suggested_direction", {}).get("suggested_direction"),
-                    "map_confidence": nav_info.get("suggested_direction", {}).get("confidence", 0.0),
-                })
+        # SLAM system removed; update sensor_localizer if present
+        if self.sensor_localizer:
+            angle_mapping = {'forward': 0.0, 'left': 45.0, 'right': -45.0}
+            for direction, distance in scan_results.items():
+                if distance > 0 and direction in angle_mapping:
+                    self.sensor_localizer.update_ultrasonic(distance, angle_mapping[direction])
         return scan_results
 
     def _check_localization_health(self) -> None:
@@ -1017,20 +1003,14 @@ class Orchestrator:
         # Update energy based on activity
         self._update_energy_level(reading, current_time)
         
-        # Update SLAM position tracking with IMU data
-        if self.slam_system and current_time - self.last_sensor_update > 0.1:  # 10Hz update
-            self._update_slam_with_imu(reading)
-            self.last_sensor_update = current_time
     
     def _ai_behavior_loop(self):
         """Main AI decision-making loop"""
         current_time = time.time()
-        
         # Update emotional state periodically
         if current_time - self.last_emotion_update > 2.0:
             self._update_emotional_state()
             self.last_emotion_update = current_time
-        
         # State machine behavior
         if self.context.behavior_state == BehaviorState.PATROLLING:
             self._patrolling_behavior()  # ENHANCED: Intelligent patrol with logging
@@ -1041,13 +1021,16 @@ class Orchestrator:
                     behavior.execute(self.context)
             except Exception:
                 pass
-            
+        # Integrate dynamic obstacle fading into the main loop
+        if self.slam_enabled and self.home_map is not None:
+            try:
+                self.home_map.fade_dynamic_obstacles()
+            except Exception as e:
+                self._logger.warning(f"Dynamic obstacle fading error: {e}")
         # Check for behavior state transitions
         self._evaluate_behavior_transitions(current_time)
-
         # Check service integration
         self._check_service_integration()
-
         # Watchdog heartbeat and timeout action (config-driven)
         try:
             hb_interval = float(getattr(self.config, "WATCHDOG_HEARTBEAT_INTERVAL_S", 0.5))
@@ -1521,9 +1504,6 @@ class Orchestrator:
             speed = int(60 + self.context.energy_level * 20)
             self.context.dog.do_action(action, step_count=step_count, speed=speed)
             
-            # Update SLAM system
-            if self.slam_system:
-                self.slam_system.update_from_movement(action, step_count)
             
             return  # Skip manual movement logic when following navigation
         
@@ -1991,11 +1971,8 @@ class Orchestrator:
         # Log shutdown initiation
         self._log_patrol_event("SYSTEM_SHUTDOWN", "Patrol system shutdown initiated")
         
-        # Stop and save SLAM system
-        if self.slam_system:
-            self._log_patrol_event("SLAM_SHUTDOWN", "Saving house map and stopping SLAM")
-            self.slam_system.stop()
-            self._logger.info("✓ House map saved")
+        # Stop and save mapping system (no legacy SLAM system)
+        # If needed, save map here using self.home_map
             
         # Stop sensor fusion localization
         if self.sensor_localizer:
@@ -2141,8 +2118,8 @@ class Orchestrator:
         Args:
             method: Calibration method ("wall_follow", "corner_seek", "landmark_align")
         """
-        if not self.slam_system:
-            self._logger.warning("❌ SLAM system not available for calibration")
+        if not self.slam_enabled or not self.home_map:
+            self._logger.warning("❌ Mapping system not available for calibration")
             return False
         
         self._logger.info(f"🎯 Starting position calibration using {method}...")
@@ -2193,24 +2170,20 @@ class Orchestrator:
             
             if turn_steps > 0:
                 self.dog.do_action(turn_direction, step_count=turn_steps, speed=60)
-                if self.slam_system:
-                    self.slam_system.update_from_movement(turn_direction, turn_steps)
             
             # Move closer to wall
             steps_needed = max(1, int((wall_distance - 25) / 15))  # Get to ~25cm from wall
             self.dog.do_action("forward", step_count=min(steps_needed, 3), speed=50)
-            if self.slam_system:
-                self.slam_system.update_from_movement("forward", min(steps_needed, 3))
         
         # Update SLAM position with high confidence (we know we're near a wall)
-        if self.slam_system:
-            current_pos = self.slam_system.house_map.get_position()
-            current_pos.confidence = 0.95  # High confidence after calibration
-            
+        if self.slam_enabled and self.home_map and hasattr(self.home_map, 'get_position'):
+            current_pos = self.home_map.get_position()
+            if hasattr(current_pos, 'confidence'):
+                current_pos.confidence = 0.95  # High confidence after calibration
             self._log_patrol_event("CALIBRATION_SUCCESS", f"Wall calibration completed", {
                 "wall_angle": closest_angle,
                 "wall_distance": wall_distance,
-                "new_confidence": current_pos.confidence
+                "new_confidence": getattr(current_pos, 'confidence', None)
             })
         
         self._logger.info("✓ Wall calibration completed")
@@ -2228,22 +2201,18 @@ class Orchestrator:
         if (scan_data['forward'] < 50 and scan_data['left'] < 50 and scan_data['right'] > 100):
             # Possible left corner
             self.dog.do_action("turn_left", step_count=2, speed=60)
-            if self.slam_system:
-                self.slam_system.update_from_movement("turn_left", 2)
             corners_found += 1
         elif (scan_data['forward'] < 50 and scan_data['right'] < 50 and scan_data['left'] > 100):
             # Possible right corner  
             self.dog.do_action("turn_right", step_count=2, speed=60)
-            if self.slam_system:
-                self.slam_system.update_from_movement("turn_right", 2)
             corners_found += 1
         
         if corners_found > 0:
             # Update position confidence
-            if self.slam_system:
-                current_pos = self.slam_system.house_map.get_position()
-                current_pos.confidence = 0.9
-                
+            if self.slam_enabled and self.home_map and hasattr(self.home_map, 'get_position'):
+                current_pos = self.home_map.get_position()
+                if hasattr(current_pos, 'confidence'):
+                    current_pos.confidence = 0.9
                 self._log_patrol_event("CALIBRATION_SUCCESS", f"Corner calibration completed", {
                     "corners_found": corners_found,
                     "scan_data": scan_data
@@ -2257,38 +2226,38 @@ class Orchestrator:
     
     def _calibrate_landmark_align(self) -> bool:
         """Calibrate using known landmarks from the map"""
-        if not self.slam_system or not self.slam_system.house_map.landmarks:
-            self._logger.warning("❌ No landmarks available for calibration")
+        if not self.slam_enabled or not self.home_map:
+            self._logger.warning("❌ Mapping system not available for calibration")
             return False
-        
+        anchors = getattr(self.home_map, 'anchors', {})
+        if not anchors:
+            self._logger.warning("❌ No visual anchors for calibration")
+            return False
         self._logger.info("🎯 Landmark alignment calibration...")
-        
-        # Get nearby landmarks
-        nav_info = self.slam_system.get_navigation_info()
-        nearby_landmarks = nav_info.get("nearby_landmarks", [])
-        
-        if not nearby_landmarks:
-            self._logger.warning("❌ No nearby landmarks for calibration")
+        current_pos = self.home_map.get_position()
+        min_dist = float('inf')
+        closest_anchor_id = None
+        for anchor_id, anchor_pos in anchors.items():
+            dist = ((anchor_pos.x - current_pos.x) ** 2 + (anchor_pos.y - current_pos.y) ** 2) ** 0.5
+            if dist < min_dist:
+                min_dist = dist
+                closest_anchor_id = anchor_id
+        if closest_anchor_id is None:
+            self._logger.warning("❌ No valid anchor found for calibration")
             return False
-        
-        # Use closest landmark for alignment
-        closest_landmark = nearby_landmarks[0]
-        self._logger.info(f"🎯 Aligning with landmark: {closest_landmark['type']} at {closest_landmark['distance']:.1f}cm")
-        
-        # This would involve more complex landmark recognition and alignment
-        # For now, just increase position confidence based on landmark proximity
-        if self.slam_system:
-            current_pos = self.slam_system.house_map.get_position()
-            current_pos.confidence = min(0.95, current_pos.confidence + 0.2)
-            
+        self._logger.info(f"🎯 Aligning with anchor: {closest_anchor_id} at {min_dist:.1f} units")
+        if self.home_map.correct_position_with_anchor(closest_anchor_id):
+            new_pos = self.home_map.get_position()
             self._log_patrol_event("CALIBRATION_SUCCESS", f"Landmark calibration completed", {
-                "landmark_type": closest_landmark['type'],
-                "landmark_distance": closest_landmark['distance'],
-                "new_confidence": current_pos.confidence
+                "anchor_id": closest_anchor_id,
+                "anchor_distance": min_dist,
+                "new_confidence": getattr(new_pos, 'confidence', None)
             })
-        
-        self._logger.info("✓ Landmark calibration completed")
-        return True
+            self._logger.info("✓ Landmark calibration completed")
+            return True
+        else:
+            self._logger.warning("❌ Failed to correct position with anchor")
+            return False
     
     def _start_autonomous_exploration(self):
         """Start autonomous exploration mode"""
@@ -2324,47 +2293,12 @@ class Orchestrator:
     
     def _navigate_to_nearest_room(self):
         """Navigate to the nearest identified room"""
-        if not self.nav_controller or not self.slam_system:
-            self._logger.warning("❌ Navigation system not available")
-            return
-        
-        # Find nearest room
-        current_pos = self.slam_system.house_map.get_position()
-        nearest_room = None
-        min_distance = float('inf')
-        
-        for room_id, room in self.slam_system.house_map.rooms.items():
-            distance = math.sqrt(
-                (room.center.x - current_pos.x) ** 2 +
-                (room.center.y - current_pos.y) ** 2
-            )
-            if distance < min_distance:
-                min_distance = distance
-                nearest_room = room_id
-        
-        if nearest_room:
-            success = self.nav_controller.navigate_to_room(nearest_room)
-            if success:
-                room_info = self.slam_system.house_map.rooms[nearest_room]
-                self._logger.info(f"🏠 Navigating to {room_info.room_type} (Room {nearest_room})")
-                self.dog.speak("single_bark_2", volume=70)
-                self.set_behavior(BehaviorState.EXPLORING)
-                
-                self._log_patrol_event("NAV_ROOM", f"Navigation to room {nearest_room} started", {
-                    "room_type": room_info.room_type,
-                    "distance": min_distance * self.slam_system.house_map.cell_size_cm
-                })
-            else:
-                self._logger.warning("❌ Could not navigate to room")
-                self.dog.speak("confused_1", volume=60)
-        else:
-            self._logger.warning("❌ No rooms identified yet")
-            self.dog.speak("confused_2", volume=60)
+        self._logger.warning("❌ Room navigation is not supported in the current mapping system.")
     
     def _show_map_visualization(self):
         """Show visual representation of the current map"""
-        if not self.slam_system:
-            self._logger.warning("❌ SLAM system not available for map visualization")
+        if not self.slam_enabled or not self.home_map:
+            self._logger.warning("❌ Mapping system not available for map visualization")
             return
         
         try:
@@ -2374,23 +2308,28 @@ class Orchestrator:
             except Exception:
                 from visualization.map_visualization import MapVisualizer
             
-            visualizer = MapVisualizer(self.slam_system.house_map)
+            visualizer = MapVisualizer(self.home_map)
             
-            self._logger.info("🗺️ Current House Map:")
+            self._logger.info("🗺️ Current Home Map:")
             visualizer.print_map(show_colors=True)
-            visualizer.print_room_summary()
-            visualizer.print_landmark_summary()
-            
+            if hasattr(visualizer, 'print_room_summary'):
+                visualizer.print_room_summary()
+            if hasattr(visualizer, 'print_landmark_summary'):
+                visualizer.print_landmark_summary()
             # Export current map
             timestamp = int(time.time())
-            visualizer.export_to_json(f"current_map_{timestamp}.json")
-            visualizer.save_report(f"map_report_{timestamp}.txt")
-            
+            export_files = []
+            if hasattr(visualizer, 'export_to_json'):
+                visualizer.export_to_json(f"current_map_{timestamp}.json")
+                export_files.append(f"current_map_{timestamp}.json")
+            if hasattr(visualizer, 'save_report'):
+                visualizer.save_report(f"map_report_{timestamp}.txt")
+                export_files.append(f"map_report_{timestamp}.txt")
             self.dog.speak("single_bark_1", volume=60)
             self._log_patrol_event("MAP_DISPLAY", "Map visualization shown", {
-                "rooms_detected": len(self.slam_system.house_map.rooms),
-                "landmarks_detected": len(self.slam_system.house_map.landmarks),
-                "export_files": [f"current_map_{timestamp}.json", f"map_report_{timestamp}.txt"]
+                "rooms_detected": 0,
+                "landmarks_detected": 0,
+                "export_files": export_files
             })
             
         except ImportError:
@@ -2467,21 +2406,19 @@ class Orchestrator:
         self._logger.info(f"Patrol log file: {self.log_file_path}")
         
         # SLAM system status
-        if self.slam_system:
+        if self.slam_enabled and self.home_map:
             try:
-                map_summary = self.slam_system.get_navigation_info()
-                current_pos = self.slam_system.house_map.get_position()
-                self._logger.info(f"SLAM enabled: {self.slam_enabled}")
-                self._logger.info(f"Map position: ({current_pos.x:.1f}, {current_pos.y:.1f}) @ {current_pos.heading:.1f}°")
-                self._logger.info(f"Position confidence: {current_pos.confidence:.3f}")
-                if map_summary.get("room_info"):
-                    room_info = map_summary["room_info"]
-                    self._logger.info(f"Current room: {room_info['room_type']} ({room_info['size_m2']:.1f}m²)")
-                self._logger.info(f"Landmarks nearby: {len(map_summary.get('nearby_landmarks', []))}")
-                nav_suggestion = map_summary.get("suggested_direction", {})
-                if nav_suggestion:
-                    self._logger.info(f"Suggested direction: {nav_suggestion.get('suggested_direction', 'none')} (confidence: {nav_suggestion.get('confidence', 0.0):.2f})")
-                
+                map_summary = self.home_map.get_map_summary() if hasattr(self.home_map, 'get_map_summary') else {}
+                current_pos = self.home_map.get_position() if hasattr(self.home_map, 'get_position') else None
+                self._logger.info(f"Mapping enabled: {self.slam_enabled}")
+                if current_pos:
+                    self._logger.info(f"Map position: ({getattr(current_pos, 'x', 0.0):.1f}, {getattr(current_pos, 'y', 0.0):.1f}) @ {getattr(current_pos, 'heading', 0.0):.1f}°")
+                    self._logger.info(f"Position confidence: {getattr(current_pos, 'confidence', 0.0):.3f}")
+                self._logger.info(f"Map bounds: {map_summary.get('map_bounds', {})}")
+                self._logger.info(f"Mapped area: {map_summary.get('mapped_area_m2', 0.0):.2f} m^2")
+                self._logger.info(f"Cell counts: {map_summary.get('cell_counts', {})}")
+                self._logger.info(f"Openings: {len(getattr(self.home_map, 'openings', {}))}")
+                self._logger.info(f"Safe paths: {len(getattr(self.home_map, 'safe_paths', {}))}")
                 # Sensor fusion status
                 if self.sensor_localizer:
                     loc_status = self.sensor_localizer.get_localization_status()
@@ -2491,11 +2428,10 @@ class Orchestrator:
                     self._logger.info(f"  Particle filter confidence: {pf_data.get('confidence', 0.0):.3f}")
                     self._logger.info(f"  Recent ultrasonic scans: {loc_status.get('recent_scans', 0)}")
                     self._logger.info(f"  Motion samples: {loc_status.get('motion_samples', 0)}")
-                
             except Exception as e:
-                self._logger.warning(f"SLAM status error: {e}")
+                self._logger.warning(f"Mapping status error: {e}")
         else:
-            self._logger.info(f"SLAM enabled: {self.slam_enabled}")
+            self._logger.info(f"Mapping enabled: {self.slam_enabled}")
             
         self._logger.info(f"======================")
 
@@ -2556,8 +2492,9 @@ class Orchestrator:
         self.autonomous_nav_enabled = False
         
         # Stop advanced systems
-        if self.slam_system:
-            self.slam_system.stop()
+        if self.slam_enabled and self.home_map:
+            # If HomeMap requires explicit stop, call it here
+            pass
         if self.sensor_localizer:
             self.sensor_localizer.stop_localization()
             
@@ -2588,17 +2525,14 @@ class Orchestrator:
         self.autonomous_nav_enabled = True
         
         # Restart systems if needed
-        if not self.slam_system:
-            self.slam_system = PiDogSLAM(f"house_map_{self.patrol_session_id}.pkl")
-            self.slam_system.start()
-            
+        if not self.home_map:
+            self.home_map = HomeMap()
         if not self.sensor_localizer:
-            self.sensor_localizer = SensorFusionLocalizer(self.slam_system.house_map)
+            self.sensor_localizer = SensorFusionLocalizer(self.home_map)
             self.sensor_localizer.start_localization()
-            
         if not self.nav_controller:
             if not self.pathfinder:
-                self.pathfinder = PiDogPathfinder(self.slam_system.house_map)
+                self.pathfinder = PiDogPathfinder(self.home_map)
             self.nav_controller = NavigationController(self.pathfinder)
         
         self._log_patrol_event("MODE_CHANGE", "Switched to Advanced Mode", {

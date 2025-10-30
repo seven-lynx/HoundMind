@@ -33,6 +33,25 @@ class PiDogConfig:
     ENABLE_ORIENTATION_SERVICE = True  # Integrate IMU yaw to track heading
     
     # ============================================================================
+    # ADVANCED MAPPING PARAMETERS (for HomeMap)
+    # ============================================================================
+    # Occupancy grid confidence threshold for cell type assignment
+    MAPPING_CONFIDENCE_THRESHOLD = 0.7   # 0.0-1.0, above = OBSTACLE, below = FREE
+    # Dynamic obstacle fading
+    MAPPING_MAX_OBSTACLE_AGE = 300.0     # Seconds before obstacle starts to fade
+    MAPPING_FADE_TIME = 300.0            # Time in seconds after which to start fading
+    MAPPING_FADE_RATE = 0.05             # Amount to decay confidence per fade
+    # Opening detection thresholds
+    MAPPING_OPENING_MIN_WIDTH_CM = 60.0  # Minimum width for an opening (cm)
+    MAPPING_OPENING_MAX_WIDTH_CM = 120.0 # Maximum width for an opening (cm)
+    MAPPING_OPENING_CELL_CONF_MIN = 0.6  # Min confidence for opening cell
+    # Safe path detection thresholds
+    MAPPING_SAFEPATH_MIN_WIDTH_CM = 40.0   # Minimum width for a safe path (cm)
+    MAPPING_SAFEPATH_MAX_WIDTH_CM = 200.0  # Maximum width for a safe path (cm)
+    MAPPING_SAFEPATH_MIN_LENGTH_CELLS = 6  # Minimum length (cells)
+    MAPPING_SAFEPATH_CELL_CONF_MIN = 0.5   # Min confidence for safe path cell
+
+    # ============================================================================
     # OBSTACLE AVOIDANCE SETTINGS
     # ============================================================================
     

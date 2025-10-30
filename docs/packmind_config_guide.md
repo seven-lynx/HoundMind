@@ -19,6 +19,29 @@ Switching presets:
 - At runtime (if voice enabled): "PiDog, simple mode" | "PiDog, advanced mode" | "PiDog, indoor mode" | "PiDog, explorer mode"
 
 ## Feature toggles
+## Advanced Mapping Parameters
+
+PackMind's mapping system exposes advanced options for fine-tuning the occupancy grid, dynamic obstacle fading, and detection of openings and safe paths. These are set in `packmind/packmind_config.py` and used by the mapping system automatically.
+
+- **MAPPING_CONFIDENCE_THRESHOLD**: Occupancy grid confidence threshold (0.0–1.0). Above = OBSTACLE, below = FREE. Default: 0.7
+- **MAPPING_MAX_OBSTACLE_AGE**: Seconds before an obstacle cell starts to fade if not observed. Default: 300.0
+- **MAPPING_FADE_TIME**: Time in seconds after which to start fading dynamic obstacles. Default: 300.0
+- **MAPPING_FADE_RATE**: Amount to decay confidence per fade step. Default: 0.05
+- **MAPPING_OPENING_MIN_WIDTH_CM**: Minimum width (cm) for an opening to be detected. Default: 60.0
+- **MAPPING_OPENING_MAX_WIDTH_CM**: Maximum width (cm) for an opening. Default: 120.0
+- **MAPPING_OPENING_CELL_CONF_MIN**: Minimum confidence for a cell to be considered part of an opening. Default: 0.6
+- **MAPPING_SAFEPATH_MIN_WIDTH_CM**: Minimum width (cm) for a safe path (corridor). Default: 40.0
+- **MAPPING_SAFEPATH_MAX_WIDTH_CM**: Maximum width (cm) for a safe path. Default: 200.0
+- **MAPPING_SAFEPATH_MIN_LENGTH_CELLS**: Minimum length (cells) for a safe path. Default: 6
+- **MAPPING_SAFEPATH_CELL_CONF_MIN**: Minimum confidence for a cell to be considered part of a safe path. Default: 0.5
+
+These parameters allow you to:
+- Make the map more or less sensitive to new obstacles and free space
+- Control how quickly transient obstacles (like people or pets) fade from the map
+- Tune what counts as a doorway/opening or a navigable corridor for your environment
+
+**Usage:**
+Edit these values in your config or preset class in `packmind/packmind_config.py`. They will be picked up automatically by the mapping system when you create a `HomeMap` with your config.
 - ENABLE_VOICE_COMMANDS: Voice recognition with wake word (requires `speech_recognition` + `pyaudio`)
 - ENABLE_SLAM_MAPPING: Enable SLAM/house mapping (requires `numpy`)
 - ENABLE_SENSOR_FUSION: Enable fused localization (depends on SLAM)

@@ -1,4 +1,24 @@
 # Changelog
+
+## [v2025.10.29b] - 2025-10-29 - HomeMap Mapping Refactor, Legacy Removal, and Documentation Overhaul
+
+### Changed
+- **PackMind mapping/navigation is now fully powered by the new HomeMap system:**
+  - All legacy mapping logic and references (HouseMap, PiDogSLAM, etc.) have been removed from the codebase.
+  - HomeMap now provides openings, safe_paths, anchors, semantic labels, sensor fusion, and advanced map visualization.
+  - Navigation, pathfinding, and visualization modules refactored to use HomeMap exclusively.
+- **Configuration:**
+  - All advanced mapping features are now user-configurable in `packmind/packmind_config.py`.
+  - Config guides updated to reflect new options and parameters.
+- **Documentation:**
+  - `README.md` updated to document the new mapping/navigation system, advanced features, and removal of legacy logic.
+  - `docs/api_reference.md` now includes a full HomeMap API section with usage patterns and advanced features.
+  - `docs/PIDOG_PROGRAMMING_GUIDE.md` references the new mapping/navigation system and provides usage examples.
+  - All legacy mapping references removed from documentation.
+- **To-Do List:**
+  - All mapping/navigation refactor and integration tasks are now complete and checked off.
+
+---
 ## [v2025.10.29] - 2025-10-29 - IMU Orientation (Yaw) integration and precise turns
 
 ### Added

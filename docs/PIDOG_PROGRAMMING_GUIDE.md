@@ -1,5 +1,6 @@
+
 # Complete PiDog Programming Guide
-> Author: 7Lynx · Doc Version: 2025.10.29
+> Author: 7Lynx · Doc Version: 2025.10.29b
 
 > **The definitive beginner-friendly guide to programming the SunFounder PiDog robotic dog with Python**
  
@@ -24,6 +25,7 @@
 
 ---
 
+
 ## 📋 Table of Contents
 
 - [Quick Start Resources](#quick-start-resources)
@@ -36,9 +38,11 @@
 - [7. Error Handling and Safety](#7-error-handling-and-safety)
 - [8. Complete Debugging and Monitoring](#8-complete-debugging-and-monitoring)
 - [9. Project Templates and Patterns](#9-project-templates-and-patterns)
+- [10. Modern Mapping & Navigation (PackMind)](#10-modern-mapping--navigation-packmind)
 - [Additional Resources](#additional-resources)
 
 ---
+
 
 ## Quick Start Resources
 
@@ -47,6 +51,50 @@
 - **[`pidog_programming_examples.py`](../examples/pidog_programming_examples.py)** - Runnable examples for every feature with menu system
 - **[`api_reference.md`](./api_reference.md)** - Complete method documentation with all parameters
 - **[`packmind/orchestrator.py`](../packmind/orchestrator.py)** - Advanced AI behavior system demonstration
+- **[`packmind/mapping/home_mapping.py`](../packmind/mapping/home_mapping.py)** - Modern HomeMap mapping/navigation API
+---
+
+## 10. 🗺️ Modern Mapping & Navigation (PackMind)
+
+**All mapping and navigation in PackMind is now powered by the HomeMap system.**
+
+### Key Concepts
+
+- **Openings**: Detected and user-registered doorways, passages, and exits.
+- **Safe Paths**: Dynamically updated, sensor-fused paths through the environment, avoiding obstacles and hazards.
+- **Anchors**: Visual or semantic map anchors for robust localization and behavior triggers.
+- **Semantic Labels**: User- or AI-assigned labels for map regions (e.g., "kitchen", "charging station").
+- **Sensor Fusion**: Combines camera, IMU, distance, touch, and sound for robust mapping and navigation.
+- **Dynamic Obstacle Fading**: Temporary obstacles fade over time for adaptive path planning.
+
+### HomeMap API Example
+
+```python
+from packmind.mapping.home_mapping import HomeMap, Position
+
+home_map = HomeMap(config)
+pos = Position(x=5, y=10)
+sensor_data = {"distance": 42, "camera": "open"}
+home_map.update_cell_from_sensor(pos, sensor_data)
+home_map.fade_dynamic_obstacles()
+home_map.register_anchor(pos, label="charging_station")
+openings = home_map.find_openings()
+safe_path = home_map.find_safe_paths(start, goal)
+home_map.export_map_image("map.png")
+```
+
+### Configuration
+
+- All advanced mapping features are configurable in `packmind/packmind_config.py`.
+- See the config guide for details on enabling/disabling features, tuning parameters, and customizing map behavior.
+
+### Usage Tips
+
+- Use anchors and semantic labels to trigger behaviors or navigation goals.
+- Use `find_safe_paths` for robust, sensor-fused navigation.
+- Visualize your map with `export_map_image` for debugging and analysis.
+
+---
 
 ---
 
@@ -964,12 +1012,15 @@ if __name__ == "__main__":
 
 ## Additional Resources
 
+
 ### Complete Example Files
 - **[`pidog_programming_examples.py`](../examples/pidog_programming_examples.py)** - Menu-driven examples for every PiDog feature
-- **[`packmind/orchestrator.py`](../packmind/orchestrator.py)** - Advanced AI behavior system with emotions and learning
+- **[`packmind/orchestrator.py`](../packmind/orchestrator.py)** - Advanced AI behavior system with emotions, learning, and modern mapping/navigation
+
 
 ### Reference Documentation
-- **[`api_reference.md`](./api_reference.md)** - Complete API reference with all methods and parameters
+- **[`api_reference.md`](./api_reference.md)** - Complete API reference with all methods and parameters, including HomeMap mapping/navigation
+
 
 ### Official Resources
 - [Official PiDog Documentation](https://docs.sunfounder.com/projects/pidog/en/latest/)
@@ -995,6 +1046,9 @@ if __name__ == "__main__":
 - **Buffer management**: Monitor and control action buffer sizes
 - **Graceful shutdown**: Always return to safe position before exit
 - **Error recovery**: Catch exceptions and attempt emergency stop
+
+---
+
 
 ---
 
