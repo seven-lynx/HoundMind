@@ -4,7 +4,7 @@ CanineCore Checkup Tool — PiDog runtime verifier
 ===============================================
 
 Author: 7Lynx
-Version: 2025.10.29
+Version: 2025.11.01
 
 Run this on the PiDog to quickly verify your environment and CanineCore modules after tinkering.
 

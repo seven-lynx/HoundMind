@@ -1,5 +1,5 @@
 # PackMind Configuration Guide
-> Author: 7Lynx · Doc Version: 2025.10.30
+> Author: 7Lynx · Doc Version: 2025.11.01
 
 This is the canonical configuration guide for PackMind. All references should point here (`docs/packmind_config_guide.md`).
 

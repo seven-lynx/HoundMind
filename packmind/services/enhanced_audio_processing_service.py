@@ -15,7 +15,7 @@ Features:
 - Integration with voice command and emotional response systems
 
 Author: 7Lynx
-Version: 2025.10.29
+Version: 2025.11.01
 Created: 2024
 """
 
@@ -23,7 +23,7 @@ import time
 import threading
 import numpy as np
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Tuple, Callable, Union
+from typing import Optional, Dict, List, Tuple, Callable, Union, Any, cast
 from enum import Enum
 import logging
 import json
@@ -633,10 +633,34 @@ class EnhancedAudioProcessingService:
         
         if self.pidog_instance:
             try:
-                # Get direction from PiDog's sound direction sensor
-                direction_data = self.pidog_instance.get_sound_direction()
-                if direction_data:
-                    return float(direction_data)  # Assuming this returns degrees
+                # Prefer explicit API if available
+                method = getattr(self.pidog_instance, "get_sound_direction", None)
+                if callable(method):
+                    direction_data = method()
+                    if direction_data is not None:
+                        try:
+                            return float(direction_data)  # degrees
+                        except Exception:
+                            pass
+                # Graceful fallback: some pidog libs expose 'sound.direction' or similar
+                if hasattr(self.pidog_instance, "sound"):
+                    snd = getattr(self.pidog_instance, "sound")
+                    # Try common attribute names
+                    for attr in ("direction", "dir", "angle", "heading"):
+                        if hasattr(snd, attr):
+                            val = getattr(snd, attr)
+                            try:
+                                return float(val)
+                            except Exception:
+                                pass
+                    # Try common method names
+                    for meth in ("get_direction", "read_direction"):
+                        if hasattr(snd, meth):
+                            try:
+                                val = getattr(snd, meth)()
+                                return float(val)
+                            except Exception:
+                                pass
             except Exception as e:
                 self.logger.warning(f"Error getting sound direction from PiDog: {e}")
         

@@ -1,6 +1,6 @@
 
-# Complete PiDog & HoundMind API Reference (2025.10.29b)
-> Author: 7Lynx · Doc Version: 2025.10.29b
+# Complete PiDog & HoundMind API Reference (2025.11.01)
+> Author: 7Lynx · Doc Version: 2025.11.01
 
 🎓 **For Complete Beginners:** This is your "dictionary" of all PiDog commands!
 

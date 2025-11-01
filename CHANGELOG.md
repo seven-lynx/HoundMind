@@ -1,33 +1,36 @@
 # Changelog
 
-## [v2025.11.01] - 2025-11-01 - Desktop Simulation Mode, Face Recognition Setup Guide, and Lightweight Install
+## [v2025.11.01] - 2025-11-01 - Desktop Simulation Mode, Lite Face Backend, and Setup Docs
 
 ### Added
-- Desktop simulation shim for `pidog` (
   `pidog/__init__.py`):
   - Uses the real hardware package by default on the Pi; provides a safe simulated `Pidog`/`PiDog` when `HOUNDMIND_SIM=1`.
   - No-op motion with plausible sensor values for development on desktops.
   - Optional noise via `HOUNDMIND_SIM_RANDOM=1`.
-- Face Recognition setup guide: `docs/face_recognition_setup.md`
   - Explains piwheels/prebuilt wheels, required build tools (cmake, build-essential, python3-dev, BLAS/LAPACK), swap sizing, and when to disable the feature.
   - Clear guidance for Pi 3B where compiling dlib is slow/unreliable.
-- Lightweight requirements for low-power devices: `requirements-lite.txt`
+  - OpenCV Haar-based detection with low-res grayscale frames; optional LBPH identity when `opencv-contrib-python` is installed
+  - Configurable via `FACE_BACKEND = "lite"`; uses `FACE_LITE_DATA_DIR` for simple training assets
+  - Pi 3B preset now defaults to the lite backend when face recognition is enabled
+  - `scripts/train_faces_lite.py` — trains LBPH from `data/faces_lite/<name>/*.jpg`
+  - `tools/lite_face_smoke_test.py` — runs the lite backend and logs detections for N seconds
   - Omits heavy optional deps (dlib/face-recognition, tensorflow, etc.).
-- Roadmap: `docs/ROADMAP.md` summarizing planned features (simulation tiers, CI, calibration UX, safety, mapping/nav, audio, telemetry, DX, docs).
+  - Pi 3B-friendly Lite Face backend (no dlib): `packmind/services/face_recognition_lite_service.py`
+    - Detection via OpenCV Haar cascades; optional identity via LBPH (requires `opencv-contrib-python`).
+    - Runs detection-only if `cv2.face` is unavailable.
+  - Training CLI for the lite backend: `scripts/train_faces_lite.py`
+  - Lite backend smoke test: `tools/lite_face_smoke_test.py`
 
 ### Changed
-- `README.md`:
   - Added “Desktop simulation mode” instructions and PowerShell/Bash examples.
   - Added optional Face Recognition install block with cmake/build-tools note and a pointer to the setup guide; referenced `requirements-lite.txt` for Pi 3B.
-- `packmind/README.md`:
+  - Added quick-start section for the lite face backend (config switch, training CLI, smoke test)
   - Added desktop simulation usage.
-  - Added Raspberry Pi face recognition notes with link to the setup guide.
-- `docs/packmind_config_guide.md`:
+  - Documented default vs lite face backends; added usage, training, and smoke test links
   - Added performance notes for Face Recognition on Pi 3B with link to the setup guide.
+  - Added `FACE_BACKEND` and `FACE_LITE_DATA_DIR` configuration keys
 
 ### Notes
-- Face Recognition remains optional at runtime (`ENABLE_FACE_RECOGNITION`), and the rest of the system operates normally without it.
-- The simulation shim defers to the real `pidog` on hardware; it only simulates when `HOUNDMIND_SIM` is set or the real package isn’t available.
 
 ## [v2025.10.29b] - 2025-10-29 - HomeMap Mapping Refactor, Legacy Removal, and Documentation Overhaul
 

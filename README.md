@@ -1,6 +1,6 @@
 
 # HoundMind — Advanced Behaviors and AI for SunFounder PiDog
-> Author: 7Lynx · Doc Version: 2025.10.30
+> Author: 7Lynx · Doc Version: 2025.11.01
 
 
 HoundMind is a next-generation AI and behavior framework for the SunFounder PiDog, featuring:

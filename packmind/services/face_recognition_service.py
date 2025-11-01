@@ -14,7 +14,7 @@ Features:
 - Privacy-conscious local processing
 
 Author: 7Lynx
-Version: 2025.10.29
+Version: 2025.11.01
 """
 
 import cv2

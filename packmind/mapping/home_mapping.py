@@ -3,7 +3,7 @@
 PiDog Home Mapping System (SLAM)
 ===============================
 
-Version: 2025.10.29
+Version: 2025.11.01
 
 Modern SLAM system for PiDog that creates and maintains a persistent map
 of the home with obstacle tracking, opening and safe path detection, and localization.

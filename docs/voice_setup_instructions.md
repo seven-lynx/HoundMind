@@ -1,5 +1,5 @@
 # Voice Recognition Setup for PiDog AI
-> Author: 7Lynx · Doc Version: 2025.10.29
+> Author: 7Lynx · Doc Version: 2025.11.01
 
 ## 🎙️ Installing Voice Recognition Dependencies
 

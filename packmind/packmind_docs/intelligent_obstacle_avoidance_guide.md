@@ -1,5 +1,5 @@
 # 🧠 Intelligent Obstacle Avoidance System
-> Author: 7Lynx · Doc Version: 2025.10.29
+> Author: 7Lynx · Doc Version: 2025.11.01
 
 ## 🎯 Overview
 
