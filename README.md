@@ -70,6 +70,33 @@ pip3 install -r requirements-lite.txt
 
 See `docs/face_recognition_setup.md` for details and troubleshooting.
 
+Pi 3B: Lite face backend (no dlib)
+
+If you want face detection (and optional simple identity) without `dlib` on a Pi 3B, use the lite backend:
+
+```python
+# packmind/packmind_config.py
+class PiDogConfig:
+	ENABLE_FACE_RECOGNITION = True
+	FACE_BACKEND = "lite"  # OpenCV Haar + optional LBPH (opencv-contrib)
+```
+
+- Detection-only works with plain `opencv-python`.
+- For identity (LBPH), install `opencv-contrib-python`.
+- Train from images: place JPGs under `data/faces_lite/<name>/*.jpg` and run:
+
+```powershell
+python scripts/train_faces_lite.py --preset pi3
+```
+
+Smoke test the lite backend (camera required):
+
+```powershell
+python tools/lite_face_smoke_test.py --preset pi3 --duration 30
+```
+
+See `docs/face_recognition_setup.md` for more.
+
 
 3) Run one of the systems
 

@@ -110,10 +110,26 @@ $env:HOUNDMIND_SIM = "1"; python packmind/orchestrator.py
 
 ## 🧩 Face recognition on Raspberry Pi
 
-Face recognition uses the `face_recognition` package (dlib). On Pi 4/5, piwheels often provides prebuilt wheels. On Pi 3B, building dlib can be very slow and may fail.
+There are two backends:
 
-- Recommended on Pi 3B: set `ENABLE_FACE_RECOGNITION = False` in `packmind/packmind_config.py`, or use `requirements-lite.txt`.
-- If you still want it, you’ll likely need build tools (`cmake`, `build-essential`, `python3-dev`, `libopenblas-dev`, `liblapack-dev`). See `docs/face_recognition_setup.md`.
+- `default`: `face_recognition` (dlib) — heavier, higher accuracy
+- `lite`: OpenCV Haar + optional LBPH — no dlib, Pi 3B friendly
+
+On Pi 4/5, the default backend works well via piwheels. On Pi 3B, use the lite backend to avoid building dlib:
+
+```python
+# packmind/packmind_config.py
+class PiDogConfig:
+    ENABLE_FACE_RECOGNITION = True
+    FACE_BACKEND = "lite"  # Haar + optional LBPH (opencv-contrib)
+```
+
+- Detection-only: works with `opencv-python` (no contrib).
+- Identity (LBPH): install `opencv-contrib-python` and train images under `data/faces_lite/<name>/*.jpg`.
+- Train model: `python scripts/train_faces_lite.py --preset pi3`
+- Smoke test: `python tools/lite_face_smoke_test.py --preset pi3 --duration 30`
+
+See `docs/face_recognition_setup.md` for full guidance and troubleshooting.
 
 ## � Feature gates at a glance
 
