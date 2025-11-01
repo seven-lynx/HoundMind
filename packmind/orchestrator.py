@@ -2584,8 +2584,18 @@ class Orchestrator:
 
 def main():
     """Main function with configuration display"""
-    # Load default configuration
-    config = load_config("default")
+    # Choose configuration: env override → platform hint → default
+    import os, platform
+    preset = os.getenv("PACKMIND_CONFIG") or os.getenv("HOUNDMIND_PROFILE")
+    if not preset:
+        # Platform hint: favor 'pi3' on 32-bit ARM (common on Pi 3B)
+        try:
+            mach = platform.machine().lower()
+            if mach.startswith("armv7"):
+                preset = "pi3"
+        except Exception:
+            preset = None
+    config = load_config(preset or "default")
     warnings = validate_config(config)
     config_source = "packmind/packmind_config.py"
     logger = logging.getLogger("packmind.orchestrator")
@@ -2645,7 +2655,9 @@ def main():
     logger.info("   • Test settings with voice commands before saving changes")
     logger.info("")
     
-    ai = Orchestrator()
+    if preset:
+        logger.info(f"Using preset: {preset}")
+    ai = Orchestrator(config_preset=preset or "default")
     
     try:
         success = ai.start_ai_system()

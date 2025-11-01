@@ -90,6 +90,12 @@ python3 canine_core/control.py # Interactive behavior menu
 
 Tip: On a development PC without hardware, many hardware services fallback to safe no-ops. Camera/audio/servos still require proper setup when you move to the Pi.
 
+Platform quick picks:
+- Desktop (no hardware): set `HOUNDMIND_SIM=1` and run.
+- Raspberry Pi 3B: use the `pi3` preset (auto-selected on ARMv7) or explicitly: `PACKMIND_CONFIG=pi3`.
+- Raspberry Pi 4/5: use `advanced` or `indoor` depending on your use case.
+See `docs/platform_guide.md` for details.
+
 
 ## Which should I choose?
 

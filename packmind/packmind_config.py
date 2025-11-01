@@ -479,6 +479,61 @@ class ExplorerConfig(PiDogConfig):
     LOG_STATUS_INTERVAL = 5
 
 
+# New: Raspberry Pi 3B friendly preset
+class Pi3Config(PiDogConfig):
+    """
+    Pi 3B friendly configuration — lighter features and conservative cadences.
+    Good for: stable operation on low-power devices without heavy dependencies.
+    """
+
+    # Disable heavy/optional features by default
+    ENABLE_FACE_RECOGNITION = False
+    ENABLE_ENHANCED_AUDIO = False
+    ENABLE_AUTONOMOUS_NAVIGATION = False
+    ENABLE_LEARNING_SYSTEM = False
+    ENABLE_PATROL_LOGGING = False
+
+    # Keep mapping but reduce cadence; disable sensor fusion to save CPU
+    ENABLE_SLAM_MAPPING = True
+    ENABLE_SENSOR_FUSION = False
+    ENABLE_INTELLIGENT_SCANNING = True
+
+    # More conservative scanning and movement
+    OBSTACLE_IMMEDIATE_THREAT = 25.0
+    OBSTACLE_APPROACHING_THREAT = 40.0
+    OBSTACLE_SCAN_INTERVAL = 0.8
+
+    # Smaller head sweeps and fewer samples
+    HEAD_SCAN_RANGE = 35
+    SCAN_SAMPLES = 2
+    SCAN_DEBOUNCE_S = 0.05
+    SCAN_INTERVAL_MIN = 0.3
+    SCAN_INTERVAL_MAX = 2.5
+
+    # Slower movement
+    SPEED_SLOW = 70
+    SPEED_NORMAL = 90
+    SPEED_FAST = 120
+    SPEED_TURN_SLOW = 90
+    SPEED_TURN_NORMAL = 140
+    SPEED_TURN_FAST = 160
+
+    # Lower service cadences
+    SENSOR_MONITOR_RATE_HZ = 12.0
+    HEALTH_MONITOR_INTERVAL_S = 7.0
+
+    # Orientation closed-loop turns are useful; keep enabled
+    ENABLE_ORIENTATION_SERVICE = True
+    ORIENTATION_TURN_TOLERANCE_DEG = 7.0
+
+    # Balance service at a lower rate
+    ENABLE_DYNAMIC_BALANCE = True
+    BALANCE_SAMPLE_RATE = 10.0
+
+    # Logging limits
+    LOG_MAX_ENTRIES = 400
+    LOG_LEVEL = "INFO"
+
 # ============================================================================
 # CONFIGURATION LOADER
 # ============================================================================
@@ -508,6 +563,9 @@ def load_config(config_name="default"):
         "pet": IndoorPetConfig,  # Alias
         "explorer": ExplorerConfig,
         "exploration": ExplorerConfig,  # Alias
+        "pi3": Pi3Config,
+        "rpi3": Pi3Config,  # Alias
+        "lite": Pi3Config,  # Friendly alias
     }
     
     config_class = config_map.get(config_name.lower(), PiDogConfig)
