@@ -117,6 +117,10 @@ from packmind.behaviors.patrolling_behavior import PatrollingBehavior
 from packmind.services.safety_watchdog import SafetyWatchdog
 from packmind.services.health_monitor import HealthMonitor
 from packmind.services.face_recognition_service import FaceRecognitionService
+try:
+    from packmind.services.face_recognition_lite_service import FaceRecognitionLiteService
+except Exception:
+    FaceRecognitionLiteService = None
 from packmind.services.dynamic_balance_service import DynamicBalanceService
 from packmind.services.enhanced_audio_processing_service import EnhancedAudioProcessingService
 from packmind.services.calibration_service import CalibrationService
@@ -413,7 +417,18 @@ class Orchestrator:
             self.calibration_service = None
 
         # Initialize new AI services
-        self.face_recognition_service = FaceRecognitionService(self.config)
+        # Face recognition backend selection
+        try:
+            backend = str(getattr(self.config, "FACE_BACKEND", "default")).lower()
+        except Exception:
+            backend = "default"
+        if backend == "lite" and FaceRecognitionLiteService is not None:
+            self.face_recognition_service = FaceRecognitionLiteService(self.config)
+            self._logger.info("Using lite face recognition backend (OpenCV Haar + optional LBPH)")
+        else:
+            self.face_recognition_service = FaceRecognitionService(self.config)
+            if backend == "lite" and FaceRecognitionLiteService is None:
+                self._logger.warning("FACE_BACKEND=lite requested but lite service unavailable; falling back to default backend")
         self.dynamic_balance_service = DynamicBalanceService(self.config)
         self.enhanced_audio_service = EnhancedAudioProcessingService(self.config)
 
@@ -488,22 +503,42 @@ class Orchestrator:
                 
                 try:
                     results = self.face_recognition_service.detect_and_recognize()
-                    if results and results.get('faces_detected', 0) > 0:
-                        recognized_faces = results.get('recognized_faces', [])
-                        if recognized_faces:
-                            # Someone was recognized - trigger happy emotion
-                            person_name = recognized_faces[0].get('name', 'Unknown')
-                            confidence = recognized_faces[0].get('confidence', 0.0)
-                            self._logger.info(f"Face recognized: {person_name} (confidence: {confidence:.2f})")
-                            self.set_emotion(EmotionalState.HAPPY)
-                            self._log_patrol_event("FACE_RECOGNITION", f"Recognized {person_name}", {
-                                "confidence": confidence
-                            })
-                        else:
-                            # Unknown face detected - trigger excited emotion
-                            self._logger.info("Unknown face detected")
-                            self.set_emotion(EmotionalState.EXCITED)
-                            self._log_patrol_event("FACE_RECOGNITION", "Unknown face detected")
+                    # Support both default (dlib) and lite (OpenCV) result schemas
+                    if not results:
+                        pass
+                    elif 'faces_detected' in results:
+                        # Default backend schema
+                        if results.get('faces_detected', 0) > 0:
+                            recognized_faces = results.get('recognized_faces', [])
+                            if recognized_faces:
+                                person_name = recognized_faces[0].get('name', 'Unknown')
+                                confidence = recognized_faces[0].get('confidence', 0.0)
+                                self._logger.info(f"Face recognized: {person_name} (confidence: {confidence:.2f})")
+                                self.set_emotion(EmotionalState.HAPPY)
+                                self._log_patrol_event("FACE_RECOGNITION", f"Recognized {person_name}", {
+                                    "confidence": confidence
+                                })
+                            else:
+                                self._logger.info("Unknown face detected")
+                                self.set_emotion(EmotionalState.EXCITED)
+                                self._log_patrol_event("FACE_RECOGNITION", "Unknown face detected")
+                    elif 'faces' in results:
+                        faces = results.get('faces') or []
+                        if faces:
+                            known_faces = [f for f in faces if f.get('known')]
+                            if known_faces:
+                                f0 = known_faces[0]
+                                person_name = f0.get('name', 'Unknown')
+                                confidence = float(f0.get('confidence', 0.0) or 0.0)
+                                self._logger.info(f"Face recognized (lite): {person_name} (confidence: {confidence:.2f})")
+                                self.set_emotion(EmotionalState.HAPPY)
+                                self._log_patrol_event("FACE_RECOGNITION", f"Recognized {person_name}", {
+                                    "confidence": confidence
+                                })
+                            else:
+                                self._logger.info("Unknown face detected (lite)")
+                                self.set_emotion(EmotionalState.EXCITED)
+                                self._log_patrol_event("FACE_RECOGNITION", "Unknown face detected")
                     
                     self._last_face_detection_time = current_time
                 except Exception as e:

@@ -224,6 +224,10 @@ class PiDogConfig:
     # ============================================================================
     # FACE RECOGNITION SYSTEM
     # ============================================================================
+    # Backend selection:
+    #   - "default": dlib/face_recognition stack (heavier, better accuracy)
+    #   - "lite": OpenCV Haar + optional LBPH (no dlib; Pi 3B friendly)
+    FACE_BACKEND = "default"
     FACE_RECOGNITION_THRESHOLD = 0.6      # Similarity threshold for recognition (0.0-1.0)
     FACE_DETECTION_INTERVAL = 2.0         # Seconds between face detection attempts
     FACE_MAX_FACES_PER_FRAME = 3          # Maximum faces to process per frame
@@ -231,6 +235,7 @@ class PiDogConfig:
     FACE_CAMERA_HEIGHT = 480              # Camera resolution height
     FACE_CAMERA_FPS = 15                  # Camera frames per second
     FACE_DATA_DIR = "data/faces"          # Directory for face data storage
+    FACE_LITE_DATA_DIR = "data/faces_lite" # Directory for lite backend training data
     FACE_AUTO_SAVE_INTERVAL = 300         # Auto-save interval (seconds)
     FACE_INTERACTION_TIMEOUT = 30         # Seconds before interaction times out
     FACE_PERSONALITY_LEARNING_RATE = 0.1  # Rate of personality trait adaptation (0.0-1.0)
@@ -533,6 +538,8 @@ class Pi3Config(PiDogConfig):
     # Logging limits
     LOG_MAX_ENTRIES = 400
     LOG_LEVEL = "INFO"
+    # If user enables recognition on Pi 3B, prefer lite backend by default
+    FACE_BACKEND = "lite"
 
 # ============================================================================
 # CONFIGURATION LOADER

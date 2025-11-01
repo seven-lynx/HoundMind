@@ -65,9 +65,37 @@ Notes:
 - Make sure you have enough free disk space.
 
 ## Lightweight alternatives
-If you only need detection (not identity recognition), consider using OpenCV-based detectors (e.g., Haar or DNN) and skip `face_recognition` entirely. That path is much lighter on older Pi hardware.
+If you only need detection (not identity recognition), or want a simpler recognizer, you can now use the "lite" backend which avoids `dlib` entirely and runs well on Pi 3B:
 
-At runtime, PackMind will operate normally with `ENABLE_FACE_RECOGNITION = False`.
+1) Enable the lite backend in config
+
+```python
+class PiDogConfig:
+  ENABLE_FACE_RECOGNITION = True
+  FACE_BACKEND = "lite"  # uses OpenCV Haar + optional LBPH
+```
+
+2) Optional: install opencv-contrib for identity recognition
+
+The lite backend always provides face detection using Haar cascades. To enable simple identity recognition (LBPH), install `opencv-contrib-python` so that `cv2.face` is available. On Raspberry Pi OS with piwheels, try:
+
+```bash
+python3 -m pip install --upgrade pip setuptools wheel
+python3 -m pip install opencv-contrib-python
+```
+
+If `cv2.face` isn’t available, the lite backend still works in detection-only mode (no identity), which is the lowest-CPU path.
+
+3) Train the LBPH model (optional)
+
+Place a few grayscale or color face images per person under `data/faces_lite/<name>/*.jpg` (3–10 images each; frontal preferred). At runtime, call `train_from_dir()` from the lite service (we’ll add a simple CLI soon), or restart after placing images; the service will look for an existing model.
+
+Notes:
+- The lite backend processes low-res grayscale frames for efficiency (default 320x240, ~10 FPS camera settings).
+- Recognition confidence is heuristic (LBPH distance mapped to 0..1); tune acceptance in your behavior logic if needed.
+- On Pi 3B, expect detection every ~1–2 seconds by default (configurable via `FACE_DETECTION_INTERVAL`).
+
+If you prefer not to use any face processing, set `ENABLE_FACE_RECOGNITION = False` and PackMind will operate normally.
 
 ## Troubleshooting
 - “No error after hours” while compiling on Pi 3B: it’s probably swapping/thrashing. Prefer wheel route or disable.
