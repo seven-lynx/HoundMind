@@ -441,33 +441,6 @@ class NavigationController:
         print("❌ No suitable exploration target found")
         return False
     
-    def navigate_to_room(self, room_id: int) -> bool:
-        """Navigate to a specific room"""
-        path = self.pathfinder.navigate_to_room(room_id)
-        
-        if path:
-            self.pathfinder.set_current_path(path)
-            self.navigation_mode = "goto_room"
-            self.current_target = room_id
-            print(f"🏠 Navigation to room {room_id} started")
-            return True
-        else:
-            print(f"❌ Cannot find path to room {room_id}")
-            return False
-    
-    def navigate_to_landmark(self, landmark_id: int) -> bool:
-        """Navigate to a specific landmark"""
-        path = self.pathfinder.navigate_to_landmark(landmark_id)
-        
-        if path:
-            self.pathfinder.set_current_path(path)
-            self.navigation_mode = "goto_landmark"
-            self.current_target = landmark_id
-            print(f"🎯 Navigation to landmark {landmark_id} started")
-            return True
-        else:
-            print(f"❌ Cannot find path to landmark {landmark_id}")
-            return False
     
     def get_next_movement_command(self) -> Optional[Dict]:
         """

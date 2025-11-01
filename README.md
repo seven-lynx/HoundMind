@@ -1,6 +1,6 @@
 
 # HoundMind — Advanced Behaviors and AI for SunFounder PiDog
-> Author: 7Lynx · Doc Version: 2025.10.29b
+> Author: 7Lynx · Doc Version: 2025.10.30
 
 
 HoundMind is a next-generation AI and behavior framework for the SunFounder PiDog, featuring:
@@ -15,7 +15,7 @@ Both systems are independent—choose the one that fits your needs. All legacy m
 
 - **CanineCore** (`canine_core/`): Async orchestrator, modular services (motion, sensors, emotions, voice), and composable behavior modules.
 - **PackMind** (`packmind/`): AI orchestrator with advanced mapping (HomeMap), navigation (A*), sensor fusion, localization, face recognition, dynamic balance, enhanced audio, and more.
-- **Docs** (`docs/`): Programming guides, API reference, config guides, and architecture docs.
+- **Docs** (`docs/`): Programming guides, API reference, config guides, and architecture docs. See [`docs/CANINE_CORE_PACKMIND_FEATURE_MATRIX.md`](docs/CANINE_CORE_PACKMIND_FEATURE_MATRIX.md) for a side-by-side capability matrix.
 - **Tools** (`tools/`): Setup utilities and integration tests.
 - **Examples** (`examples/`): Runnable code examples.
 - **Legacy** (`legacy/`): Archived modules (pre-2025, not maintained).
@@ -50,6 +50,25 @@ Optional: enable voice features
 sudo apt update && sudo apt install -y portaudio19-dev python3-pyaudio
 pip3 install speech_recognition pyaudio
 ```
+
+Optional: face recognition (heavy on Pi 3B)
+
+```bash
+# Pi 4/5: try standard install (piwheels may provide prebuilt wheels)
+pip3 install face_recognition
+
+# If it tries to build dlib from source, install build tools first
+sudo apt update && sudo apt install -y cmake build-essential python3-dev libopenblas-dev liblapack-dev
+pip3 install dlib==19.24.0 face_recognition
+```
+
+On low-power models (e.g., Pi 3B), we recommend disabling face recognition or using the lightweight requirements:
+
+```bash
+pip3 install -r requirements-lite.txt
+```
+
+See `docs/face_recognition_setup.md` for details and troubleshooting.
 
 
 3) Run one of the systems
@@ -267,6 +286,21 @@ python packmind/orchestrator.py # PackMind
 
 Note: Hardware‑dependent features won’t function fully without PiDog.
 
+### Desktop simulation mode (no hardware required)
+
+You can force a lightweight simulation for the `pidog` library so code runs on a desktop without any hardware:
+
+- Set an environment variable before running:
+	- PowerShell (Windows): `$env:HOUNDMIND_SIM = "1"; python packmind/orchestrator.py`
+	- Bash (Linux/macOS): `HOUNDMIND_SIM=1 python3 packmind/orchestrator.py`
+- When enabled, `from pidog import Pidog` will resolve to a simulated class that:
+	- Accepts all basic motion calls (`do_action`, `head_move`, `body_stop`, `wait_all_done`)
+	- Provides plausible sensor reads (`ultrasonic.read_distance()`, `dual_touch.read()`, `ears.isdetected()/read()`)
+	- Exposes IMU-like attributes (`accData`, `gyroData`) with stable values and optional noise
+	- Is safe: all motion is no-op and won’t affect hardware
+
+Tip: You can also enable small randomization with `HOUNDMIND_SIM_RANDOM=1`.
+
 
 ## Documentation
 
@@ -345,3 +379,22 @@ See the API reference and mapping guide for usage patterns and advanced queries.
 ---
 
 Built to help you teach, learn, and explore with PiDog.
+
+## Roadmap / Future work
+
+- Desktop PiDog simulation shim (no-op motion, plausible sensors)
+	- Drop-in replacement for `pidog.Pidog` to run on Windows/macOS/Linux
+	- Tiers: 0) no-op fixed values; 1) randomized noisy signals; 2) seeded deterministic; 3) optional ROS2/Gazebo later
+	- Opt-in via environment variable (e.g., `HOUNDMIND_SIM=1`) or config preset; keeps PackMind/CanineCore code unchanged
+- Rich calibration UX
+	- Voice-guided calibration flow; on-device prompts; store results per surface profile
+- Balance corrections (hardware-aware)
+	- Minimal safe leg/pose adjustments for roll/pitch with cooldowns
+- Navigation & mapping enhancements
+	- Goal-directed exploration, room labeling, multi-session map merge, map export/import UI
+- Testing and CI
+	- Simulation-based unit tests for services and orchestrators; GitHub Actions workflow
+- Telemetry and dashboards
+	- Optional local web dashboard for status, logs, map summary, and live scan data
+- Packaging & releases
+	- Versioned GitHub Releases, optional pip extras for advanced services

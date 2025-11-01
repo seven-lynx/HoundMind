@@ -143,6 +143,7 @@ class HomeMap:
         """
         import matplotlib.pyplot as plt
         from matplotlib.patches import Rectangle
+        import numpy as np
         grid_img = np.zeros((self.max_size[1], self.max_size[0], 3), dtype=np.uint8)
         # Color cells by type
         for i in range(self.max_size[0]):
@@ -166,14 +167,14 @@ class HomeMap:
         # Overlay openings (if any)
         for op in getattr(self, 'openings', {}).values():
             if hasattr(op, 'x') and hasattr(op, 'y'):
-                ax.scatter(op.x, op.y, color='yellow', marker='o', s=40, label='Opening')
+                ax.scatter(op.x, op.y, color='yellow', marker='o', s=40, label='Opening')  # type: ignore
         # Overlay anchors (if any)
         if hasattr(self, 'anchors'):
             for aid, pos in self.anchors.items():
-                ax.scatter(pos.x, pos.y, color='magenta', marker='P', s=60, label='Anchor')  # 'P' is a valid marker (plus filled)
+                ax.scatter(pos.x, pos.y, color='magenta', marker='s', s=60, label='Anchor')  # 's' is a valid marker (square)  # type: ignore
                 ax.text(pos.x, pos.y, str(aid), color='magenta', fontsize=8)
         # Current position
-    ax.scatter(self.current_position.x, self.current_position.y, color='lime', marker='X', s=60, label='Robot')  # 'X' is a valid marker
+        ax.scatter(self.current_position.x, self.current_position.y, color='lime', marker='o', s=60, label='Robot')  # 'o' is a valid marker  # type: ignore
         ax.set_title('HomeMap Visualization')
         ax.set_xlabel('X (grid)')
         ax.set_ylabel('Y (grid)')
@@ -520,7 +521,7 @@ class HomeMap:
                 "openings": len(self.openings),
                 "safe_paths": len(self.safe_paths),
                 "odometry_error": self.odometry_error,
-                "last_update": self.last_update
+                # "last_update": self.last_update  # Removed: attribute not defined
             }
     
 

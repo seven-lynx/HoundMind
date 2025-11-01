@@ -42,6 +42,11 @@ Configure behavior and features via `packmind/packmind_config.py` (presets avail
     - Multi-source sound tracking and voice activity detection
     - `from packmind.services.enhanced_audio_processing_service import EnhancedAudioProcessingService`
 
+- 🧭 **Calibration**: `packmind/services/calibration_service.py`
+    - Unified calibration routines (wall-follow, corner-seek, landmark-align)
+    - Orchestrator delegates runtime calibration to this service
+    - `from packmind.services.calibration_service import CalibrationService`
+
 Note: Older top-level files like `house_mapping.py` or `pathfinding.py` were moved into these folders. Update imports accordingly.
 
 ## ⚙️ Configuration
@@ -59,6 +64,8 @@ class PiDogConfig:
         ENABLE_FACE_RECOGNITION = True
         ENABLE_DYNAMIC_BALANCE = True
         ENABLE_ENHANCED_AUDIO = True
+    # Calibration
+    # (No toggle required; orchestrator delegates to CalibrationService when SLAM is enabled)
 ```
 
 ## 📚 Documentation
@@ -69,7 +76,44 @@ class PiDogConfig:
     - `intelligent_obstacle_avoidance_guide.md`
 - Voice setup: `../docs/voice_setup_instructions.md`
 
+### 🔧 Calibration quickstart
+
+Voice commands (when SLAM is enabled):
+
+- Say "PiDog calibrate" → wall-follow calibration via CalibrationService
+- Say "PiDog find corner" → corner-seek calibration via CalibrationService
+
+Programmatic use:
+
+```python
+from packmind.services.calibration_service import CalibrationService
+
+cal = CalibrationService(slam_system=home_map, scanning_service=scanner, dog=pidog, logger=logger)
+ok = cal.calibrate("wall_follow")  # or "corner_seek", "landmark_align"
+```
+
 For general PiDog programming resources, see `../docs/`.
+
+## 🖥️ Desktop simulation mode
+
+PackMind can run on a desktop without hardware using a built-in simulation shim:
+
+- Set `HOUNDMIND_SIM=1` to force simulation for `from pidog import Pidog`.
+- The simulator provides no-op motion and plausible sensor values so services like scanning and energy/emotion updates run.
+- Optional `HOUNDMIND_SIM_RANDOM=1` adds light noise to IMU/ultrasonic data for testing.
+
+Examples (PowerShell):
+
+```powershell
+$env:HOUNDMIND_SIM = "1"; python packmind/orchestrator.py
+```
+
+## 🧩 Face recognition on Raspberry Pi
+
+Face recognition uses the `face_recognition` package (dlib). On Pi 4/5, piwheels often provides prebuilt wheels. On Pi 3B, building dlib can be very slow and may fail.
+
+- Recommended on Pi 3B: set `ENABLE_FACE_RECOGNITION = False` in `packmind/packmind_config.py`, or use `requirements-lite.txt`.
+- If you still want it, you’ll likely need build tools (`cmake`, `build-essential`, `python3-dev`, `libopenblas-dev`, `liblapack-dev`). See `docs/face_recognition_setup.md`.
 
 ## � Feature gates at a glance
 
@@ -98,3 +142,18 @@ Logging can be tuned via `LOG_LEVEL`, `LOG_FILE_MAX_MB`, and `LOG_FILE_BACKUPS`.
 ---
 
 Want a framework to build your own behaviors? See `../canine_core/` 🔧
+
+## Future work
+
+- Desktop simulation shim for PiDog
+    - Drop-in class compatible with `pidog.Pidog` (no-op motion; plausible sensor readings)
+    - Enable with `HOUNDMIND_SIM=1` or a config preset; supports deterministic seeds for tests
+    - Later: optional ROS2/Gazebo or Webots backends for physics
+- Calibration UX
+    - Voice-guided flow; per-surface profiles; saved calibration snapshots
+- Balance corrections
+    - Minimal safe corrective motions when IMU detects tilt (cooldown; guardrails)
+- Developer tooling
+    - Service smoke tests, simulator-backed integration tests, CI workflow
+- UI & telemetry
+    - Optional local dashboard: logs, map preview, service health, scan charts

@@ -1,0 +1,44 @@
+# Lightweight requirements for low-power devices (e.g., Raspberry Pi 3B)
+# Omits heavy optional packages like face-recognition/dlib and TensorFlow.
+
+# Core dependencies
+keyboard>=0.13.5
+importlib-metadata>=4.0.0
+
+# Audio and voice (keep minimal)
+speechrecognition>=3.10.0
+pyaudio>=0.2.11
+pydub>=0.25.1
+
+# Computer vision (no face-recognition/dlib)
+opencv-python>=4.8.0
+pillow>=9.5.0
+
+# Scientific computing and data processing
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+
+# Machine learning (omit heavy frameworks)
+# scikit-learn and tensorflow omitted here on purpose
+
+# Hardware interface (Raspberry Pi specific)
+RPi.GPIO>=0.7.1
+adafruit-circuitpython-servokit>=1.3.15
+adafruit-blinka>=8.20.0
+pidog>=1.0.0
+
+# Communication and networking
+requests>=2.31.0
+websockets>=11.0.0
+
+# Development and debugging
+pytest>=7.4.0
+black>=23.0.0
+flake8>=6.0.0
+
+# Utility libraries
+pyyaml>=6.0
+python-dotenv>=1.0.0
+colorama>=0.4.6
+tqdm>=4.65.0

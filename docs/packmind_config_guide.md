@@ -1,9 +1,9 @@
 # PackMind Configuration Guide
-> Author: 7Lynx · Doc Version: 2025.10.29
+> Author: 7Lynx · Doc Version: 2025.10.30
 
 This is the canonical configuration guide for PackMind. All references should point here (`docs/packmind_config_guide.md`).
 
-PackMind is the standalone AI runtime in HoundMind with its own orchestrator, services, and optional mapping/navigation. This guide explains the options in `packmind/packmind_config.py`, how they affect behavior, and how to use presets.
+PackMind is the standalone AI runtime in HoundMind with its own orchestrator, services, and optional mapping/navigation. This guide explains the options in `packmind/packmind_config.py`, how they affect behavior, and how to use presets. For a side-by-side comparison with CanineCore modules, see [`docs/CANINE_CORE_PACKMIND_FEATURE_MATRIX.md`](CANINE_CORE_PACKMIND_FEATURE_MATRIX.md).
 
 ## Presets
 PackMind ships with multiple presets declared in `packmind/packmind_config.py`.
@@ -78,6 +78,21 @@ Notes:
 - Obstacle avoidance can use precise IMU-based turning instead of fixed steps.
 - If disabled or heading unavailable, the system falls back to step-based turns using `TURN_DEGREES_PER_STEP`.
 - Real-world turning can vary with speed and surface; the IMU closed-loop approach compensates for this automatically. Only the fallback step path depends on `TURN_DEGREES_PER_STEP` calibration.
+
+## Calibration (when SLAM is enabled)
+- Runtime calibration is handled by `CalibrationService` and invoked by the orchestrator.
+- Voice commands: "PiDog, calibrate" (wall-follow) and "PiDog, find corner" (corner-seek).
+- Programmatic use:
+
+```python
+from packmind.services.calibration_service import CalibrationService
+
+cal = CalibrationService(slam_system=home_map, scanning_service=scanner, dog=pidog, logger=logger)
+ok = cal.calibrate("wall_follow")  # or "corner_seek", "landmark_align"
+```
+
+Notes:
+- There is no separate feature toggle for calibration; the orchestrator delegates to the service when SLAM is enabled and dependencies are available.
 
 ## Turn calibration tool
 - Run `python tools/turn_calibration.py` on the PiDog to auto-calibrate turning.
@@ -156,6 +171,11 @@ Voice runtime (ASR) settings used by `runtime/voice_runtime.py`:
 - FACE_DATA_DIR: On‑disk storage for profiles/encodings/interactions
 - FACE_AUTO_SAVE_INTERVAL (s): Autosave cadence
 - FACE_CONFIDENCE_DISPLAY_MIN (0..1): Min confidence to display recognition feedback
+
+Performance note (Raspberry Pi):
+- On Pi 4/5, prebuilt ARM wheels for `dlib` (dependency of `face_recognition`) are often available via piwheels.
+- On Pi 3B, compiling `dlib` is slow and can fail due to memory limits. Consider setting `ENABLE_FACE_RECOGNITION = False`, or use `requirements-lite.txt`.
+- See `docs/face_recognition_setup.md` for setup, build prerequisites (e.g., `cmake`), and troubleshooting.
 
 ## Dynamic balance
 - ENABLE_DYNAMIC_BALANCE (bool): Enable balance monitoring

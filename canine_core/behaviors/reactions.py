@@ -61,7 +61,16 @@ class ReactionsBehavior(Behavior):
         self._task = asyncio.create_task(self._loop())
 
     async def on_event(self, event: Event) -> None:
-        # Future: react to bus events (voice command, external triggers)
+        # Clap/whistle detection (audio event)
+        if hasattr(event, 'type') and event.type == 'audio_event':
+            sound_type = getattr(event, 'sound_type', '').lower()
+            dog = getattr(self._ctx.hardware, "dog", None) if self._ctx else None
+            if dog:
+                if sound_type == 'clap' or sound_type == 'whistle':
+                    # Move toward the sound or perform a trick
+                    dog.do_action('forward', step_count=2, speed=100)
+                    self._emotion((0, 255, 255), 'flash')
+            return
         return
 
     async def stop(self) -> None:
@@ -251,10 +260,27 @@ class ReactionsBehavior(Behavior):
     async def _loop(self) -> None:
         assert self._ctx is not None
         interval = float(getattr(self._ctx.config, "REACTIONS_INTERVAL", 0.5))
+        prev_light = None
+        light_sensor = getattr(self._ctx.hardware, "light", None)
+        light_threshold = getattr(self._ctx.config, "LIGHT_LEVEL_ALERT_THRESHOLD", 30)
         while self._running:
             self._touch()
             self._imu()
             self._sound_react()
+            # Light level change reaction
+            if light_sensor is not None:
+                try:
+                    curr_light = light_sensor.read() if hasattr(light_sensor, 'read') else None
+                    if curr_light is not None:
+                        if prev_light is not None and abs(curr_light - prev_light) > light_threshold:
+                            # Sudden change detected
+                            self._emotion((255, 255, 0), 'flash')
+                            dog = getattr(self._ctx.hardware, "dog", None)
+                            if dog:
+                                dog.do_action('bark', speed=80)
+                        prev_light = curr_light
+                except Exception:
+                    pass
             await asyncio.sleep(interval)
 
 

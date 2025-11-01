@@ -37,7 +37,7 @@ This document outlines the target modular architecture for the PackMind subsyste
   - emotion_service.py: emotion computation + LED/sound feedback hooks
   - voice_service.py: intent registry + text processing
   - asr_service.py: microphone + wake-word + STT (optional)
-  - navigation_service.py: SLAM + pathfinding + localization + calibration
+  - calibration_service.py: unified calibration (wall-follow, corner-seek, landmark-align); orchestrator delegates here
   - log_service.py: in-memory ring + file append + report generation
 
 - packmind_config.py: presets and validation
@@ -77,6 +77,7 @@ This document outlines the target modular architecture for the PackMind subsyste
   - ASR service produces text and feeds VoiceService
 - NavigationService
   - wrap SLAM/pathfinding/localizer; expose calibrate/show_map/navigate
+  (Updated: calibration is handled by CalibrationService; orchestrator no longer provides internal calibration methods.)
 
 ## State Machine
 - Orchestrator owns BehaviorState and swaps current behavior object (from registry).
@@ -87,6 +88,20 @@ This document outlines the target modular architecture for the PackMind subsyste
 - Added new behaviors: exploring, interacting, resting, playing.
 - Introduced BehaviorRegistry and ServiceContainer; orchestrator uses them to assemble behaviors and services.
 - Normalized configuration import to `packmind/packmind_config.py` and removed fallback in orchestrator.
+- Unified calibration via `CalibrationService`; removed internal `_calibrate_*` methods from orchestrator. Orchestrator now delegates calibration exclusively to the service at runtime.
+
+## Future work
+
+- Desktop simulation shim
+  - Drop-in `pidog` replacement that returns plausible sensor data and ignores motion
+  - Tiers: no-op/fixed, randomized, deterministic (seeded), and optional ROS2/Gazebo physics
+  - Entry guarded by env/config flag so orchestrator/services remain unchanged
+- Balance correction actions
+  - Safe, minimal corrective poses when tilt detected (cooldowns, thresholds)
+- Voice-guided calibration
+  - Interactive prompts, persistent surface profiles, quick re-calibration
+- Service test harness
+  - Simulator-backed tests and CI integration to validate behavior without hardware
 
 ## Error/edge cases
 - dog is None or missing capabilities (host PC): services return safe defaults and avoid hardware calls.

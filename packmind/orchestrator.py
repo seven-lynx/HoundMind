@@ -119,6 +119,7 @@ from packmind.services.health_monitor import HealthMonitor
 from packmind.services.face_recognition_service import FaceRecognitionService
 from packmind.services.dynamic_balance_service import DynamicBalanceService
 from packmind.services.enhanced_audio_processing_service import EnhancedAudioProcessingService
+from packmind.services.calibration_service import CalibrationService
 
 # Note: No local dummy classes are defined for disabled features.
 """
@@ -400,6 +401,16 @@ class Orchestrator:
         self.context.behavior_state = BehaviorState.IDLE
         # Scanning service from container
         self.scanning_service = self._container.scanning()
+        # Calibration service (unified path) – dog may be None until initialize()
+        try:
+            self.calibration_service = CalibrationService(
+                slam_system=self.home_map,
+                scanning_service=self.scanning_service,
+                dog=self.context.dog,
+                logger=self._logger,
+            )
+        except Exception:
+            self.calibration_service = None
 
         # Initialize new AI services
         self.face_recognition_service = FaceRecognitionService(self.config)
@@ -591,6 +602,15 @@ class Orchestrator:
             # Startup sequence
             self.context.dog.do_action("stand", speed=60)
             self.context.dog.wait_all_done()
+
+            # Update calibration service with live dog handle (if created earlier)
+            try:
+                if getattr(self, "calibration_service", None) is not None:
+                    self.calibration_service.dog = self.context.dog
+                    self.calibration_service.slam_system = self.home_map
+                    self.calibration_service.scanning_service = self.scanning_service
+            except Exception:
+                pass
             
             # Set initial emotional state
             self.set_emotion(EmotionalState.CALM)
@@ -2121,143 +2141,28 @@ class Orchestrator:
         if not self.slam_enabled or not self.home_map:
             self._logger.warning("❌ Mapping system not available for calibration")
             return False
-        
+
         self._logger.info(f"🎯 Starting position calibration using {method}...")
         self._log_patrol_event("CALIBRATION_START", f"Position calibration started: {method}")
-        
-        if method == "wall_follow":
-            return self._calibrate_wall_follow()
-        elif method == "corner_seek":
-            return self._calibrate_corner_seek()
-        elif method == "landmark_align":
-            return self._calibrate_landmark_align()
-        else:
-            self._logger.warning(f"❌ Unknown calibration method: {method}")
+
+        # Unified service path only
+        try:
+            if getattr(self, "calibration_service", None) is None:
+                self._logger.warning("CalibrationService not available")
+                self._log_patrol_event("CALIBRATION_FAILED", f"Service unavailable: {method}")
+                return False
+            ok = bool(self.calibration_service.calibrate(method))
+            if ok:
+                self._log_patrol_event("CALIBRATION_SUCCESS", f"Calibration completed via service: {method}")
+                return True
+            self._log_patrol_event("CALIBRATION_FAILED", f"Calibration failed via service: {method}")
+            return False
+        except Exception as e:
+            self._logger.error(f"Calibration service error: {e}")
+            self._log_patrol_event("CALIBRATION_ERROR", f"Calibration service error: {e}")
             return False
     
-    def _calibrate_wall_follow(self) -> bool:
-        """Calibrate position by following a wall to establish reference"""
-        self._logger.info("🧱 Wall following calibration...")
-        
-        # Perform 360-degree scan to find walls
-        wall_distances = {}
-        for angle in range(0, 360, 45):  # Every 45 degrees
-            head_angle = max(-80, min(80, angle - 180))  # Convert to head range
-            self.dog.head_move([[head_angle, 0, 0]], speed=90)
-            time.sleep(0.3)
-            
-            distance = self.dog.ultrasonic.read_distance()
-            if 10 < distance < 200:  # Valid wall distance
-                wall_distances[angle] = distance
-        
-        # Return head to center
-        self.dog.head_move([[0, 0, 0]], speed=90)
-        
-        if not wall_distances:
-            self._logger.warning("❌ No walls found for calibration")
-            return False
-        
-        # Find closest wall
-        closest_angle, wall_distance = min(wall_distances.items(), key=lambda x: x[1])
-        
-        self._logger.info(f"🎯 Closest wall at {closest_angle}°, distance {wall_distance:.1f}cm")
-        
-        # Move toward wall for reference alignment
-        if wall_distance > 30:
-            # Calculate turn needed
-            turn_direction = "turn_left" if closest_angle > 180 else "turn_right"
-            turn_steps = min(3, abs(closest_angle - 180) // 45)
-            
-            if turn_steps > 0:
-                self.dog.do_action(turn_direction, step_count=turn_steps, speed=60)
-            
-            # Move closer to wall
-            steps_needed = max(1, int((wall_distance - 25) / 15))  # Get to ~25cm from wall
-            self.dog.do_action("forward", step_count=min(steps_needed, 3), speed=50)
-        
-        # Update SLAM position with high confidence (we know we're near a wall)
-        if self.slam_enabled and self.home_map and hasattr(self.home_map, 'get_position'):
-            current_pos = self.home_map.get_position()
-            if hasattr(current_pos, 'confidence'):
-                current_pos.confidence = 0.95  # High confidence after calibration
-            self._log_patrol_event("CALIBRATION_SUCCESS", f"Wall calibration completed", {
-                "wall_angle": closest_angle,
-                "wall_distance": wall_distance,
-                "new_confidence": getattr(current_pos, 'confidence', None)
-            })
-        
-        self._logger.info("✓ Wall calibration completed")
-        return True
-    
-    def _calibrate_corner_seek(self) -> bool:
-        """Calibrate by finding and aligning with room corners"""
-        self._logger.info("📐 Corner seeking calibration...")
-        
-        # Look for corner patterns in current scan data
-        corners_found = 0
-        scan_data = self._perform_three_way_scan()
-        
-        # Simple corner detection: look for perpendicular walls
-        if (scan_data['forward'] < 50 and scan_data['left'] < 50 and scan_data['right'] > 100):
-            # Possible left corner
-            self.dog.do_action("turn_left", step_count=2, speed=60)
-            corners_found += 1
-        elif (scan_data['forward'] < 50 and scan_data['right'] < 50 and scan_data['left'] > 100):
-            # Possible right corner  
-            self.dog.do_action("turn_right", step_count=2, speed=60)
-            corners_found += 1
-        
-        if corners_found > 0:
-            # Update position confidence
-            if self.slam_enabled and self.home_map and hasattr(self.home_map, 'get_position'):
-                current_pos = self.home_map.get_position()
-                if hasattr(current_pos, 'confidence'):
-                    current_pos.confidence = 0.9
-                self._log_patrol_event("CALIBRATION_SUCCESS", f"Corner calibration completed", {
-                    "corners_found": corners_found,
-                    "scan_data": scan_data
-                })
-            
-            self._logger.info(f"✓ Corner calibration completed ({corners_found} corners)")
-            return True
-        else:
-            self._logger.warning("❌ No clear corners found")
-            return False
-    
-    def _calibrate_landmark_align(self) -> bool:
-        """Calibrate using known landmarks from the map"""
-        if not self.slam_enabled or not self.home_map:
-            self._logger.warning("❌ Mapping system not available for calibration")
-            return False
-        anchors = getattr(self.home_map, 'anchors', {})
-        if not anchors:
-            self._logger.warning("❌ No visual anchors for calibration")
-            return False
-        self._logger.info("🎯 Landmark alignment calibration...")
-        current_pos = self.home_map.get_position()
-        min_dist = float('inf')
-        closest_anchor_id = None
-        for anchor_id, anchor_pos in anchors.items():
-            dist = ((anchor_pos.x - current_pos.x) ** 2 + (anchor_pos.y - current_pos.y) ** 2) ** 0.5
-            if dist < min_dist:
-                min_dist = dist
-                closest_anchor_id = anchor_id
-        if closest_anchor_id is None:
-            self._logger.warning("❌ No valid anchor found for calibration")
-            return False
-        self._logger.info(f"🎯 Aligning with anchor: {closest_anchor_id} at {min_dist:.1f} units")
-        if self.home_map.correct_position_with_anchor(closest_anchor_id):
-            new_pos = self.home_map.get_position()
-            self._log_patrol_event("CALIBRATION_SUCCESS", f"Landmark calibration completed", {
-                "anchor_id": closest_anchor_id,
-                "anchor_distance": min_dist,
-                "new_confidence": getattr(new_pos, 'confidence', None)
-            })
-            self._logger.info("✓ Landmark calibration completed")
-            return True
-        else:
-            self._logger.warning("❌ Failed to correct position with anchor")
-            return False
+    # Internal calibration helpers removed in favor of CalibrationService
     
     def _start_autonomous_exploration(self):
         """Start autonomous exploration mode"""
@@ -2312,10 +2217,8 @@ class Orchestrator:
             
             self._logger.info("🗺️ Current Home Map:")
             visualizer.print_map(show_colors=True)
-            if hasattr(visualizer, 'print_room_summary'):
-                visualizer.print_room_summary()
-            if hasattr(visualizer, 'print_landmark_summary'):
-                visualizer.print_landmark_summary()
+            if hasattr(visualizer, 'print_anchor_summary'):
+                visualizer.print_anchor_summary()
             # Export current map
             timestamp = int(time.time())
             export_files = []
