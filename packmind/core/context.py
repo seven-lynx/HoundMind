@@ -12,7 +12,7 @@ class AIContext:
     services, and behaviors.
     """
     # Core hardware abstraction (Pidog hardware object at runtime)
-    # Use Any to avoid editor noise on non-Pi environments
+    # Keep as Any to avoid cross-package analyzer issues; runtime guards are in place
     dog: Optional[Any] = None
 
     # Emotional State

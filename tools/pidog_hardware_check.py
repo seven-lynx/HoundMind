@@ -281,12 +281,18 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         try:
             # Center head and close safely
-            dog.head_move([[0, 0, 0]], speed=50)
-            dog.wait_head_done()
+            hm = getattr(dog, "head_move", None)
+            if callable(hm):
+                hm([[0, 0, 0]], speed=50)
+            wait_done = getattr(dog, "wait_head_done", None)
+            if callable(wait_done):
+                wait_done()
         except Exception:
             pass
         try:
-            dog.close()
+            _close = getattr(dog, "close", None)
+            if callable(_close):
+                _close()
         except Exception:
             pass
 

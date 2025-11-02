@@ -75,11 +75,18 @@ else:
         def read(self) -> int:
             return -1
 
+    class _RgbStrip:
+        def set_mode(self, mode: str, color: str, **kwargs):
+            _logger.debug(f"[sim] rgb_strip.set_mode({mode}, {color}, {kwargs})")
+        def close(self):
+            _logger.debug("[sim] rgb_strip.close()")
+
     class Pidog:
         def __init__(self) -> None:
             self.ultrasonic = _Ultrasonic(self)
             self.dual_touch = _DualTouch()
             self.ears = _Ears()
+            self._rgb = _RgbStrip()
             self._randomize = _truthy(os.getenv("HOUNDMIND_SIM_RANDOM"))
             self.accData = (0.0, 0.0, 9.8)
             self.gyroData = (0.0, 0.0, 0.0)
@@ -88,8 +95,12 @@ else:
         @property
         def distance(self) -> float:
             return self.ultrasonic.read_distance()
+        def read_distance(self) -> float:
+            return self.ultrasonic.read_distance()
         def head_move(self, seq, speed: int = 60):
             time.sleep(0.02)
+        def wait_head_done(self):
+            time.sleep(0.01)
         def do_action(self, action: str, step_count: int = 1, speed: int = 60, **kwargs):
             self._last_action = (action, step_count, speed, kwargs)
             if self._randomize:
@@ -112,6 +123,13 @@ else:
             _logger.debug(f"[sim] speak: {sound} vol={volume}")
         def power_down(self):
             _logger.info("[sim] power_down invoked")
+        def stop_and_lie(self):
+            _logger.debug("[sim] stop_and_lie()")
+        def close(self):
+            _logger.info("pidog shim: close() called")
+        @property
+        def rgb_strip(self):
+            return self._rgb
         def get_accelerometer_data(self):
             if self._randomize:
                 return (

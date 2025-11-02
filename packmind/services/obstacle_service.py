@@ -55,7 +55,9 @@ class ObstacleService:
         left_dist = scan.get("left", 0.0)
         right_dist = scan.get("right", 0.0)
 
-        recent = [a for a in self.avoidance_history if now - a[0] < 10.0]
+        # Use a local explicitly-typed slice to keep analyzers happy
+        recent_hist = list(self.avoidance_history)
+        recent = [a for a in recent_hist if now - a[0] < 10.0]
         if len(recent) >= 3:
             self._execute_advanced_avoidance_strategy(context, config)
         else:
@@ -76,8 +78,9 @@ class ObstacleService:
             direction = "turn_right"
             steps = config.TURN_STEPS_NORMAL if right_dist > 50 else config.TURN_STEPS_SMALL
         else:
-            recent_lefts = sum(1 for _, d, _ in self.avoidance_history[-3:] if d == "left")
-            recent_rights = sum(1 for _, d, _ in self.avoidance_history[-3:] if d == "right")
+            last_three: list[tuple[float, str, float]] = list(self.avoidance_history[-3:])
+            recent_lefts = sum(1 for _, d, _ in last_three if d == "left")
+            recent_rights = sum(1 for _, d, _ in last_three if d == "right")
             if recent_lefts > recent_rights:
                 direction = "turn_right"
             else:
@@ -148,7 +151,8 @@ class ObstacleService:
             return
         if len(self.movement_history) <= 10:
             return
-        recent = [m for _, m in self.movement_history[-10:]]
+        last_moves: list[tuple[float, float]] = list(self.movement_history[-10:])
+        recent = [m for _, m in last_moves]
         avg = sum(recent) / len(recent)
         try:
             movement_threshold = float(getattr(config, "STUCK_MOVEMENT_THRESHOLD", 1000.0))

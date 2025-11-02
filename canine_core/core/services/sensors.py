@@ -19,15 +19,36 @@ class SensorService:
         if dog is None:
             return (1000.0, 1000.0, 1000.0)
         try:
-            dog.head_move([[-head_range, 0, 0]], speed=head_speed)
-            dog.wait_head_done()
-            left = float(dog.read_distance() or 1000.0)
-            dog.head_move([[head_range, 0, 0]], speed=head_speed)
-            dog.wait_head_done()
-            right = float(dog.read_distance() or 1000.0)
-            dog.head_move([[0, 0, 0]], speed=head_speed)
-            dog.wait_head_done()
-            fwd = float(dog.read_distance() or 1000.0)
+            head_move = getattr(dog, "head_move", None)
+            wait_done = getattr(dog, "wait_head_done", None)
+            read_dist = getattr(dog, "read_distance", None)
+
+            if callable(head_move):
+                head_move([[-head_range, 0, 0]], speed=head_speed)
+            if callable(wait_done):
+                wait_done()
+            _lv: object = read_dist() if callable(read_dist) else 1000.0
+            if not isinstance(_lv, (int, float)):
+                _lv = 1000.0
+            left = float(_lv)
+
+            if callable(head_move):
+                head_move([[head_range, 0, 0]], speed=head_speed)
+            if callable(wait_done):
+                wait_done()
+            _rv: object = read_dist() if callable(read_dist) else 1000.0
+            if not isinstance(_rv, (int, float)):
+                _rv = 1000.0
+            right = float(_rv)
+
+            if callable(head_move):
+                head_move([[0, 0, 0]], speed=head_speed)
+            if callable(wait_done):
+                wait_done()
+            _fv: object = read_dist() if callable(read_dist) else 1000.0
+            if not isinstance(_fv, (int, float)):
+                _fv = 1000.0
+            fwd = float(_fv)
             return (fwd, left, right)
         except Exception:
             return (1000.0, 1000.0, 1000.0)

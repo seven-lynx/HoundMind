@@ -322,13 +322,18 @@ def minimal_head_sweep() -> bool:
     try:
         dog = Pidog()
         # Center, small left, small right, center
-        dog.head_move([[0, 0, 0]], speed=40)
+        hm = getattr(dog, "head_move", None)
+        if callable(hm):
+            hm([[0, 0, 0]], speed=40)
         time.sleep(0.2)
-        dog.head_move([[20, 0, 0]], speed=40)
+        if callable(hm):
+            hm([[20, 0, 0]], speed=40)
         time.sleep(0.2)
-        dog.head_move([[-20, 0, 0]], speed=40)
+        if callable(hm):
+            hm([[-20, 0, 0]], speed=40)
         time.sleep(0.2)
-        dog.head_move([[0, 0, 0]], speed=40)
+        if callable(hm):
+            hm([[0, 0, 0]], speed=40)
         time.sleep(0.2)
         print(f"{OK} head sweep complete")
         return True
@@ -338,9 +343,13 @@ def minimal_head_sweep() -> bool:
     finally:
         try:
             if dog is not None:
-                dog.head_move([[0, 0, 0]], speed=40)
+                hm = getattr(dog, "head_move", None)
+                if callable(hm):
+                    hm([[0, 0, 0]], speed=40)
                 time.sleep(0.2)
-                dog.close()
+                _close = getattr(dog, "close", None)
+                if callable(_close):
+                    _close()
         except Exception:
             pass
 

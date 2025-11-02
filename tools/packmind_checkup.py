@@ -196,9 +196,13 @@ def service_smoke_tests(preset: str, *, move: bool = False) -> bool:
             # Best-effort to center head and close
             try:
                 if dog is not None:
-                    dog.head_move([[0, 0, 0]], speed=50)
+                    hm = getattr(dog, "head_move", None)
+                    if callable(hm):
+                        hm([[0, 0, 0]], speed=50)
                     time.sleep(0.2)
-                    dog.close()
+                    _close = getattr(dog, "close", None)
+                    if callable(_close):
+                        _close()
             except Exception:
                 pass
 

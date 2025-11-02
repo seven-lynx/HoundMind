@@ -130,7 +130,7 @@ class DynamicBalanceService:
         
         # Callback functions for balance events
         self.balance_callbacks: Dict[BalanceState, List[Callable]] = {
-            state: [] for state in BalanceState
+            state: [] for state in list(BalanceState)
         }
         
         # Data storage

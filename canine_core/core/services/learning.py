@@ -12,7 +12,7 @@ Data location:
 - <repo_root>/data/canine_core/learning.json
 
 Author: 7Lynx
-Doc Version: 2025.10.24
+Doc Version: 2025.11.01
 """
 from __future__ import annotations
 

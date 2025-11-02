@@ -502,7 +502,7 @@ class HomeMap:
         """Get summary of current map state"""
         with self.map_lock:
             # Count cell types
-            cell_counts = {cell_type: 0 for cell_type in CellType}
+            cell_counts = {cell_type: 0 for cell_type in list(CellType)}
             for x in range(self.map_bounds['min_x'], self.map_bounds['max_x'] + 1):
                 for y in range(self.map_bounds['min_y'], self.map_bounds['max_y'] + 1):
                     cell_type = self.grid[x, y].cell_type

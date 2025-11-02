@@ -187,7 +187,7 @@ class EnhancedAudioProcessingService:
         
         # Callback functions
         self.audio_callbacks: Dict[AudioEvent, List[Callable]] = {
-            event: [] for event in AudioEvent
+            event: [] for event in list(AudioEvent)
         }
         
         # Data storage
@@ -637,11 +637,9 @@ class EnhancedAudioProcessingService:
                 method = getattr(self.pidog_instance, "get_sound_direction", None)
                 if callable(method):
                     direction_data = method()
-                    if direction_data is not None:
-                        try:
-                            return float(direction_data)  # degrees
-                        except Exception:
-                            pass
+                    val = self._to_float(direction_data)
+                    if val is not None:
+                        return val
                 # Graceful fallback: some pidog libs expose 'sound.direction' or similar
                 if hasattr(self.pidog_instance, "sound"):
                     snd = getattr(self.pidog_instance, "sound")
@@ -649,16 +647,17 @@ class EnhancedAudioProcessingService:
                     for attr in ("direction", "dir", "angle", "heading"):
                         if hasattr(snd, attr):
                             val = getattr(snd, attr)
-                            try:
-                                return float(val)
-                            except Exception:
-                                pass
+                            fval = self._to_float(val)
+                            if fval is not None:
+                                return fval
                     # Try common method names
                     for meth in ("get_direction", "read_direction"):
                         if hasattr(snd, meth):
                             try:
                                 val = getattr(snd, meth)()
-                                return float(val)
+                                fval = self._to_float(val)
+                                if fval is not None:
+                                    return fval
                             except Exception:
                                 pass
             except Exception as e:
@@ -672,6 +671,31 @@ class EnhancedAudioProcessingService:
         # Random direction for simulation
         import random
         return random.uniform(0, 360)
+
+    def _to_float(self, value: object) -> Optional[float]:
+        """Best-effort conversion to float degrees with strict checks.
+        Accepts int/float-like, string numbers, numpy scalars; rejects others.
+        """
+        try:
+            # Handle numpy scalar via safe getattr
+            item_fn = getattr(value, "item", None)
+            if callable(item_fn):
+                value = item_fn()
+            # Reject dicts/lists/tuples except len-1 sequences
+            if isinstance(value, (list, tuple)):
+                if len(value) == 1:
+                    value = value[0]
+                else:
+                    return None
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                # Strip degrees symbol and whitespace
+                s = value.strip().replace("°", "")
+                return float(s)
+        except Exception:
+            return None
+        return None
     
     def _classify_sound_type(self, sample: AudioSample) -> SoundSourceType:
         """Classify the type of sound based on audio characteristics"""
@@ -818,18 +842,20 @@ class EnhancedAudioProcessingService:
                     'peak_noise_level': self.statistics.peak_noise_level,
                     'silence_percentage': self.statistics.silence_percentage
                 },
-                'events': [
-                    {
-                        'timestamp': e.timestamp,
-                        'event_type': e.event_type.value,
-                        'source_id': e.source_id,
-                        'direction': e.direction,
-                        'intensity': e.intensity,
-                        'confidence': e.confidence,
-                        'description': e.description
-                    }
-                    for e in self.audio_events[-100:]  # Save last 100 events
-                ],
+                'events': (
+                    [
+                        {
+                            'timestamp': ev.timestamp,
+                            'event_type': ev.event_type.value,
+                            'source_id': ev.source_id,
+                            'direction': ev.direction,
+                            'intensity': ev.intensity,
+                            'confidence': ev.confidence,
+                            'description': ev.description
+                        }
+                        for ev in list(self.audio_events[-100:])
+                    ]
+                ),
                 'config': {
                     'sample_rate': self.sample_rate,
                     'channels': self.channels,

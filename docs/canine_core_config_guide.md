@@ -1,5 +1,5 @@
 # CanineCore Configuration Guide
-> Author: 7Lynx · Doc Version: 2025.10.30
+> Author: 7Lynx · Doc Version: 2025.11.01
 
 This is the canonical configuration guide for CanineCore. All references should point here (`docs/canine_core_config_guide.md`). For cross-stack capability mapping, see [`docs/CANINE_CORE_PACKMIND_FEATURE_MATRIX.md`](CANINE_CORE_PACKMIND_FEATURE_MATRIX.md).
 

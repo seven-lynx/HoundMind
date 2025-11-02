@@ -30,6 +30,13 @@
   - Added performance notes for Face Recognition on Pi 3B with link to the setup guide.
   - Added `FACE_BACKEND` and `FACE_LITE_DATA_DIR` configuration keys
 
+### Maintenance
+- Analyzer hardening and sim-safety:
+  - Introduced a `PidogLike` Protocol and extended the pidog shim to align with runtime usage (read_distance, wait_head_done, rgb_strip.set_mode, stop_and_lie, close), reducing false-positive attribute warnings while keeping non-Pi runs safe.
+  - Stabilized obstacle avoidance history slicing and recent-movement computations to avoid static analyzer mis-parses.
+  - Enhanced audio service: robust float conversion for sound direction data, avoiding brittle casts.
+  - Checkup tools and sensors now guard hardware calls with `getattr(...)/callable(...)` to prevent attribute errors on desktops.
+
 ### Notes
 
 ## [v2025.10.29b] - 2025-10-29 - HomeMap Mapping Refactor, Legacy Removal, and Documentation Overhaul
