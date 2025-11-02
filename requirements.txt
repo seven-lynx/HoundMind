@@ -36,6 +36,10 @@ pidog>=1.0.0
 requests>=2.31.0
 websockets>=11.0.0
 
+# Telemetry and web API (optional for dashboard)
+fastapi>=0.115.0
+uvicorn>=0.30.0
+
 # Development and debugging
 pytest>=7.4.0
 black>=23.0.0

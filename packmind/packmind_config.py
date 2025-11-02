@@ -31,6 +31,11 @@ class PiDogConfig:
     ENABLE_DYNAMIC_BALANCE = True      # Real-time balance monitoring and stability control
     ENABLE_ENHANCED_AUDIO = True       # Multi-source sound tracking and intelligent localization
     ENABLE_ORIENTATION_SERVICE = True  # Integrate IMU yaw to track heading
+    # Telemetry/Web dashboard (FastAPI) — disabled by default
+    TELEMETRY_ENABLED = False
+    TELEMETRY_HOST = "0.0.0.0"
+    TELEMETRY_PORT = 8765
+    TELEMETRY_BASIC_AUTH = None  # e.g., ("user", "pass") in future; not used yet
     
     # ============================================================================
     # ADVANCED MAPPING PARAMETERS (for HomeMap)
