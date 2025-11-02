@@ -1,5 +1,11 @@
- # HoundMind Roadmap
+# HoundMind Roadmap
 > Living document of planned features and enhancements (updated 2025-11-01)
+
+Status snapshot (2025‑11‑01)
+- P1 Dashboard/Telemetry: Ready to start (scaffolding next)
+- P2 TFLite Face: Planned, pending model selection and thresholds
+- P3 CI (Sim): Planned, depends on Pidog shim Tier 0 (ready)
+- P4 Navigation v2: Design in progress
 
 ## Priorities (next major updates)
 
@@ -10,6 +16,14 @@ P1 — Live Web Dashboard + Telemetry (recommended first)
 - Security: LAN-only by default; optional basic auth
 - Config: TELEMETRY_ENABLED; zero overhead when disabled
 - Acceptance: live vitals/events visible; trigger a scan/head move; no Pi 3B regressions when disabled
+
+Near‑term milestones (P1)
+- [ ] Scaffolding: FastAPI app, `/health`, `/status` JSON, WebSocket `/events`
+- [ ] Event publisher hooks from orchestrator (health, scans, face-lite, audio)
+- [ ] Minimal UI (htmx) page with Status, Events stream, and 1–2 safe controls
+- [ ] Config: `TELEMETRY_ENABLED` and intervals; LAN-only default; optional basic auth
+- [ ] Map snapshot stub endpoint; wire camera/map preview later
+- [ ] Docs: quick start + troubleshooting page
 
 P2 — TFLite Face Embeddings Backend (accuracy upgrade, still light)
 - `FACE_BACKEND = "tflite"`; quantized MobileFaceNet-lite (or similar) + cosine similarity
@@ -34,6 +48,11 @@ P4 — Goal‑directed Navigation v2 (labels/anchors, doorway biasing)
   - Activation: `HOUNDMIND_SIM=1` or config preset; keep orchestrators/services unchanged
 - Simulator-backed unit/integration tests for PackMind and CanineCore
 - GitHub Actions workflow to run tests on pushes/PRs
+
+CI (P3) milestones
+- [ ] Action job: sim imports + orchestrator boot + short service tick (Tier 0)
+- [ ] Store logs/artifacts; add status snapshot JSON
+- [ ] Coverage + relaxed lint; README badge
 
 ## Calibration & Orientation
 - Voice-guided calibration flow with status prompts and LED cues
@@ -87,3 +106,9 @@ P4 — Goal‑directed Navigation v2 (labels/anchors, doorway biasing)
 - End-to-end tutorial: from first boot to autonomous exploration
 - Troubleshooting playbook with common sensor/hardware issues
 - API guides for extending services/behaviors and adding new modules
+
+## Maintenance & Quality
+- Analyzer hardening and sim-safety (2025‑11‑01):
+  - Added `PidogLike` Protocol and extended pidog shim (read_distance, wait_head_done, rgb_strip.set_mode, stop_and_lie, close)
+  - Stabilized obstacle avoidance history slicing and enhanced audio direction casting
+  - Guarded PiDog calls in tools/services for non‑Pi hosts
