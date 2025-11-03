@@ -423,10 +423,128 @@ python tools/test_service_integration.py
 
 ## Troubleshooting
 
-- If `pidog` imports fail on the Pi, install the official SunFounder libraries and verify servo calibration.
-- For voice issues, confirm `portaudio19-dev` and `pyaudio` are installed and a default input device is set.
-- On desktops without hardware, expect safe no‑ops for hardware calls.
-- For mapping/navigation issues, ensure your configuration in `packmind/packmind_config.py` enables the correct HomeMap features and that all sensors are properly connected. See the config guide for details.
+Below are common issues, how they show up, why they happen, and how to fix them.
+
+### Voice (ASR) install and device selection
+
+Symptoms
+- `ImportError: No module named 'pyaudio'`
+- `OSError: PortAudio library not found`
+- `ALSA: No default input device` or speech not detected
+
+Fix (Raspberry Pi)
+```bash
+sudo apt update && sudo apt install -y portaudio19-dev python3-dev
+python3 -m pip install SpeechRecognition pyaudio
+# If building PyAudio fails on your Pi OS:
+sudo apt install -y python3-pyaudio
+python3 -m pip install SpeechRecognition
+```
+
+Fix (Windows)
+```powershell
+pip install SpeechRecognition pyaudio
+# If PyAudio wheel fails to install:
+pip install pipwin
+pipwin install pyaudio
+```
+
+Select the right mic
+- Set `VOICE_MIC_INDEX` in `packmind/packmind_config.py` (default 0). If you have multiple devices, try 1, 2, ... until recognition responds.
+- Tip: Start PackMind and watch the logs; it will state the mic index used.
+
+### Camera (OpenCV) not opening
+
+Symptoms
+- `cv2.VideoCapture(0)` fails, or frames are empty
+
+Fix
+- Ensure the camera is enabled in OS settings and connected.
+- Try a different device index: set env `CAM_INDEX=1` (or 2) before running.
+- On Pi (Bookworm/libcamera), verify the camera works with a basic test app. If OpenCV access keeps failing, consider using USB webcams or ensuring V4L compatibility.
+
+### `pidog` import confusion or forced sim
+
+Symptoms
+- `ModuleNotFoundError: No module named 'pidog'` or unexpected simulator/hardware behavior
+
+Fix
+- On the robot, use the default shim: `from pidog import Pidog` (uses real hardware if installed, else sim).
+- To always simulate (e.g., docs/tests): `from pidog_sim import Pidog`.
+- To force simulation for a run:
+	- PowerShell: `$env:HOUNDMIND_SIM = "1"; python -m packmind`
+	- Bash: `HOUNDMIND_SIM=1 python3 -m packmind`
+
+### `canine_core` / `packmind` not found when running tools
+
+Symptoms
+- `ModuleNotFoundError: canine_core` or `packmind` when executing scripts from `tools/`
+
+Fix
+- Run from the repository root. The tools include a small `sys.path` bootstrap, so running from `HoundMind/` should just work:
+```bash
+python3 tools/packmind_checkup.py --scope services
+```
+
+### Face recognition heavy on Pi 3B
+
+Symptoms
+- Slow installs (dlib build), high CPU, delayed recognition
+
+Fix
+- Use the lite backend:
+	- In `packmind/packmind_config.py`: `FACE_BACKEND = "lite"` (keep `ENABLE_FACE_RECOGNITION = True`).
+	- Detection-only works with `opencv-python`; for identity (LBPH), install `opencv-contrib-python`.
+- Prefer `requirements-lite.txt` on Pi 3B.
+
+### Version conflicts (NumPy/OpenCV) on ARM
+
+Symptoms
+- `ImportError: version mismatch`, `illegal instruction`, or crashes on import
+
+Fix
+- On Pi, prefer wheels from piwheels (default on Raspberry Pi OS). If you upgraded elsewhere, try:
+```bash
+python3 -m pip uninstall -y numpy opencv-python
+python3 -m pip install --no-cache-dir numpy opencv-python
+```
+
+### Telemetry server binding / port in use
+
+Symptoms
+- `Address already in use` or cannot connect from another device
+
+Fix
+```powershell
+python tools/run_telemetry.py --host 0.0.0.0 --port 8765  # bind to all interfaces
+```
+- If a firewall blocks access, allow the port or try a different one with `--port`.
+
+### Watchdog timeouts under load
+
+Symptoms
+- Logs show `Watchdog timeout detected - executing safety action`
+
+Fix
+- Increase `WATCHDOG_TIMEOUT_S` slightly in `packmind/packmind_config.py` for Pi 3B.
+- Let HealthMonitor degrade scan rate under load (already enabled). You can tame scanning by raising `OBSTACLE_SCAN_INTERVAL`.
+
+### ALSA/audio permissions or device issues (Pi)
+
+Symptoms
+- Microphone not detected or permission errors
+
+Fix
+- Ensure your user is in the appropriate audio groups (often handled by the OS). Reboot after adding audio packages. If issues persist, try a USB microphone.
+
+### General checks
+
+Run safe checkups on the Pi:
+```bash
+python3 tools/packmind_checkup.py --scope services
+python3 tools/caninecore_checkup.py --scope import
+python3 tools/pidog_hardware_check.py                # add --move for a small head sweep
+```
 
 ## License
 
