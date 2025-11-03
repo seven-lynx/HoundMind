@@ -1,0 +1,25 @@
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+# Ruff >=0.6 still accepts these top-level settings
+select = ["E", "F", "I", "UP"]
+ignore = [
+  "E501",  # line too long; handled by Black or deferred
+]
+exclude = [
+  "legacy",
+  "docs",
+  "data",
+  "logs",
+  ".venv",
+  ".git",
+  ".github",
+  "packmind/packmind_docs",
+  "**/__pycache__",
+]
+
+[tool.ruff.per-file-ignores]
+"**/__init__.py" = ["F401"]  # allow re-exports
