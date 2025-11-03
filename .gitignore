@@ -60,7 +60,10 @@ coverage.xml
 .pytype/
 
 # IDE/editor config
+# VS Code (track select files)
 .vscode/
+!.vscode/tasks.json
+!.vscode/extensions.json
 .idea/
 *.sublime-project
 *.sublime-workspace
@@ -87,3 +90,14 @@ tmp/
 
 # Other
 **/~$*
+
+# Local analyzers and editor configs (keep local only)
+pyrightconfig.json
+.python-version
+.ruff_cache/
+*.code-workspace
+
+# Misc generated artifacts
+frame.jpg
+*.bak
+*.tmp
