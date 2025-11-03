@@ -1,6 +1,6 @@
 
 # HoundMind — Advanced Behaviors and AI for SunFounder PiDog
-> Author: 7Lynx · Doc Version: 2025.11.01
+> Author: 7Lynx · Doc Version: 2025.11.02
 
 
 HoundMind is a next-generation AI and behavior framework for the SunFounder PiDog, featuring:
@@ -47,8 +47,13 @@ pip3 install -r requirements.txt
 Optional: enable voice features
 
 ```bash
-sudo apt update && sudo apt install -y portaudio19-dev python3-pyaudio
-pip3 install speech_recognition pyaudio
+# Recommended (pip): installs SpeechRecognition and builds PyAudio
+sudo apt update && sudo apt install -y portaudio19-dev python3-dev
+pip3 install SpeechRecognition pyaudio
+
+# If PyAudio build fails on your Pi OS, try the apt package instead:
+# sudo apt install -y python3-pyaudio
+# pip3 install SpeechRecognition
 ```
 
 Optional: face recognition (heavy on Pi 3B)
@@ -333,6 +338,21 @@ You can force a lightweight simulation for the `pidog` library so code runs on a
 	- Is safe: all motion is no-op and won’t affect hardware
 
 Tip: You can also enable small randomization with `HOUNDMIND_SIM_RANDOM=1`.
+
+### Hardware vs Simulator imports: `pidog` vs `pidog_sim`
+
+- `from pidog import Pidog` (default):
+
+	- On the robot (with the official library installed), this uses the real hardware library automatically.
+	- On desktops or when the real library isn’t present, it safely falls back to the built‑in simulator.
+	- You can still force simulation anywhere by setting `HOUNDMIND_SIM=1`.
+
+- `from pidog_sim import Pidog` (explicit simulator):
+
+	- Always uses the simulator, regardless of what’s installed on the system.
+	- Helpful for examples/tests that should never touch hardware.
+
+Under the hood, `pidog` is a drop‑in shim that delegates to the real library on the Pi and simulates elsewhere. `pidog_sim` is a tiny alias that forces sim mode for clarity.
 
 
 ## Documentation

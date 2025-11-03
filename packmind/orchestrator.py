@@ -26,6 +26,20 @@ Version: 2025.11.01
 Run with: python packmind/orchestrator.py
 """
 
+# Allow running this file directly as a script without requiring PYTHONPATH.
+# When executed via `python packmind/orchestrator.py`, Python sets sys.path[0]
+# to the package directory (…/HoundMind/packmind) so absolute imports like
+# `from packmind ...` fail because the project root isn't on sys.path.
+# This bootstrap inserts the project root and sets __package__ accordingly,
+# making absolute and relative imports behave the same as `python -m`.
+if __name__ == "__main__" and (__package__ is None or __package__ == ""):
+    import os as _os
+    import sys as _sys
+    _root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    if _root not in _sys.path:
+        _sys.path.insert(0, _root)
+    __package__ = "packmind"
+
 # ============================================================================
 # CONFIGURATION IMPORT
 # ============================================================================
@@ -50,7 +64,7 @@ import logging
 VOICE_AVAILABLE = False
 MAPPING_AVAILABLE = False
 
-# Voice recognition imports (install with: pip install speech_recognition pyaudio)
+# Voice recognition imports (install with: pip install SpeechRecognition pyaudio)
 try:
     import speech_recognition as sr
     import pyaudio
@@ -58,7 +72,7 @@ try:
     logging.getLogger("packmind").info("Voice recognition modules available")
 except ImportError:
     VOICE_AVAILABLE = False
-    logging.getLogger("packmind").warning("Voice recognition modules not available. Install: pip install speech_recognition pyaudio")
+    logging.getLogger("packmind").warning("Voice recognition modules not available. Install: pip install SpeechRecognition pyaudio")
 
 # SLAM and navigation imports
 try:
@@ -2680,7 +2694,7 @@ def main():
             logger.info("   • 'show map' (display current map), 'stop navigation'")
             logger.info("   • 'status' (detailed info including localization data)")
     else:
-        logger.info("🔇 Voice commands disabled (install: pip install speech_recognition pyaudio)")
+        logger.info("🔇 Voice commands disabled (install: pip install SpeechRecognition pyaudio)")
     
     logger.info("")
     logger.info("💡 Configuration Tips:")

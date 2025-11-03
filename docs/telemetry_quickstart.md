@@ -15,13 +15,31 @@ You need FastAPI and Uvicorn:
 pip install fastapi uvicorn
 ```
 
+On Windows PowerShell:
+
+```powershell
+pip install fastapi uvicorn
+```
+
 On Raspberry Pi (slow SD cards), consider adding `--no-cache-dir` and a venv.
 
 ## Run it
-From the repo root:
+From the repo root, using config defaults:
 
 ```bash
-python3 tools/run_telemetry.py --host 0.0.0.0 --port 8765
+python tools/run_telemetry.py
+```
+
+Override host/port explicitly:
+
+```bash
+python tools/run_telemetry.py --host 0.0.0.0 --port 8765
+```
+
+Start even if disabled in config:
+
+```bash
+python tools/run_telemetry.py --force
 ```
 
 Then open a browser to `http://<pi-ip>:8765/`.

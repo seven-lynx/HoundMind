@@ -31,6 +31,14 @@ import platform
 import sys
 import time
 import traceback
+import os
+
+# Ensure repo root is on sys.path when running this script directly from tools/
+if __name__ == "__main__" and (__package__ is None or __package__ == ""):
+    _tools_dir = os.path.abspath(os.path.dirname(__file__))
+    _repo_root = os.path.abspath(os.path.join(_tools_dir, os.pardir))
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
 
 OK = "✓"
 FAIL = "✗"
@@ -69,13 +77,7 @@ def check_pidog_import() -> bool:
 
 def import_packmind_modules() -> bool:
     _print_header("PackMind module imports")
-    try:
-        import packmind  # noqa: F401
-    except Exception as e:
-        print(f"{FAIL} failed to import packmind package: {e}")
-        traceback.print_exc(limit=1)
-        return False
-
+    # Import subpackages directly to avoid confusion with the top-level packmind.py launcher
     subpackages = [
         "packmind.core",
         "packmind.behaviors",

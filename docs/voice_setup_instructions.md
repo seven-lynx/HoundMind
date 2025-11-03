@@ -1,23 +1,30 @@
 # Voice Recognition Setup for PiDog AI
-> Author: 7Lynx · Doc Version: 2025.11.01
+> Author: 7Lynx · Doc Version: 2025.11.02
 
 ## 🎙️ Installing Voice Recognition Dependencies
 
 To enable voice commands with "PiDog" wake word, you need to install additional packages:
 
+Note on names: the pip package is called "SpeechRecognition" but the Python import name is `speech_recognition`.
+
 ### 1. Install Python packages
 ```bash
-pip install speech_recognition pyaudio
+pip install SpeechRecognition pyaudio
 ```
 
 ### 2. On Raspberry Pi (if you get errors):
 ```bash
-# Install system dependencies first
+# Install build dependencies first (recommended for PyAudio)
 sudo apt update
-sudo apt install portaudio19-dev python3-pyaudio
+sudo apt install -y portaudio19-dev python3-dev
 
-# Then install Python packages
-pip3 install speech_recognition pyaudio
+# Then install Python packages via pip
+pip3 install SpeechRecognition pyaudio
+
+# If building PyAudio fails, use the apt package as a fallback
+# (you can still use pip for SpeechRecognition)
+# sudo apt install -y python3-pyaudio
+# pip3 install SpeechRecognition
 ```
 
 ### 3. On Windows (if you get pyaudio errors):
@@ -82,11 +89,11 @@ Once installed, you can use these commands:
 
 ### "No module named speech_recognition"
 ```bash
-pip install --upgrade speech_recognition
+pip install --upgrade SpeechRecognition
 ```
 
 ### "PyAudio not available"
-- On Raspberry Pi: `sudo apt install python3-pyaudio`
+- On Raspberry Pi: try `pip3 install pyaudio`; if build fails, `sudo apt install -y python3-pyaudio`
 - On Windows: Use `pipwin install pyaudio`
 - On macOS: `brew install portaudio && pip install pyaudio`
 

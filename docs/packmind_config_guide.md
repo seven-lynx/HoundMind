@@ -1,5 +1,5 @@
 # PackMind Configuration Guide
-> Author: 7Lynx · Doc Version: 2025.11.01
+> Author: 7Lynx · Doc Version: 2025.11.02
 
 This is the canonical configuration guide for PackMind. All references should point here (`docs/packmind_config_guide.md`).
 
@@ -42,7 +42,7 @@ These parameters allow you to:
 
 **Usage:**
 Edit these values in your config or preset class in `packmind/packmind_config.py`. They will be picked up automatically by the mapping system when you create a `HomeMap` with your config.
-- ENABLE_VOICE_COMMANDS: Voice recognition with wake word (requires `speech_recognition` + `pyaudio`)
+- ENABLE_VOICE_COMMANDS: Voice recognition with wake word (requires SpeechRecognition (pip package, import as `speech_recognition`) + `pyaudio`)
 - ENABLE_SLAM_MAPPING: Enable SLAM/house mapping (requires `numpy`)
 - ENABLE_SENSOR_FUSION: Enable fused localization (depends on SLAM)
 - ENABLE_INTELLIGENT_SCANNING: 3‑way obstacle scanning while moving

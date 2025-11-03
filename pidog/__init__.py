@@ -26,26 +26,58 @@ _force_sim = _truthy(os.getenv("HOUNDMIND_SIM"))
 _real_mod = None
 if not _force_sim:
     try:
-        this_dir = os.path.dirname(__file__)
-        # Remove any sys.path entries that point to our pidog folder
-        old_path = list(sys.path)
-        try:
-            sys.path = [p for p in sys.path if os.path.abspath(p) != os.path.abspath(os.path.dirname(this_dir)) and os.path.abspath(p) != os.path.abspath(this_dir)]
-        except Exception:
-            pass
-        try:
-            _real_mod = __import__("pidog", fromlist=["Pidog"])  # actual installed package
-        finally:
-            sys.path = old_path
+        import importlib.util as _ilu
+        from importlib.machinery import PathFinder as _PathFinder
+
+        this_dir = os.path.abspath(os.path.dirname(__file__))
+        repo_root = os.path.abspath(os.path.dirname(this_dir))
+
+        # Build a search path that excludes this repo (both pidog folder and root)
+        _filtered_path = []
+        for p in sys.path:
+            ap = os.path.abspath(p)
+            if ap == this_dir or ap == repo_root:
+                continue
+            _filtered_path.append(p)
+
+        _spec = _PathFinder.find_spec("pidog", _filtered_path)
+        # Guard against resolving back to ourselves
+        if _spec:
+            _origin = getattr(_spec, "origin", None)
+            if _origin is not None and os.path.abspath(_origin) != os.path.abspath(__file__):
+                _mod = _ilu.module_from_spec(_spec)
+                assert _spec.loader is not None
+                _spec.loader.exec_module(_mod)
+                _real_mod = _mod
     except Exception:
         _real_mod = None
 
 if _real_mod is not None and not _force_sim:
-    try:
-        Pidog = getattr(_real_mod, "Pidog")  # type: ignore[attr-defined]
-    except Exception:
-        Pidog = getattr(_real_mod, "PiDog")  # type: ignore[assignment]
-    PiDog = Pidog
+    # Try common class name variants found in different releases
+    _candidates = ("Pidog", "PiDog", "PIDog", "PIDOG")
+    _cls = None
+    for _name in _candidates:
+        try:
+            _cls = getattr(_real_mod, _name)
+            break
+        except Exception:
+            _cls = None
+    if _cls is None:
+        # Last resort: scan attributes for a class that looks like the main hardware client
+        for _name in dir(_real_mod):
+            if _name.lower() == "pidog":
+                try:
+                    _maybe = getattr(_real_mod, _name)
+                    if isinstance(_maybe, type):
+                        _cls = _maybe
+                        break
+                except Exception:
+                    pass
+    if _cls is None:
+        _logger.warning("pidog shim: real library found but no Pidog/PiDog class exposed; falling back to sim")
+    else:
+        Pidog = _cls  # type: ignore[assignment]
+        PiDog = Pidog
     for _name in dir(_real_mod):
         if _name.startswith("__"):
             continue
@@ -55,7 +87,10 @@ if _real_mod is not None and not _force_sim:
             globals()[_name] = getattr(_real_mod, _name)
         except Exception:
             pass
-    _logger.info("pidog shim: delegated to real hardware library")
+    if _cls is not None:
+        _logger.info("pidog shim: delegated to real hardware library")
+    else:
+        _real_mod = None  # ensure we drop to sim
 else:
     class _Ultrasonic:
         def __init__(self, parent: "Pidog") -> None:

@@ -12,7 +12,17 @@ This will:
 - optionally run a 3-way scan via ScanningService
 """
 import os
+import sys
+
+# Force simulation mode by default
 os.environ.setdefault("HOUNDMIND_SIM", "1")
+
+# Ensure repo root in sys.path for direct execution from tools/
+if __name__ == "__main__" and (__package__ is None or __package__ == ""):
+    _tools_dir = os.path.abspath(os.path.dirname(__file__))
+    _repo_root = os.path.abspath(os.path.join(_tools_dir, os.pardir))
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
 
 import time
 import logging

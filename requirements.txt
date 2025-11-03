@@ -6,7 +6,7 @@ keyboard>=0.13.5
 importlib-metadata>=4.0.0
 
 # Audio and voice processing  
-speechrecognition>=3.10.0
+SpeechRecognition>=3.10.0
 pyaudio>=0.2.11
 whisper>=1.1.10
 pydub>=0.25.1

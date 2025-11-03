@@ -9,53 +9,49 @@ This script helps you set up and test your PiDog AI configuration.
 import sys
 import os
 
+# Ensure repo root in sys.path when run from tools/
+if __name__ == "__main__" and (__package__ is None or __package__ == ""):
+    _tools_dir = os.path.abspath(os.path.dirname(__file__))
+    _repo_root = os.path.abspath(os.path.join(_tools_dir, os.pardir))
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
+
+
 def main():
     print("🐕 PiDog AI Setup Assistant")
     print("===========================")
     print()
-    
-    # Check if config file exists
-    config_exists = os.path.exists("packmind_config.py")
-    
-    if config_exists:
-        print("✅ packmind_config.py found")
-        
-        # Test import
-        try:
-            from packmind_config import load_config, validate_config
-            print("✅ Configuration system working")
-            
-            # Test all presets
-            presets = ["default", "simple", "advanced", "indoor", "explorer"]
-            print("\n📋 Available Configuration Presets:")
-            
-            for preset in presets:
-                try:
-                    config = load_config(preset)
-                    warnings = validate_config(config)
-                    
-                    status = "⚠️" if warnings else "✅"
-                    print(f"{status} {preset.title():10} - SLAM: {'✓' if config.ENABLE_SLAM_MAPPING else '✗'} Speed: {config.SPEED_NORMAL}")
-                    
-                    if warnings and preset == "default":
-                        print("   Warnings:")
-                        for warning in warnings:
-                            print(f"     - {warning}")
-                            
-                except Exception as e:
-                    print(f"❌ {preset.title():10} - Error: {e}")
-                    
-        except ImportError as e:
-            print(f"❌ Configuration import failed: {e}")
-            return False
-            
-    else:
-        print("❌ packmind_config.py not found")
-        print("\n💡 To set up configuration:")
-        print("   1. The packmind_config.py file should be in the same directory")
-        print("   2. Copy it from the provided template")
-        print("   3. Edit the PiDogConfig class values as needed")
+
+    # Test configuration import from packmind
+    try:
+        from packmind.packmind_config import load_config, validate_config  # type: ignore
+        print("✅ Configuration system available (packmind/packmind_config.py)")
+    except Exception as e:
+        print(f"❌ Configuration import failed: {e}")
+        print("   Ensure you're running from the repo root and Python can import 'packmind'.")
         return False
+
+    # Test all presets
+    presets = ["default", "simple", "advanced", "indoor", "explorer"]
+    print("\n📋 Available Configuration Presets:")
+
+    for preset in presets:
+        try:
+            config = load_config(preset)
+            warnings = validate_config(config)
+
+            status = "⚠️" if warnings else "✅"
+            slam = getattr(config, "ENABLE_SLAM_MAPPING", False)
+            speed = getattr(config, "SPEED_NORMAL", "-")
+            print(f"{status} {preset.title():10} - SLAM: {'✓' if slam else '✗'} Speed: {speed}")
+
+            if warnings and preset == "default":
+                print("   Warnings:")
+                for warning in warnings:
+                    print(f"     - {warning}")
+
+        except Exception as e:
+            print(f"❌ {preset.title():10} - Error: {e}")
     
     print("\n🔧 Dependency Check:")
     
@@ -74,7 +70,7 @@ def main():
         print("✅ Voice recognition available (speech_recognition + pyaudio)")
     except ImportError:
         print("⚠️ Voice recognition not available")
-        print("   Install: pip install speech_recognition pyaudio")
+        print("   Install: pip install SpeechRecognition pyaudio")
     
     # Check SLAM dependencies
     try:
@@ -85,45 +81,43 @@ def main():
         print("   Install: pip install numpy")
     
     print("\n🎯 Quick Configuration Test:")
-    
-    if config_exists:
+    try:
+        from packmind.packmind_config import load_config  # type: ignore
+
+        # Test configuration loading
+        config = load_config("default")
+        print(f"   Default speeds: Walk={getattr(config, 'SPEED_NORMAL', '-')}, Turn={getattr(config, 'SPEED_TURN_NORMAL', '-')}")
+        print(f"   Obstacle threshold: {getattr(config, 'OBSTACLE_IMMEDIATE_THREAT', '-')}cm")
+        print(f"   Wake word: '{getattr(config, 'WAKE_WORD', '-')}'")
+
+        # Recommend preset based on dependencies
+        print("\n💡 Recommended Configuration:")
+
+        has_numpy = True
+        has_voice = True
         try:
-            from packmind_config import load_config
-            
-            # Test configuration loading
-            config = load_config("default")
-            print(f"   Default speeds: Walk={config.SPEED_NORMAL}, Turn={config.SPEED_TURN_NORMAL}")
-            print(f"   Obstacle threshold: {config.OBSTACLE_IMMEDIATE_THREAT}cm")
-            print(f"   Wake word: '{config.WAKE_WORD}'")
-            
-            # Recommend preset based on dependencies
-            print("\n💡 Recommended Configuration:")
-            
-            has_numpy = True
-            has_voice = True
-            try:
-                import numpy
-            except ImportError:
-                has_numpy = False
-            
-            try:
-                import speech_recognition, pyaudio
-            except ImportError:
-                has_voice = False
-            
-            if has_numpy and has_voice:
-                print("   🚀 'advanced' preset - Full AI capabilities")
-            elif has_numpy:
-                print("   🏠 'indoor' preset - SLAM mapping without voice") 
-            else:
-                print("   🔧 'simple' preset - Basic obstacle avoidance")
-                
-        except Exception as e:
-            print(f"   Error testing configuration: {e}")
+            import numpy  # noqa: F401
+        except ImportError:
+            has_numpy = False
+
+        try:
+            import speech_recognition  # noqa: F401
+            import pyaudio  # noqa: F401
+        except ImportError:
+            has_voice = False
+
+        if has_numpy and has_voice:
+            print("   🚀 'advanced' preset - Full AI capabilities")
+        elif has_numpy:
+            print("   🏠 'indoor' preset - SLAM mapping without voice")
+        else:
+            print("   🔧 'simple' preset - Basic obstacle avoidance")
+    except Exception as e:
+        print(f"   Error testing configuration: {e}")
     
     print("\n🚀 Ready to Start!")
-    print("   Run: python packmind/orchestrator.py")
-    print("   Or:  python packmind.py")
+    print("   Run: python3 packmind/orchestrator.py")
+    print("   Or:  python3 packmind.py")
     print("\n📚 Voice Commands (when enabled):")
     print("   'PiDog, status' - Show current status")
     print("   'PiDog, show config' - Display configuration") 

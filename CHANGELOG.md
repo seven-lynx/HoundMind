@@ -1,5 +1,25 @@
 # Changelog
 
+## [v2025.11.02] - 2025-11-02 - Pi import robustness, explicit simulator alias, and docs
+
+### Added
+- `pidog_sim` package: explicit simulator alias that forces sim mode and re-exports the `pidog` shim. Use `from pidog_sim import Pidog` for examples/tests that must not touch hardware.
+- Telemetry server runner: `tools/run_telemetry.py` now starts the FastAPI dashboard using config defaults with `--host/--port` overrides and `--force` to run when disabled.
+- Telemetry quickstart: `docs/telemetry_quickstart.md` with install instructions and usage.
+
+### Changed
+- `pidog` shim hardened to avoid self-import and to support multiple vendor class name variants (`Pidog`, `PiDog`, `PIDog`, `PIDOG`). On the Pi with the official package installed, the shim now reliably delegates to the real hardware library; otherwise it falls back to the simulator.
+- `packmind/orchestrator.py` can be run directly (`python3 packmind/orchestrator.py`) without `PYTHONPATH` tweaks; a small bootstrap adds the repo root to `sys.path` when needed.
+- `packmind/__main__.py` added so `python3 -m packmind` starts the orchestrator.
+- `tools/caninecore_checkup.py` now prepends the repo root to `sys.path` when run from `tools/`, fixing `ModuleNotFoundError: canine_core` on the Pi.
+- README updated with a new "Hardware vs Simulator imports: pidog vs pidog_sim" section for clarity.
+- Telemetry config flags (`TELEMETRY_ENABLED`, `TELEMETRY_HOST`, `TELEMETRY_PORT`, `TELEMETRY_BASIC_AUTH`) consolidated in `packmind/packmind_config.py`; duplicate `TELEMETRY_ENABLED` key removed from the logging section.
+
+### Notes
+- You can still force simulation anywhere with `HOUNDMIND_SIM=1`.
+- On the robot, prefer `from pidog import Pidog` (uses real hardware automatically). For explicit sim in docs/tests, use `from pidog_sim import Pidog`.
+ - Docs: corrected voice setup to use the canonical PyPI name `SpeechRecognition` (import as `speech_recognition`) and added Pi-friendly PyAudio guidance (PortAudio headers + python3-dev, with apt fallback).
+
 ## [v2025.11.01] - 2025-11-01 - Desktop Simulation Mode, Lite Face Backend, and Setup Docs
 
 ### Added

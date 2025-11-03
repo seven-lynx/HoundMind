@@ -313,7 +313,7 @@ class PiDogConfig:
     LOG_FILE_MAX_MB = 10
     LOG_FILE_BACKUPS = 5
 
-    TELEMETRY_ENABLED = False
+    # Telemetry sampling and endpoint hints
     TELEMETRY_SAMPLE_INTERVAL_S = 2.0
     TELEMETRY_ENDPOINT = ""
 

@@ -1,4 +1,4 @@
-# HoundMind Roadmap
+  # HoundMind Roadmap
 > Living document of planned features and enhancements (updated 2025-11-01)
 
 Status snapshot (2025‑11‑01)
