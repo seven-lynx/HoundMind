@@ -1,6 +1,6 @@
 
 # HoundMind — Advanced Behaviors and AI for SunFounder PiDog
-> Author: 7Lynx · Doc Version: 2025.11.02
+> Author: 7Lynx · Doc Version: 2025.11.03
 
 
 HoundMind is a next-generation AI and behavior framework for the SunFounder PiDog, featuring:
@@ -20,6 +20,39 @@ Both systems are independent—choose the one that fits your needs. All legacy m
 - **Examples** (`examples/`): Runnable code examples.
 - **Legacy** (`legacy/`): Archived modules (pre-2025, not maintained).
 
+
+## Install and run
+
+New to the project? Start with the step‑by‑step install guide:
+
+- See `docs/INSTALL.md` for Raspberry Pi and Desktop (simulation) paths.
+- On the Pi, there’s a guided installer that can install vendor modules, set up audio, and install HoundMind deps, and even launch either system:
+	```bash
+	python3 scripts/pidog_install.py
+	```
+
+### Before you start (Pi): OS imaging checklist
+
+- Use Raspberry Pi Imager to write Raspberry Pi OS (Bookworm) to the microSD
+	- Pi 4/5: 64‑bit OS; Pi 3B: 32‑bit OS recommended (64‑bit supported with more manual dependency work)
+	- In Advanced options: set hostname, enable SSH, add Wi‑Fi, set locale/timezone
+- First boot on the Pi → update and reboot:
+	```bash
+	sudo apt update && sudo apt upgrade -y
+	sudo reboot
+	```
+- Enable required interfaces:
+	```bash
+	sudo raspi-config
+	# Interface Options → I2C → Enable (required); Camera → Enable (optional)
+	```
+- Verify I2C exists and (optionally) probe:
+	```bash
+	ls -l /dev/i2c-1
+	sudo apt install -y i2c-tools
+	i2cdetect -y 1
+	```
+- Full steps: see `docs/INSTALL.md#A0-install-raspberry-pi-os-one-time-on-the-microsd`
 
 ## Quick install and run on the Raspberry Pi 🧰
 
@@ -74,6 +107,16 @@ pip3 install -r requirements-lite.txt
 ```
 
 See `docs/face_recognition_setup.md` for details and troubleshooting.
+
+Desktop (simulation) quick start
+
+- Use the desktop requirements and enable the simulator:
+
+```powershell
+pip install -r requirements-desktop.txt
+$env:HOUNDMIND_SIM = "1"
+python packmind/orchestrator.py
+```
 
 Pi 3B: Lite face backend (no dlib)
 
@@ -394,6 +437,28 @@ python tools/run_telemetry.py --force
 - **CanineCore Checkup (Pi)**: `tools/caninecore_checkup.py` - Import all CanineCore modules; optional minimal head sweep with `--move`
 - **PiDog Hardware Check (Pi)**: `tools/pidog_hardware_check.py` - Direct hardware check (distance, IMU, ears, touch, audio, LED); add `--move` for motion/head sweep
 - **Integration Test**: `tools/test_service_integration.py` - Validate AI services integration
+- **Audio Device Lister**: `tools/list_audio_devices.py` - Enumerate input/microphone devices and indexes (useful for setting `VOICE_MIC_INDEX`)
+	- Windows PowerShell:
+		```powershell
+		python tools/list_audio_devices.py
+		```
+	- Raspberry Pi:
+		```bash
+		python3 tools/list_audio_devices.py
+		```
+- **Camera Check**: `tools/camera_check.py` - Diagnose camera access, print properties, and optionally save a frame
+	- List devices and try index 0:
+		```powershell
+		python tools/camera_check.py --list-devices --max-index 10
+		```
+	- Windows tip (try DirectShow backend):
+		```powershell
+		python tools/camera_check.py --backend dshow --index 0 --save frame.jpg
+		```
+	- Linux/Pi tip (V4L2 is typical; try a different index):
+		```bash
+		python3 tools/camera_check.py --index 0 --save frame.jpg
+		```
 
 Run PackMind checkup on the Pi:
 ```bash
@@ -462,6 +527,11 @@ Fix
 - Ensure the camera is enabled in OS settings and connected.
 - Try a different device index: set env `CAM_INDEX=1` (or 2) before running.
 - On Pi (Bookworm/libcamera), verify the camera works with a basic test app. If OpenCV access keeps failing, consider using USB webcams or ensuring V4L compatibility.
+ - Use the camera diagnostic tool to probe indexes/backends and save a test frame:
+ 	```powershell
+ 	python tools/camera_check.py --list-devices --max-index 10
+ 	python tools/camera_check.py --backend dshow --index 0 --save frame.jpg  # Windows tip
+ 	```
 
 ### `pidog` import confusion or forced sim
 

@@ -15,7 +15,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass, asdict
-from typing import Any, Dict, Optional, Set as TSet, TYPE_CHECKING, cast
+from typing import Any, Dict, Optional, Set as TSet, TYPE_CHECKING, cast, Tuple
 
 try:
     from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -79,12 +79,21 @@ class TelemetryHub:
         )
 
 
-def build_app(hub: TelemetryHub) -> Any:
+def build_app(hub: TelemetryHub, basic_auth: Optional[Tuple[str, str]] = None) -> Any:
     if FastAPI is None:
         raise RuntimeError(
             "FastAPI/uvicorn are not installed. Install optional deps: pip install fastapi uvicorn"
         )
-    app = FastAPI(title="PackMind Telemetry", version="2025.11.01")
+    # Prefer PackMind package version if available to avoid hard-coded drift
+    pm_version = "dev"
+    try:  # pragma: no cover - simple runtime check
+        from packmind import __version__ as _pm_v  # type: ignore
+        if isinstance(_pm_v, str) and _pm_v:
+            pm_version = _pm_v
+    except Exception:
+        pm_version = "dev"
+
+    app = FastAPI(title="PackMind Telemetry", version=pm_version)
 
     @app.get("/health")
     async def health() -> Any:
@@ -159,16 +168,56 @@ def build_app(hub: TelemetryHub) -> Any:
             await hub.unregister(ws)
         return None
 
+    # Optional ingestion endpoint: POST JSON to broadcast to clients
+    @app.post("/ingest")
+    async def ingest(request: Any) -> Any:  # request: fastapi.Request, but typed as Any when fastapi missing
+        # Basic auth gate (if configured)
+        if basic_auth:
+            try:
+                from fastapi import HTTPException, status
+                from fastapi import Request
+                req = cast(Request, request)
+                auth = req.headers.get("authorization") or req.headers.get("Authorization")
+                if not auth or not auth.lower().startswith("basic "):
+                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing basic auth")
+                import base64
+                try:
+                    decoded = base64.b64decode(auth.split(" ", 1)[1].strip()).decode("utf-8")
+                    user, pwd = decoded.split(":", 1)
+                except Exception:
+                    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid basic auth")
+                if (user, pwd) != basic_auth:
+                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid credentials")
+            except Exception as ex:  # pragma: no cover
+                # If FastAPI components missing or error occurred, reject
+                return cast(Any, JSONResponse)({"ok": False, "error": "auth_failed"}, status_code=401)
+
+        try:
+            from fastapi import Request
+            req = cast(Request, request)
+            payload = await req.json()
+        except Exception:
+            payload = None
+        if not isinstance(payload, dict):
+            return cast(Any, JSONResponse)({"ok": False, "error": "invalid_json"}, status_code=400)
+        # Attach server timestamp
+        try:
+            payload.setdefault("server_ts", time.time())
+        except Exception:
+            pass
+        await hub.publish(payload)
+        return cast(Any, JSONResponse)({"ok": True})
+
     return app
 
 
-def start(host: str = "0.0.0.0", port: int = 8765) -> None:
+def start(host: str = "0.0.0.0", port: int = 8765, basic_auth: Optional[Tuple[str, str]] = None) -> None:
     if uvicorn is None:
         raise RuntimeError(
             "Uvicorn is not installed. Install optional deps: pip install uvicorn fastapi"
         )
     hub = TelemetryHub()
-    app = build_app(hub)
+    app = build_app(hub, basic_auth=basic_auth)
 
     # Optional: demo publisher task emitting a heartbeat every 2s if run standalone
     async def _demo():

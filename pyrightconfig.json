@@ -1,8 +1,16 @@
 {
   "typeCheckingMode": "basic",
-  "reportOptionalMemberAccess": "information",
-  "reportMissingImports": "information",
-  "reportMissingModuleSource": "information",
+  // Reduce noise from optional deps on desktop (FastAPI, SpeechRecognition, etc.)
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  // Accessing optional attributes is guarded in code; suppress info-level chatter
+  "reportOptionalMemberAccess": "none",
   "reportMissingTypeStubs": "none",
-  "exclude": ["**/.venv", "**/build", "**/dist", "**/__pycache__"]
+  "exclude": [
+    "**/.venv",
+    "**/build",
+    "**/dist",
+    "**/__pycache__",
+    "legacy/**"
+  ]
 }

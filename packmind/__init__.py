@@ -3,10 +3,10 @@
 Exports the primary orchestrator and core types/services for external use.
 
 Author: 7Lynx
-Version: 2025.11.01
+Version: 2025.11.03
 """
 
-__version__ = "2025.11.01"
+__version__ = "2025.11.03"
 
 from packmind.core.context import AIContext
 from packmind.core.types import BehaviorState, EmotionalState

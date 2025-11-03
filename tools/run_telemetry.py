@@ -60,7 +60,12 @@ def main(argv: list[str] | None = None) -> int:
     if basic_auth:
         print("[telemetry] Basic auth configured in TELEMETRY_BASIC_AUTH (user:pass).")
 
-    start(host=host, port=port)
+    # TELEMETRY_BASIC_AUTH may be None or a tuple (user, pass)
+    try:
+        ba = tuple(basic_auth) if basic_auth else None  # type: ignore[assignment]
+    except Exception:
+        ba = None
+    start(host=host, port=port, basic_auth=ba)
     return 0
 
 

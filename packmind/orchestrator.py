@@ -120,6 +120,7 @@ from packmind.runtime.voice_runtime import VoiceRuntime
 from packmind.services.scanning_service import ScanningService
 from packmind.runtime.sensor_monitor import SensorMonitor
 from packmind.runtime.scanning_coordinator import ScanningCoordinator
+from packmind.runtime.telemetry_client import TelemetryClient
 from packmind.behaviors.exploring_behavior import ExploringBehavior
 from packmind.behaviors.interacting_behavior import InteractingBehavior
 from packmind.behaviors.resting_behavior import RestingBehavior
@@ -276,6 +277,8 @@ class Orchestrator:
         self._sensor_monitor: Optional[SensorMonitor] = None
         self._scan_coordinator: Optional[ScanningCoordinator] = None
         self._health_monitor: Optional[HealthMonitor] = None
+        # Telemetry client (optional)
+        self._telemetry: Optional[TelemetryClient] = None
         
         # Voice command system (configurable)
         self.listening_for_wake_word = True
@@ -398,6 +401,24 @@ class Orchestrator:
         except Exception:
             self.orientation_service = None
         self.voice_service = VoiceService()
+
+        # Initialize telemetry client if enabled
+        try:
+            if bool(getattr(self.config, "TELEMETRY_ENABLED", False)):
+                host = str(getattr(self.config, "TELEMETRY_HOST", "127.0.0.1"))
+                port = int(getattr(self.config, "TELEMETRY_PORT", 8765))
+                endpoint = str(getattr(self.config, "TELEMETRY_ENDPOINT", ""))
+                base_url = endpoint.strip() or f"http://{host}:{port}"
+                basic_auth = getattr(self.config, "TELEMETRY_BASIC_AUTH", None)
+                try:
+                    ba = tuple(basic_auth) if basic_auth else None  # type: ignore[assignment]
+                except Exception:
+                    ba = None
+                self._telemetry = TelemetryClient(base_url=base_url, basic_auth=ba)
+                self._telemetry.start()
+                self._logger.info(f"Telemetry client started → {base_url}")
+        except Exception as e:
+            self._logger.warning(f"Telemetry client unavailable: {e}")
         self.voice_service.set_wake_word(self.wake_word)
         # Register current voice commands with the voice service
         for k, v in self.voice_commands.items():
@@ -1178,6 +1199,19 @@ class Orchestrator:
                     "threats_detected": [d for d, dist in scan_results.items() if dist < 40],
                 },
             )
+            # Telemetry publish (best-effort)
+            try:
+                if self._telemetry is not None:
+                    self._telemetry.publish({
+                        "type": "scan",
+                        "ts": current_time,
+                        "forward_cm": float(scan_results.get("forward", -1)),
+                        "left_cm": float(scan_results.get("left", -1)),
+                        "right_cm": float(scan_results.get("right", -1)),
+                        "behavior": self.context.behavior_state.value,
+                    })
+            except Exception:
+                pass
             # Update obstacle cache
             self.obstacle_scan_data.update({
                 'forward': float(scan_results.get('forward', self.obstacle_scan_data['forward'])),
@@ -1264,6 +1298,22 @@ class Orchestrator:
                     "degraded": degrade,
                 },
             )
+            # Telemetry publish (best-effort)
+            try:
+                if self._telemetry is not None:
+                    ev = {
+                        "type": "health",
+                        "ts": time.time(),
+                        "load_1m": sample.get("load_1m"),
+                        "cpu_temp_c": temp,
+                        "mem_used_pct": mem_used,
+                        "cpu_cores": cores,
+                        "scan_interval": self.scan_interval,
+                        "degraded": degrade,
+                    }
+                    self._telemetry.publish(ev)
+            except Exception:
+                pass
         except Exception:
             # Avoid cascading failures from health sampling
             pass
@@ -1769,6 +1819,18 @@ class Orchestrator:
                     "trigger_cause": "automatic_update",
                 },
             )
+            # Telemetry publish
+            try:
+                if self._telemetry is not None:
+                    self._telemetry.publish({
+                        "type": "emotion",
+                        "ts": time.time(),
+                        "old": old_emotion.value,
+                        "new": emotion.value,
+                        "energy": float(self.energy_level),
+                    })
+            except Exception:
+                pass
             # Delegate to emotion service for state update and optional feedback
             try:
                 if self.emotional_system_enabled:
@@ -1799,6 +1861,18 @@ class Orchestrator:
                     "transition_reason": "automatic_state_machine",
                 },
             )
+            # Telemetry publish
+            try:
+                if self._telemetry is not None:
+                    self._telemetry.publish({
+                        "type": "behavior",
+                        "ts": time.time(),
+                        "old": old_behavior.value,
+                        "new": behavior.value,
+                        "time_in_prev_s": float(round(time_in_previous, 3)),
+                    })
+            except Exception:
+                pass
 
             # Exit old behavior object if present
             try:

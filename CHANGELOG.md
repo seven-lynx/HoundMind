@@ -1,5 +1,25 @@
 # Changelog
 
+## [v2025.11.03] - 2025-11-03 - Guided installer launcher, vendor-aligned install docs, and telemetry version sync
+
+### Added
+- Guided installer enhancements (`scripts/pidog_install.py`):
+  - New launcher options to start CanineCore (main/control) and PackMind (with optional `PACKMIND_CONFIG` preset) directly from the menu.
+  - One-stop menu: install vendor modules (Robot HAT 2.5.x, Vilib, PiDog), set up I2S audio, run vendor demo, verify imports/I2C, install HoundMind deps for Pi 4/5 (full) or Pi 3B (lite), and launch systems.
+- Install guide overhaul (`docs/INSTALL.md`):
+  - Linear Raspberry Pi flow with anchors: A0 (OS) → A1 (vendor modules) → A2 (checks/calibration) → A3 (deps per model) → A4 (run systems).
+  - Clear separation of CanineCore vs PackMind; added a note that the guided installer can launch either system.
+  - Pi 3B OS guidance (32-bit recommended; 64-bit supported with caveats) and vendor steps aligned with SunFounder docs (Robot HAT 2.5.x install.py, Vilib install.py, PiDog setup.py, I2S i2samp.sh).
+- Tools: camera/audio helpers referenced from the guide to list devices and probe camera.
+
+### Changed
+- Telemetry server (`packmind/runtime/telemetry_server.py`) now reads version from `packmind.__version__` to avoid drift.
+- `packmind.__version__` bumped to `2025.11.03` for release consistency.
+- README and subsystem docs updated to reflect guided installer launch capability and current doc version.
+
+### Notes
+- Remaining file headers that still show 2025.11.01/02 are unchanged modules and will be updated on their next functional change.
+
 ## [v2025.11.02] - 2025-11-02 - Pi import robustness, explicit simulator alias, and docs
 
 ### Added

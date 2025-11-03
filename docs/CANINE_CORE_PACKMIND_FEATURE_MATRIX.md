@@ -1,5 +1,5 @@
-# CanineCore ⇄ PackMind Feature Matrix (2025.11.01)
-> Author: 7Lynx · Doc Version: 2025.11.01
+# CanineCore ⇄ PackMind Feature Matrix (2025.11.03)
+> Author: 7Lynx · Doc Version: 2025.11.03
 
 This matrix maps high-level capabilities across the two stacks. CanineCore exposes modular, user-configurable building blocks. PackMind delivers a turnkey companion experience built on those fundamentals. Entries marked **(planned)** or **(in progress)** indicate features that still need full implementation or integration in the noted stack.
 
@@ -40,4 +40,4 @@ This matrix maps high-level capabilities across the two stacks. CanineCore expos
 4. For major releases, mention the matrix in release notes so users know what’s new.
 
 ---
-Last updated: 2025.11.01
+Last updated: 2025.11.03
