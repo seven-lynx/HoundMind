@@ -1,8 +1,8 @@
   # HoundMind Roadmap
-> Living document of planned features and enhancements (updated 2025-11-01)
+> Living document of planned features and enhancements (updated 2025-11-02)
 
-Status snapshot (2025‑11‑01)
-- P1 Dashboard/Telemetry: Ready to start (scaffolding next)
+Status snapshot (2025‑11‑02)
+- P1 Dashboard/Telemetry: Backend scaffolding + runner + docs DONE; hooks/UI pending
 - P2 TFLite Face: Planned, pending model selection and thresholds
 - P3 CI (Sim): Planned, depends on Pidog shim Tier 0 (ready)
 - P4 Navigation v2: Design in progress
@@ -10,20 +10,23 @@ Status snapshot (2025‑11‑01)
 ## Priorities (next major updates)
 
 P1 — Live Web Dashboard + Telemetry (recommended first)
-- Backend (FastAPI + WebSocket): `/status`, `/events` stream, `/control` (safe ops), map snapshot endpoint
-- Data feeds: health, scans, face-lite events, audio levels, mapping stats
-- Frontend: minimal (htmx/Alpine) Status + Events + Controls
-- Security: LAN-only by default; optional basic auth
-- Config: TELEMETRY_ENABLED; zero overhead when disabled
-- Acceptance: live vitals/events visible; trigger a scan/head move; no Pi 3B regressions when disabled
+- Backend (FastAPI + WebSocket): `/health`, `/status`, `/` (index), `/ws/events` — DONE
+- Runner tool with config defaults and overrides — DONE (`tools/run_telemetry.py`)
+- Quickstart docs — DONE (`docs/telemetry_quickstart.md`)
+- Data feeds: health, scans, face-lite events, audio levels, mapping stats — PARTIAL (health demo only)
+- Frontend: minimal (htmx/Alpine) Status + Events + Controls — TODO
+- Security: LAN-only by default; optional basic auth — TODO (config placeholder exists)
+- Config: TELEMETRY_ENABLED; zero overhead when disabled — DONE
+- Acceptance: live vitals/events visible; trigger a scan/head move; no Pi 3B regressions when disabled — PARTIAL
 
 Near‑term milestones (P1)
-- [ ] Scaffolding: FastAPI app, `/health`, `/status` JSON, WebSocket `/events`
+- [x] Scaffolding: FastAPI app, `/health`, `/status` JSON, WebSocket `/events`
+- [x] Runner: `tools/run_telemetry.py` with config defaults, overrides, `--force`
+- [x] Docs: quick start + troubleshooting page
 - [ ] Event publisher hooks from orchestrator (health, scans, face-lite, audio)
 - [ ] Minimal UI (htmx) page with Status, Events stream, and 1–2 safe controls
-- [ ] Config: `TELEMETRY_ENABLED` and intervals; LAN-only default; optional basic auth
+- [ ] Config: LAN-only default enforcement; optional basic auth
 - [ ] Map snapshot stub endpoint; wire camera/map preview later
-- [ ] Docs: quick start + troubleshooting page
 
 P2 — TFLite Face Embeddings Backend (accuracy upgrade, still light)
 - `FACE_BACKEND = "tflite"`; quantized MobileFaceNet-lite (or similar) + cosine similarity

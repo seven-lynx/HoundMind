@@ -111,6 +111,8 @@ See `docs/face_recognition_setup.md` for more.
 python3 packmind/orchestrator.py
 # or
 python3 packmind.py
+# or
+python -m packmind
 ```
 
 **CanineCore (modular behaviors):**
@@ -365,6 +367,24 @@ Under the hood, `pidog` is a drop‑in shim that delegates to the real library o
 - PackMind architecture: `packmind/packmind_docs/ARCHITECTURE.md`
 - PackMind configuration: `docs/packmind_config_guide.md`
 - **Mapping & Navigation**: See `packmind/mapping/home_mapping.py` and `packmind/packmind_docs/intelligent_obstacle_avoidance_guide.md` for advanced HomeMap usage and API details.
+
+### Telemetry dashboard (optional)
+
+An experimental P1 telemetry dashboard is available for basic status and event streaming.
+
+- Quickstart: `docs/telemetry_quickstart.md`
+- Start with config defaults:
+
+```bash
+python tools/run_telemetry.py
+```
+
+- Override host/port or force start even if disabled:
+
+```bash
+python tools/run_telemetry.py --host 0.0.0.0 --port 8765
+python tools/run_telemetry.py --force
+```
 
 ## Testing & Tools
 
