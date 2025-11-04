@@ -121,6 +121,9 @@ def init_logging():
             return
     if _open_log_at(LOG_DIR / f"pidog_install_{ts}.log"):
         return
+    # Home fallback
+    if _open_log_at(HOME / "HoundMind-logs" / f"pidog_install_{ts}.log", note="(Using home log location)"):
+        return
     # Linux fallback
     if sys.platform.startswith("linux") and _open_log_at(Path("/tmp") / f"pidog_install_{ts}.log", note="(Using fallback log location)"):
         return
@@ -456,6 +459,9 @@ def main():
     if not is_linux():
         print("This installer is intended to run on Raspberry Pi (Linux). Exiting.")
         return 1
+
+    # Initialize logging before showing the menu
+    init_logging()
 
     while True:
         print_header()
