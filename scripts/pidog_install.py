@@ -73,6 +73,41 @@ def run(cmd: str, cwd: Path | None = None) -> int:
         return 130
 
 
+def venv_dir() -> Path:
+    return REPO_ROOT / ".venv"
+
+
+def venv_python_path() -> Path:
+    # Linux/macOS layout
+    bin_py = venv_dir() / "bin" / "python3"
+    if bin_py.exists():
+        return bin_py
+    # Fallbacks
+    bin_py = venv_dir() / "bin" / "python"
+    if bin_py.exists():
+        return bin_py
+    # Windows layout (unlikely on Pi, but harmless)
+    return venv_dir() / "Scripts" / "python.exe"
+
+
+def ensure_venv(system_site: bool = True) -> Path:
+    """Create a local venv that can see vendor system packages (robot-hat, pidog, vilib)."""
+    vd = venv_dir()
+    if vd.exists():
+        return venv_python_path()
+    print("\n== Creating Python virtual environment (.venv) ==")
+    # Ensure venv module is available
+    run("sudo apt update")
+    run("sudo apt install -y python3-venv")
+    flag = " --system-site-packages" if system_site else ""
+    rc = run(f"python3 -m venv .venv{flag}", cwd=REPO_ROOT)
+    if rc != 0:
+        print("Failed to create venv. You can install deps with --break-system-packages as a fallback.")
+    else:
+        print("Created .venv; this isolates Python deps and avoids PEP 668 'externally-managed-environment' errors.")
+    return venv_python_path()
+
+
 def ensure_prereqs():
     print("\nChecking prerequisites (git, python3-pip, setuptools, smbus)...")
     # Attempt a quick install; harmless if already installed
@@ -234,15 +269,20 @@ def verify_imports_and_devices():
 def install_houndmind_pi45():
     print("\n== Install HoundMind deps (Pi 4/5 full) ==")
     run("sudo apt update && sudo apt install -y portaudio19-dev python3-dev cmake build-essential libopenblas-dev liblapack-dev")
-    run("python3 -m pip install --upgrade pip")
-    run(f"pip3 install -r {REPO_ROOT / 'requirements.txt'}")
+    vp = ensure_venv(system_site=True)
+    run(f"{vp} -m pip install --upgrade pip")
+    run(f"{vp} -m pip install -r {REPO_ROOT / 'requirements.txt'}")
+    print("\nTip: To use the venv manually: source .venv/bin/activate")
 
 
 def install_houndmind_pi3():
     print("\n== Install HoundMind deps (Pi 3B lite) ==")
     run("sudo apt update && sudo apt install -y portaudio19-dev python3-dev")
-    run("python3 -m pip install --upgrade pip")
-    run(f"pip3 install -r {REPO_ROOT / 'requirements-lite.txt'}")
+    # Create a venv that can see vendor system packages to avoid PEP 668 errors
+    vp = ensure_venv(system_site=True)
+    run(f"{vp} -m pip install --upgrade pip")
+    run(f"{vp} -m pip install -r {REPO_ROOT / 'requirements-lite.txt'}")
+    print("\nInstalled lite deps into .venv (with system-site-packages). This avoids 'externally-managed-environment' errors.")
 
 
 def detect_defaults() -> tuple[str, str]:
@@ -317,17 +357,23 @@ def main():
             install_houndmind_pi3()
         elif choice == "8":
             # Launch CanineCore (main)
-            run("python3 main.py", cwd=REPO_ROOT)
+            vp = venv_python_path()
+            py = str(vp) if vp.exists() else "python3"
+            run(f"{py} main.py", cwd=REPO_ROOT)
         elif choice == "9":
             # Launch CanineCore interactive control
-            run("python3 canine_core/control.py", cwd=REPO_ROOT)
+            vp = venv_python_path()
+            py = str(vp) if vp.exists() else "python3"
+            run(f"{py} canine_core/control.py", cwd=REPO_ROOT)
         elif choice == "10":
             # Launch PackMind, optional preset
             preset = input("Preset (blank=default, e.g., pi3/advanced): ").strip()
+            vp = venv_python_path()
+            py = str(vp) if vp.exists() else "python3"
             if preset:
-                run(f"PACKMIND_CONFIG={preset} python3 packmind/orchestrator.py", cwd=REPO_ROOT)
+                run(f"PACKMIND_CONFIG={preset} {py} packmind/orchestrator.py", cwd=REPO_ROOT)
             else:
-                run("python3 packmind/orchestrator.py", cwd=REPO_ROOT)
+                run(f"{py} packmind/orchestrator.py", cwd=REPO_ROOT)
         elif choice == "11":
             test_i2s_audio()
         elif choice == "12":

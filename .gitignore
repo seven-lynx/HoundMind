@@ -67,6 +67,7 @@ coverage.xml
 .editorconfig
 .pre-commit-config.yaml
 pyproject.toml
+.github/
 .idea/
 *.sublime-project
 *.sublime-workspace
