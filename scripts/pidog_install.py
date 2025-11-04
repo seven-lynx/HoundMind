@@ -30,6 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 LOG_DIR = REPO_ROOT / "logs"
 LOG_FILE: Path | None = None
 LOG_ENABLED: bool = False
+LOG_ERROR: str | None = None
 _ORIG_PRINT = builtins.print
 _ORIG_INPUT = builtins.input
 _LOG_FH = None
@@ -70,54 +71,65 @@ def init_logging():
     - Record input() prompts and responses.
     - Subprocess output is also captured by run().
     """
-    global LOG_FILE, _LOG_FH, LOG_ENABLED
-    try:
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        LOG_FILE = LOG_DIR / f"pidog_install_{ts}.log"
-        _LOG_FH = LOG_FILE.open("a", buffering=1, encoding="utf-8", errors="ignore")
-        # Replace builtins print/input with logging variants
-        builtins.print = _tee_print
-        builtins.input = _logged_input
-        # Header
-        _tee_print("== PiDog Installer Session Log ==")
-        _tee_print(f"Start: {datetime.now().isoformat(timespec='seconds')}")
-        _tee_print(f"Repo : {REPO_ROOT}")
-        _tee_print(f"User : {HOME}")
-        _tee_print("")
-        LOG_ENABLED = True
+    global LOG_FILE, _LOG_FH, LOG_ENABLED, LOG_ERROR
 
-        def _close_log():
-            try:
-                if _LOG_FH:
-                    _LOG_FH.flush()
-                    _LOG_FH.close()
-            except Exception:
-                pass
-
-        atexit.register(_close_log)
-    except Exception as e:
-        # Fallback to /tmp on Linux if repo folder isn't writable
+    def _open_log_at(path: Path, note: str | None = None) -> bool:
+        global LOG_FILE, _LOG_FH, LOG_ENABLED, LOG_ERROR
         try:
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            tmp_dir = Path("/tmp") if sys.platform.startswith("linux") else REPO_ROOT
-            tmp_dir.mkdir(parents=True, exist_ok=True)
-            LOG_FILE = tmp_dir / f"pidog_install_{ts}.log"
-            _LOG_FH = LOG_FILE.open("a", buffering=1, encoding="utf-8", errors="ignore")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _fh = path.open("a", buffering=1, encoding="utf-8", errors="ignore")
+            # Swap IO
             builtins.print = _tee_print
             builtins.input = _logged_input
+            # Assign globals
+            LOG_FILE = path
+            _LOG_FH = _fh
+            LOG_ENABLED = True
+            # Header
             _tee_print("== PiDog Installer Session Log ==")
             _tee_print(f"Start: {datetime.now().isoformat(timespec='seconds')}")
             _tee_print(f"Repo : {REPO_ROOT}")
             _tee_print(f"User : {HOME}")
-            _tee_print("(Using fallback log location)")
+            if note:
+                _tee_print(note)
             _tee_print("")
-            LOG_ENABLED = True
-        except Exception as e2:
-            # As a last resort, keep console-only, but inform the user
-            LOG_FILE = None
+
+            def _close_log():
+                try:
+                    if _LOG_FH:
+                        _LOG_FH.flush()
+                        _LOG_FH.close()
+                except Exception:
+                    pass
+
+            atexit.register(_close_log)
+            return True
+        except Exception as ex:
             LOG_ENABLED = False
-            _ORIG_PRINT(f"[installer] Logging disabled: {e2}")
+            LOG_ERROR = str(ex)
+            return False
+
+    # Priority: explicit file -> explicit dir -> repo logs -> /tmp
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    env_file = os.environ.get("PDI_LOG_FILE")
+    env_dir = os.environ.get("PDI_LOG_DIR")
+    if env_file:
+        if _open_log_at(Path(env_file)):
+            return
+    if env_dir:
+        if _open_log_at(Path(env_dir) / f"pidog_install_{ts}.log"):
+            return
+    if _open_log_at(LOG_DIR / f"pidog_install_{ts}.log"):
+        return
+    # Linux fallback
+    if sys.platform.startswith("linux") and _open_log_at(Path("/tmp") / f"pidog_install_{ts}.log", note="(Using fallback log location)"):
+        return
+    # Give up
+    LOG_FILE = None
+    LOG_ENABLED = False
+    if LOG_ERROR is None:
+        LOG_ERROR = "unknown error opening log file"
+    _ORIG_PRINT(f"[installer] Logging disabled: {LOG_ERROR}")
 
 
 def is_linux() -> bool:
@@ -412,7 +424,8 @@ def print_header():
     if LOG_FILE:
         print(f"Log   : {LOG_FILE}")
     else:
-        print("Log   : disabled")
+        reason = f" ({LOG_ERROR})" if LOG_ERROR else ""
+        print(f"Log   : disabled{reason}")
     # Friendly hints for common envs
     try:
         is_32bit = sys.maxsize < 2**32
