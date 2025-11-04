@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased] - 2025-11-04
+
+### Improved
+- Guided installer (`scripts/pidog_install.py`):
+  - I2S audio setup now installs `alsa-utils`, guides reboot after `i2samp.sh`, and adds a dedicated audio test option (lists devices, sets volume, plays a test sound).
+  - Header shows Python version and prints clear notes when on 32‑bit OS or Python 3.13 (heavy ML wheels like mediapipe/tflite may be unavailable and are optional).
+  - Verify step prints `robot_hat` load path and whether it exports `Robot` to catch mismatched installs early.
+  - New “Repair vendor modules” option to remove conflicting pip installs and reinstall Robot HAT (2.5.x), Vilib, and PiDog from vendor sources.
+
+### Docs
+- `docs/INSTALL.md`: Added a “Guided installer quick start (Raspberry Pi)” section at the top with exact commands and the recommended menu flow; clarified that mediapipe/tflite warnings on Pi 3B (32‑bit) or Python 3.13 are expected and safe to ignore when using the lite path.
+- `README.md`: Added a concise guided installer quick‑start with the recommended menu flow under Install and run.
+
+### Notes
+- No behavior or runtime changes; improvements focus on installation reliability and first‑time setup clarity on the Pi.
+
 ## [v2025.11.03] - 2025-11-03 - Guided installer launcher, vendor-aligned install docs, and telemetry version sync
 
 ### Added

@@ -31,6 +31,16 @@ New to the project? Start with the step‑by‑step install guide:
 	python3 scripts/pidog_install.py
 	```
 
+Guided installer quick start (Pi):
+- 1) Install vendor modules (Robot HAT 2.5.x, Vilib, PiDog)
+- 2) I2S audio setup (reboot when prompted)
+- 3) Run vendor wake‑up demo (checks servos/sound)
+- 5) Verify imports and I2C devices
+- 6) Install HoundMind deps (Pi 4/5 full) or 7) (Pi 3B lite)
+- 8) Launch CanineCore (main) · 9) CanineCore control · 10) PackMind (optional preset)
+
+Tip: Do OS imaging (A0) first; the installer covers A1 → A4 from `docs/INSTALL.md` and is safe to run multiple times.
+
 ### Before you start (Pi): OS imaging checklist
 
 - Use Raspberry Pi Imager to write Raspberry Pi OS (Bookworm) to the microSD

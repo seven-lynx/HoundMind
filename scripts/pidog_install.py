@@ -60,6 +60,10 @@ def arch() -> str:
         return "unknown"
 
 
+def py_version_str() -> str:
+    return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+
 def run(cmd: str, cwd: Path | None = None) -> int:
     print(f"\n$ {cmd}")
     try:
@@ -114,14 +118,69 @@ def install_pidog():
     run("sudo python3 setup.py install", cwd=dest)
 
 
+def repair_vendor_modules():
+    print("\n== Repair vendor modules (remove conflicting pip installs, force reinstall) ==")
+    # Remove potentially conflicting pip-installed variants first
+    # Try both user and system contexts; ignore failures
+    cmds = [
+        "pip3 uninstall -y robot-hat robot_hat sunfounder-robot-hat || true",
+        "sudo -H pip3 uninstall -y robot-hat robot_hat sunfounder-robot-hat || true",
+        "pip3 uninstall -y pidog || true",
+        "sudo -H pip3 uninstall -y pidog || true",
+        "pip3 uninstall -y vilib || true",
+        "sudo -H pip3 uninstall -y vilib || true",
+    ]
+    for c in cmds:
+        run(c)
+    # Reinstall from vendor sources
+    install_robot_hat()
+    install_vilib()
+    install_pidog()
+
+
 def setup_i2s():
     print("\n== I2S Audio Setup ==")
     dest = HOME / "robot-hat"
     if not dest.exists():
         print("robot-hat not found at ~/robot-hat; installing first...")
         install_robot_hat()
-    run("sudo bash i2samp.sh", cwd=dest)
-    print("\nWhen prompted, type 'y' to continue and allow /dev/zero to run in the background. Reboot afterwards.")
+    # Ensure ALSA utilities are present for volume/test
+    run("sudo apt update")
+    run("sudo apt install -y alsa-utils")
+    # Run vendor setup script
+    rc = run("sudo bash i2samp.sh", cwd=dest)
+    print("\nNotes:")
+    print("- When prompted, type 'y' to continue and allow /dev/zero to run in the background.")
+    print("- A reboot is usually required for I2S overlays to take effect.")
+    print("- After reboot, use menu option 'Test I2S audio' to set volume and play a test sound.")
+    if rc == 0:
+        choice = input("Reboot now? [y/N]: ").strip().lower()
+        if choice == "y":
+            run("sudo reboot")
+    else:
+        print("i2samp.sh exited with errors. You can re-run option 2 after fixing issues, or continue and try the audio test after a reboot.")
+
+
+def test_i2s_audio():
+    print("\n== Test I2S audio (list devices, set volume, play test) ==")
+    # List ALSA playback devices
+    run("aplay -l || true")
+    # Try to set volume on common controls
+    controls = ["Master", "PCM", "Speaker", "Headphone", "Digital"]
+    for ctl in controls:
+        run(f"amixer -c 0 sset {ctl} 90% || true")
+    # Prefer a known sample if available
+    sample = Path("/usr/share/sounds/alsa/Front_Center.wav")
+    if sample.exists():
+        print("Playing Front_Center.wav …")
+        run(f"aplay -q {sample}")
+    else:
+        print("No sample wav found; using a 440Hz sine for ~1s …")
+        run("speaker-test -t sine -f 440 -l 1 || true")
+    print("\nIf you still hear no sound:")
+    print("- Re-run 'I2S audio setup' and choose reboot.")
+    print("- Open 'alsamixer' and check the correct card/device; unmute and raise volume.")
+    print("- Ensure the I2S amplifier/speaker is wired correctly and powered.")
 
 
 def run_vendor_demo():
@@ -154,6 +213,17 @@ def verify_imports_and_devices():
                 print(f"OK: import {m}")
             except Exception as e:
                 print(f"FAIL: import {m}: {e}")
+        # Deeper diagnostics for robot_hat
+        try:
+            import robot_hat as rh
+            import inspect
+            print("robot_hat file:", getattr(rh, "__file__", "<unknown>"))
+            has_robot = hasattr(rh, "Robot")
+            print("robot_hat has 'Robot':", has_robot)
+            if not has_robot:
+                print("Hint: A conflicting or outdated robot_hat may be installed via pip. See 'Repair vendor modules' in the installer menu.")
+        except Exception as e:
+            print("robot_hat diagnostics error:", e)
         print("/dev/i2c-1 exists:", os.path.exists("/dev/i2c-1"))
         """
     )
@@ -188,7 +258,18 @@ def print_header():
     print("=" * 60)
     print(f"Model : {model}")
     print(f"Arch  : {a}")
+    print(f"Python: {py_version_str()}")
     print(f"Repo  : {REPO_ROOT}")
+    # Friendly hints for common envs
+    try:
+        is_32bit = sys.maxsize < 2**32
+        py_major, py_minor = sys.version_info[:2]
+        if is_32bit:
+            print("\nNote: 32-bit OS detected. Heavy ML packages (mediapipe/tensorflow/tflite-runtime) are not supported here—use the Pi 3B lite path (option 7).")
+        if py_major >= 3 and py_minor >= 13:
+            print("Note: Python 3.13 detected. Some third-party wheels (e.g., tflite-runtime/mediapipe) may be unavailable; they are optional and will be skipped.")
+    except Exception:
+        pass
     print("\nMenu:")
     print("  1) Install vendor modules (Robot HAT 2.5.x, Vilib, PiDog)")
     print("  2) I2S audio setup")
@@ -200,6 +281,8 @@ def print_header():
     print("  8) Launch CanineCore (main)")
     print("  9) Launch CanineCore control menu")
     print(" 10) Launch PackMind (optionally choose preset)")
+    print(" 11) Test I2S audio (volume + test sound)")
+    print(" 12) Repair vendor modules (clean pip + reinstall Robot HAT/Vilib/PiDog)")
     print("  0) Exit")
 
 
@@ -245,6 +328,10 @@ def main():
                 run(f"PACKMIND_CONFIG={preset} python3 packmind/orchestrator.py", cwd=REPO_ROOT)
             else:
                 run("python3 packmind/orchestrator.py", cwd=REPO_ROOT)
+        elif choice == "11":
+            test_i2s_audio()
+        elif choice == "12":
+            repair_vendor_modules()
         elif choice == "0":
             print("Bye.")
             return 0

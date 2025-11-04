@@ -8,6 +8,31 @@ Pick your path below and follow each step in order.
 
 ---
 
+## Guided installer quick start (Raspberry Pi)
+
+If you already imaged Raspberry Pi OS (see A0) and cloned this repo on the Pi, you can do almost everything from one menu: install vendor modules, set up audio, verify hardware, install HoundMind deps (Pi 4/5 or Pi 3B), and launch either system.
+
+Run on the Pi (SSH or local terminal) from the repo root:
+
+```bash
+cd ~/HoundMind
+python3 scripts/pidog_install.py
+```
+
+Recommended flow inside the menu:
+- 1) Install vendor modules (Robot HAT 2.5.x, Vilib, PiDog)
+- 2) I2S audio setup (reboot when prompted)
+- 3) Run vendor wake‑up demo (checks servos and sound)
+- 5) Verify imports and I2C devices
+- 6) Install HoundMind deps: Pi 4/5 (full)   |   7) Pi 3B (lite)
+- 8) Launch CanineCore (main)   |   9) CanineCore control   |   10) PackMind (with optional preset)
+
+Notes and tips:
+- Safe to run multiple times; it skips work when possible and will use sudo when needed.
+- For PiDog Standard, use servo zeroing in the vendor examples; for PiDog V2, use the zeroing button on the HAT.
+- Make sure I2C is enabled (A0) and set your Wi‑Fi country in raspi‑config.
+- The installer covers A1 → A4 below. Do A0 (OS imaging) first.
+
 ## 0) Prerequisites
 
 - Python 3.9+ (3.10–3.12 recommended)
@@ -37,7 +62,7 @@ cd HoundMind
 
 ## A) Raspberry Pi (on the robot)
 
-If you’re using actual PiDog hardware, install SunFounder’s vendor modules right after OS imaging and basic config, before installing HoundMind dependencies. After A0, go to A1 (vendor modules), then A2 (checks/calibration), then A3 (PackMind per model).
+If you’re using actual PiDog hardware, install SunFounder’s vendor modules right after OS imaging and basic config, before installing HoundMind dependencies. After A0, go to A1 (vendor modules), then A2 (checks/calibration), then A3 (HoundMind per model).
 
 Raspberry Pi quick index:
 - [A0 — Install Raspberry Pi OS](#a0)
@@ -209,6 +234,7 @@ Notes:
 - Ensure I2C is enabled (see A0). You should see `/dev/i2c-1` and optionally `0x40` on `i2cdetect -y 1`.
 - On some examples and hardware tests, `sudo` is required to access devices.
 - For audio tests, plug in your speaker/amp and set a reasonable volume (e.g., `--volume 60`).
+- On Pi 3B (32‑bit) or Python 3.13, vendor installers may print messages like “mediapipe is only supported on 64‑bit” or “tflite‑runtime only supported on Python ≤3.12”. These components are optional for HoundMind and safe to ignore; use the Pi 3B lite path below (A3.2).
 
 <a id="a2"></a>
 ### A2) Vendor checks and calibration (recommended)

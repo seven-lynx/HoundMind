@@ -60,10 +60,13 @@ coverage.xml
 .pytype/
 
 # IDE/editor config
-# VS Code (track select files)
+# VS Code (ignore entirely)
 .vscode/
-!.vscode/tasks.json
-!.vscode/extensions.json
+
+# Editor and local tooling configs (ignored for minimal repo footprint)
+.editorconfig
+.pre-commit-config.yaml
+pyproject.toml
 .idea/
 *.sublime-project
 *.sublime-workspace
