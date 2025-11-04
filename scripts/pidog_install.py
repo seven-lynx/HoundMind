@@ -19,11 +19,84 @@ import sys
 import shutil
 import subprocess
 import textwrap
+import atexit
+import builtins
+from datetime import datetime
 from pathlib import Path
 
 
 HOME = Path.home()
 REPO_ROOT = Path(__file__).resolve().parents[1]
+LOG_DIR = REPO_ROOT / "logs"
+LOG_FILE: Path | None = None
+_ORIG_PRINT = builtins.print
+_ORIG_INPUT = builtins.input
+_LOG_FH = None
+
+
+def _tee_print(*args, **kwargs):
+    sep = kwargs.get("sep", " ")
+    end = kwargs.get("end", "\n")
+    text = sep.join(str(a) for a in args) + end
+    # Console
+    _ORIG_PRINT(*args, **kwargs)
+    # Log file
+    try:
+        if _LOG_FH:
+            _LOG_FH.write(text)
+            _LOG_FH.flush()
+    except Exception:
+        pass
+
+
+def _logged_input(prompt: str = "") -> str:
+    # Show prompt to console
+    resp = _ORIG_INPUT(prompt)
+    # Record prompt + response to log
+    try:
+        if _LOG_FH:
+            _LOG_FH.write(f"{prompt}{resp}\n")
+            _LOG_FH.flush()
+    except Exception:
+        pass
+    return resp
+
+
+def init_logging():
+    """Initialize session logging to logs/pidog_install_YYYYmmdd_HHMMSS.log.
+
+    - Tee all print() output to both console and file.
+    - Record input() prompts and responses.
+    - Subprocess output is also captured by run().
+    """
+    global LOG_FILE, _LOG_FH
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        LOG_FILE = LOG_DIR / f"pidog_install_{ts}.log"
+        _LOG_FH = LOG_FILE.open("a", buffering=1, encoding="utf-8", errors="ignore")
+        # Replace builtins print/input with logging variants
+        builtins.print = _tee_print
+        builtins.input = _logged_input
+        # Header
+        _tee_print("== PiDog Installer Session Log ==")
+        _tee_print(f"Start: {datetime.now().isoformat(timespec='seconds')}")
+        _tee_print(f"Repo : {REPO_ROOT}")
+        _tee_print(f"User : {HOME}")
+        _tee_print("")
+
+        def _close_log():
+            try:
+                if _LOG_FH:
+                    _LOG_FH.flush()
+                    _LOG_FH.close()
+            except Exception:
+                pass
+
+        atexit.register(_close_log)
+    except Exception:
+        # If logging fails, continue without file logging
+        pass
 
 
 def is_linux() -> bool:
@@ -65,10 +138,25 @@ def py_version_str() -> str:
 
 
 def run(cmd: str, cwd: Path | None = None) -> int:
+    """Run a shell command, streaming output to console and log in real time."""
     print(f"\n$ {cmd}")
     try:
-        result = subprocess.run(cmd, shell=True, cwd=str(cwd) if cwd else None)
-        return result.returncode
+        proc = subprocess.Popen(
+            cmd,
+            shell=True,
+            cwd=str(cwd) if cwd else None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            # Already includes newline
+            _tee_print(line, end="")
+        proc.wait()
+        print(f"[exit {proc.returncode}]")
+        return proc.returncode
     except KeyboardInterrupt:
         return 130
 
@@ -300,6 +388,8 @@ def print_header():
     print(f"Arch  : {a}")
     print(f"Python: {py_version_str()}")
     print(f"Repo  : {REPO_ROOT}")
+    if LOG_FILE:
+        print(f"Log   : {LOG_FILE}")
     # Friendly hints for common envs
     try:
         is_32bit = sys.maxsize < 2**32
