@@ -11,13 +11,10 @@ pyaudio>=0.2.11
 pydub>=0.25.1
 
 # Computer vision (no face-recognition/dlib)
-opencv-python>=4.8.0
-pillow>=9.5.0
+# On Pi 3B, OpenCV and Pillow are provided by apt (python3-opencv, python3-pil)
 
 # Scientific computing and data processing
-numpy>=1.24.0
-scipy>=1.10.0
-matplotlib>=3.7.0
+# On Pi 3B, numpy/scipy/matplotlib come from apt to avoid source builds.
 
 # Machine learning (omit heavy frameworks)
 # scikit-learn and tensorflow omitted here on purpose

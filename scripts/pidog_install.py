@@ -401,7 +401,12 @@ def install_houndmind_pi45():
 
 def install_houndmind_pi3():
     print("\n== Install HoundMind deps (Pi 3B lite) ==")
-    run("sudo apt update && sudo apt install -y portaudio19-dev python3-dev")
+    # Use apt for heavy scientific/vision stacks to avoid building from source on Pi 3B (py313/armv7l)
+    run(
+        "sudo apt update && sudo apt install -y "
+        "portaudio19-dev python3-dev libatlas-base-dev "
+        "python3-numpy python3-scipy python3-matplotlib python3-opencv python3-pil"
+    )
     # Create a venv that can see vendor system packages to avoid PEP 668 errors
     vp = ensure_venv(system_site=True)
     run(f"{vp} -m pip install --upgrade pip")
