@@ -303,46 +303,57 @@ Pick the subsection that matches your device.
 <a id="a3-2"></a>
 #### A3.2) Pi 3B (lite features, faster install)
 
-Pi 3B is resource constrained; prefer the lightweight path.
+Pi 3B is resource‑constrained. To avoid very slow source builds on Python 3.13/ARMv7, install the heavy packages from apt and keep pip light. We recommend a local venv that can see system packages.
 
-Note on OS choice:
-- 32-bit Raspberry Pi OS (Bookworm) is recommended for the Pi 3B due to broader prebuilt wheels (piwheels) and lower memory overhead.
-- 64-bit Raspberry Pi OS is supported, but you may encounter more source builds and need additional system headers. If using 64-bit, stick to `requirements-lite.txt` and the lite face backend.
+Notes
+- OS: 32‑bit Raspberry Pi OS (Bookworm/Trixie) is recommended for Pi 3B. 64‑bit works but causes more source builds and higher RAM use.
+- Python: 3.10–3.12 easiest. 3.13 works but more wheels are missing; the steps below handle it.
+- PEP 668: Using a venv with `--system-site-packages` avoids the “externally‑managed‑environment” issue while still seeing apt packages.
 
-1. Update system packages and audio headers
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   sudo apt install -y portaudio19-dev python3-dev
-   ```
-2. Install lightweight Python dependencies
-   ```bash
-   python3 -m pip install --upgrade pip
-   pip3 install -r requirements-lite.txt
-   ```
-3. Enable the lite face backend (optional detection only)
-   - In `packmind/packmind_config.py`:
-     ```python
-     ENABLE_FACE_RECOGNITION = True
-     FACE_BACKEND = "lite"
-     ```
-   - Detection-only works with `opencv-python`. For identity (LBPH), install:
-     ```bash
-     pip3 install opencv-contrib-python
-     ```
-4. Verify camera and audio (same as Pi 4/5)
-   ```bash
-   python3 tools/list_audio_devices.py
-   python3 tools/camera_check.py --index 0 --save frame.jpg
-   ```
-5. Run HoundMind (see A4 for system choices)
+1. Update system packages and install system Python headers and heavy libs from apt
+  ```bash
+  sudo apt update && sudo apt upgrade -y
+  sudo apt install -y \
+    portaudio19-dev python3-dev python3-venv \
+    python3-numpy python3-scipy python3-matplotlib python3-opencv python3-pil \
+    libopenblas-dev liblapack-dev
+  ```
+2. Create a venv that can see system packages, then upgrade pip
+  ```bash
+  cd ~/HoundMind
+  python3 -m venv .venv --system-site-packages
+  . .venv/bin/activate
+  python -m pip install --upgrade pip
+  ```
+3. Install the lightweight Python requirements (pip won’t rebuild the heavy ones)
+  ```bash
+  pip install -r requirements-lite.txt
+  ```
+4. (Optional) Enable the lite face backend (detection‑only; plus identity with opencv‑contrib)
+  - In `packmind/packmind_config.py`:
+    ```python
+    ENABLE_FACE_RECOGNITION = True
+    FACE_BACKEND = "lite"
+    ```
+  - For identity (LBPH), add opencv‑contrib (may pull source on some setups):
+    ```bash
+    pip install opencv-contrib-python
+    ```
+5. Verify camera and audio
+  ```bash
+  python tools/list_audio_devices.py
+  python tools/camera_check.py --index 0 --save frame.jpg
+  ```
+6. Run HoundMind (see A4 for system choices)
   - Example (PackMind with Pi3 preset):
     ```bash
-    PACKMIND_CONFIG=pi3 python3 packmind/orchestrator.py
+    PACKMIND_CONFIG=pi3 python packmind/orchestrator.py
     ```
 
-Tips:
-- If camera access fails on Bookworm with libcamera-only modules, try a USB webcam or ensure V4L2 compatibility.
-- If voice capture is silent, pick the right `VOICE_MIC_INDEX` in `packmind/packmind_config.py` using the audio lister.
+Tips
+- If camera access fails on Bookworm with libcamera‑only stacks, try a USB webcam or ensure V4L2 compatibility.
+- If voice capture is silent, pick the right `VOICE_MIC_INDEX` using `tools/list_audio_devices.py`.
+- If you prefer installing into system Python instead of a venv, add `--break-system-packages` to pip (not recommended).
 
  
 

@@ -66,57 +66,36 @@ Tip: Do OS imaging (A0) first; the installer covers A1 → A4 from `docs/INSTALL
 
 ## Quick install and run on the Raspberry Pi 🧰
 
-Requirements 
-
-- Raspberry Pi with PiDog assembled and powered
-- Raspberry Pi OS (Bookworm or compatible), Python 3.9+
-- Official `pidog` package (and related hardware libs) installed on the Pi
-
-1) Clone the repo on the Pi
+If you want one menu that does it all, use the guided installer (recommended):
 
 ```bash
-cd ~
-git clone https://github.com/seven-lynx/HoundMind.git
-cd HoundMind
+cd ~/HoundMind
+python3 scripts/pidog_install.py
 ```
 
-2) Install Python dependencies
+Manual installs (summary) — see `docs/INSTALL.md` for full steps:
 
-```bash
-pip3 install -r requirements.txt
-```
+- Pi 4/5 (full features):
+	```bash
+	sudo apt update && sudo apt install -y portaudio19-dev python3-dev cmake build-essential libopenblas-dev liblapack-dev python3-venv
+	cd ~/HoundMind && python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip
+	pip install -r requirements.txt
+	```
 
+- Pi 3B (lite path, avoids source builds on py3.13/armv7l):
+	```bash
+	sudo apt update && sudo apt install -y \
+		portaudio19-dev python3-dev python3-venv \
+		python3-numpy python3-scipy python3-matplotlib python3-opencv python3-pil \
+		libopenblas-dev liblapack-dev
+	cd ~/HoundMind && python3 -m venv .venv --system-site-packages && . .venv/bin/activate && python -m pip install --upgrade pip
+	pip install -r requirements-lite.txt
+	```
 
-Optional: enable voice features
-
-```bash
-# Recommended (pip): installs SpeechRecognition and builds PyAudio
-sudo apt update && sudo apt install -y portaudio19-dev python3-dev
-pip3 install SpeechRecognition pyaudio
-
-# If PyAudio build fails on your Pi OS, try the apt package instead:
-# sudo apt install -y python3-pyaudio
-# pip3 install SpeechRecognition
-```
-
-Optional: face recognition (heavy on Pi 3B)
-
-```bash
-# Pi 4/5: try standard install (piwheels may provide prebuilt wheels)
-pip3 install face_recognition
-
-# If it tries to build dlib from source, install build tools first
-sudo apt update && sudo apt install -y cmake build-essential python3-dev libopenblas-dev liblapack-dev
-pip3 install dlib==19.24.0 face_recognition
-```
-
-On low-power models (e.g., Pi 3B), we recommend disabling face recognition or using the lightweight requirements:
-
-```bash
-pip3 install -r requirements-lite.txt
-```
-
-See `docs/face_recognition_setup.md` for details and troubleshooting.
+Notes
+- On Pi 3B, heavy packages (numpy/scipy/matplotlib/opencv/pillow) come from apt; the venv uses `--system-site-packages` so Python can see them. This avoids long/fragile source builds on Python 3.13/ARMv7.
+- Voice: install PortAudio headers via apt; then `pip install SpeechRecognition pyaudio` (or `sudo apt install python3-pyaudio`).
+- Face recognition: on Pi 4/5 you can try `face_recognition`; on Pi 3B use the lite backend (OpenCV Haar + optional LBPH). See `docs/requirements.md`.
 
 Desktop (simulation) quick start
 
