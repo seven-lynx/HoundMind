@@ -20,6 +20,7 @@ import numpy as np
 import time
 import logging
 from pathlib import Path
+import os
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
 from datetime import datetime
@@ -47,14 +48,43 @@ class FaceRecognitionLiteService:
         # Data dir
         self.data_dir = Path(getattr(self.config, "FACE_LITE_DATA_DIR", "data/faces_lite"))
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        # Cascade
+        # Cascade (handle Debian packaging where cv2.data may be missing)
+        self._detector = None
+        cascade_candidates = []
         try:
-            cascade_path = str(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml")
-            self._detector = cv2.CascadeClassifier(cascade_path)
-            if self._detector.empty():
-                raise RuntimeError("Failed to load Haar cascade")
-        except Exception as e:
-            self.logger.warning(f"Haar cascade unavailable: {e}")
+            # Prefer cv2.data if available (pip wheels)
+            base = getattr(cv2, "data", None)
+            haar_dir = getattr(base, "haarcascades", None) if base is not None else None
+            if haar_dir:
+                cascade_candidates.append(Path(str(haar_dir)) / "haarcascade_frontalface_default.xml")
+        except Exception:
+            pass
+        # Environment override
+        env_path = os.getenv("OPENCV_HAAR_PATH", "").strip()
+        if env_path:
+            cascade_candidates.append(Path(env_path))
+        # Common Debian paths
+        cascade_candidates.extend(
+            [
+                Path("/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"),
+                Path("/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"),
+            ]
+        )
+        # Local project fallback (if user placed cascades under data/opencv)
+        cascade_candidates.append(self.data_dir.parent / "opencv" / "haarcascade_frontalface_default.xml")
+
+        chosen = next((p for p in cascade_candidates if p and p.exists()), None)
+        if chosen is not None:
+            try:
+                self._detector = cv2.CascadeClassifier(str(chosen))
+            except Exception:
+                self._detector = None
+
+        if self._detector is None or self._detector.empty():
+            self.logger.warning(
+                "Haar cascade unavailable: cv2.data missing and no cascade file found. "
+                "Install python3-opencv-data or set OPENCV_HAAR_PATH to the cascade XML."
+            )
             self.enabled = False
             self._detector = None
         # Recognizer (optional)
