@@ -56,24 +56,28 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Always return head to center after scan
 
 ## Navigation & Obstacle Avoidance
-- [x] Obstacle avoidance module (`navigation/obstacle_avoidance.py`)
-- [x] Threat levels: `IMMEDIATE` vs `APPROACHING`
-- [x] Avoidance history buffer (last 10–30s)
-- [x] Strategy rotation: smart turn → backup turn → zigzag → reverse escape
-- [x] Stuck detection via accel magnitude window
-- [x] Scan-based open-space selection (yaw sweep + clustering)
-- [x] Approach detection + retreat/turn escalation
-- [x] Dynamic scan width (narrow when safe)
-- [x] IMU-based turn-by-angle (uses heading integration)
-- [x] Navigation LED feedback
-- [x] Avoidance strategy rotation (backup/zigzag/reverse)
-- [x] Stuck recovery telemetry (count + last strategy)
-- [x] Turn confidence gating for scan decisions
-- [x] Low-confidence cooldown to reduce scan jitter
-- [x] Low-confidence scan retry limit before fallback
-- [x] Optional mapping best_path bias for turn decisions
-- [x] Mapping bias confidence threshold
-- [x] Mapping bias cooldown
+	- [ ] Navigation, Patrol, and Localization Improvements
+		- [ ] Add WiFi-based localization module (scan for APs, record RSSI for each SSID)
+		- [ ] Build and update a WiFi fingerprint map during exploration
+		- [ ] Estimate position by matching current WiFi scan to stored fingerprints
+		- [ ] Fuse WiFi-based localization with IMU, mapping, and vision for robust pose estimation
+		- [ ] Use WiFi fingerprints for “lost” recovery and map anchoring
+		- [ ] Log WiFi scan data for offline analysis and tuning
+		- [ ] Make patrol and explore behaviors context-aware (adapt to map coverage, recent obstacles, or “boredom”)
+		- [ ] Add “curiosity” or “goal-seeking” states to bias exploration toward unmapped or less-visited areas
+		- [ ] Use a confidence score for navigation decisions; fallback to safe/known paths if confidence is low
+		- [ ] Add “dead-end” and “loop” detection to avoid getting stuck in small spaces
+		- [ ] Allow user-defined patrol routes or zones (not just random or pre-set patterns)
+		- [ ] Add “pause and scan” or “linger” behaviors at patrol waypoints
+		- [ ] Fuse more sensor data (vision, IMU, distance) for improved pose estimation
+		- [ ] Add “lost” recovery: trigger search or return-to-home if localization confidence drops
+		- [ ] Use map history to bias against repeatedly visiting the same area
+		- [ ] Integrate global path planning (A* or similar) for Pi4, fallback to local planner on Pi3
+		- [ ] Log navigation decisions, confidence, and localization status for later analysis
+		- [ ] Expose current map, pose, and planned path in the streaming UI for real-time debugging
+		- [ ] Add unit and scenario tests for new navigation and patrol behaviors
+		- [ ] Document new behaviors and configuration options in the programming guide
+		- [ ] Add roadmap review and tuning session after initial implementation
 
 
 ## Mapping
@@ -126,6 +130,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 ## Tests (Hardware-validated)
 - [x] Core runtime tests (non-hardware)
 - [x] Automated on-device smoke test script
+- [x] Gentle recovery test (navigation/obstacle avoidance)
 
 ## Bug Fixes / Hardening
 - [x] Runtime loop: account for tick duration when sleeping to reduce drift.
@@ -223,7 +228,25 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Camera capture service (Pi4-optimized, low-latency).
 - [x] Frame pre-processing (resize, normalize, ROI selection).
 	- [x] Vision inference scheduler (separate process/thread).
-- [ ] Camera streaming UI (local preview + debug overlay).
+	- [ ] Camera streaming UI (local preview + debug overlay).
+		- [ ] Toggle overlays on/off (bounding boxes, labels, FPS, inference results)
+		- [ ] Switch between raw and annotated video streams
+		- [ ] Adjustable overlay transparency and color schemes
+		- [ ] Real-time telemetry panel (FPS, CPU/GPU/RAM, temp, inference latency)
+		- [ ] Show module health/status (vision, mapping, navigation)
+		- [ ] Show last N inference results or detected objects
+		- [ ] Click-to-inspect pixel/ROI or trigger actions
+		- [ ] Draw/select regions of interest (ROI) live from UI
+		- [ ] Multi-stream support (multiple cameras, PiP)
+		- [ ] Event & alert overlay (highlight on detection, errors, warnings)
+		- [ ] Timeline & playback (buffer/replay recent video, step through frames)
+		- [ ] Remote control & tuning (adjust vision params, trigger calibration)
+		- [ ] Data export & annotation (download frames/clips, mark for training)
+		- [ ] WebSocket/REST API for telemetry and control
+		- [ ] User authentication & access control (password, roles)
+		- [ ] Modular overlay system for future extensibility
+		- [ ] Mobile-friendly UI
+		- [ ] Support for custom plugins/scripts
 
 #### Facial Recognition & Identity
 - [x] Face detection model integration (fast on Pi4).

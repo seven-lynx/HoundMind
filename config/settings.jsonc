@@ -1,3 +1,13 @@
+      "wifi_localization": {
+        // WiFi-based localization (disabled by default)
+        "enabled": false,
+        "required": false,
+        "scan_interval": 10.0,
+        // List of SSIDs to ignore (optional)
+        "ignore_ssids": [],
+        // Maximum fingerprint file size in bytes (default: 262144 = 256 KB)
+        "max_fingerprint_file_size": 262144
+      },
 // HoundMind master configuration (PiDog hardware only)
 // This is the only user-facing config file. It is plain text with comments.
 // All options are live-tuned by editing this file and restarting the runtime.
@@ -116,6 +126,12 @@
         // IMU balance compensation module.
         "enabled": false,
         "required": false
+      },
+      "wifi_localization": {
+        // WiFi-based localization (disabled by default)
+        "enabled": false,
+        "required": false,
+        "scan_interval": 10.0
       },
     "safety": {
       // Safety overrides (emergency backing, etc.).
