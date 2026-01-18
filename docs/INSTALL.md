@@ -112,3 +112,40 @@ python pidog/examples/<example>.py
 - Keep HoundMind and PiDog installed in the **same Python environment** to avoid import errors.
 	- If you use a virtual environment, install **everything** inside it (recommended for beginners).
 	- If you prefer system-wide installs, skip the venv and install everything system-wide (advanced users only).
+
+## PiDog & Dependency Installation (Official)
+
+To use HoundMind with SunFounder PiDog hardware, install the following dependencies on your Raspberry Pi (Pi 4 recommended):
+
+1. **Install system tools:**
+   ```sh
+   sudo apt install git python3-pip python3-setuptools python3-smbus
+   ```
+2. **Install robot-hat library:**
+   ```sh
+   cd ~/
+   git clone -b v2.0 https://github.com/sunfounder/robot-hat.git
+   cd robot-hat
+   sudo python3 setup.py install
+   ```
+3. **Install vilib library:**
+   ```sh
+   cd ~/
+   git clone -b picamera2 https://github.com/sunfounder/vilib.git
+   cd vilib
+   sudo python3 install.py
+   ```
+4. **Install pidog library:**
+   ```sh
+   cd ~/
+   git clone https://github.com/sunfounder/pidog.git
+   cd pidog
+   sudo python3 setup.py install
+   ```
+5. **Install i2samp (for sound):**
+   ```sh
+   cd ~/pidog
+   sudo bash i2samp.sh
+   ```
+
+For more details, see the [official PiDog repo](https://github.com/sunfounder/pidog) and [official docs](https://docs.sunfounder.com/projects/pidog/en/latest/).

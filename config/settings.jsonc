@@ -1,13 +1,3 @@
-      "wifi_localization": {
-        // WiFi-based localization (disabled by default)
-        "enabled": false,
-        "required": false,
-        "scan_interval": 10.0,
-        // List of SSIDs to ignore (optional)
-        "ignore_ssids": [],
-        // Maximum fingerprint file size in bytes (default: 262144 = 256 KB)
-        "max_fingerprint_file_size": 262144
-      },
 // HoundMind master configuration (PiDog hardware only)
 // This is the only user-facing config file. It is plain text with comments.
 // All options are live-tuned by editing this file and restarting the runtime.
@@ -24,8 +14,8 @@
         "vision_pi4": {"enabled": true},
         "face_recognition": {"enabled": false},
         "semantic_labeler": {"enabled": false},
-        "slam_pi4": {"enabled": false},
-        "telemetry_dashboard": {"enabled": false}
+        "slam_pi4": {"enabled": true},
+        "telemetry_dashboard": {"enabled": true}
       },
       "settings": {
         "navigation": {
@@ -164,13 +154,13 @@
       "required": false
     },
     "slam_pi4": {
-      // Pi4 SLAM module (disabled by default).
-      "enabled": false,
+      // Pi4 SLAM module (enabled for validation).
+      "enabled": true,
       "required": false
     },
     "telemetry_dashboard": {
-      // Pi4 telemetry dashboard (disabled by default).
-      "enabled": false,
+      // Pi4 telemetry dashboard (enabled for validation).
+      "enabled": true,
       "required": false
     },
     "energy_emotion": {

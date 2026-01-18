@@ -99,10 +99,10 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for enable/disable steps.
 If HoundMind breaks, you can still run the official PiDog scripts from the SunFounder repo. See [docs/INSTALL.md](docs/INSTALL.md) for fallback instructions.
 
 ## Migration status
-- Core runtime, safety/health, and logging foundations are complete.
-- Remaining: minor polish and documentation; emergency stop procedure implemented.
 
-# Major Features & Default Status
+# Official SunFounder PiDog Repository
+
+
 
 | Feature                        | Default      | Notes (Enable/Disable)                |
 |--------------------------------|-------------|---------------------------------------|
@@ -132,3 +132,40 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Telemetry Dashboard (Pi4)      | Disabled    | Opt-in, requires Pi4                  |
 
 See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for details and enable/disable instructions for each module.
+
+## PiDog & Dependency Installation (Official)
+
+To use HoundMind with SunFounder PiDog hardware, install the following dependencies on your Raspberry Pi (Pi 4 recommended):
+
+1. **Install system tools:**
+   ```sh
+   sudo apt install git python3-pip python3-setuptools python3-smbus
+   ```
+2. **Install robot-hat library:**
+   ```sh
+   cd ~/
+   git clone -b v2.0 https://github.com/sunfounder/robot-hat.git
+   cd robot-hat
+   sudo python3 setup.py install
+   ```
+3. **Install vilib library:**
+   ```sh
+   cd ~/
+   git clone -b picamera2 https://github.com/sunfounder/vilib.git
+   cd vilib
+   sudo python3 install.py
+   ```
+4. **Install pidog library:**
+   ```sh
+   cd ~/
+   git clone https://github.com/sunfounder/pidog.git
+   cd pidog
+   sudo python3 setup.py install
+   ```
+5. **Install i2samp (for sound):**
+   ```sh
+   cd ~/pidog
+   sudo bash i2samp.sh
+   ```
+
+For more details, see the [official PiDog repo](https://github.com/sunfounder/pidog) and [official docs](https://docs.sunfounder.com/projects/pidog/en/latest/).
