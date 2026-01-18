@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build source and wheel distributions",
+			"type": "shell",
+			"command": "python -m build",
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

@@ -6,6 +6,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.optional.vision_preprocessing import VisionPreprocessor
+from houndmind_ai.optional.vision_inference_scheduler import VisionInferenceScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +31,28 @@ class VisionPi4Module(Module):
         self._http_server: ThreadingHTTPServer | None = None
         self._http_thread: threading.Thread | None = None
 
+        self._preprocessor = None
+        self._inference_scheduler = None
+        self._last_inference_result = None
+
     def start(self, context) -> None:
         if not self.status.enabled:
             return
         settings = (context.get("settings") or {}).get("vision_pi4", {})
         backend = settings.get("backend", "picamera2")
+
+        # Setup preprocessor and inference scheduler if enabled
+        self._preprocessor = VisionPreprocessor(settings.get("preprocessing", {}))
+        if settings.get("inference_scheduler_enabled", True):
+            def _on_inference_result(result):
+                self._last_inference_result = result
+                context.set("vision_inference_result", result)
+            # Dummy inference function, replace with actual model
+            def _dummy_inference(frame):
+                time.sleep(0.05)
+                return {"frame_id": id(frame), "result": "ok"}
+            self._inference_scheduler = VisionInferenceScheduler(_dummy_inference, result_callback=_on_inference_result)
+            self._inference_scheduler.start()
 
         if backend == "picamera2":
             try:
@@ -107,6 +126,13 @@ class VisionPi4Module(Module):
             context.set("vision_frame_ts", now)
             self._last_frame_ts = now
             self._last_frame = frame
+            # Preprocess and schedule inference if enabled
+            if self._preprocessor and self._inference_scheduler:
+                try:
+                    processed = self._preprocessor.process(frame)
+                    self._inference_scheduler.submit_frame(processed)
+                except Exception as exc:
+                    logger.warning("Vision preprocessing/inference failed: %s", exc)
 
     def stop(self, context) -> None:
         if self._camera is not None:
@@ -125,6 +151,9 @@ class VisionPi4Module(Module):
                 self._http_server.server_close()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Vision HTTP server shutdown failed: %s", exc)
+        if self._inference_scheduler:
+            self._inference_scheduler.stop()
+            self._inference_scheduler = None
 
     def _maybe_start_http(self, settings: dict) -> None:
         http_settings = settings.get("http", {})

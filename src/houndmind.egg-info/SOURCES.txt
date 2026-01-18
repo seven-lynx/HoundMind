@@ -54,6 +54,7 @@ src/houndmind_ai/safety/watchdog.py
 tests/test_attention_module.py
 tests/test_balance_module.py
 tests/test_config_validation.py
+tests/test_gentle_recovery.py
 tests/test_led_manager.py
 tests/test_mapping.py
 tests/test_runtime.py
