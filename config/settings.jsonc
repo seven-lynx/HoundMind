@@ -75,7 +75,8 @@
     "mapping": {
       // Mapping and optional home map storage.
       "enabled": true,
-      "required": false
+      "required": false,
+      "path_planning_enabled": true
     },
     "behavior": {
       // High-level behavior selection.
@@ -576,7 +577,7 @@
       // Enable mapping module (safe to keep on by default).
       "enabled": true,
       // Future hook for optional path planning.
-      "path_planning_enabled": false,
+      "path_planning_enabled": true,
       // Max samples to keep in memory.
       "sample_history_max": 500,
       // Max age for samples in seconds (0 = keep forever).

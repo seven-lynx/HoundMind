@@ -56,28 +56,28 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Always return head to center after scan
 
 ## Navigation & Obstacle Avoidance
-	- [ ] Navigation, Patrol, and Localization Improvements
-		- [ ] Add WiFi-based localization module (scan for APs, record RSSI for each SSID)
-		- [ ] Build and update a WiFi fingerprint map during exploration
-		- [ ] Estimate position by matching current WiFi scan to stored fingerprints
-		- [ ] Fuse WiFi-based localization with IMU, mapping, and vision for robust pose estimation
-		- [ ] Use WiFi fingerprints for “lost” recovery and map anchoring
-		- [ ] Log WiFi scan data for offline analysis and tuning
-		- [ ] Make patrol and explore behaviors context-aware (adapt to map coverage, recent obstacles, or “boredom”)
-		- [ ] Add “curiosity” or “goal-seeking” states to bias exploration toward unmapped or less-visited areas
-		- [ ] Use a confidence score for navigation decisions; fallback to safe/known paths if confidence is low
-		- [ ] Add “dead-end” and “loop” detection to avoid getting stuck in small spaces
-		- [ ] Allow user-defined patrol routes or zones (not just random or pre-set patterns)
-		- [ ] Add “pause and scan” or “linger” behaviors at patrol waypoints
-		- [ ] Fuse more sensor data (vision, IMU, distance) for improved pose estimation
-		- [ ] Add “lost” recovery: trigger search or return-to-home if localization confidence drops
-		- [ ] Use map history to bias against repeatedly visiting the same area
-		- [ ] Integrate global path planning (A* or similar) for Pi4, fallback to local planner on Pi3
-		- [ ] Log navigation decisions, confidence, and localization status for later analysis
-		- [ ] Expose current map, pose, and planned path in the streaming UI for real-time debugging
-		- [ ] Add unit and scenario tests for new navigation and patrol behaviors
-		- [ ] Document new behaviors and configuration options in the programming guide
-		- [ ] Add roadmap review and tuning session after initial implementation
+	- [x] Navigation, Patrol, and Localization Improvements
+		- [x] Add WiFi-based localization module (scan for APs, record RSSI for each SSID)
+		- [x] Build and update a WiFi fingerprint map during exploration
+		- [x] Estimate position by matching current WiFi scan to stored fingerprints
+		- [x] Fuse WiFi-based localization with IMU, mapping, and vision for robust pose estimation
+		- [x] Use WiFi fingerprints for “lost” recovery and map anchoring
+		- [x] Log WiFi scan data for offline analysis and tuning
+		- [x] Make patrol and explore behaviors context-aware (adapt to map coverage, recent obstacles, or “boredom”)
+		- [x] Add “curiosity” or “goal-seeking” states to bias exploration toward unmapped or less-visited areas
+		- [x] Use a confidence score for navigation decisions; fallback to safe/known paths if confidence is low
+		- [x] Add “dead-end” and “loop” detection to avoid getting stuck in small spaces
+		- [x] Allow user-defined patrol routes or zones (not just random or pre-set patterns)
+		- [x] Add “pause and scan” or “linger” behaviors at patrol waypoints
+		- [x] Fuse more sensor data (vision, IMU, distance) for improved pose estimation
+		- [x] Add “lost” recovery: trigger search or return-to-home if localization confidence drops
+		- [x] Use map history to bias against repeatedly visiting the same area
+		- [x] Integrate global path planning (A* or similar) for Pi4, fallback to local planner on Pi3
+		- [x] Log navigation decisions, confidence, and localization status for later analysis
+		- [x] Expose current map, pose, and planned path in the streaming UI for real-time debugging
+		- [x] Add unit and scenario tests for new navigation and patrol behaviors
+		- [x] Document new behaviors and configuration options in the programming guide
+		- [x] Add roadmap review and tuning session after initial implementation
 
 
 ## Mapping

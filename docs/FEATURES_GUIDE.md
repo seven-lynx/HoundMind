@@ -342,3 +342,41 @@ Use `profile: "pi3" | "pi4"` in `config/settings.jsonc`, or set `HOUNDMIND_PROFI
 - If `pidog` import fails: install SunFounder PiDog first, then HoundMind.
 - If a module fails: disable it in `modules` and restart.
 - For camera issues: switch `settings.vision_pi4.backend` to `opencv`.
+
+---
+
+## 22) Path Planning (A* for Pi4)
+**What it does:**
+- Plans a path from the current cell to a specified goal using the A* algorithm on a grid map.
+- The planned path is available in the runtime context for navigation and debugging.
+
+**Enable:**
+- Set `"path_planning_enabled": true` in the `mapping` section of your config.
+- Set a goal with `"goal": [x, y]` in the same section.
+
+**Usage:**
+- The mapping module will call the path planning hook each tick if enabled.
+- The planned path will be available in the context as `path_planning`.
+
+**Example:**
+```python
+from houndmind_ai.mapping.path_planner import astar
+
+grid = [
+    [0, 0, 0, 1, 0],
+    [1, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0],
+]
+start = (0, 0)
+goal = (4, 4)
+path = astar(grid, start, goal)
+print("Path:", path)
+# Output: [(0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (3, 2), (4, 2), (4, 3), (4, 4)]
+```
+
+**Disable:**
+- Set `"path_planning_enabled": false` in the mapping config.
+
+---

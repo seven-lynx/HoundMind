@@ -32,6 +32,7 @@ from houndmind_ai.optional.telemetry_dashboard import TelemetryDashboardModule
 from houndmind_ai.optional.vision import VisionModule
 from houndmind_ai.optional.vision_pi4 import VisionPi4Module
 from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
+from houndmind_ai.mapping import default_path_planning_hook
 
 
 def build_modules(config) -> list:
@@ -100,6 +101,12 @@ def main() -> None:
     config = load_config(args.config)
     setup_logging((config.settings or {}).get("logging", {}))
     runtime = HoundMindRuntime(config, build_modules(config))
+
+    # Register path planning hook for Pi4 if enabled
+    mapping_settings = (config.settings or {}).get("mapping", {})
+    if mapping_settings.get("path_planning_enabled", False):
+        runtime.context.set("path_planning_hook", default_path_planning_hook)
+
     runtime.run()
 
 

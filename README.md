@@ -98,10 +98,6 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for enable/disable steps.
 ## Fallback (Original PiDog Software)
 If HoundMind breaks, you can still run the official PiDog scripts from the SunFounder repo. See [docs/INSTALL.md](docs/INSTALL.md) for fallback instructions.
 
-## Migration status
-
-# Official SunFounder PiDog Repository
-
 
 
 | Feature                        | Default      | Notes (Enable/Disable)                |
@@ -169,3 +165,30 @@ To use HoundMind with SunFounder PiDog hardware, install the following dependenc
    ```
 
 For more details, see the [official PiDog repo](https://github.com/sunfounder/pidog) and [official docs](https://docs.sunfounder.com/projects/pidog/en/latest/).
+
+## Path Planning (A* for Pi4)
+HoundMind now supports grid-based path planning using the A* algorithm on Pi4. When enabled in `config/settings.jsonc`, the mapping module will plan a path from the current cell to a specified goal using the current map. The planned path is available in the runtime context for navigation and debugging.
+
+- Enable with `"path_planning_enabled": true` in the mapping section of your config.
+- Set a goal with `"goal": [x, y]`.
+- The planned path will be available in the context as `path_planning`.
+
+Example grid and output:
+```python
+from houndmind_ai.mapping.path_planner import astar
+
+grid = [
+    [0, 0, 0, 1, 0],
+    [1, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0],
+]
+start = (0, 0)
+goal = (4, 4)
+path = astar(grid, start, goal)
+print("Path:", path)
+# Output: [(0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (3, 2), (4, 2), (4, 3), (4, 4)]
+```
+
+See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for more details.
