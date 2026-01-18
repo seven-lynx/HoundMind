@@ -190,8 +190,8 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Quiet mode schedule (reduce scan cadence + action frequency on demand).
 - [x] Battery/voltage alert hook to trigger rest behavior (if available).
 - [x] No-go memory for angles that repeatedly cause avoidance.
-- [ ] Gentle recovery: reduce speed after repeated stuck events.
-- [ ] Adaptive scan step (coarser when clear, finer when near obstacles).
+- [x] Gentle recovery: reduce speed after repeated stuck events.
+- [x] Adaptive scan step (coarser when clear, finer when near obstacles).
 - [ ] Sensor health summary badge (LED/log) with thresholds.
 
 ### Pi 3 — Audit Suggestions (module polish)
