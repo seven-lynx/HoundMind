@@ -97,3 +97,34 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 ## Migration status
 - Core runtime, safety/health, and logging foundations are complete.
 - Remaining: minor polish and documentation; emergency stop procedure implemented.
+
+# Major Features & Default Status
+
+| Feature                        | Default      | Notes (Enable/Disable)                |
+|--------------------------------|-------------|---------------------------------------|
+| Core Runtime                   | Enabled     | Always required                       |
+| HAL: Sensors & Motors          | Enabled     |                                       |
+| Perception                     | Enabled     |                                       |
+| Scanning                       | Enabled     |                                       |
+| Navigation & Obstacle Avoidance| Enabled     |                                       |
+| Mapping (Pi3-safe)             | Enabled     |                                       |
+| Behavior                       | Enabled     |                                       |
+| Attention                      | Enabled     |                                       |
+| Watchdog                       | Enabled     | Low-impact defaults                   |
+| Service Watchdog               | Enabled     |                                       |
+| Event Logging                  | Enabled     |                                       |
+| LED Manager                    | Enabled     |                                       |
+| Calibration                    | Enabled     |                                       |
+| Safety                         | Disabled    | Opt-in for emergency stop/tilt        |
+| Health Monitor                 | Disabled    | Opt-in for CPU/mem/temp/throttling    |
+| Balance                        | Disabled    | Opt-in for IMU posture                |
+| Vision (Pi3 legacy)            | Disabled    | Opt-in, legacy camera                 |
+| Voice (Pi3 legacy)             | Disabled    | Opt-in, legacy voice                  |
+| Voice Assistant (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
+| Face Recognition (Pi4)         | Disabled    | Opt-in, requires Pi4                  |
+| Pi4 Vision Feed (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
+| Semantic Labeler (Pi4)         | Disabled    | Opt-in, requires Pi4                  |
+| SLAM (Pi4)                     | Disabled    | Opt-in, requires Pi4                  |
+| Telemetry Dashboard (Pi4)      | Disabled    | Opt-in, requires Pi4                  |
+
+See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for details and enable/disable instructions for each module.
