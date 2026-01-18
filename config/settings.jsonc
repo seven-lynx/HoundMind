@@ -348,6 +348,31 @@
     // =====================================================================
     // NAVIGATION & SCANNING (Pi 3 friendly)
     // =====================================================================
+    // =====================================================================
+    // SENSOR HEALTH SUMMARY BADGE (LED/log)
+    // =====================================================================
+    "sensor_health": {
+      // Enable sensor health summary badge (LED/log)
+      "enabled": false,
+      // LED color for healthy sensors
+      "led_ok_color": "green",
+      // LED color for warning state
+      "led_warning_color": "yellow",
+      // LED color for error state
+      "led_error_color": "red",
+      // Log health status changes
+      "log_enabled": true,
+      // Ultrasonic sensor: max age (s) before warning
+      "ultrasonic_stale_s": 1.0,
+      // IMU: max age (s) before warning
+      "imu_stale_s": 1.0,
+      // Touch: max age (s) before warning
+      "touch_stale_s": 1.0,
+      // Sound direction: max age (s) before warning
+      "sound_stale_s": 1.0,
+      // Set to true to treat any error as critical (red LED)
+      "error_is_critical": true
+    },
     "navigation": {
       // Minimum safe distance (cm) before avoidance triggers.
       "min_distance_cm": 15,

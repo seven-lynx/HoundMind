@@ -7,6 +7,7 @@ from datetime import datetime
 
 from .config import Config
 from .module import Module, ModuleError
+from houndmind_ai.safety.sensor_health import SensorHealthModule
 
 logger = logging.getLogger(__name__)
 
@@ -189,3 +190,13 @@ class HoundMindRuntime:
             logger.warning("Runtime interrupted by user")
         finally:
             self.stop()
+
+
+def build_default_modules(config: Config) -> list[Module]:
+    from houndmind_ai.safety.sensor_health import SensorHealthModule
+    # ... import other modules as needed ...
+    modules = []
+    # ...existing module instantiation logic...
+    # Add sensor health module (disabled by default)
+    modules.append(SensorHealthModule("sensor_health", enabled=config.settings.get("sensor_health", {}).get("enabled", False)))
+    return modules
