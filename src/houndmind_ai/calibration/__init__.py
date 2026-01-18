@@ -1,0 +1,1 @@
+"""Calibration helpers for HoundMind."""

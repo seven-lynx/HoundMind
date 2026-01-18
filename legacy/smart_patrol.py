@@ -15,11 +15,12 @@ obstacle_count = 0  # ✅ Track consecutive obstacle encounters
 speed_profiles = {
     "walking": {"walk_speed": 80, "turn_speed": 120},
     "trotting": {"walk_speed": 120, "turn_speed": 200},
-    "running": {"walk_speed": 200, "turn_speed": 220}
+    "running": {"walk_speed": 200, "turn_speed": 220},
 }
 
 current_profile = "trotting"
 current_speed = speed_profiles[current_profile]
+
 
 def update_position(direction):
     """Track PiDog’s position and directional facing in the mapped space."""
@@ -40,15 +41,17 @@ def update_position(direction):
 
     print(f"📍 Updated Position: {position}")
 
+
 def scan_surroundings():
     """Scan forward, left, and right while recording previous scan data."""
     distances = {
         "left": dog.read_distance_at(-50),
         "forward": dog.read_distance_at(0),
-        "right": dog.read_distance_at(50)
+        "right": dog.read_distance_at(50),
     }
     print(f"🔎 Scanned Distances: {distances}")
     return distances
+
 
 def decay_obstacle_memory():
     """Reduces memory weight of old obstacles over time."""
@@ -59,12 +62,13 @@ def decay_obstacle_memory():
             del obstacle_map[key]  # ✅ Remove fully decayed obstacles
     print(f"📌 Decayed Obstacle Map: {obstacle_map}")
 
+
 def detect_obstacle():
     """Detect obstacles, track memory decay, and intelligently adjust movement."""
     global obstacle_count
     distances = scan_surroundings()
-    
-    current_position = (position["x"], position["y"]) 
+
+    current_position = (position["x"], position["y"])
 
     # ✅ Apply memory decay to obstacles
     decay_obstacle_memory()
@@ -83,7 +87,9 @@ def detect_obstacle():
         return True
 
     # ✅ Use past scans to predict safest turn direction
-    past_obstacles = {k: v for k, v in obstacle_map.items() if v > 1}  # ✅ Prioritize frequently blocked areas
+    past_obstacles = {
+        k: v for k, v in obstacle_map.items() if v > 1
+    }  # ✅ Prioritize frequently blocked areas
     if past_obstacles:
         print("🧠 Using past obstacle data for turn prediction.")
         direction = "left" if distances["left"] > distances["right"] else "right"
@@ -116,18 +122,22 @@ def detect_obstacle():
 
     return False
 
+
 def turn_with_head(direction):
     """Synchronize PiDog’s head movement with turns."""
-    dog.head_move([[ -50 if direction == "left" else 50, 0, 0]], speed=current_speed["walk_speed"])
+    dog.head_move(
+        [[-50 if direction == "left" else 50, 0, 0]], speed=current_speed["walk_speed"]
+    )
     dog.wait_head_done()
     dog.do_action(f"turn_{direction}", step_count=3, speed=current_speed["turn_speed"])
     dog.head_move([[0, 0, 0]], speed=current_speed["walk_speed"])
     dog.wait_head_done()
 
+
 def monitor_keyboard():
     """Cycle through speed profiles with keyboard input."""
     while True:
-        if keyboard.is_pressed('space'):
+        if keyboard.is_pressed("space"):
             profiles = list(speed_profiles.keys())
             current_index = profiles.index(current_profile)
             new_index = (current_index + 1) % len(profiles)
@@ -136,6 +146,7 @@ def monitor_keyboard():
             current_speed = speed_profiles[current_profile]
             print(f"⚡ Speed Profile Changed: {current_profile}")
             time.sleep(1)
+
 
 def start_behavior():
     """PiDog continuously patrols while dynamically adjusting movement based on obstacles."""

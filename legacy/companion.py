@@ -15,19 +15,21 @@ voice_engine = pyttsx3.init()
 voice_engine.setProperty("rate", 150)
 voice_engine.setProperty("volume", 1.0)
 
+
 def speak(text):
     """Make PiDog speak."""
     print(f"PiDog says: {text}")
     voice_engine.say(text)
     voice_engine.runAndWait()
 
+
 def get_chatbot_response(prompt):
     """Retrieve AI-generated response."""
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
+        model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
     )
     return response["choices"][0]["message"]["content"]
+
 
 def companion_mode():
     """Continuously chat with PiDog."""
@@ -40,15 +42,16 @@ def companion_mode():
             if prompt.lower() == "exit":
                 speak("Okay, talk to you later!")
                 break
-            
+
             response = get_chatbot_response(prompt)
             speak(response)
-    
+
     except KeyboardInterrupt:
         speak("Okay, shutting down chat mode.")
         dog.do_action("stand", speed=50)
         dog.wait_all_done()
         dog.close()
+
 
 # Start Companion Mode
 companion_mode()

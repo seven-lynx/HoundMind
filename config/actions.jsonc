@@ -1,0 +1,90 @@
+// HoundMind action catalog (PiDog ActionFlow names)
+// Add custom actions here, but keep names aligned with ActionFlow operations.
+{
+  "catalog": {
+    // Low-energy idle actions.
+    "idle": [
+      "stand",
+      "sit",
+      "half_sit",
+      "lie",
+      "waiting",
+      "shake head",
+      "tilting_head",
+      "tilting_head_left",
+      "tilting_head_right",
+      "head_up_down",
+      "nod",
+      "nod_lethargy",
+      "relax neck",
+      "think",
+      "recall"
+    ],
+    // Alert or attention-grabbing actions.
+    "alert": [
+      "wag tail",
+      "shake head",
+      "head_bark",
+      "bark",
+      "bark harder",
+      "pant",
+      "howling",
+      "surprise"
+    ],
+    // Obstacle avoidance and recovery actions.
+    "avoid": [
+      "backward",
+      "turn left",
+      "turn right",
+      "forward",
+      "trot",
+      "stand"
+    ],
+    // Playful and social actions.
+    "play": [
+      "stretch",
+      "push up",
+      "high five",
+      "handshake",
+      "lick hand",
+      "feet shake",
+      "scratch",
+      "twist body",
+      "fluster"
+    ],
+    // Rest / calm-down actions.
+    "rest": [
+      "doze off",
+      "nod lethargy",
+      "lie",
+      "relax neck"
+    ],
+    // Patrol actions (steady movement).
+    "patrol": [
+      "forward",
+      "trot",
+      "turn left",
+      "turn right"
+    ],
+    // Explore actions (curious movement).
+    "explore": [
+      "forward",
+      "trot",
+      "turn left",
+      "turn right",
+      "head_up_down",
+      "tilting_head"
+    ],
+    // Interaction actions (social gestures).
+    "interact": [
+      "wag tail",
+      "shake head",
+      "handshake",
+      "high five",
+      "sit",
+      "stand"
+    ],
+    // Custom actions (add your own names here).
+    "custom": []
+  }
+}

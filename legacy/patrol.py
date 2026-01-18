@@ -10,6 +10,7 @@ dog.do_action("stand", speed=80)  # Ensure Pidog is ready
 dog.wait_all_done()
 time.sleep(0.5)
 
+
 def move_forward():
     """Move Pidog forward with obstacle detection & randomized speed."""
     speed = random.choice([80, 100, 120])  # ✅ Random speed variation
@@ -31,6 +32,7 @@ def move_forward():
     if random.random() < 0.3:  # 30% chance to do idle behavior
         perform_idle_behavior()
 
+
 def stop_movement():
     """Immediately stop Pidog to prevent collisions."""
     print("Stopping immediately!")
@@ -38,11 +40,13 @@ def stop_movement():
     dog.wait_all_done()
     time.sleep(0.5)
 
+
 def detect_obstacle():
     """Check for obstacles using the ultrasonic sensor."""
     distance = dog.read_distance()  # Correct method call
     print(f"Distance detected: {distance} cm")  # Debugging output
     return distance < 60  # Increased detection range for earlier reaction
+
 
 def retreat():
     """Move Pidog backward when an obstacle is detected."""
@@ -53,6 +57,7 @@ def retreat():
 
     navigate_around_obstacle()  # Turn after retreating
 
+
 def reverse_turn():
     """Move backward while turning in a random direction."""
     print("Executing Reverse Turn: Moving backward while turning...")
@@ -61,26 +66,34 @@ def reverse_turn():
     print(f"Reverse turning {turn_direction}")  # Debugging output
 
     if turn_direction == "left":
-        dog.do_action("backward_left", step_count=5, speed=100)  # Moves backward while turning left
+        dog.do_action(
+            "backward_left", step_count=5, speed=100
+        )  # Moves backward while turning left
     else:
-        dog.do_action("backward_right", step_count=5, speed=100)  # Moves backward while turning right
+        dog.do_action(
+            "backward_right", step_count=5, speed=100
+        )  # Moves backward while turning right
 
     dog.wait_all_done()
     time.sleep(0.5)
 
+
 def respond_to_obstacle():
     """Randomly choose between retreating or reverse turning when an obstacle is detected."""
-    action = random.choice(["retreat", "reverse_turn"])  # Randomly selects avoidance method
-    
+    action = random.choice(
+        ["retreat", "reverse_turn"]
+    )  # Randomly selects avoidance method
+
     if action == "retreat":
         retreat()  # Executes retreat behavior
     else:
         reverse_turn()  # Executes reverse turn behavior
 
+
 def navigate_around_obstacle():
     """Turn left or right randomly, then fully reset movement before continuing."""
     turn_direction = random.choice(["left", "right"])
-    turn_style = random.choice(["sharp", "smooth"]) 
+    turn_style = random.choice(["sharp", "smooth"])
 
     print(f"Turning {turn_direction}, Style: {turn_style}")  # Debugging output
 
@@ -91,7 +104,9 @@ def navigate_around_obstacle():
             dog.do_action("turn_left", step_count=5, speed=100)  # Increased turn speed
     else:
         if turn_style == "sharp":
-            dog.do_action("turn_right", step_count=10, speed=100)  # Increased turn speed
+            dog.do_action(
+                "turn_right", step_count=10, speed=100
+            )  # Increased turn speed
         else:
             dog.do_action("turn_right", step_count=5, speed=100)  # Increased turn speed
 
@@ -109,10 +124,11 @@ def navigate_around_obstacle():
     dog.do_action("forward", step_count=5, speed=100)  # Reset movement speed properly
     dog.wait_all_done()
 
+
 def perform_idle_behavior():
     """Make PiDog do idle animations to simulate natural behavior."""
     idle_action = random.choice(["head_tilt", "tail_wag", "bark"])
-    
+
     if idle_action == "head_tilt":
         print("PiDog tilts its head curiously...")
         dog.do_action("head_tilt", speed=50)
@@ -126,10 +142,11 @@ def perform_idle_behavior():
     dog.wait_all_done()
     time.sleep(0.5)
 
+
 def scan_area():
     """Make PiDog scan its surroundings before resuming patrol."""
     print("Scanning the area before continuing...")
-    
+
     dog.do_action("turn_left", step_count=5, speed=80)  # Looks left
     dog.wait_all_done()
     time.sleep(0.5)
@@ -137,6 +154,7 @@ def scan_area():
     dog.do_action("turn_right", step_count=5, speed=80)  # Looks right
     dog.wait_all_done()
     time.sleep(0.5)
+
 
 # Main loop
 try:

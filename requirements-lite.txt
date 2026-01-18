@@ -1,41 +1,5 @@
-# Lightweight requirements for low-power devices (e.g., Raspberry Pi 3B)
-# Omits heavy optional packages like face-recognition/dlib and TensorFlow.
+# Minimal dependencies for Pi3 runtime (lightweight preset)
+# Add only small, well-supported packages here for Pi3 installs.
 
-# Core dependencies
-keyboard>=0.13.5
-importlib-metadata>=4.0.0
-
-# Audio and voice (keep minimal)
-SpeechRecognition>=3.10.0
-pyaudio>=0.2.11
-pydub>=0.25.1
-
-# Computer vision (no face-recognition/dlib)
-# On Pi 3B, OpenCV and Pillow are provided by apt (python3-opencv, python3-pil)
-
-# Scientific computing and data processing
-# On Pi 3B, numpy/scipy/matplotlib come from apt to avoid source builds.
-
-# Machine learning (omit heavy frameworks)
-# scikit-learn and tensorflow omitted here on purpose
-
-# Hardware interface (Raspberry Pi specific)
-RPi.GPIO>=0.7.1
-adafruit-circuitpython-servokit>=1.3.15
-adafruit-blinka>=8.20.0
-pidog>=1.0.0
-
-# Communication and networking
-requests>=2.31.0
-websockets>=11.0.0
-
-# Development and debugging
-pytest>=7.4.0
-black>=23.0.0
-flake8>=6.0.0
-
-# Utility libraries
-pyyaml>=6.0
-python-dotenv>=1.0.0
-colorama>=0.4.6
-tqdm>=4.65.0
+# Hardware bindings (platform-specific)
+pidog>=0.1.0

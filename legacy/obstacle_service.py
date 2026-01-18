@@ -45,9 +45,17 @@ def ctx():
 def analyze_scan_levels(ctx):
     cfg = ConfigStub()
     svc = ObstacleService()
-    assert svc.analyze_scan({"forward": 20.0, "left": 50.0, "right": 50.0}, cfg) == "IMMEDIATE"
-    assert svc.analyze_scan({"forward": 30.0, "left": 50.0, "right": 50.0}, cfg) == "APPROACHING"
-    assert svc.analyze_scan({"forward": 100.0, "left": 50.0, "right": 50.0}, cfg) is None
+    assert (
+        svc.analyze_scan({"forward": 20.0, "left": 50.0, "right": 50.0}, cfg)
+        == "IMMEDIATE"
+    )
+    assert (
+        svc.analyze_scan({"forward": 30.0, "left": 50.0, "right": 50.0}, cfg)
+        == "APPROACHING"
+    )
+    assert (
+        svc.analyze_scan({"forward": 100.0, "left": 50.0, "right": 50.0}, cfg) is None
+    )
 
 
 def maybe_avoid_executes_turn(ctx):

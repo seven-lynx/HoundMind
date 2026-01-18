@@ -62,10 +62,12 @@ def three_way_scan_returns_median_and_centers_head(ctx, monkeypatch):
 
 def three_way_scan_raises_on_missing_readings():
     c = AIContext()
+
     # Ultrasonic always invalid
     class BadDog(FakeDog):
         def __init__(self):
             super().__init__((-1, -1, -1))
+
     c.dog = BadDog()
     svc = ScanningService(c)
     with pytest.raises(RuntimeError):

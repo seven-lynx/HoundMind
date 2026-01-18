@@ -20,6 +20,7 @@ manual_mode = False
 # ✅ Define global movement speed
 current_speed = 120  # Default normal speed
 
+
 def recalibrate_position():
     """Periodically recalibrate position using PiDog’s IMU."""
     imu_data = dog.gyroData  # Get motion data
@@ -29,6 +30,7 @@ def recalibrate_position():
         position["x"] += round(imu_data[0] * 0.1)
         position["y"] += round(imu_data[1] * 0.1)
         print(f"✅ Adjusted position after recalibration: {position}")
+
 
 def update_position(direction):
     """Update PiDog’s exact coordinates based on movement direction."""
@@ -44,6 +46,7 @@ def update_position(direction):
         position["x"] += step_size
 
     print(f"📍 PiDog’s current position: {position['x']}, {position['y']}")
+
 
 def detect_obstacle():
     """Check for obstacles directly ahead with updated threshold."""
@@ -61,9 +64,10 @@ def detect_obstacle():
 
     return False
 
+
 def patrol_head_movement():
     # Move PiDog's head side to side slowly, reset forward, then scan forward for obstacles.
-    update_emotion("scanning")  
+    update_emotion("scanning")
 
     # Side-to-side head movement for patrol effect
     dog.head_move([[30, 0, 0]], immediately=True, speed=30)  # Look right
@@ -77,6 +81,7 @@ def patrol_head_movement():
     # Reset head to FORWARD before obstacle scanning
     dog.head_move([[0, 0, 0]], immediately=True, speed=60)
     dog.wait_head_done()
+
 
 def check_sides():
     # PiDog dynamically turns toward the most open area.
@@ -115,7 +120,8 @@ def check_sides():
 
     dog.wait_all_done()
     resume_patrol()  # Ensure patrol resumes
-    
+
+
 def retreat():
     # Move PiDog backward after detecting an obstacle and ensure patrol resumes.
     print("No sidestep available! Retreating...")
@@ -133,68 +139,73 @@ def retreat():
     print("Resuming patrol after retreat...")
     resume_patrol()
 
+
 def resume_patrol():
     # Ensure PiDog resumes forward movement after obstacle avoidance.
     global manual_mode
     manual_mode = False  # Ensure patrol mode resumes
     move_forward()
 
+
 def move_forward():
     # Move PiDog forward while checking obstacles.
     global manual_mode
-    speed = 120  
+    speed = 120
 
     update_emotion("patrolling")
 
     for _ in range(5):
         if manual_mode:
             return
-        
-        patrol_head_movement()  
-        
-        if detect_obstacle():  
+
+        patrol_head_movement()
+
+        if detect_obstacle():
             stop_movement()
-            check_sides()  
+            check_sides()
             return
-        
+
         update_position("forward")
 
         if tuple(position) in blocked_positions:
             print("Detected previously blocked area! Changing direction...")
             check_sides()
             return
-        
-        dog.do_action("forward", step_count=1, speed=speed)  
+
+        dog.do_action("forward", step_count=1, speed=speed)
         dog.wait_all_done()
         time.sleep(0.2)
 
+
 def stop_movement():
-    #Immediately stop PiDog.
+    # Immediately stop PiDog.
     global manual_mode
     manual_mode = True
     dog.do_action("stand", speed=120)
     dog.wait_all_done()
     time.sleep(0.5)
 
+
 def update_emotion(status):
     # Change PiDog's RGB LED colors based on events.
     if status == "patrolling":
-        dog.rgb_strip.set_mode(style="breath", color="green", brightness=1)  
+        dog.rgb_strip.set_mode(style="breath", color="green", brightness=1)
         print("PiDog is happily patrolling!")
 
     elif status == "scanning":
-        dog.rgb_strip.set_mode(style="breath", color="blue", brightness=1)  
+        dog.rgb_strip.set_mode(style="breath", color="blue", brightness=1)
         print("PiDog is scanning for obstacles...")
 
     elif status == "blocked":
-        dog.rgb_strip.set_mode(style="boom", color="red", brightness=1)  
+        dog.rgb_strip.set_mode(style="boom", color="red", brightness=1)
         print("PiDog detected an obstacle and stopped!")
 
     elif status == "avoiding":
-        dog.rgb_strip.set_mode(style="bark", color="yellow", brightness=1)  
+        dog.rgb_strip.set_mode(style="bark", color="yellow", brightness=1)
         print("PiDog is changing its path!")
 
     dog.wait_all_done()
+
 
 # Terminal command listener
 def manual_control():
@@ -202,7 +213,9 @@ def manual_control():
     global manual_mode
 
     while True:
-        command = input("Enter command ('left', 'right', 'stop', 'resume'): ").strip().lower()
+        command = (
+            input("Enter command ('left', 'right', 'stop', 'resume'): ").strip().lower()
+        )
 
         if command == "left":
             print("Manual turn left!")
@@ -226,6 +239,7 @@ def manual_control():
 
         else:
             print("Invalid command. Use 'left', 'right', 'stop', or 'resume'.")
+
 
 # Run manual control in a separate thread
 control_thread = threading.Thread(target=manual_control, daemon=True)

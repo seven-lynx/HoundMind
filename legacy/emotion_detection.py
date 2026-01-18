@@ -10,7 +10,10 @@ dog.wait_all_done()
 time.sleep(0.5)
 
 # Load facial emotion detection model (OpenCV default)
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+)
+
 
 def detect_emotion():
     """Use AI to analyze facial expressions and respond emotionally."""
@@ -43,6 +46,7 @@ def detect_emotion():
         else:
             print("No face detected. Waiting for interaction.")
 
+
 def emotion_mode():
     """Continuously detect emotions and respond."""
     print("Entering AI Emotional Recognition Mode...")
@@ -51,12 +55,13 @@ def emotion_mode():
         while True:
             detect_emotion()
             time.sleep(1)  # Small delay between scans
-    
+
     except KeyboardInterrupt:
         print("Exiting Emotion Mode...")
         dog.do_action("stand", speed=50)  # Stop movement safely
         dog.wait_all_done()
         dog.close()  # Shut down Pidog properly
+
 
 # Start AI Emotional Mode
 emotion_mode()

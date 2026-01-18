@@ -15,16 +15,18 @@ voice_engine = pyttsx3.init()
 voice_engine.setProperty("rate", 150)  # Adjust speaking speed
 voice_engine.setProperty("volume", 1.0)  # Max volume
 
+
 def speak(text):
     """Make PiDog speak using AI text-to-speech."""
     print(f"PiDog says: {text}")
     voice_engine.say(text)
     voice_engine.runAndWait()
 
+
 def listen_for_command():
     """Use microphone to listen for voice commands."""
     recognizer = sr.Recognizer()
-    
+
     with sr.Microphone() as source:
         print("PiDog is listening for commands...")
         recognizer.adjust_for_ambient_noise(source)  # Reduce background noise
@@ -40,6 +42,7 @@ def listen_for_command():
             speak("There was an error with speech recognition.")
             return None
 
+
 def voice_personality_mode():
     """Continuously listen for voice interactions and respond with personality."""
     print("Entering AI Voice Personality Mode...")
@@ -52,7 +55,9 @@ def voice_personality_mode():
                 if "hello" in command:
                     speak("Hi there! How's your day going?")
                 elif "what can you do" in command:
-                    speak("I can patrol, guard, follow, and talk with you! Isn't that awesome?")
+                    speak(
+                        "I can patrol, guard, follow, and talk with you! Isn't that awesome?"
+                    )
                 elif "good dog" in command:
                     speak("Aww, thanks! That makes me happy!")
                     dog.do_action("tail_wag", speed=80)
@@ -60,9 +65,13 @@ def voice_personality_mode():
                     speak("Alright, I'll wait here!")
                     dog.do_action("stand", speed=80)
                 elif "tell me a joke" in command:
-                    speak("Why did the robot dog fail obedience school? It kept rebooting!")
+                    speak(
+                        "Why did the robot dog fail obedience school? It kept rebooting!"
+                    )
                 else:
-                    speak("Hmm, I don't know that command yet. Try asking me something else!")
+                    speak(
+                        "Hmm, I don't know that command yet. Try asking me something else!"
+                    )
 
     except KeyboardInterrupt:
         speak("Okay, shutting down voice mode. Talk to you later!")
@@ -70,6 +79,7 @@ def voice_personality_mode():
         dog.do_action("stand", speed=50)  # Stop movement safely
         dog.wait_all_done()
         dog.close()  # Shut down Pidog properly
+
 
 # Start AI Voice Personality Mode
 voice_personality_mode()

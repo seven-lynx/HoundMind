@@ -1,5 +1,6 @@
 import speech_recognition as sr
 
+
 def test_microphone():
     recognizer = sr.Recognizer()
 
@@ -22,6 +23,7 @@ def test_microphone():
     with open("mic_test.wav", "wb") as f:
         f.write(audio.get_wav_data())
     print("Recording saved as 'mic_test.wav'. You can play it to verify.")
+
 
 # Run the test function
 if __name__ == "__main__":

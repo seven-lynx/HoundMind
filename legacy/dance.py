@@ -9,6 +9,7 @@ dog.do_action("stand", speed=80)
 dog.wait_all_done()
 time.sleep(0.5)
 
+
 def detect_beat(file_path):
     """Analyze audio to detect beats."""
     y, sr = librosa.load(file_path)
@@ -16,10 +17,11 @@ def detect_beat(file_path):
     print(f"Detected BPM: {tempo}")
     return tempo
 
+
 def dance_to_music():
     """Sync PiDog's movement to detected music beat."""
     print("Entering Dance Mode...")
-    
+
     try:
         while True:
             bpm = detect_beat("song.mp3")  # Load song
@@ -33,12 +35,13 @@ def dance_to_music():
 
             dog.wait_all_done()
             time.sleep(2)
-    
+
     except KeyboardInterrupt:
         print("Exiting Dance Mode...")
         dog.do_action("stand", speed=50)
         dog.wait_all_done()
         dog.close()
+
 
 # Start Dance Mode
 dance_to_music()

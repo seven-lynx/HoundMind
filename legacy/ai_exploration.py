@@ -14,6 +14,7 @@ position = [0, 0]  # Track PiDog's location
 explored_map = {}  # Mapping grid
 blocked_positions = set()  # Store blocked areas
 
+
 def update_position(direction):
     """Update PiDog's mapped location."""
     if direction == "forward":
@@ -28,6 +29,7 @@ def update_position(direction):
     explored_map[tuple(position)] = "visited"
     print(f"PiDog's current position: {position}")
 
+
 def detect_obstacle():
     """Check for obstacles and store blocked positions."""
     distance = dog.read_distance()
@@ -36,6 +38,7 @@ def detect_obstacle():
         print(f"Blocked at position: {position}")
 
     return distance < 30
+
 
 def explore_environment():
     """Move and scan surroundings dynamically."""
@@ -49,7 +52,7 @@ def explore_environment():
             print("Previously blocked area detected! Changing path...")
             adjust_route()
             return
-        
+
         dog.do_action("forward", step_count=1, speed=speed)
         dog.wait_all_done()
         time.sleep(0.2)
@@ -58,6 +61,7 @@ def explore_environment():
             print("Obstacle detected! Adjusting route...")
             adjust_route()
             return
+
 
 def adjust_route():
     """Modify movement based on obstacles detected."""
@@ -73,8 +77,9 @@ def adjust_route():
 
     dog.wait_all_done()
     time.sleep(0.5)
-    
+
     explore_environment()  # Resume exploration
+
 
 # Main Exploration Loop
 try:

@@ -10,6 +10,7 @@ dog.do_action("stand", speed=80)  # Ensure PiDog is ready
 dog.wait_all_done()
 time.sleep(0.5)
 
+
 def listen_for_command():
     """Continuously listen for voice commands."""
     recognizer = sr.Recognizer()
@@ -20,21 +21,25 @@ def listen_for_command():
 
         while True:
             try:
-                audio = recognizer.listen(source)  # Remove timeout for continuous listening
+                audio = recognizer.listen(
+                    source
+                )  # Remove timeout for continuous listening
                 command = recognizer.recognize_google(audio).lower()
                 print(f"Detected speech: {command}")
                 process_command(command)  # Execute detected command
-                    
+
             except sr.UnknownValueError:
                 print("Could not understand speech.")
             except sr.RequestError:
                 print("Speech recognition service error.")
+
 
 def stop_movement():
     """Stops PiDog immediately, ensuring it's in a ready state for further commands."""
     print("Emergency stop activated! PiDog is standing and awaiting commands.")
     dog.do_action("stand", speed=120)  # Stand up immediately
     dog.wait_all_done()
+
 
 def process_command(command):
     """Interpret and execute voice commands"""
@@ -78,6 +83,7 @@ def process_command(command):
 
     else:
         print("Unknown command. Try again.")
+
 
 # Run voice command detection in a separate thread
 voice_thread = threading.Thread(target=listen_for_command, daemon=True)

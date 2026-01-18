@@ -1,4 +1,6 @@
-raise ImportError("Archived module: replaced by canine_core.core.orchestrator and control.py.")
+raise ImportError(
+    "Archived module: replaced by canine_core.core.orchestrator and control.py."
+)
 #!/usr/bin/env python3
 """
 PiDog Master Control Script
@@ -28,7 +30,7 @@ from . import global_state  # ✅ Integrated state tracking
 # ✅ Define Available Modules (Updated for new structure)
 module_names = {
     "smart_patrol": "src.behaviors.smart_patrol",
-    "smarter_patrol": "src.behaviors.smarter_patrol", 
+    "smarter_patrol": "src.behaviors.smarter_patrol",
     "voice_patrol": "src.behaviors.voice_patrol",
     "voice_control": "src.behaviors.whisper_voice_control",
     "idle_behavior": "src.behaviors.idle_behavior",
@@ -42,6 +44,7 @@ module_names = {
 # ✅ Track Active Threads
 active_threads = []
 recently_used = []  # ✅ Prevents repeating recent modules
+
 
 def load_module(module_name):
     """
@@ -58,7 +61,9 @@ def load_module(module_name):
         if hasattr(module, "start_behavior"):  # ✅ Validate function exists
             return module.start_behavior
         else:
-            print(f"⚠️ WARNING: '{module_name}' does not have 'start_behavior'. Check implementation.")
+            print(
+                f"⚠️ WARNING: '{module_name}' does not have 'start_behavior'. Check implementation."
+            )
             return None
     except ModuleNotFoundError:
         print(f"❌ ERROR: Module '{module_name}' not found! Skipping.")
@@ -66,6 +71,7 @@ def load_module(module_name):
         print(f"⚠️ Unexpected error while loading '{module_name}': {e}")
         traceback.print_exc()
     return None
+
 
 def run_module_for_time(module_name, duration):
     """
@@ -89,7 +95,9 @@ def run_module_for_time(module_name, duration):
 
     start_time = time.time()
     while time.time() - start_time < duration:
-        if keyboard.is_pressed(global_state.interrupt_key):  # ✅ Customizable interruption key
+        if keyboard.is_pressed(
+            global_state.interrupt_key
+        ):  # ✅ Customizable interruption key
             print("\n🔴 INTERRUPTED! Select a new module.")
             thread.join()  # ✅ Graceful shutdown before switching
             active_threads.remove(thread)
@@ -101,6 +109,7 @@ def run_module_for_time(module_name, duration):
     print(f"⏳ {module_name} completed.")
     active_threads.remove(thread)
     global_state.active_mode = "idle"  # ✅ Reset active mode after completion
+
 
 def select_module_manually():
     """
@@ -119,7 +128,9 @@ def select_module_manually():
     start_time = time.time()
     while time.time() - start_time < 30:  # ✅ Timeout after 30 seconds
         try:
-            choice = input("\n🔢 Enter module number to run (or wait to resume auto-selection): ")
+            choice = input(
+                "\n🔢 Enter module number to run (or wait to resume auto-selection): "
+            )
             if not choice:
                 continue  # ✅ Ignore empty input
 
@@ -136,6 +147,7 @@ def select_module_manually():
             print("⚠️ Please enter a valid number.")
 
     print("\n⏳ Timeout reached. Resuming automatic module selection...")
+
 
 # ✅ Enhanced Random Module Selection
 def shuffled_module_queue():
@@ -154,6 +166,7 @@ def shuffled_module_queue():
 
     return module_list
 
+
 def main():
     """Main function for the modular system master controller."""
     module_queue = shuffled_module_queue()  # ✅ Ensures non-repetitive selection
@@ -169,6 +182,7 @@ def main():
             recently_used.pop(0)
 
         run_module_for_time(selected_module, duration=10)
+
 
 if __name__ == "__main__":
     main()

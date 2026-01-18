@@ -1,73 +1,58 @@
-#!/usr/bin/env python3
-"""
-Run the PackMind Telemetry Server.
-
-Optional deps required:
-    pip install fastapi uvicorn
-
-Usage:
-    python tools/run_telemetry.py                 # uses config defaults
-    python tools/run_telemetry.py --host 0.0.0.0 --port 8765
-    python tools/run_telemetry.py --force         # start even if disabled in config
-"""
 from __future__ import annotations
 
 import argparse
-import os
-import sys
 
-# Ensure repo root in sys.path for direct execution from tools/
-if __name__ == "__main__" and (__package__ is None or __package__ == ""):
-    _tools_dir = os.path.abspath(os.path.dirname(__file__))
-    _repo_root = os.path.abspath(os.path.join(_tools_dir, os.pardir))
-    if _repo_root not in sys.path:
-        sys.path.insert(0, _repo_root)
+from houndmind_ai.core.config import load_config
+from houndmind_ai.core.runtime import HoundMindRuntime
+from houndmind_ai.main import build_modules
 
-try:
-    from packmind.packmind_config import load_config
-    from packmind.runtime.telemetry_server import start
-except Exception as e:  # pragma: no cover
-    raise SystemExit(
-        "Telemetry server dependencies missing or project not importable.\n"
-        "Install deps with: pip install fastapi uvicorn\n"
-        f"Error: {e}"
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run HoundMind with telemetry dashboard enabled"
     )
+    parser.add_argument(
+        "--config", type=str, default=None, help="Path to settings.jsonc"
+    )
+    parser.add_argument(
+        "--host", type=str, default=None, help="Telemetry host override"
+    )
+    parser.add_argument(
+        "--port", type=int, default=None, help="Telemetry port override"
+    )
+    parser.add_argument(
+        "--tick-hz", type=int, default=None, help="Runtime tick rate override"
+    )
+    parser.add_argument(
+        "--cycles",
+        type=int,
+        default=None,
+        help="Max runtime cycles (omit for continuous)",
+    )
+    args = parser.parse_args()
 
+    config = load_config(args.config)
 
-def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="PackMind Telemetry Server")
-    p.add_argument("--host", default=None, help="Host override (defaults to config)")
-    p.add_argument("--port", default=None, type=int, help="Port override (defaults to config)")
-    p.add_argument("--force", action="store_true", help="Run even if TELEMETRY_ENABLED is False")
-    args = p.parse_args(argv)
+    if args.tick_hz is not None:
+        config.loop.tick_hz = max(1, int(args.tick_hz))
+    if args.cycles is not None:
+        config.loop.max_cycles = None if args.cycles <= 0 else int(args.cycles)
 
-    cfg = load_config()
-    # Resolve enable flag
-    enabled = bool(getattr(cfg, "TELEMETRY_ENABLED", True))
-    if not enabled and not args.force:
-        print("[telemetry] TELEMETRY_ENABLED is False in config. Use --force to start anyway.")
-        return 1
+    if "telemetry_dashboard" in config.modules:
+        config.modules["telemetry_dashboard"].enabled = True
 
-    # Resolve host/port from config with CLI overrides
-    host = args.host or str(getattr(cfg, "TELEMETRY_HOST", "127.0.0.1"))
-    try:
-        port = int(args.port if args.port is not None else getattr(cfg, "TELEMETRY_PORT", 8765))
-    except Exception:
-        port = 8765
+    telemetry_settings = (config.settings or {}).setdefault("telemetry_dashboard", {})
+    telemetry_settings["enabled"] = True
+    http_settings = telemetry_settings.setdefault("http", {})
+    http_settings["enabled"] = True
+    if args.host:
+        http_settings["host"] = args.host
+    if args.port:
+        http_settings["port"] = int(args.port)
 
-    basic_auth = getattr(cfg, "TELEMETRY_BASIC_AUTH", None)
-    print(f"[telemetry] Starting server on {host}:{port} (enabled={enabled})")
-    if basic_auth:
-        print("[telemetry] Basic auth configured in TELEMETRY_BASIC_AUTH (user:pass).")
-
-    # TELEMETRY_BASIC_AUTH may be None or a tuple (user, pass)
-    try:
-        ba = tuple(basic_auth) if basic_auth else None  # type: ignore[assignment]
-    except Exception:
-        ba = None
-    start(host=host, port=port, basic_auth=ba)
-    return 0
+    runtime = HoundMindRuntime(config, build_modules(config))
+    runtime.run()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

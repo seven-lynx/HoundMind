@@ -1,52 +1,19 @@
-# PiDog Enhanced Functionality - Python Dependencies
-# ================================================
+# Full dependencies for Pi4 (heavy preset)
+# Includes vision, audio, and ML-friendly packages. Expect longer installs.
 
-# Core dependencies
-keyboard>=0.13.5
-importlib-metadata>=4.0.0
+# Hardware bindings
+pidog>=0.1.0
 
-# Audio and voice processing  
-SpeechRecognition>=3.10.0
-pyaudio>=0.2.11
-whisper>=1.1.10
-pydub>=0.25.1
+# Core numeric stack
+numpy
+scipy
 
-# Computer vision and image processing
-opencv-python>=4.8.0
-pillow>=9.5.0
-face-recognition>=1.3.0
-dlib>=19.24.0
+# Vision
+opencv-python
+opencv-contrib-python
+face_recognition
 
-# Scientific computing and data processing
-numpy>=1.24.0
-scipy>=1.10.0
-matplotlib>=3.7.0
-
-# Machine learning (optional, for advanced features)
-scikit-learn>=1.2.0
-tensorflow>=2.12.0
-
-# Hardware interface (Raspberry Pi specific)
-RPi.GPIO>=0.7.1
-adafruit-circuitpython-servokit>=1.3.15
-adafruit-blinka>=8.20.0
-pidog>=1.0.0
-
-# Communication and networking
-requests>=2.31.0
-websockets>=11.0.0
-
-# Telemetry and web API (optional for dashboard)
-fastapi>=0.115.0
-uvicorn>=0.30.0
-
-# Development and debugging
-pytest>=7.4.0
-black>=23.0.0
-flake8>=6.0.0
-
-# Utility libraries
-pyyaml>=6.0
-python-dotenv>=1.0.0
-colorama>=0.4.6
-tqdm>=4.65.0
+# Audio / speech
+SpeechRecognition
+pyaudio
+sounddevice

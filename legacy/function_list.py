@@ -1,1 +1,3 @@
-raise ImportError("Archived utility: function_list moved out of CanineCore. See examples/docs instead.")
+raise ImportError(
+    "Archived utility: function_list moved out of CanineCore. See examples/docs instead."
+)

@@ -1,0 +1,877 @@
+// HoundMind master configuration (PiDog hardware only)
+// This is the only user-facing config file. It is plain text with comments.
+// All options are live-tuned by editing this file and restarting the runtime.
+{
+  "profile": "pi3",
+  "profiles": {
+    "pi3": {},
+    "pi4": {
+      "loop": {
+        "tick_hz": 10,
+        "max_cycles": null
+      },
+      "modules": {
+        "vision_pi4": {"enabled": true},
+        "face_recognition": {"enabled": false},
+        "semantic_labeler": {"enabled": false},
+        "slam_pi4": {"enabled": false},
+        "telemetry_dashboard": {"enabled": false}
+      },
+      "settings": {
+        "navigation": {
+          "scan_interval_s": 0.3,
+          "scan_interval_min_s": 0.2,
+          "scan_interval_max_s": 1.5
+        },
+        "vision_pi4": {
+          "frame_interval_s": 0.1
+        }
+      }
+    }
+  },
+  "loop": {
+    // Main loop frequency in Hz.
+    "tick_hz": 5,
+    // Max cycles to run; set null for continuous operation.
+    "max_cycles": 10
+  },
+  "modules": {
+    "hal_sensors": {
+      // Enable sensor HAL (ultrasonic, touch, sound direction, IMU).
+      "enabled": true,
+      // Required modules will stop the runtime if they fail to start.
+      "required": true
+    },
+      "scanning": {
+        // Head scan service (three-way or sweep). Reactive feed for navigation.
+        "enabled": true,
+        "required": false
+      },
+      "orientation": {
+        // IMU heading integration (gyro Z -> heading).
+        "enabled": true,
+        "required": false
+      },
+    "hal_motors": {
+      // Enable motor HAL (ActionFlow + servo actions).
+      "enabled": true,
+      "required": true
+    },
+    "perception": {
+      // Sensor fusion and signal extraction.
+      "enabled": true,
+      "required": false
+    },
+    "navigation": {
+      // Obstacle avoidance + navigation cues.
+      "enabled": true,
+      "required": false
+    },
+    "mapping": {
+      // Mapping and optional home map storage.
+      "enabled": true,
+      "required": false
+    },
+    "behavior": {
+      // High-level behavior selection.
+      "enabled": true,
+      "required": false
+    },
+    "attention": {
+      // Head attention to sound direction.
+      "enabled": true,
+      "required": false
+    },
+    "calibration": {
+      // Calibration workflows (disabled by default).
+      "enabled": false,
+      "required": false
+    },
+      "event_log": {
+        // Event logger (lightweight). Can be disabled.
+        "enabled": true,
+        "required": false
+      },
+      "health": {
+        // Lightweight system health monitor (Pi 3 friendly).
+        "enabled": false,
+        "required": false
+      },
+      "service_watchdog": {
+        // Background service watchdog (restart failed modules).
+        "enabled": true,
+        "required": false
+      },
+      "watchdog": {
+        // Watchdog that triggers recovery when sensor/scan data is stale.
+        "enabled": true,
+        "required": false
+      },
+      "balance": {
+        // IMU balance compensation module.
+        "enabled": false,
+        "required": false
+      },
+    "safety": {
+      // Safety overrides (emergency backing, etc.).
+      "enabled": false,
+      "required": false
+    },
+    "vision": {
+      // Camera-based modules (disabled until tested).
+      "enabled": false,
+      "required": false
+    },
+    "vision_pi4": {
+      // Pi4 vision feed (disabled by default).
+      "enabled": false,
+      "required": false
+    },
+    "voice": {
+      // Voice interaction modules (disabled until tested).
+      "enabled": false,
+      "required": false
+    },
+    "face_recognition": {
+      // Pi4 face recognition module (disabled by default).
+      "enabled": false,
+      "required": false
+    },
+    "semantic_labeler": {
+      // Pi4 semantic labeling (disabled by default).
+      "enabled": false,
+      "required": false
+    },
+    "slam_pi4": {
+      // Pi4 SLAM module (disabled by default).
+      "enabled": false,
+      "required": false
+    },
+    "telemetry_dashboard": {
+      // Pi4 telemetry dashboard (disabled by default).
+      "enabled": false,
+      "required": false
+    },
+    "energy_emotion": {
+      // Optional energy/emotion tracking (disabled by default).
+      "enabled": false,
+      "required": false
+    },
+    "led_manager": {
+      // Centralized LED manager (recommended).
+      "enabled": true,
+      "required": false
+    }
+  },
+  "settings": {
+    // =====================================================================
+    // SENSORS (reactive sensor service)
+    // =====================================================================
+    "sensors": {
+      // Sensor polling cadence (Hz). Keep light for Pi 3.
+      "poll_hz": 10,
+      // Max sensor snapshots to keep in history.
+      "history_size": 10,
+      // Enable/disable individual sensors.
+      "enable_ultrasonic": true,
+      "enable_touch": true,
+      "enable_sound": true,
+      "enable_imu": true,
+      // Ultrasonic sampling.
+      "distance_samples": 3,
+      "distance_sample_delay_s": 0.03,
+      "distance_use_median": true,
+      // Ignore repeated distance reads inside this window (seconds).
+      "distance_debounce_s": 0.0,
+      "distance_min_cm": 2,
+      "distance_max_cm": 200,
+      // Reject outlier samples using z-score threshold (0 = off).
+      "distance_outlier_reject_z": 2.5,
+      // EMA smoothing for distance (0 = off, 1 = no smoothing).
+      "distance_ema_alpha": 0.0,
+      // Touch debounce window to reduce chatter.
+      "touch_debounce_s": 0.05,
+      // If true, only read sound direction when sound is detected.
+      "sound_direction_on_detect": true,
+      // IMU low-pass filter smoothing (0 = off, 1 = no smoothing).
+      "imu_lpf_alpha": 0.3
+    },
+    // =====================================================================
+    // PERCEPTION (lightweight signal extraction)
+    // =====================================================================
+    "perception": {
+      // Distance threshold (cm) used to flag obstacles.
+      "obstacle_cm": 20,
+      // Minimal fusion settings for lightweight pose hints.
+      "fusion": {
+        "fusion_anchor_distance_cm": 120,
+        "fusion_min_confidence": 0.3
+      }
+    },
+    // =====================================================================
+    // FACE RECOGNITION (Pi4 optional)
+    // =====================================================================
+    "face_recognition": {
+      "enabled": false,
+      // Backend options: "stub" (default), "opencv" (lite), "face_recognition" (heavy).
+      "backend": "stub",
+      // Common detection settings.
+      "scale_factor": 1.1,
+      "min_neighbors": 5,
+      "min_face_px": 60,
+      // OpenCV (lite) settings.
+      "opencv_haar_path": "",
+      "lbph": {
+        "enabled": true,
+        "model_path": "data/face_model.yml",
+        "dataset_dir": "data/face_dataset",
+        "label_map_path": "data/face_labels.json",
+        "confidence_threshold": 70.0
+      },
+      // face_recognition (heavy) settings.
+      "embeddings_path": "data/face_embeddings.json",
+      "match_threshold": 0.6,
+      "http": {
+        "enabled": false,
+        "host": "0.0.0.0",
+        "port": 8088
+      }
+    },
+    // =====================================================================
+    // PI4 VISION FEED
+    // =====================================================================
+    "vision_pi4": {
+      "enabled": false,
+      "backend": "picamera2",
+      "device_index": 0,
+      "frame_interval_s": 0.2,
+      "http": {
+        "enabled": false,
+        "host": "0.0.0.0",
+        "port": 8090
+      }
+    },
+    // =====================================================================
+    // VOICE ASSISTANT (Pi4 optional)
+    // =====================================================================
+    "voice_assistant": {
+      "enabled": false,
+      // Minimum seconds between accepted commands.
+      "cooldown_s": 1.0,
+      // Map phrases to PiDog actions.
+      "command_map": {
+        "sit": "sit",
+        "stand": "stand",
+        "lie": "lie",
+        "down": "lie",
+        "forward": "forward",
+        "back": "backward",
+        "backward": "backward",
+        "turn left": "turn left",
+        "turn right": "turn right",
+        "wag": "wag tail",
+        "wag tail": "wag tail",
+        "shake": "shake head",
+        "shake head": "shake head",
+        "stop": "lie"
+      },
+      // Aliases map to other keys in command_map.
+      "aliases": {
+        "go": "forward",
+        "reverse": "backward",
+        "halt": "stop",
+        "sleep": "lie"
+      },
+      "http": {
+        "enabled": false,
+        "host": "0.0.0.0",
+        "port": 8091
+      }
+    },
+    // =====================================================================
+    // SEMANTIC LABELER (Pi4 optional)
+    // =====================================================================
+    "semantic_labeler": {
+      "enabled": false,
+      "backend": "stub",
+      "interval_s": 0.5,
+      // OpenCV DNN settings (set model/config/labels to enable)
+      "model_path": "models/ssd_mobilenet_v3_large_coco_2020_01_14.pb",
+      "config_path": "models/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt",
+      "labels_path": "models/coco_labels.txt",
+      "input_width": 320,
+      "input_height": 320,
+      "confidence_threshold": 0.5
+    },
+    // =====================================================================
+    // PI4 SLAM (stub + backend gating)
+    // =====================================================================
+    "slam_pi4": {
+      "enabled": false,
+      "backend": "stub",
+      "interval_s": 0.2,
+      "gyro_scale": 0.0,
+      "stub_confidence": 0.1,
+      "nav_hint_enabled": false,
+      "nav_target_heading_deg": null,
+      "nav_deadband_deg": 10.0
+    },
+    // =====================================================================
+    // TELEMETRY DASHBOARD (Pi4 optional)
+    // =====================================================================
+    "telemetry_dashboard": {
+      "enabled": false,
+      "snapshot_interval_s": 0.5,
+      "context_keys": [
+        "sensor_reading",
+        "scan_latest",
+        "mapping_openings",
+        "navigation_action",
+        "behavior_action",
+        "safety_action",
+        "performance_telemetry",
+        "slam_pose",
+        "faces",
+        "semantic_labels"
+      ],
+      "http": {
+        "enabled": false,
+        "host": "0.0.0.0",
+        "port": 8092
+      }
+    },
+    // =====================================================================
+    // NAVIGATION & SCANNING (Pi 3 friendly)
+    // =====================================================================
+    "navigation": {
+      // Minimum safe distance (cm) before avoidance triggers.
+      "min_distance_cm": 15,
+      // Emergency stop distance (cm) for immediate retreat.
+      "emergency_stop_cm": 12,
+      // Comfortable clearance (cm) for forward movement.
+      "safe_distance_cm": 35,
+      // ActionFlow action to avoid obstacles.
+      "avoid_action": "backward",
+      // ActionFlow action when clear and idle.
+      "safe_action": "stand",
+      // How often to run a head scan (seconds).
+      "scan_interval_s": 0.5,
+      // Min/max scan interval bounds (seconds).
+      "scan_interval_min_s": 0.2,
+      "scan_interval_max_s": 2.0,
+      // Scan mode: "sweep" (angles) or "three_way" (left/right/forward).
+      "scan_mode": "sweep",
+      // Run scans continuously in the background.
+      "scan_continuous": true,
+      // Scan history length for debugging and smoothing.
+      "scan_history_size": 10,
+      // Ultrasonic samples per scan point.
+      "scan_samples": 3,
+      // Stale scan threshold (seconds) before requesting a new scan.
+      "scan_stale_s": 0.8,
+      // Head scan sweep range (degrees).
+      "scan_yaw_max_deg": 60,
+      // Use a smaller sweep when the forward path is consistently clear.
+      "enable_dynamic_scan": true,
+      // Narrow sweep limit when dynamic scanning is enabled.
+      "dynamic_scan_yaw_max_deg": 30,
+      // Head scan step size (degrees).
+      "scan_step_deg": 15,
+      // Time to settle after a head move (seconds).
+      "scan_settle_s": 0.12,
+      // Delay between reads in a sweep (seconds).
+      "scan_between_reads_s": 0.04,
+      // Scan debouncing (ignore overly-frequent reads).
+      "scan_debounce_s": 0.05,
+      // Distance EMA smoothing during scans (0 = off, 1 = no smoothing).
+      "scan_smoothing_alpha": 0.4,
+      // Minimum valid scan points before acting on turn decisions.
+      "scan_min_valid_points": 3,
+      // Minimum fraction of valid points (0-1) required.
+      "scan_min_valid_ratio": 0.5,
+      // EMA factor for per-angle baselines.
+      "baseline_ema": 0.25,
+      // Minimum open gap width in degrees for a valid opening.
+      "min_gap_width_deg": 30,
+      // Minimum distance (cm) required to count as open space.
+      "min_score_cm": 60,
+      // Confirmation window for scan decisions.
+      "confirm_window": 2,
+      // Votes required to confirm a scan decision.
+      "confirm_threshold": 2,
+      // Minimum confidence ratio required to act on a turn (0-1).
+      "turn_confidence_min": 0.6,
+      // Cooldown after low-confidence scans (seconds).
+      "low_confidence_cooldown_s": 0.8,
+      // Retry count for low-confidence scans before fallback.
+      "scan_retry_limit": 2,
+      // No-go memory: bias away from repeated avoidance directions.
+      "no_go_enabled": false,
+      // Time window (seconds) to track repeated directions.
+      "no_go_window_s": 8.0,
+      // Repeats before biasing away from a direction.
+      "no_go_repeat_threshold": 3,
+      // Head scan speed (PiDog head movement speed).
+      "head_scan_speed": 70,
+      // Approach detection: absolute delta (cm) from baseline.
+      "approach_delta_cm": 10,
+      // Approach detection: percent delta from baseline (0-1).
+      "approach_delta_pct": 0.25,
+      // Window size for approach confirmation votes.
+      "approach_confirm_window": 3,
+      // Confirmation votes required to treat approach as real.
+      "approach_confirm_threshold": 2,
+      // Cooldown before another approach response (seconds).
+      "approach_cooldown_s": 2.0,
+      // How many backward steps to take on approach.
+      "backup_steps": 2,
+      // Turn angle to use for gap alignment (degrees).
+      "turn_degrees_on_gap": 30,
+      // Turn direction after retreat: "left", "right", or "auto".
+      "retreat_turn_direction": "auto",
+      // Turn cooldown to reduce oscillation (seconds).
+      "turn_cooldown_s": 0.0,
+      // Clear-path streak to skip scans when safe.
+      "clear_path_streak_min": 0,
+      "clear_path_skip_scans": true,
+      // Optional bias from mapping best_path (deg) if available.
+      "use_mapping_bias": true,
+      "mapping_bias_weight": 0.5,
+      "mapping_bias_min_confidence": 0.6,
+      "mapping_bias_cooldown_s": 1.0,
+      // Optional SLAM navigation hint integration (Pi4 only).
+      "slam_nav_enabled": false,
+      "slam_nav_override": true,
+      "slam_nav_min_confidence": 0.3,
+      // Navigation decision logging.
+      "log_decision_enabled": true,
+      "log_decision_raw_angles": false,
+      // Lightweight local planner (uses mapping.best_path as a short-range hint)
+      "planner_enabled": true,
+      "planner_min_confidence": 0.6,
+      "planner_influence_weight": 0.0,
+      "planner_max_age_s": 2.0,
+      // Stuck detection (movement magnitude) and avoidance strategy.
+      "stuck_time_window_s": 5.0,
+      "stuck_movement_threshold": 1500.0,
+      "stuck_min_samples": 10,
+      "stuck_cooldown_s": 6.0,
+      "stuck_strategy_repeat_window_s": 10.0,
+      "stuck_strategy_repeat_threshold": 3,
+      "avoidance_strategies": ["smart_turn", "backup_turn", "zigzag", "reverse_escape"],
+      // LED feedback for navigation states.
+      "led_enabled": true,
+      "led_priority": 50,
+      "led_patrol_color": "green",
+      "led_turn_color": "orange",
+      "led_obstacle_color": "red",
+      "led_retreat_color": "red"
+    },
+    // =====================================================================
+    // MOVEMENT & ACTION TUNING (future wiring)
+    // =====================================================================
+    "movement": {
+      // Step counts for turns/walks.
+      "turn_steps_small": 1,
+      "turn_steps_normal": 2,
+      "turn_steps_large": 4,
+      "walk_steps_short": 1,
+      "walk_steps_normal": 2,
+      "walk_steps_long": 3,
+      "backup_steps": 3,
+      // Approximate degrees per single turn step (fallback when orientation is off).
+      "turn_degrees_per_step": 15.0,
+      // Movement speeds (0-255).
+      "speed_slow": 80,
+      "speed_normal": 120,
+      "speed_fast": 200,
+      "speed_emergency": 100,
+      // Turn speeds (should be faster than walk speeds).
+      "speed_turn_slow": 100,
+      "speed_turn_normal": 200,
+      "speed_turn_fast": 220,
+      // Micro pause between queued steps.
+      "step_pause_s": 0.02
+    },
+    // =====================================================================
+    // ORIENTATION (IMU heading integration)
+    // =====================================================================
+    "orientation": {
+      "gyro_scale": 1.0,
+      "bias_z": 0.0,
+      // Optional startup calibration for gyro Z bias.
+      "calibration_enabled": true,
+      // Wait this long before collecting samples (seconds).
+      "calibration_settle_s": 0.3,
+      "calibration_duration_s": 2.0,
+      "calibration_samples": 30,
+      // Clamp bias magnitude (0 = disable clamp).
+      "calibration_max_bias_abs": 0.0,
+      "initial_heading_deg": 0.0,
+      "turn_tolerance_deg": 5.0,
+      "turn_timeout_s": 3.0
+    },
+    // =====================================================================
+    // MAPPING
+    // =====================================================================
+    "mapping": {
+      // Enable mapping module (safe to keep on by default).
+      "enabled": true,
+      // Future hook for optional path planning.
+      "path_planning_enabled": false,
+      // Max samples to keep in memory.
+      "sample_history_max": 500,
+      // Max age for samples in seconds (0 = keep forever).
+      "sample_max_age_s": 0,
+      // Store a persistent "Home Map" snapshot at intervals.
+      "home_map_enabled": false,
+      // Max samples to write in a home map snapshot (0 = no cap).
+      "home_map_max_samples": 500,
+      // Max age for samples in a home map snapshot (seconds, 0 = no cap).
+      "home_map_max_age_s": 0,
+      // Save interval in seconds for the home map.
+      "home_map_save_interval_s": 30,
+      // Output path for the home map file (relative to repo root).
+      "home_map_path": "data/home_map.json",
+      // Metadata for future grid-based mapping.
+      "cell_size_cm": 10,
+      "grid_size": [100, 100],
+      // Opening detection thresholds (from scan data).
+      "opening_min_width_cm": 60,
+      "opening_max_width_cm": 120,
+      "opening_cell_conf_min": 0.6,
+      // Safe path thresholds.
+      "safe_path_min_width_cm": 40,
+      "safe_path_max_width_cm": 200,
+      "safe_path_min_length_cells": 6,
+      "safe_path_cell_conf_min": 0.5,
+      // Safe path scoring weights.
+      "safe_path_score_weight_width": 0.6,
+      "safe_path_score_weight_distance": 0.4
+    },
+    // =====================================================================
+    // BEHAVIOR
+    // =====================================================================
+    "behavior": {
+      // Default action when idle.
+      "idle_action": "stand",
+      // Action when touch is detected.
+      "touch_action": "wag tail",
+      // Action when sound is detected.
+      "sound_action": "shake head",
+      // Action when avoidance is requested by perception.
+      "avoid_action": "backward",
+      // Action used for exploration (optional behavior).
+      "explore_action": "forward",
+      // Action used for interaction (optional behavior).
+      "interact_action": "wag tail",
+      // Separate action catalog file for long lists and custom actions.
+      "actions_file": "actions.jsonc",
+      // Named action sets to use for each behavior mode.
+      "action_sets": {
+        "idle": "idle",
+        "alert": "alert",
+        "avoid": "avoid",
+        "play": "play",
+        "rest": "rest",
+        "patrol": "patrol",
+        "explore": "explore",
+        "interact": "interact"
+      },
+      // Probability (0-1) to emit an idle action each tick.
+      "random_idle_chance": 0.05,
+      // Minimum time between behavior action changes (seconds).
+      "action_cooldown_s": 0.0,
+      // Autonomous mode selection.
+      "autonomy_enabled": true,
+      "autonomy_interval_s": 8.0,
+      "autonomy_modes": ["idle", "patrol", "explore", "interact", "play", "rest"],
+      "autonomy_weights": {
+        "idle": 0.35,
+        "patrol": 0.25,
+        "explore": 0.15,
+        "interact": 0.1,
+        "play": 0.1,
+        "rest": 0.05
+      },
+      "autonomy_rest_energy_max": 0.35,
+      "autonomy_play_energy_min": 0.75,
+      "patrol_action": "forward",
+      // Idle behavior registry choices (weighted or sequential).
+      "idle_choices": ["idle_behavior", "rest_behavior"],
+      "behavior_selection_mode": "weighted",
+      "behavior_weights": {
+        "idle_behavior": 0.8,
+        "rest_behavior": 0.2
+      },
+      // Action catalog is loaded from actions.jsonc (kept here for reference).
+      "catalog": {}
+    },
+    // =====================================================================
+    // ENERGY & EMOTION (optional)
+    // =====================================================================
+    "energy": {
+      "initial": 0.6,
+      "min": 0.0,
+      "max": 1.0,
+      "decay_per_tick": 0.01,
+      "boost_touch": 0.08,
+      "boost_sound": 0.05,
+      "boost_obstacle": 0.02,
+      "speed_slow_threshold": 0.35,
+      "speed_fast_threshold": 0.75
+    },
+    "emotion": {
+      "led_enabled": false,
+      "led_priority": 40,
+      "led_cooldown_s": 1.0,
+      "led_colors": {
+        "calm": "blue",
+        "alert": "orange",
+        "excited": "green",
+        "tired": "purple"
+      }
+    },
+    // =====================================================================
+    // LED MANAGER (centralized RGB control)
+    // =====================================================================
+    "led": {
+      "enabled": true,
+      "priority": ["safety", "navigation", "attention", "emotion"],
+      "cooldown_s": 0.4,
+      "brightness": 0.7,
+      "default_color": "blue",
+      "safety_color": "red",
+      "safety_mode": "boom",
+      "attention_color": "cyan",
+      "attention_mode": "listen",
+      "nav_mode": "breath",
+      "nav_turn_mode": "listen",
+      "nav_obstacle_mode": "bark",
+      "nav_retreat_mode": "boom",
+      "emotion_mode": "breath",
+      "emotion_color": "blue"
+    },
+    // =====================================================================
+    // ATTENTION (sound direction -> head yaw)
+    // =====================================================================
+    "attention": {
+      "enabled": true,
+      "sound_cooldown_s": 0.5,
+      "head_yaw_max_deg": 60.0,
+      "head_turn_speed": 70,
+      "respect_scanning": true,
+      "scan_block_s": 0.4,
+      "led_priority": 60
+    },
+    // =====================================================================
+    // MOTORS
+    // =====================================================================
+    "motors": {
+      // Minimum delay (seconds) between queued actions.
+      "min_action_interval_s": 0.2,
+      // Head follows body turns for more natural movement.
+      "head_turn_follow_enabled": true,
+      // Degrees to yaw the head when turning (same direction as turn).
+      "head_turn_follow_deg": 12.0,
+      // Head turn speed for follow behavior.
+      "head_turn_follow_speed": 70,
+      // How long to hold the head offset before returning to center (seconds).
+      "head_turn_follow_hold_s": 0.4,
+      // If true, avoid head follow shortly after scans.
+      "head_turn_follow_respect_scanning": true,
+      // Block head follow for this long after a scan update (seconds).
+      "head_turn_follow_scan_block_s": 0.4,
+      // If true, avoid head follow shortly after attention head turns.
+      "head_turn_follow_respect_attention": true,
+      // Block head follow for this long after attention (seconds).
+      "head_turn_follow_attention_block_s": 0.6
+    },
+    // =====================================================================
+    // CALIBRATION HOOKS
+    // =====================================================================
+    "calibration": {
+      // Stored servo zero offsets (name -> degrees). Filled by calibration runs.
+      "servo_zero_offsets": {},
+      // Default calibration behavior options.
+      "auto_apply_servo_offsets": false,
+      // Persist calibration outputs to a JSON file (separate from settings).
+      "persist_enabled": true,
+      "persist_path": "data/calibration.json",
+      // Optional calibration request: servo_zero | wall_follow | corner_seek | landmark_align
+      "request": null,
+      // Calibration tuning values.
+      "wall_follow_target_distance_cm": 30.0,
+      "corner_seek_turn_deg": 45.0,
+      "landmark_alignment_confidence_min": 0.6,
+      // Bump localization confidence after a successful calibration.
+      "localization_confidence_bump": 0.1
+    },
+    // =====================================================================
+    // SAFETY
+    // =====================================================================
+    "safety": {
+      // Distance (cm) that triggers an emergency backup.
+      "too_close_cm": 10,
+      // Emergency stop override (highest priority).
+      "emergency_stop_enabled": false,
+      // Distance (cm) that triggers emergency stop action.
+      "emergency_stop_cm": 8,
+      // ActionFlow action used for emergency stop.
+      "emergency_stop_action": "lie",
+      // Cooldown between emergency stop actions (seconds).
+      "emergency_stop_cooldown_s": 2.0,
+      // If true, attempt to call hardware-level stop methods on PiDog.
+      "emergency_stop_use_hardware_stop": true,
+      // Tilt detection threshold (degrees). If exceeded, safety will trigger.
+      "tilt_threshold_deg": 45.0,
+      // Action to run when tilt threshold is exceeded.
+      "tilt_action": "lie",
+      // Cooldown between tilt triggers (seconds).
+      "tilt_cooldown_s": 1.0,
+      // LED priority for safety conditions.
+      "led_priority": 80,
+      // Priority order for action overrides (highest first).
+      "override_priority": ["safety", "watchdog", "navigation", "behavior"],
+      // Clear lower-priority actions when safety is active.
+      "override_clear_lower": true
+    },
+    // =====================================================================
+    // WATCHDOG (future wiring)
+    // =====================================================================
+    "service_watchdog": {
+      // Enable background service watchdog.
+      "enabled": true,
+      // Per-module heartbeat timeout (seconds).
+      "module_timeout_s": 6.0,
+      // Cooldown between restart attempts.
+      "restart_cooldown_s": 5.0,
+      // Max restart attempts per module.
+      "max_restarts": 3,
+      // Modules to monitor for heartbeats (empty = all modules).
+      "monitor_modules": [],
+      // Modules to ignore (avoid self-restart loops).
+      "ignore_modules": ["service_watchdog"],
+      // Restart on error or stale heartbeat.
+      "restart_on_error": true,
+      "restart_on_stale": true,
+      // Status snapshot cadence (seconds).
+      "status_interval_s": 1.0
+    },
+    "watchdog": {
+      // Enable watchdog recovery.
+      "enabled": true,
+      // Treat sensor/scan data as stale after these windows (seconds).
+      "sensor_timeout_s": 2.0,
+      "scan_timeout_s": 2.0,
+      // Per-module heartbeat timeout (seconds).
+      "module_timeout_s": 4.0,
+      // Modules to monitor for heartbeats (empty = all modules).
+      "monitor_modules": [],
+      // Cooldown between watchdog recovery attempts.
+      "restart_cooldown_s": 5.0,
+      // Per-module restart cooldown (seconds).
+      "restart_module_cooldown_s": 10.0,
+      // Recovery mode: "behavior" or "action".
+      "recovery_mode": "behavior",
+      "recovery_behavior": null,
+      "recovery_action": null,
+      // Optional module restarts to attempt recovery.
+      "restart_modules": [],
+      // Max restart attempts per module.
+      "max_restarts": 0
+    },
+    // =====================================================================
+    // BALANCE (IMU-based posture compensation)
+    // =====================================================================
+    "balance": {
+      "enabled": false,
+      "update_hz": 10.0,
+      "compensation_scale": 1.0,
+      "max_pitch_deg": 12.0,
+      "max_roll_deg": 12.0,
+      "lpf_alpha": 0.4,
+      "active_when_moving": true,
+      "active_actions": ["forward", "backward", "turn left", "turn right", "trot"]
+    },
+    // =====================================================================
+    // LOGGING & TELEMETRY (lightweight)
+    // =====================================================================
+    "logging": {
+      // Enable/disable console logging.
+      "enable_console": true,
+      // Enable/disable file logging.
+      "enable_file": true,
+      // Log directory and file name.
+      "log_dir": "logs",
+      "log_file_name": "houndmind.log",
+      "log_max_entries": 1000,
+      // Status log output to terminal can be disabled.
+      "status_log_enabled": true,
+      "status_log_interval_s": 10,
+      "log_level": "INFO",
+      "log_file_max_mb": 10,
+      "log_file_backups": 5,
+      // Event logger (ring buffer + JSONL).
+      "event_log_enabled": true,
+      "event_log_interval_s": 0.5,
+      "event_log_max_entries": 1000,
+      "event_log_file_enabled": true,
+      "event_log_path": "logs/houndmind_events.jsonl"
+    },
+    // =====================================================================
+    // PERFORMANCE SAFEGUARDS (Pi 3 friendly)
+    // =====================================================================
+    "performance": {
+      // Scan interval bounds used by validation warnings.
+      "scan_interval_min_s": 0.2,
+      "scan_interval_max_s": 2.0,
+      // Upper bound for sensor polling on Pi 3.
+      "sensor_poll_hz_max": 20,
+      // Health thresholds (future wiring).
+      "health_load_per_core_warn_multiplier": 1.5,
+      "health_temp_warn_c": 70.0,
+      "health_gpu_temp_warn_c": 75.0,
+      "health_mem_used_warn_pct": 85.0,
+      "health_monitor_interval_s": 5.0,
+      "health_scan_interval_multiplier": 2.0,
+      "health_scan_interval_abs_delta": 1.0,
+      "health_vision_frame_interval_multiplier": 2.0,
+      "health_vision_frame_interval_abs_delta": 0.2,
+      "health_actions": [],
+      // Safe mode: reduces scan cadence and turn speed on Pi3.
+      "safe_mode_enabled": false,
+      "safe_mode_scan_interval_s": 1.2,
+      "safe_mode_turn_speed": 140,
+      // Warn when a runtime tick exceeds this duration (seconds).
+      "runtime_tick_warn_s": 0.4
+    },
+    // =====================================================================
+    // BATTERY / VOLTAGE (optional)
+    // =====================================================================
+    "battery": {
+      "enabled": false,
+      // Optional voltage threshold (set if hardware exposes voltage).
+      "low_voltage_v": 6.8,
+      // Optional percent threshold (0-1) if percent is available.
+      "low_percent": 0.2,
+      // Behavior override when low battery is detected.
+      "behavior_override": "rest_behavior"
+    },
+    // =====================================================================
+    // QUIET MODE (optional schedule-based throttling)
+    // =====================================================================
+    "quiet_mode": {
+      "enabled": false,
+      // Local time (hours 0-23). Supports overnight windows (e.g., 22 -> 7).
+      "start_hour": 22,
+      "end_hour": 7,
+      // Slow down scanning during quiet mode (seconds).
+      "scan_interval_s": 1.2,
+      // Extra cooldown between behavior action changes (seconds).
+      "behavior_action_cooldown_s": 1.5,
+      // Minimum delay between motor actions (seconds).
+      "motor_min_action_interval_s": 0.6
+    }
+  }
+}

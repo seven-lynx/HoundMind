@@ -12,6 +12,7 @@ time.sleep(0.5)
 # Load hand detection model
 hand_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_hand.xml")
 
+
 def detect_gesture():
     """Use AI to recognize hand gestures."""
     cap = cv2.VideoCapture(0)  # Open camera feed
@@ -39,6 +40,7 @@ def detect_gesture():
         else:
             print("No gesture detected. Waiting for interaction.")
 
+
 def gesture_mode():
     """Continuously detect hand gestures and respond."""
     print("Entering Gesture Recognition Mode...")
@@ -47,12 +49,13 @@ def gesture_mode():
         while True:
             detect_gesture()
             time.sleep(1)
-    
+
     except KeyboardInterrupt:
         print("Exiting Gesture Mode...")
         dog.do_action("stand", speed=50)
         dog.wait_all_done()
         dog.close()
+
 
 # Start Gesture Mode
 gesture_mode()

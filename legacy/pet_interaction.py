@@ -10,9 +10,12 @@ dog.wait_all_done()
 time.sleep(0.5)
 
 # Load AI pet recognition model
-pet_cascade = cv2.CascadeClassifier("custom_pet_model.xml")  # Placeholder for pet detection model
+pet_cascade = cv2.CascadeClassifier(
+    "custom_pet_model.xml"
+)  # Placeholder for pet detection model
 
 import random
+
 
 def detect_pet():
     """Identify pets and respond accordingly."""
@@ -42,9 +45,11 @@ def detect_pet():
         else:
             print("No pet detected. PiDog continues patrol.")
 
+
 def classify_pet(frame):
     """Placeholder function for AI pet classification (requires model training)."""
     return random.choice(["dog", "cat", "unknown"])  # Simulated AI output
+
 
 def pet_interaction_mode():
     """Continuously detect pets and respond accordingly."""
@@ -54,12 +59,13 @@ def pet_interaction_mode():
         while True:
             detect_pet()
             time.sleep(1)
-    
+
     except KeyboardInterrupt:
         print("Exiting Pet Mode...")
         dog.do_action("stand", speed=50)
         dog.wait_all_done()
         dog.close()
+
 
 # Start Pet Interaction Mode
 pet_interaction_mode()

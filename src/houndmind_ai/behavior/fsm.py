@@ -1,0 +1,281 @@
+from __future__ import annotations
+
+import logging
+import time
+from enum import Enum
+
+from houndmind_ai.core.module import Module
+from houndmind_ai.behavior.library import BehaviorLibrary, BehaviorLibraryConfig
+from houndmind_ai.behavior.registry import BehaviorRegistry
+
+logger = logging.getLogger(__name__)
+
+
+class BehaviorState(str, Enum):
+    IDLE = "idle"
+    ALERT = "alert"
+    AVOIDING = "avoiding"
+    PATROL = "patrol"
+    EXPLORE = "explore"
+    INTERACT = "interact"
+    PLAY = "play"
+    REST = "rest"
+
+
+class BehaviorModule(Module):
+    def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
+        super().__init__(name, enabled=enabled, required=required)
+        self.state = BehaviorState.IDLE
+        self.last_action: str | None = None
+        self._last_action_ts = 0.0
+        self._last_autonomy_ts = 0.0
+        self._autonomy_mode: str | None = None
+        self.library: BehaviorLibrary | None = None
+        self.registry: BehaviorRegistry | None = None
+
+    def tick(self, context) -> None:
+        # Perception is fused upstream; behavior maps it to actions.
+        perception = context.get("perception") or {}
+        obstacle = perception.get("obstacle", False)
+        touch = perception.get("touch", "N")
+        sound = perception.get("sound", False)
+
+        # Behavior settings are centralized in settings.json for easy tuning.
+        settings = (context.get("settings") or {}).get("behavior", {})
+        idle_action = settings.get("idle_action", "stand")
+        touch_action = settings.get("touch_action", "wag tail")
+        sound_action = settings.get("sound_action", "shake head")
+        avoid_action = settings.get("avoid_action", "backward")
+        patrol_action = settings.get("patrol_action", "forward")
+        explore_action = settings.get("explore_action", "forward")
+        interact_action = settings.get("interact_action", "wag tail")
+
+        # Initialize the behavior library once with action sets from config.
+        if self.library is None:
+            action_sets = settings.get("action_sets", {})
+            catalog = settings.get("catalog", {})
+            self.library = BehaviorLibrary(
+                BehaviorLibraryConfig(
+                    idle_actions=catalog.get(
+                        action_sets.get("idle", "idle"), [idle_action]
+                    ),
+                    alert_actions=catalog.get(
+                        action_sets.get("alert", "alert"), [touch_action, sound_action]
+                    ),
+                    avoid_actions=catalog.get(
+                        action_sets.get("avoid", "avoid"), [avoid_action]
+                    ),
+                    play_actions=catalog.get(
+                        action_sets.get("play", "play"), ["stretch"]
+                    ),
+                    rest_actions=catalog.get(action_sets.get("rest", "rest"), ["lie"]),
+                    patrol_actions=catalog.get(
+                        action_sets.get("patrol", "patrol"), [patrol_action]
+                    ),
+                    explore_actions=catalog.get(
+                        action_sets.get("explore", "explore"), [explore_action]
+                    ),
+                    interact_actions=catalog.get(
+                        action_sets.get("interact", "interact"), [interact_action]
+                    ),
+                    random_idle_chance=settings.get("random_idle_chance", 0.05),
+                )
+            )
+        if self.registry is None:
+            self.registry = BehaviorRegistry()
+            self.registry.register("idle_behavior", self.library.pick_idle_action)
+            self.registry.register("rest_behavior", self.library.pick_rest_action)
+            self.registry.register("play_behavior", self.library.pick_play_action)
+            self.registry.register("patrol_behavior", self.library.pick_patrol_action)
+            self.registry.register("explore_behavior", self.library.pick_explore_action)
+            self.registry.register(
+                "interact_behavior", self.library.pick_interact_action
+            )
+
+        battery_settings = (context.get("settings") or {}).get("battery", {})
+        if battery_settings.get("enabled", False):
+            voltage = context.get("battery_voltage")
+            percent = context.get("battery_percent")
+            try:
+                voltage = float(voltage) if voltage is not None else None
+            except Exception:
+                voltage = None
+            try:
+                percent = float(percent) if percent is not None else None
+            except Exception:
+                percent = None
+            low_voltage = battery_settings.get("low_voltage_v")
+            low_percent = battery_settings.get("low_percent")
+            try:
+                low_voltage = float(low_voltage) if low_voltage is not None else None
+            except Exception:
+                low_voltage = None
+            try:
+                low_percent = float(low_percent) if low_percent is not None else None
+            except Exception:
+                low_percent = None
+
+            low = False
+            if (
+                voltage is not None
+                and low_voltage is not None
+                and voltage <= low_voltage
+            ):
+                low = True
+            if (
+                percent is not None
+                and low_percent is not None
+                and percent <= low_percent
+            ):
+                low = True
+
+            if low:
+                context.set(
+                    "battery_low",
+                    {
+                        "timestamp": time.time(),
+                        "voltage": voltage,
+                        "percent": percent,
+                        "low_voltage_v": low_voltage,
+                        "low_percent": low_percent,
+                    },
+                )
+                if context.get("behavior_override") is None:
+                    override_name = battery_settings.get(
+                        "behavior_override", "rest_behavior"
+                    )
+                    context.set("behavior_override", override_name)
+
+        override = context.get("behavior_override")
+        if override:
+            action = self._resolve_override(override)
+            self.state = BehaviorState.IDLE
+        elif obstacle:
+            self.state = BehaviorState.AVOIDING
+            action = self.library.pick_avoid_action() if self.library else avoid_action
+        elif touch != "N":
+            self.state = BehaviorState.ALERT
+            action = self.library.pick_alert_action() if self.library else touch_action
+        elif sound:
+            self.state = BehaviorState.ALERT
+            action = self.library.pick_alert_action() if self.library else sound_action
+        else:
+            if settings.get("autonomy_enabled", True):
+                mode = self._select_autonomy_mode(settings, context)
+                if mode == "patrol":
+                    self.state = BehaviorState.PATROL
+                    action = (
+                        self.library.pick_patrol_action()
+                        if self.library
+                        else patrol_action
+                    )
+                elif mode == "explore":
+                    self.state = BehaviorState.EXPLORE
+                    action = (
+                        self.library.pick_explore_action()
+                        if self.library
+                        else explore_action
+                    )
+                elif mode == "interact":
+                    self.state = BehaviorState.INTERACT
+                    action = (
+                        self.library.pick_interact_action()
+                        if self.library
+                        else interact_action
+                    )
+                elif mode == "play":
+                    self.state = BehaviorState.PLAY
+                    action = (
+                        self.library.pick_play_action() if self.library else "stretch"
+                    )
+                elif mode == "rest":
+                    self.state = BehaviorState.REST
+                    action = self.library.pick_rest_action() if self.library else "lie"
+                else:
+                    self.state = BehaviorState.IDLE
+                    action = (
+                        self._select_idle_behavior(settings)
+                        if self.library
+                        else idle_action
+                    )
+            else:
+                self.state = BehaviorState.IDLE
+                action = (
+                    self._select_idle_behavior(settings)
+                    if self.library
+                    else idle_action
+                )
+
+        if action != self.last_action:
+            cooldown = float(settings.get("action_cooldown_s", 0.0))
+            quiet = (context.get("settings") or {}).get("quiet_mode", {})
+            if context.get("quiet_mode_active"):
+                try:
+                    quiet_cooldown = float(quiet.get("behavior_action_cooldown_s", 0.0))
+                except Exception:
+                    quiet_cooldown = 0.0
+                cooldown = max(cooldown, quiet_cooldown)
+            if cooldown > 0 and (time.time() - self._last_action_ts) < cooldown:
+                return
+            context.set("behavior_action", action)
+            self.last_action = action
+            self._last_action_ts = time.time()
+            logger.info("Behavior -> %s (%s)", action, self.state)
+
+    def _resolve_override(self, override: object) -> str:
+        if self.registry is None:
+            return str(override)
+        name = str(override)
+        if self.registry.has(name):
+            result = self.registry.run(name)
+            if result:
+                return result
+        return name
+
+    def _select_idle_behavior(self, settings) -> str:
+        choices = settings.get("idle_choices", ["idle_behavior"])
+        selection_mode = settings.get("behavior_selection_mode", "weighted")
+        weights = settings.get("behavior_weights", {})
+        if self.registry is None:
+            return self.library.pick_idle_action() if self.library else "stand"
+        if selection_mode == "sequential":
+            choice = self.registry.pick_sequential(list(choices))
+        else:
+            choice = self.registry.pick_weighted(list(choices), weights)
+        if choice:
+            result = self.registry.run(choice)
+            if result:
+                return result
+        return self.library.pick_idle_action() if self.library else "stand"
+
+    def _select_autonomy_mode(self, settings, context) -> str:
+        now = time.time()
+        interval = float(settings.get("autonomy_interval_s", 8.0))
+        energy = context.get("energy_level")
+        try:
+            energy = float(energy) if energy is not None else None
+        except Exception:
+            energy = None
+
+        rest_max = float(settings.get("autonomy_rest_energy_max", 0.35))
+        play_min = float(settings.get("autonomy_play_energy_min", 0.75))
+        if energy is not None and energy <= rest_max:
+            self._autonomy_mode = "rest"
+            return "rest"
+        if energy is not None and energy >= play_min:
+            self._autonomy_mode = "play"
+            return "play"
+
+        if self._autonomy_mode and (now - self._last_autonomy_ts) < interval:
+            return self._autonomy_mode
+
+        modes = settings.get("autonomy_modes", ["idle", "patrol", "play", "rest"])
+        if not isinstance(modes, list) or not modes:
+            modes = ["idle"]
+        weights = settings.get("autonomy_weights", {})
+        choice = (
+            self.registry.pick_weighted(list(modes), weights) if self.registry else None
+        )
+        self._autonomy_mode = choice or "idle"
+        self._last_autonomy_ts = now
+        return self._autonomy_mode

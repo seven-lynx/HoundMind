@@ -1,10 +1,12 @@
 """
 Simple in-process pub/sub event bus for CanineCore.
 """
+
 from __future__ import annotations
 import asyncio
 from typing import Callable, Dict, List
 from .interfaces import Event
+
 
 class EventBus:
     def __init__(self) -> None:

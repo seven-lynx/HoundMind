@@ -1,6 +1,8 @@
 
 # Complete PiDog Programming Guide
-> Author: 7Lynx · Doc Version: 2025.11.01
+
+Version: v2026.01.18 • Author: 7Lynx
+
 
 > **The definitive beginner-friendly guide to programming the SunFounder PiDog robotic dog with Python**
  
@@ -10,7 +12,7 @@
 
 ## 🎓 **For Complete Beginners**
 
-**Never programmed a robot before? No problem!** This guide is designed to teach you step-by-step:
+**Never programmed a robot before? No problem!** This guide is designed to teach you step-by-step. Simulation mode is no longer supported; all features require real PiDog hardware. PackMind and CanineCore are now unified.
 
 - 🤖 **What is the PiDog?** - A friendly robotic dog you can control with Python code
 - 💡 **How does it work?** - Your Python code sends commands to motors (servos) and reads sensors
@@ -38,7 +40,7 @@
 - [7. Error Handling and Safety](#7-error-handling-and-safety)
 - [8. Complete Debugging and Monitoring](#8-complete-debugging-and-monitoring)
 - [9. Project Templates and Patterns](#9-project-templates-and-patterns)
-- [10. Modern Mapping & Navigation (PackMind)](#10-modern-mapping--navigation-packmind)
+- [10. HoundMind Mapping Snapshots](#10-houndmind-mapping-snapshots)
 - [Additional Resources](#additional-resources)
 
 ---
@@ -49,58 +51,43 @@
 > **🚀 New to PiDog programming?** These resources get you coding quickly:
 
 - **[`pidog_programming_examples.py`](../examples/pidog_programming_examples.py)** - Runnable examples for every feature with menu system
+- **[`houndmind_mapping_demo.py`](../examples/houndmind_mapping_demo.py)** - HoundMind-only mapping snapshot example (no hardware required)
 - **[`api_reference.md`](./api_reference.md)** - Complete method documentation with all parameters
-- **[`packmind/orchestrator.py`](../packmind/orchestrator.py)** - Advanced AI behavior system demonstration
-- **[`packmind/mapping/home_mapping.py`](../packmind/mapping/home_mapping.py)** - Modern HomeMap mapping/navigation API
+- **[`FEATURES_GUIDE.md`](./FEATURES_GUIDE.md)** - What each feature does and how to disable it
 ---
 
-## 10. 🗺️ Modern Mapping & Navigation (PackMind)
+## Install Order (Recommended)
 
-**All mapping and navigation in PackMind is now powered by the HomeMap system.**
+HoundMind is an add-on to the default SunFounder PiDog software. Install the official PiDog software first, then install HoundMind in the **same** Python environment so `pidog` is available.
 
-### Key Concepts
+1) Install the official SunFounder PiDog software (this provides the `pidog` library).
+2) Install HoundMind as an add-on:
 
-- **Openings**: Detected and user-registered doorways, passages, and exits.
-- **Safe Paths**: Dynamically updated, sensor-fused paths through the environment, avoiding obstacles and hazards.
-- **Anchors**: Visual or semantic map anchors for robust localization and behavior triggers.
-- **Semantic Labels**: User- or AI-assigned labels for map regions (e.g., "kitchen", "charging station").
-- **Sensor Fusion**: Combines camera, IMU, distance, touch, and sound for robust mapping and navigation.
-- **Dynamic Obstacle Fading**: Temporary obstacles fade over time for adaptive path planning.
-
-### HomeMap API Example
-
-```python
-from packmind.mapping.home_mapping import HomeMap, Position
-
-home_map = HomeMap(config)
-pos = Position(x=5, y=10)
-sensor_data = {"distance": 42, "camera": "open"}
-home_map.update_cell_from_sensor(pos, sensor_data)
-home_map.fade_dynamic_obstacles()
-home_map.register_anchor(pos, label="charging_station")
-openings = home_map.find_openings()
-safe_path = home_map.find_safe_paths(start, goal)
-home_map.export_map_image("map.png")
+```bash
+python -m venv .venv
+# Linux/macOS:
+. .venv/bin/activate
+# Windows PowerShell:
+# . .venv\Scripts\Activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-lite.txt
+python -m pip install -e .
 ```
 
-### Configuration
+If HoundMind ever breaks, the original PiDog software remains intact; you can still run the default PiDog scripts without uninstalling HoundMind.
 
-- All advanced mapping features are configurable in `packmind/packmind_config.py`.
-- See the config guide for details on enabling/disabling features, tuning parameters, and customizing map behavior.
+Fallback tip: run an example from the official PiDog repo (replace `<example>.py` with a real file):
 
-### Usage Tips
+```bash
+python pidog/examples/<example> .py
+```
 
-- Use anchors and semantic labels to trigger behaviors or navigation goals.
-- Use `find_safe_paths` for robust, sensor-fused navigation.
-- Visualize your map with `export_map_image` for debugging and analysis.
-
----
-
----
 
 ## 1. 🤖 PiDog Class: Your Robot's "Brain" (For Beginners)
 
 **What is the PiDog class?** Think of it as the "remote control app" for your robotic dog. Just like how you use an app to control a smart TV, the PiDog class lets you control your robot from Python code.
+
+> **Note:** `pidog` is the library provided by the default SunFounder PiDog software. Install that first, then install HoundMind in the same environment so `from pidog import Pidog` works.
 
 ### Simple Initialization (Start Here!)
 
@@ -672,6 +659,13 @@ if __name__ == "__main__":
 
 ## 7. Error Handling and Safety
 
+### Quick Safety Checklist (Run Before Hardware Tests)
+
+1) Clear the area and keep the robot on a flat surface.
+2) Start with low speeds and small step counts.
+3) Keep emergency stop reachable and enabled.
+4) If anything looks wrong, stop and call `dog.body_stop()`.
+
 ### 7.1 Safe Program Structure
 
 ```python
@@ -1010,16 +1004,44 @@ if __name__ == "__main__":
 
 ---
 
+## 10. HoundMind Mapping Snapshots
+
+HoundMind includes a lightweight mapping module that can analyze scan openings and save JSON snapshots for later review. This example runs without hardware:
+
+```python
+from houndmind_ai.mapping.mapper import MappingModule
+
+settings = {
+    "opening_min_width_cm": 10,
+    "opening_max_width_cm": 1000,
+    "opening_cell_conf_min": 0.0,
+    "safe_path_min_width_cm": 1,
+    "safe_path_max_width_cm": 1000,
+    "safe_path_cell_conf_min": 0.0,
+    "safe_path_score_weight_width": 0.6,
+    "safe_path_score_weight_distance": 0.4,
+}
+
+angles = {"-60": 120.0, "0": 80.0, "60": 60.0}
+openings, safe_paths, best_path = MappingModule._analyze_scan_openings(angles, settings)
+print("openings:", openings)
+print("safe_paths:", safe_paths)
+print("best_path:", best_path)
+```
+
+See the runnable example in `examples/houndmind_mapping_demo.py`.
+
+---
+
 ## Additional Resources
 
 
 ### Complete Example Files
 - **[`pidog_programming_examples.py`](../examples/pidog_programming_examples.py)** - Menu-driven examples for every PiDog feature
-- **[`packmind/orchestrator.py`](../packmind/orchestrator.py)** - Advanced AI behavior system with emotions, learning, and modern mapping/navigation
 
 
 ### Reference Documentation
-- **[`api_reference.md`](./api_reference.md)** - Complete API reference with all methods and parameters, including HomeMap mapping/navigation
+- **[`api_reference.md`](./api_reference.md)** - Complete API reference with all methods and parameters, including mapping/navigation
 
 
 ### Official Resources

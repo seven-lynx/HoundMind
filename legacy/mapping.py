@@ -14,6 +14,7 @@ position = [0, 0]  # Track PiDog's location
 blocked_positions = set()  # Store blocked areas
 mapped_area = {}  # Home mapping grid
 
+
 def update_position(direction):
     """Adjust PiDog's coordinates based on movement."""
     if direction == "forward":
@@ -29,28 +30,30 @@ def update_position(direction):
     mapped_area[tuple(position)] = "visited"
     print(f"PiDog's current position: {position}")
 
+
 def detect_obstacle():
     """Check for obstacles and store blocked positions."""
     distance = dog.read_distance()
     if distance < 30:
         blocked_positions.add(tuple(position))
         print(f"Blocked at position: {position}")
-    
+
     return distance < 30
+
 
 def move_forward():
     """Move PiDog forward and track mapping data."""
     speed = random.choice([80, 100, 120])
     print(f"Moving forward at speed {speed}...")
 
-    for _ in range(5):  
-        update_position("forward")  
+    for _ in range(5):
+        update_position("forward")
 
         if tuple(position) in blocked_positions:
             print("Previously blocked area detected! Changing direction...")
             respond_to_obstacle()
             return
-        
+
         dog.do_action("forward", step_count=1, speed=speed)
         dog.wait_all_done()
         time.sleep(0.2)
@@ -61,6 +64,7 @@ def move_forward():
             respond_to_obstacle()
             return
 
+
 def stop_movement():
     """Immediately stop PiDog to prevent collisions."""
     print("Stopping immediately!")
@@ -68,15 +72,17 @@ def stop_movement():
     dog.wait_all_done()
     time.sleep(0.5)
 
+
 def retreat():
     """Move PiDog backward when an obstacle is detected."""
     print("Executing Retreat: Moving backward 2 steps...")
-    update_position("backward")  
+    update_position("backward")
     dog.do_action("backward", step_count=2, speed=100)
     dog.wait_all_done()
     time.sleep(0.5)
-    
+
     navigate_around_obstacle()
+
 
 def navigate_around_obstacle():
     """Turn and adjust movement while updating the map."""
@@ -97,14 +103,16 @@ def navigate_around_obstacle():
     dog.do_action("forward", step_count=5, speed=100)
     dog.wait_all_done()
 
+
 def respond_to_obstacle():
     """Choose either retreat or navigate around obstacle."""
     action = random.choice(["retreat", "navigate"])
-    
+
     if action == "retreat":
         retreat()
     else:
         navigate_around_obstacle()
+
 
 def return_to_start():
     """Guide PiDog back to its starting position."""
@@ -125,6 +133,7 @@ def return_to_start():
         time.sleep(0.5)
 
     print("PiDog has returned home!")
+
 
 # Main Mapping Mode
 try:

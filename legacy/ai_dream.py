@@ -19,10 +19,12 @@ try:
 except FileNotFoundError:
     learning_data = {"obstacles": [], "commands": {}}
 
+
 def store_obstacle(position):
     """Save obstacle locations for future avoidance."""
     learning_data["obstacles"].append(position)
     print(f"Stored obstacle at {position}")
+
 
 def track_command(command):
     """Track frequently used commands."""
@@ -33,6 +35,7 @@ def track_command(command):
 
     print(f"Recorded command: {command}")
 
+
 def dream_mode():
     """PiDog thinks and adjusts behavior while idle."""
     print("Entering AI Dream Mode...")
@@ -42,7 +45,11 @@ def dream_mode():
             time.sleep(5)  # Periodic processing
 
             # Analyze past experiences
-            most_frequent_command = max(learning_data["commands"], key=learning_data["commands"].get, default=None)
+            most_frequent_command = max(
+                learning_data["commands"],
+                key=learning_data["commands"].get,
+                default=None,
+            )
             if most_frequent_command:
                 print(f"PiDog prioritizes {most_frequent_command} next time!")
 
@@ -52,12 +59,13 @@ def dream_mode():
             # Save updated learning data
             with open(memory_file, "w") as file:
                 json.dump(learning_data, file)
-    
+
     except KeyboardInterrupt:
         print("Exiting AI Dream Mode...")
         dog.do_action("stand", speed=50)
         dog.wait_all_done()
         dog.close()
+
 
 # Start Dream Mode
 dream_mode()
