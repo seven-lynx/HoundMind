@@ -1,5 +1,7 @@
-# Minimal dependencies for Pi3 runtime (lightweight preset)
 # Add only small, well-supported packages here for Pi3 installs.
 
 # Hardware bindings (platform-specific)
 pidog>=0.1.0
+# Vision pre-processing (lightweight, Pi3-compatible)
+numpy
+opencv-python
