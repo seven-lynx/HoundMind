@@ -221,7 +221,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 
 #### Vision Pipeline
 - [x] Camera capture service (Pi4-optimized, low-latency).
-- [ ] Frame pre-processing (resize, normalize, ROI selection).
+- [x] Frame pre-processing (resize, normalize, ROI selection).
 - [ ] Vision inference scheduler (separate process/thread).
 - [ ] Camera streaming UI (local preview + debug overlay).
 
