@@ -192,7 +192,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] No-go memory for angles that repeatedly cause avoidance.
 - [x] Gentle recovery: reduce speed after repeated stuck events.
 - [x] Adaptive scan step (coarser when clear, finer when near obstacles).
-- [ ] Sensor health summary badge (LED/log) with thresholds.
+- [x] Sensor health summary badge (LED/log) with thresholds.
 
 ### Pi 3 — Audit Suggestions (module polish)
 - [x] Runtime: add tick overrun timing warnings and graceful shutdown handling.
