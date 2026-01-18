@@ -70,25 +70,23 @@ class SlamPi4Module(Module):
             return
 
 
+
         if self.backend == "rtabmap" and self._rtabmap:
             # --- Camera/IMU data pipeline ---
             frame = context.get("vision_frame")
             sensor = context.get("sensor_reading")
             imu = None
             if sensor:
-                # IMU: (acc, gyro, valid)
                 acc = getattr(sensor, "acc", None)
                 gyro = getattr(sensor, "gyro", None)
                 imu = {"acc": acc, "gyro": gyro}
             try:
                 # Feed frame and IMU to RTAB-Map (API may differ; adjust as needed)
                 if frame is not None:
-                    # rtabmap-py: process(frame, imu=None, timestamp=None)
                     ts = getattr(sensor, "timestamp", time.time()) if sensor else time.time()
                     self._rtabmap.process(frame, imu=imu, timestamp=ts)
                 pose = self._rtabmap.getPose() if hasattr(self._rtabmap, "getPose") else None
                 if pose:
-                    # Example pose: (x, y, z, roll, pitch, yaw, confidence)
                     self._pose = {
                         "x": float(pose[0]),
                         "y": float(pose[1]),
@@ -97,9 +95,27 @@ class SlamPi4Module(Module):
                     }
                 else:
                     self._pose = {"x": 0.0, "y": 0.0, "yaw": 0.0, "confidence": 0.0}
+
+                # Expose map and trajectory for visualization/debugging
+                map_data = None
+                trajectory = None
+                if hasattr(self._rtabmap, "getMapData"):
+                    try:
+                        map_data = self._rtabmap.getMapData()
+                    except Exception as exc:
+                        logger.debug(f"RTAB-Map getMapData failed: {exc}")
+                if hasattr(self._rtabmap, "getTrajectory"):
+                    try:
+                        trajectory = self._rtabmap.getTrajectory()
+                    except Exception as exc:
+                        logger.debug(f"RTAB-Map getTrajectory failed: {exc}")
+                context.set("slam_map_data", map_data)
+                context.set("slam_trajectory", trajectory)
             except Exception as exc:
                 logger.warning(f"RTAB-Map tick failed: {exc}")
                 self._pose = {"x": 0.0, "y": 0.0, "yaw": 0.0, "confidence": 0.0}
+                context.set("slam_map_data", None)
+                context.set("slam_trajectory", None)
         else:
             self._update_stub(context, settings)
 

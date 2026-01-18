@@ -60,6 +60,8 @@ class TelemetryDashboardModule(Module):
                 "safety_action",
                 "performance_telemetry",
                 "slam_pose",
+                "slam_map_data",
+                "slam_trajectory",
                 "faces",
                 "semantic_labels",
             ],
