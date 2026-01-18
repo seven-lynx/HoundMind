@@ -36,6 +36,9 @@ class ObstacleAvoidanceModule(Module):
         self._dead_end_cache: deque[int] = deque(maxlen=5)
         self._clear_path_streak = 0
         self._no_go_history: deque[tuple[float, str]] = deque(maxlen=40)
+        # Gentle recovery state
+        self._gentle_recovery_active = False
+        self._gentle_recovery_until = 0.0
 
     def tick(self, context) -> None:
         perception = context.get("perception") or {}
@@ -58,6 +61,29 @@ class ObstacleAvoidanceModule(Module):
         approach_cooldown_s = settings.get("approach_cooldown_s", 2.0)
         backup_steps = settings.get("backup_steps", 2)
         retreat_turn_direction = settings.get("retreat_turn_direction", "auto")
+
+        # Gentle recovery config
+        movement_settings = (context.get("settings") or {}).get("movement", {})
+        gentle_recovery_threshold = int(settings.get("gentle_recovery_stuck_count", 3))
+        gentle_recovery_speed = int(movement_settings.get("gentle_recovery_speed", 80))
+        gentle_recovery_cooldown = float(settings.get("gentle_recovery_cooldown_s", 8.0))
+
+        now = time.time()
+
+        # Always set gentle recovery state at the start of tick
+        if self._gentle_recovery_active or now < self._gentle_recovery_until:
+            if now >= self._gentle_recovery_until:
+                self._gentle_recovery_active = False
+                self._stuck_count = 0
+                context.set("gentle_recovery_active", False)
+                context.set("energy_speed_hint", None)
+            else:
+                context.set("gentle_recovery_active", True)
+                context.set("gentle_recovery_until", self._gentle_recovery_until)
+                context.set("energy_speed_hint", "slow")
+        else:
+            context.set("gentle_recovery_active", False)
+            context.set("energy_speed_hint", None)
         turn_degrees_on_gap = settings.get("turn_degrees_on_gap", 30)
 
         now = time.time()
@@ -173,6 +199,17 @@ class ObstacleAvoidanceModule(Module):
                     "strategy": self._last_strategy,
                 },
             )
+            # Activate gentle recovery immediately if threshold reached and not already active
+            if (
+                not self._gentle_recovery_active
+                and self._stuck_count >= gentle_recovery_threshold
+            ):
+                self._gentle_recovery_active = True
+                self._gentle_recovery_until = now + gentle_recovery_cooldown
+                # Set state immediately for test and runtime visibility
+                context.set("gentle_recovery_active", True)
+                context.set("gentle_recovery_until", self._gentle_recovery_until)
+                context.set("energy_speed_hint", "slow")
             return
 
         direction = self._apply_no_go_bias(direction, now, settings)

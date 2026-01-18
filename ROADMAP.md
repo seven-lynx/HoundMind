@@ -1,5 +1,14 @@
 # HoundMind Roadmap
 
+## Unified Runtime & Migration
+- [x] PackMind and CanineCore unified into a single runtime
+- [x] Simulation mode removed (hardware-only)
+
+## Documentation & Release
+- [x] All guides updated for unified system, no sim mode, and Pi OS Lite recommendation
+- [x] Changelog and README reflect all major changes
+- [x] Release QA checklist: tests, docs, tag, changelog, install validation
+
 Purpose: Track completion for each module needed for the PiDog hardware-only build (Pi 3 target). Check items as they’re implemented and verified on hardware.
 
 ## Core Runtime

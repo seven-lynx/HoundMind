@@ -63,6 +63,11 @@
       "required": false
     },
     "navigation": {
+      // Gentle recovery: reduce speed after repeated stuck events
+      // Number of stuck events before gentle recovery triggers
+      "gentle_recovery_stuck_count": 3,
+      // Cooldown period (seconds) for gentle recovery
+      "gentle_recovery_cooldown_s": 8.0,
       // Obstacle avoidance + navigation cues.
       "enabled": true,
       "required": false
@@ -471,6 +476,8 @@
     // MOVEMENT & ACTION TUNING (future wiring)
     // =====================================================================
     "movement": {
+      // Speed to use during gentle recovery (0-255)
+      "gentle_recovery_speed": 80,
       // Step counts for turns/walks.
       "turn_steps_small": 1,
       "turn_steps_normal": 2,
