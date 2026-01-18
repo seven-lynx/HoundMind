@@ -146,9 +146,13 @@ def main() -> int:
         return 2
 
     pi_class = detect_pi_class()
-    preset = args.preset
-    if preset == "auto":
-        preset = "full" if pi_class == "pi4" else "lite"
+    # Force full preset for Pi4/5, always install all dependencies for all modules that can run
+    if pi_class == "pi4":
+        preset = "full"
+    elif pi_class == "pi3":
+        preset = "lite"
+    else:
+        preset = args.preset if args.preset != "auto" else "lite"
     if preset == "full" and pi_class == "pi3":
         print("Pi 3 detected: full preset is not supported. Use --preset lite.")
         return 2
@@ -167,6 +171,16 @@ def main() -> int:
     code = run([str(pip), "install", "-r", str(req)])
     if code != 0:
         return code
+    # Always install Flask and run model downloader for Pi4/5
+    if pi_class == "pi4":
+        code = run([str(pip), "install", "flask"])
+        if code != 0:
+            return code
+        model_dl = repo_root / "tools" / "download_opencv_models.py"
+        if model_dl.exists():
+            code = run([str(python), str(model_dl)])
+            if code != 0:
+                print("Warning: Model downloader failed, but continuing.")
 
     if not args.skip_pidog:
         if is_windows():

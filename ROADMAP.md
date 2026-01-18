@@ -257,6 +257,18 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 
 #### Mapping, SLAM & Localization
 - [ ] Full SLAM pipeline (visual/IMU fusion).
+	- [ ] Evaluate and select a SLAM backend (e.g., ORB-SLAM3, OpenVSLAM, RTAB-Map) for Pi4 compatibility and performance.
+	- [ ] Integrate the chosen SLAM backend as a runtime module (wrap initialization, start/stop, and config in `slam_pi4.py`).
+	- [ ] Implement camera and IMU data pipeline for SLAM backend (ensure synchronized frame and IMU delivery).
+	- [ ] Add configuration options for SLAM backend selection and tuning in `settings.slam_pi4`.
+	- [ ] Implement pose output: publish `slam_pose` (x, y, yaw, confidence) and `slam_status` to context.
+	- [ ] Add map output: expose map/trajectory data for visualization and debugging.
+	- [ ] Implement loop-closure detection and map optimization (if supported by backend).
+	- [ ] Add fallback to stub mode if backend is unavailable or fails.
+	- [ ] Validate SLAM accuracy and robustness in real-world Pi4 tests (varied lighting, movement, and environments).
+	- [ ] Document SLAM usage, configuration, and troubleshooting in the features guide and programming guide.
+	- [ ] Add unit and scenario tests for SLAM integration and pose/map outputs.
+	- [ ] Expose SLAM status and map in the telemetry dashboard for live monitoring.
 - [ ] Sensor-fusion localization (IMU + vision + distance).
 - [ ] Global pathfinding (A* or similar) across mapped spaces.
 - [ ] Path planning hooks + planner integration in runtime.

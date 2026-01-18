@@ -17,3 +17,7 @@ face_recognition
 SpeechRecognition
 pyaudio
 sounddevice
+
+# SLAM (RTAB-Map)
+# Note: rtabmap-py may need to be built from source on Pi4. See scripts/install_rtabmap_pi4.md for instructions.
+rtabmap-py

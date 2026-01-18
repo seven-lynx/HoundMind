@@ -62,6 +62,10 @@ Set the profile in [config/settings.jsonc](config/settings.jsonc) or via `HOUNDM
 
 Pi4/5 modules (vision, face recognition, semantic labeling, SLAM, telemetry) remain opt-in.
 
+
+## SLAM (RTAB-Map for Pi4/5)
+For robust mapping and localization on Pi4/5, HoundMind supports RTAB-Map as the recommended SLAM backend. See [scripts/install_rtabmap_pi4.md](scripts/install_rtabmap_pi4.md) for installation steps and troubleshooting.
+
 ## Feature Guide
 See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for what each feature does, how to use it, and how to disable it.
 

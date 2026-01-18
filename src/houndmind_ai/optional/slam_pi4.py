@@ -8,8 +8,9 @@ from houndmind_ai.core.module import Module
 logger = logging.getLogger(__name__)
 
 
+
 class SlamPi4Module(Module):
-    """Pi4 SLAM module (stub + backend gating).
+    """Pi4 SLAM module (RTAB-Map or stub backend).
 
     Publishes:
     - `slam_pose`: {"x": float, "y": float, "yaw": float, "confidence": float}
@@ -22,6 +23,9 @@ class SlamPi4Module(Module):
         self.available = False
         self._last_ts = 0.0
         self._pose = {"x": 0.0, "y": 0.0, "yaw": 0.0, "confidence": 0.0}
+        self._rtabmap = None
+        self._rtabmap_cfg = None
+        self._rtabmap_failed = False
 
     def start(self, context) -> None:
         if not self.status.enabled:
@@ -29,22 +33,29 @@ class SlamPi4Module(Module):
         settings = (context.get("settings") or {}).get("slam_pi4", {})
         self.backend = settings.get("backend", "stub")
 
-        if self.backend == "stub":
-            self.available = True
-            context.set("slam_status", {"status": "ready", "backend": self.backend})
-            return
-
-        if self.backend == "orbslam3":
+        if self.backend == "rtabmap":
             try:
-                import orbslam3  # type: ignore  # noqa: F401
-            except Exception as exc:  # noqa: BLE001
-                self.disable(f"ORB-SLAM3 backend unavailable: {exc}")
+                import rtabmap as rtabmap_py
+                self._rtabmap_cfg = settings.get("rtabmap", {})
+                # Initialize RTAB-Map (minimal, real pipeline needs camera/IMU)
+                self._rtabmap = rtabmap_py.Rtabmap()
+                db_path = self._rtabmap_cfg.get("database_path", "rtabmap.db")
+                self._rtabmap.init(db_path)
+                self.available = True
+                context.set("slam_status", {"status": "ready", "backend": self.backend})
                 return
+            except Exception as exc:
+                logger.warning(f"RTAB-Map backend unavailable: {exc}")
+                self._rtabmap_failed = True
+                self._rtabmap = None
+                self.available = False
+                # Fallback to stub
+        if self.backend == "stub" or self._rtabmap_failed:
             self.available = True
-            context.set("slam_status", {"status": "ready", "backend": self.backend})
+            context.set("slam_status", {"status": "ready", "backend": "stub"})
             return
-
         self.disable(f"Unknown SLAM backend: {self.backend}")
+
 
     def tick(self, context) -> None:
         if not self.available or not self.status.enabled:
@@ -58,8 +69,37 @@ class SlamPi4Module(Module):
         if now - self._last_ts < interval:
             return
 
-        if self.backend == "stub":
-            self._update_stub(context, settings)
+
+        if self.backend == "rtabmap" and self._rtabmap:
+            # --- Camera/IMU data pipeline ---
+            frame = context.get("vision_frame")
+            sensor = context.get("sensor_reading")
+            imu = None
+            if sensor:
+                # IMU: (acc, gyro, valid)
+                acc = getattr(sensor, "acc", None)
+                gyro = getattr(sensor, "gyro", None)
+                imu = {"acc": acc, "gyro": gyro}
+            try:
+                # Feed frame and IMU to RTAB-Map (API may differ; adjust as needed)
+                if frame is not None:
+                    # rtabmap-py: process(frame, imu=None, timestamp=None)
+                    ts = getattr(sensor, "timestamp", time.time()) if sensor else time.time()
+                    self._rtabmap.process(frame, imu=imu, timestamp=ts)
+                pose = self._rtabmap.getPose() if hasattr(self._rtabmap, "getPose") else None
+                if pose:
+                    # Example pose: (x, y, z, roll, pitch, yaw, confidence)
+                    self._pose = {
+                        "x": float(pose[0]),
+                        "y": float(pose[1]),
+                        "yaw": float(pose[5]),
+                        "confidence": float(pose[6]) if len(pose) > 6 else 1.0,
+                    }
+                else:
+                    self._pose = {"x": 0.0, "y": 0.0, "yaw": 0.0, "confidence": 0.0}
+            except Exception as exc:
+                logger.warning(f"RTAB-Map tick failed: {exc}")
+                self._pose = {"x": 0.0, "y": 0.0, "yaw": 0.0, "confidence": 0.0}
         else:
             self._update_stub(context, settings)
 

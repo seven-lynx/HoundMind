@@ -328,15 +328,35 @@
     // PI4 SLAM (stub + backend gating)
     // =====================================================================
     "slam_pi4": {
-      "enabled": false,
-      "backend": "stub",
-      "interval_s": 0.2,
-      "gyro_scale": 0.0,
-      "stub_confidence": 0.1,
-      "nav_hint_enabled": false,
-      "nav_target_heading_deg": null,
-      "nav_deadband_deg": 10.0
-    },
+        "enabled": false,
+        // Backend: "stub" (default), "rtabmap" (for full SLAM)
+        "backend": "stub",
+        // Main SLAM update interval (seconds)
+        "interval_s": 0.2,
+        // IMU gyro scale (for stub mode)
+        "gyro_scale": 0.0,
+        // Stub mode confidence value
+        "stub_confidence": 0.1,
+        // RTAB-Map config (used if backend = "rtabmap")
+        "rtabmap": {
+          // Path to RTAB-Map database (optional, default: in-memory)
+          "database_path": "rtabmap.db",
+          // Frame width/height for SLAM (optional, default: auto)
+          "frame_width": null,
+          "frame_height": null,
+          // Use RGB-D (recommended) or monocular
+          "rgbd_enabled": true,
+          // RTAB-Map parameters (see RTAB-Map docs for full list)
+          "parameters": {
+            "RGBD/LinearUpdate": 0.1,
+            "RGBD/AngularUpdate": 0.1
+          }
+        },
+        // Navigation hint integration
+        "nav_hint_enabled": false,
+        "nav_target_heading_deg": null,
+        "nav_deadband_deg": 10.0
+      },
     // =====================================================================
     // TELEMETRY DASHBOARD (Pi4 optional)
     // =====================================================================

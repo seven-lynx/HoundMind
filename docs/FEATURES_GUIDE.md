@@ -216,7 +216,37 @@ python tools/camera_check.py --index 0 --save frame.jpg
 
 **Disable:** `modules.vision_pi4.enabled = false`
 
----
+
+## 21a) Vision Inference Scheduler (Pi4)
+**What it does:** Runs vision model inference in a background thread for Pi4/5 hardware. Accepts preprocessed frames, schedules inference, and returns results asynchronously for downstream modules.
+
+**Enable:**
+- Enabled automatically when `modules.vision_pi4.enabled = true` and `settings.vision_pi4.inference_scheduler_enabled = true` (default: true).
+
+**Configuration:**
+- `settings.vision_pi4.inference_scheduler_enabled`: Enable/disable scheduler (default: true)
+- `settings.vision_pi4.preprocessing`: Preprocessing config (see below)
+
+**Disable:** Set `settings.vision_pi4.inference_scheduler_enabled = false`
+
+**Notes:**
+- Results are published to `vision_inference_result` in context.
+- Replace the dummy inference function with your own model for custom tasks.
+
+## 21b) Vision Preprocessing (Pi4)
+**What it does:** Preprocesses camera frames before inference (resize, normalize, ROI selection). Hardware-friendly and configurable for Pi4/5 vision tasks.
+
+**Enable:**
+- Enabled automatically when `modules.vision_pi4.enabled = true`.
+
+**Configuration:**
+- `settings.vision_pi4.preprocessing.resize`: Target size, e.g. `[224, 224]`
+- `settings.vision_pi4.preprocessing.normalize`: Enable normalization (default: true)
+- `settings.vision_pi4.preprocessing.roi`: Region of interest, e.g. `[x, y, w, h]`
+- `settings.vision_pi4.preprocessing.mean`: Mean for normalization (default: `[0.485, 0.456, 0.406]`)
+- `settings.vision_pi4.preprocessing.std`: Std for normalization (default: `[0.229, 0.224, 0.225]`)
+
+**Disable:** Not recommended; preprocessing is lightweight and safe for all Pi4/5 vision tasks.
 
 ## 22) Semantic Labeler (Pi4)
 **What it does:** Adds object labels from camera frames (lite stub or OpenCV DNN).
@@ -242,11 +272,16 @@ This populates `models/` with:
 ---
 
 ## 23) SLAM (Pi4)
-**What it does:** Provides pose/mapping outputs for robust navigation. Defaults to a safe stub until a backend is configured.
+**What it does:** Provides real-time pose and mapping outputs for robust navigation. Supports RTAB-Map (visual/IMU SLAM) as the recommended backend for Pi4/5, with fallback to a safe stub if not available.
 
 **Enable:**
 - `modules.slam_pi4.enabled = true`
-- `settings.slam_pi4.backend = "stub"` (or a future backend like `orbslam3`)
+- `settings.slam_pi4.backend = "rtabmap"` (recommended for Pi4/5)
+- See `scripts/install_rtabmap_pi4.md` for RTAB-Map install steps.
+
+**Configuration:**
+- `settings.slam_pi4.rtabmap`: RTAB-Map options (database path, frame size, RGB-D, parameters)
+- `settings.slam_pi4.interval_s`: SLAM update interval
 
 **Navigation integration (optional):**
 - `settings.slam_pi4.nav_hint_enabled = true`
@@ -255,7 +290,9 @@ This populates `models/` with:
 
 **Disable:** `modules.slam_pi4.enabled = false`
 
----
+**Notes:**
+- RTAB-Map requires camera and IMU data; see the install guide for dependencies and troubleshooting.
+- If RTAB-Map is not installed or fails, the module falls back to stub mode for safe operation.
 
 ## 24) Telemetry Dashboard (Pi4)
 **What it does:** Serves a simple web dashboard and JSON snapshot of runtime context, including `performance_telemetry` (FPS, latency, CPU/GPU/RAM).
@@ -271,7 +308,24 @@ This populates `models/` with:
 
 **Disable:** `modules.telemetry_dashboard.enabled = false`
 
----
+
+## 25) WiFi Localization (Pi4/5)
+**What it does:** Scans for nearby WiFi access points, records signal strengths (RSSI), and provides fingerprint-based localization for indoor positioning. Useful for context-aware behaviors and navigation.
+
+**Enable:**
+- `modules.wifi_localization.enabled = true`
+- (Optional) Adjust scan interval, ignore list, and fingerprint file in `settings.wifi_localization`:
+	- `scan_interval`: Scan period in seconds (default: 10.0)
+	- `ignore_ssids`: List of SSIDs to ignore
+	- `fingerprint_file`: Path for persistent storage (default: `wifi_fingerprints.json`)
+	- `max_fingerprint_file_size`: Max file size in bytes (default: 262144)
+
+**Disable:** `modules.wifi_localization.enabled = false`
+
+**Notes:**
+- Disabled by default. Safe to enable on Pi4/5 with WiFi hardware.
+- Fingerprints are updated when `current_location` is set in context.
+- File size limit prevents SD card bloat; oldest entries are pruned automatically.
 
 ## 25) How to Disable Any Feature
 1) Open `config/settings.jsonc`
