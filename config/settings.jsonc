@@ -221,6 +221,21 @@
       }
     },
     // =====================================================================
+    // HABITUATION (suppress repeated stimuli)
+    // =====================================================================
+    "habituation": {
+      "enabled": true,
+      // List of stimuli keys to monitor. Modules may consult
+      // `habituation:<stimulus>:habituated` in runtime context.
+      "stimuli": ["sound", "touch"],
+      // Window (s) for counting repeated stimuli
+      "window_s": 1.0,
+      // Number of events within window to consider habituated
+      "threshold": 3,
+      // Recovery window (s) of quiet required to reset habituation
+      "recovery_s": 6.0
+    },
+    // =====================================================================
     // FACE RECOGNITION (Pi4 optional)
     // =====================================================================
     "face_recognition": {
