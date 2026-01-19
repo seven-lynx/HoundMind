@@ -27,6 +27,10 @@ class AttentionModule(Module):
         if not perception.get("sound"):
             return
 
+        # Respect habituation: if sound events are habituated, skip attention
+        if context.get("habituation:sound:habituated"):
+            return
+
         now = time.time()
         cooldown = float(settings.get("sound_cooldown_s", 0.5))
         if now - self._last_attention_ts < cooldown:

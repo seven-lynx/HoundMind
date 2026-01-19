@@ -11,6 +11,7 @@ from houndmind_ai.hal.motors import MotorModule
 from houndmind_ai.hal.sensors import SensorModule
 from houndmind_ai.behavior.fsm import BehaviorModule
 from houndmind_ai.behavior.attention import AttentionModule
+from houndmind_ai.behavior.habituation import HabituationModule
 from houndmind_ai.calibration.workflow import CalibrationModule
 from houndmind_ai.mapping.mapper import MappingModule
 from houndmind_ai.navigation.local_planner import LocalPlannerModule
@@ -57,6 +58,7 @@ def build_modules(config) -> list:
             "navigation", **module_configs.get("navigation", {}).__dict__
         ),
         BehaviorModule("behavior", **module_configs.get("behavior", {}).__dict__),
+        HabituationModule("habituation", **module_configs.get("habituation", {}).__dict__),
         AttentionModule("attention", **module_configs.get("attention", {}).__dict__),
         EventLoggerModule("event_log", **module_configs.get("event_log", {}).__dict__),
         LedManagerModule(
