@@ -37,6 +37,9 @@ class BehaviorModule(Module):
         self._autonomy_mode: str | None = None
         self.library: BehaviorLibrary | None = None
         self.registry: BehaviorRegistry | None = None
+        # habituation tracking: counts and last timestamp per stimulus type
+        self._stim_counts: dict[str, int] = {}
+        self._stim_last_ts: dict[str, float] = {}
 
     def tick(self, context) -> None:
         now = time.time()
@@ -45,6 +48,42 @@ class BehaviorModule(Module):
         obstacle = perception.get("obstacle", False)
         touch = perception.get("touch", "N")
         sound = perception.get("sound", False)
+
+        # Habituation: suppress repeated stimuli if enabled and threshold reached.
+        # Settings: habituation_enabled (bool), habituation_threshold (int),
+        # habituation_recovery_s (float) - time without stimulus to reset count.
+        hab_settings = (context.get("settings") or {}).get("behavior", {})
+        hab_enabled = bool(hab_settings.get("habituation_enabled", False))
+        if hab_enabled:
+            now = time.time()
+            # decay / recovery: clear counts if enough quiet time has passed
+            recovery_s = float(hab_settings.get("habituation_recovery_s", 30.0))
+            for k, last in list(self._stim_last_ts.items()):
+                try:
+                    if (now - last) >= recovery_s:
+                        self._stim_counts.pop(k, None)
+                        self._stim_last_ts.pop(k, None)
+                except Exception:
+                    self._stim_counts.pop(k, None)
+                    self._stim_last_ts.pop(k, None)
+
+            # update counts for current stimuli and possibly suppress reactions
+            threshold = int(hab_settings.get("habituation_threshold", 3))
+            if touch != "N":
+                cnt = self._stim_counts.get("touch", 0) + 1
+                self._stim_counts["touch"] = cnt
+                self._stim_last_ts["touch"] = now
+                if cnt >= threshold:
+                    # treat as no touch when habituated
+                    touch = "N"
+                    context.set("behavior_habituation", {"stimulus": "touch", "count": cnt})
+            if sound:
+                cnt = self._stim_counts.get("sound", 0) + 1
+                self._stim_counts["sound"] = cnt
+                self._stim_last_ts["sound"] = now
+                if cnt >= threshold:
+                    sound = False
+                    context.set("behavior_habituation", {"stimulus": "sound", "count": cnt})
 
         # Behavior settings are centralized in settings.json for easy tuning.
         settings = (context.get("settings") or {}).get("behavior", {})

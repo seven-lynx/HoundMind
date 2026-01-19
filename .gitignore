@@ -1,0 +1,14 @@
+# Local instructions (agent-specific)
+INSTRUCTIONS.md
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Environments
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -71,6 +71,14 @@ This guide explains what each feature does, how to use it, and how to disable it
 - `settings.behavior.micro_idle_interval_s` (minimum seconds between micro-idle actions)
 - `settings.behavior.micro_idle_chance` (probability per eligible interval)
 
+**Habituation (suppress repeated stimuli):**
+When enabled, habituation reduces jittery or annoying reactions to repeated identical stimuli (touch or sound). The runtime tracks recent stimuli counts and will temporarily ignore a stimulus type after it has occurred a configurable number of times. Habituation automatically recovers after a quiet period.
+
+**Settings:**
+- `settings.behavior.habituation_enabled` (default: false) — enable/disable habituation
+- `settings.behavior.habituation_threshold` (default: 3) — number of repeated events to suppress
+- `settings.behavior.habituation_recovery_s` (default: 30.0) — seconds without that stimulus to reset the count
+
 **Disable:** `modules.behavior.enabled = false`
 
 ---

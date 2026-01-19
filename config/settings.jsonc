@@ -649,6 +649,12 @@
       "micro_idle_interval_s": 12.0,
       // Chance (0-1) to emit a micro-idle action when eligible.
       "micro_idle_chance": 0.2,
+      // Habituation: optionally suppress repeated stimuli (touch/sound)
+      // Default: disabled. When enabled, repeated identical stimuli will be
+      // ignored after `habituation_threshold` occurrences until `habituation_recovery_s` elapses.
+      "habituation_enabled": false,
+      "habituation_threshold": 3,
+      "habituation_recovery_s": 30.0,
       // Enable behavior transition guard (cooldown + confirmation) to reduce jitter.
       "transition_guard_enabled": false,
       // Minimum time (seconds) to remain in a state before switching (when guard enabled).
