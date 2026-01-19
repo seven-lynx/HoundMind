@@ -7,7 +7,6 @@ from datetime import datetime
 
 from .config import Config
 from .module import Module, ModuleError
-from houndmind_ai.safety.sensor_health import SensorHealthModule
 
 logger = logging.getLogger(__name__)
 

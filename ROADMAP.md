@@ -228,25 +228,25 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Camera capture service (Pi4-optimized, low-latency).
 - [x] Frame pre-processing (resize, normalize, ROI selection).
 	- [x] Vision inference scheduler (separate process/thread).
-	- [ ] Camera streaming UI (local preview + debug overlay).
-		- [ ] Toggle overlays on/off (bounding boxes, labels, FPS, inference results)
-		- [ ] Switch between raw and annotated video streams
-		- [ ] Adjustable overlay transparency and color schemes
-		- [ ] Real-time telemetry panel (FPS, CPU/GPU/RAM, temp, inference latency)
-		- [ ] Show module health/status (vision, mapping, navigation)
-		- [ ] Show last N inference results or detected objects
-		- [ ] Click-to-inspect pixel/ROI or trigger actions
-		- [ ] Draw/select regions of interest (ROI) live from UI
-		- [ ] Multi-stream support (multiple cameras, PiP)
-		- [ ] Event & alert overlay (highlight on detection, errors, warnings)
-		- [ ] Timeline & playback (buffer/replay recent video, step through frames)
-		- [ ] Remote control & tuning (adjust vision params, trigger calibration)
-		- [ ] Data export & annotation (download frames/clips, mark for training)
-		- [ ] WebSocket/REST API for telemetry and control
-		- [ ] User authentication & access control (password, roles)
-		- [ ] Modular overlay system for future extensibility
-		- [ ] Mobile-friendly UI
-		- [ ] Support for custom plugins/scripts
+	- [x] Camera streaming UI (local preview + debug overlay).
+		- [x] Toggle overlays on/off (bounding boxes, labels, FPS, inference results)
+		- [x] Switch between raw and annotated video streams
+		- [x] Adjustable overlay transparency and color schemes
+		- [x] Real-time telemetry panel (FPS, CPU/GPU/RAM, temp, inference latency)
+		- [x] Show module health/status (vision, mapping, navigation)
+		- [x] Show last N inference results or detected objects
+		- [x] Click-to-inspect pixel/ROI or trigger actions
+		- [x] Draw/select regions of interest (ROI) live from UI
+		- [x] Multi-stream support (multiple cameras, PiP)
+		- [x] Event & alert overlay (highlight on detection, errors, warnings)
+		- [x] Timeline & playback (buffer/replay recent video, step through frames)
+		- [x] Remote control & tuning (adjust vision params, trigger calibration)
+		- [x] Data export & annotation (download frames/clips, mark for training)
+		- [x] WebSocket/REST API for telemetry and control
+		- [x] User authentication & access control (password, roles)
+		- [x] Modular overlay system for future extensibility
+		- [x] Mobile-friendly UI
+		- [x] Support for custom plugins/scripts
 
 #### Facial Recognition & Identity
 - [x] Face detection model integration (fast on Pi4).

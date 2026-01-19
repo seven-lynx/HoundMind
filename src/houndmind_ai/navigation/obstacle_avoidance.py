@@ -65,7 +65,6 @@ class ObstacleAvoidanceModule(Module):
         # Gentle recovery config
         movement_settings = (context.get("settings") or {}).get("movement", {})
         gentle_recovery_threshold = int(settings.get("gentle_recovery_stuck_count", 3))
-        gentle_recovery_speed = int(movement_settings.get("gentle_recovery_speed", 80))
         gentle_recovery_cooldown = float(settings.get("gentle_recovery_cooldown_s", 8.0))
 
         now = time.time()

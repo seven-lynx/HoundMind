@@ -26,9 +26,7 @@ class SensorHealthModule(Module):
         # Check staleness for each sensor type
         status = "ok"
         details = {}
-        stale = False
         warn = False
-        error = False
         # Ultrasonic
         us_stale = now - getattr(sensor, "timestamp", 0) > float(settings.get("ultrasonic_stale_s", 1.0))
         if us_stale or not getattr(sensor, "distance_valid", True):
@@ -54,7 +52,6 @@ class SensorHealthModule(Module):
             status = "warning"
         if settings.get("error_is_critical", True) and (not getattr(sensor, "distance_valid", True) or not getattr(sensor, "imu_valid", True)):
             status = "error"
-            error = True
         # LED color
         led_color = settings.get("led_ok_color", "green")
         if status == "warning":

@@ -81,7 +81,6 @@ class MotorModule(Module):
         ):
             self._hardware_stop()
         perf = (context.get("settings") or {}).get("performance", {})
-        safe_mode = bool(perf.get("safe_mode_enabled", False))
 
         try:
             now = time.time()

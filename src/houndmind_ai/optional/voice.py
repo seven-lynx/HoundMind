@@ -57,6 +57,9 @@ class VoiceModule(Module):
                 self._last_command_ts = now
                 return None
 
+        mapping = settings.get("command_map", {})
+        aliases = settings.get("aliases", {})
+
         if self._pending:
             for item in list(self._pending):
                 if "action" in item:
@@ -76,8 +79,6 @@ class VoiceModule(Module):
             return None
 
         normalized = self._normalize(text)
-        mapping = settings.get("command_map", {})
-        aliases = settings.get("aliases", {})
 
         action = self._resolve_action(normalized, mapping, aliases)
         if action:
