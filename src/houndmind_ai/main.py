@@ -5,6 +5,7 @@ from pathlib import Path
 
 from houndmind_ai.core.config import load_config
 from houndmind_ai.core.logging_setup import setup_logging
+import socket
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.motors import MotorModule
 from houndmind_ai.hal.sensors import SensorModule
@@ -99,8 +100,22 @@ def main() -> None:
     args = parser.parse_args()
 
     config = load_config(args.config)
-    setup_logging((config.settings or {}).get("logging", {}))
+    context_filter = setup_logging((config.settings or {}).get("logging", {}))
     runtime = HoundMindRuntime(config, build_modules(config))
+
+    # Bind the runtime context dict into logging so runtime keys (tick, module statuses)
+    # flow into all log records automatically. Use hostname as a fallback device id.
+    try:
+        device = (config.settings or {}).get("device", {})
+        device_id = device.get("device_id") if isinstance(device, dict) else None
+        if not device_id:
+            device_id = socket.gethostname()
+    except Exception:
+        device_id = socket.gethostname()
+
+    # Attach the runtime's mutable dict so updates are reflected in logs.
+    runtime.context.set("device_id", device_id)
+    context_filter.set_context(runtime.context.data)
 
     # Register path planning hook for Pi4 if enabled
     mapping_settings = (config.settings or {}).get("mapping", {})

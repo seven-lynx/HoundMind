@@ -1,48 +1,95 @@
-from __future__ import annotations
-
+import json
 import logging
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
-from typing import Any
+import logging.handlers
+import os
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 
-def setup_logging(settings: dict[str, Any]) -> None:
-    level_name = str(settings.get("log_level", "INFO")).upper()
-    level = getattr(logging, level_name, logging.INFO)
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        # include any extra fields attached to the record
+        for k, v in record.__dict__.items():
+            if k in ("name", "msg", "args", "levelname", "levelno", "pathname", "lineno", "exc_info", "exc_text", "stack_info", "created", "msecs", "relativeCreated", "thread", "threadName", "processName", "process"):
+                continue
+            try:
+                json.dumps(v)
+                payload[k] = v
+            except Exception:
+                payload[k] = repr(v)
+
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+
+        return json.dumps(payload, ensure_ascii=False)
+
+
+class ContextFilter(logging.Filter):
+    """Inject runtime context into every log record.
+
+    Provide a dict-like `context` with optional keys: `device_id`, `runtime_tick`, `trace_id`, `mission_id`.
+    """
+
+    def __init__(self, context: Optional[Dict[str, Any]] = None):
+        super().__init__()
+        self.context = context or {}
+
+    def set_context(self, context: Dict[str, Any]) -> None:
+        self.context = context or {}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        for k, v in self.context.items():
+            setattr(record, k, v)
+        return True
+
+
+def setup_logging(config: Optional[Dict[str, Any]] = None) -> ContextFilter:
+    """Centralized logging setup.
+
+    Args:
+        config: optional dict with keys `log_dir`, `log_file`, `level`, `backup_count`, `console_level`.
+
+    Returns:
+        The `ContextFilter` instance attached to the root logger so callers can update runtime fields.
+    """
+
+    cfg = config or {}
+    log_dir = cfg.get("log_dir", os.path.join(os.getcwd(), "logs"))
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = cfg.get("log_file", os.path.join(log_dir, "houndmind.log"))
+    level_name = (cfg.get("level") or "INFO").upper()
+    console_level_name = (cfg.get("console_level") or level_name).upper()
+    backup_count = int(cfg.get("backup_count", 7))
 
     root = logging.getLogger()
-    root.setLevel(level)
+    root.setLevel(getattr(logging, level_name, logging.INFO))
 
-    if getattr(root, "_houndmind_configured", False):
-        return
+    # Avoid adding duplicate handlers on repeated setup calls
+    if not any(isinstance(h, logging.handlers.RotatingFileHandler) and getattr(h, "_houndmind_managed", False) for h in root.handlers):
+        file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=backup_count)
+        file_handler.setLevel(getattr(logging, level_name, logging.INFO))
+        file_handler.setFormatter(JsonFormatter())
+        # mark handler so repeated setup_logging calls won't duplicate
+        setattr(file_handler, "_houndmind_managed", True)
+        root.addHandler(file_handler)
 
-    enable_console = bool(settings.get("enable_console", True))
-    enable_file = bool(settings.get("enable_file", True))
-
-    if enable_console:
+    if not any(isinstance(h, logging.StreamHandler) and getattr(h, "_houndmind_console", False) for h in root.handlers):
         console = logging.StreamHandler()
-        console.setLevel(level)
-        console.setFormatter(logging.Formatter("[%(levelname)s] %(name)s: %(message)s"))
+        console.setLevel(getattr(logging, console_level_name, logging.INFO))
+        console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        setattr(console, "_houndmind_console", True)
         root.addHandler(console)
 
-    if enable_file:
-        log_dir = Path(str(settings.get("log_dir", "logs")))
-        if not log_dir.is_absolute():
-            log_dir = Path(__file__).resolve().parents[3] / log_dir
-        log_dir.mkdir(parents=True, exist_ok=True)
-        file_path = log_dir / str(settings.get("log_file_name", "houndmind.log"))
-        max_mb = int(settings.get("log_file_max_mb", 10))
-        backups = int(settings.get("log_file_backups", 5))
-        handler = RotatingFileHandler(
-            file_path,
-            maxBytes=max_mb * 1024 * 1024,
-            backupCount=backups,
-            encoding="utf-8",
-        )
-        handler.setLevel(level)
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
-        )
-        root.addHandler(handler)
+    context_filter = ContextFilter(cfg.get("context", {}))
+    root.addFilter(context_filter)
 
-    setattr(root, "_houndmind_configured", True)
+    return context_filter
+
+
+__all__ = ["setup_logging", "JsonFormatter", "ContextFilter"]

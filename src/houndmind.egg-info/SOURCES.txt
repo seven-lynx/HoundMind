@@ -60,10 +60,12 @@ tests/test_attention_module.py
 tests/test_balance_module.py
 tests/test_config_validation.py
 tests/test_gentle_recovery.py
+tests/test_habituation.py
 tests/test_led_manager.py
 tests/test_mapping.py
 tests/test_path_planning.py
 tests/test_runtime.py
 tests/test_sensor_health.py
+tests/test_slam_pi4.py
 tests/test_vision_inference_scheduler.py
 tests/test_vision_preprocessing.py

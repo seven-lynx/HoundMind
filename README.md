@@ -22,7 +22,7 @@ This installs the SunFounder PiDog dependencies **and** HoundMind in the same en
 
 ## Before You Start (Pi OS Checklist)
 - Flash Raspberry Pi OS and complete first boot setup.
-- Preferred OS: **Raspberry Pi OS Bookworm (64-bit)** with Python 3.11 (recommended).
+- Preferred OS: **Raspberry Pi OS Bookworm (64-bit)** with Python 3.12 (recommended).
 
 IMPORTANT: Bookworm is recommended because many heavy packages used by the full (Pi4) preset have prebuilt wheels for Bookworm but may not yet provide wheels for newer distributions (for example, Trixie with Python 3.13). If you hit build errors, switch to Bookworm or run the installer with `--preset lite`.
 - Update and reboot:

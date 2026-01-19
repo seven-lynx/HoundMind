@@ -112,8 +112,8 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 
 The following checkable tasks cover robustness, observability, and supportability for logging and troubleshooting:
 
-- [ ] Centralize logger setup in `src/houndmind_ai/core/logging_setup.py` (JSON formatter, handlers, rotation, level overrides).
-- [ ] Add a `ContextFilter` to inject `device_id`, `runtime_tick`, `mission_id`/`trace_id` into all log records.
+ - [x] Centralize logger setup in `src/houndmind_ai/core/logging_setup.py` (JSON formatter, handlers, rotation, level overrides).
+ - [x] Add a `ContextFilter` to inject `device_id`, `runtime_tick`, `mission_id`/`trace_id` into all log records.
 - [ ] Implement log rotation and retention policy (daily rotate + gzip backups, configurable `backupCount`).
 - [ ] Add optional error aggregation (Sentry/Logstash) with explicit opt-in and privacy documentation in `docs/INSTALL.md`.
 - [ ] Implement log sampling and rate-limiting for high-frequency sensors and debug streams.
@@ -309,7 +309,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
  - [ ] Add persistent internal state (energy/mood/engagement) that decays over minutes.
  - [x] Add behavior state transition cooldowns + confidence gates to reduce jitter.
  - [x] Add micro-behaviors (small head turns, posture shifts, idle breathing) for lifelike idle.
- - [ ] Add habituation to repeated stimuli with recovery after quiet periods.
+ - [x] Add habituation to repeated stimuli with recovery after quiet periods.
  - [ ] Add intent blending (patrol/explore/rest mix) based on energy + recent stimuli.
  - [ ] Add goal memory (recent waypoints, no-go zones) to reduce loops.
  - [ ] Add return-to-home behavior when confidence/pose quality drops.

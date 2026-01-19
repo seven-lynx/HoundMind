@@ -1,6 +1,5 @@
-# Local instructions (agent-specific)
-INSTRUCTIONS.md
-
+# Local workflow
+WORK.md
 # Python
 __pycache__/
 *.py[cod]
@@ -12,6 +11,9 @@ venv/
 # Local git hooks and dev scripts
 .githooks/
 scripts/
+
+# Editor settings
+.vscode/
 
 # OS
 .DS_Store

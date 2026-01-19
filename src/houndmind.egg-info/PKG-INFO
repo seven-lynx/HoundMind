@@ -20,10 +20,6 @@ HoundMind is a unified AI control framework for the SunFounder PiDog. Simulation
 - Vision, voice, and Pi4/5 optional modules are **disabled by default**; basic watchdogs are enabled.
 - Safety and throttling features are **opt-in** (disabled by default for bug testing).
 
-## Quick start
-- Run the main loop on PiDog hardware:
-  - `python -m houndmind_ai`
-
 ## Installer Quickstart (Recommended)
 Run the automated installer on a Raspberry Pi:
 
@@ -35,6 +31,9 @@ This installs the SunFounder PiDog dependencies **and** HoundMind in the same en
 
 ## Before You Start (Pi OS Checklist)
 - Flash Raspberry Pi OS and complete first boot setup.
+- Preferred OS: **Raspberry Pi OS Bookworm (64-bit)** with Python 3.11 (recommended).
+
+IMPORTANT: Bookworm is recommended because many heavy packages used by the full (Pi4) preset have prebuilt wheels for Bookworm but may not yet provide wheels for newer distributions (for example, Trixie with Python 3.13). If you hit build errors, switch to Bookworm or run the installer with `--preset lite`.
 - Update and reboot:
   - `sudo apt update && sudo apt upgrade -y`
 - Enable interfaces in `raspi-config`:
@@ -49,6 +48,10 @@ The guided installer can:
 - Verify imports and hardware access
 
 It is safe to re-run; it skips work that is already complete.
+
+## Start HoundMind
+- Run the main loop on PiDog hardware:
+  - `python -m houndmind_ai`
 
 ## Hardware checkup
 - Run a minimal sensor + motion check on the PiDog hardware:
@@ -126,10 +129,16 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for detailed enable/disable
 - **Audio not working** → Ensure PortAudio headers are installed; rerun audio setup.
 - **Port in use** → Change HTTP ports in `config/settings.jsonc` for vision/telemetry/voice.
 
+- **Build errors for heavy packages (face_recognition, dlib, pyaudio, rtabmap-py)** → These commonly occur on newer Raspberry Pi OS releases (for example, Trixie with Python 3.13) because prebuilt wheels are not yet available. Preferred OS: **Raspberry Pi OS Bookworm (64-bit, Python 3.11)**. If you see many `wheel`/`gcc`/`dlib` build failures during the full install, either switch to Bookworm or run the installer with `--preset lite`.
+
+- **`ERROR: Could not find a version that satisfies the requirement pidog`** → `pidog` is not on PyPI; the guided installer or `scripts/pidog_install.py` will clone and install it from the SunFounder repo into the same environment. See `docs/INSTALL.md` for manual steps.
+
 ## Fallback (Original PiDog Software)
 If HoundMind breaks, you can still run the official PiDog scripts from the SunFounder repo. See [docs/INSTALL.md](docs/INSTALL.md) for fallback instructions.
 
 
+
+## Primary Features
 
 | Feature                        | Default      | Notes (Enable/Disable)                |
 |--------------------------------|-------------|---------------------------------------|
@@ -208,6 +217,8 @@ bash scripts/install_houndmind.sh --run-i2samp
 ```
 
 The shell wrapper forwards arguments to `scripts/pidog_install.py` (see `--help` on that script for more options, e.g. `--auto-system-deps`).
+
+Important: `pidog` is **not** available on PyPI, so it will never install via `pip install pidog`. Use the guided installer or clone the repo and install it manually.
 
 For more details, see the [official PiDog repo](https://github.com/sunfounder/pidog) and [official docs](https://docs.sunfounder.com/projects/pidog/en/latest/).
 
