@@ -335,9 +335,3 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 
 ## Suggestions & Next Steps
 
-- Validate the RTAB-Map adapter on Pi4 hardware and iterate on the adapter calls if the RTAB-Map Python API differs in the target build.
-- Add a telemetry UI overlay to visualize maps and trajectories in-browser (canvas or WebGL), using the existing `/download_slam_map` and `/download_slam_trajectory` endpoints as data sources.
-- Provide an automated `scripts/install_rtabmap_pi4.sh` wrapper that invokes the documented RTAB-Map build steps to simplify Pi4 setup for users.
-- Consider adding optional extras in `pyproject.toml` (e.g. `extras = { full = ["opencv-python", "face_recognition", "rtabmap-py"] }`) so users can install `houndmind[full]` for Pi4 feature sets.
-- Add CI jobs or guidance for running Pi4-heavy integration tests (hardware-in-the-loop or documented manual validation checklist) and mark them as optional in CI matrix.
-- Expand SLAM unit and integration tests to include simulated camera/IMU streams for scenario testing before hardware runs.
