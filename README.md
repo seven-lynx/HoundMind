@@ -70,13 +70,35 @@ For robust mapping and localization on Pi4/5, HoundMind supports RTAB-Map as the
 See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for what each feature does, how to use it, and how to disable it.
 
 ## Telemetry Dashboard (Pi4 Optional)
-Enable the dashboard module and open:
-- `http://<pi-ip>:8092/` for the live dashboard
-- `http://<pi-ip>:8092/snapshot` for JSON snapshots
+Enable the optional telemetry dashboard module and open the dashboard in a browser:
 
-Performance telemetry includes tick latency, FPS, and CPU/GPU/RAM when enabled.
+- `http://<pi-ip>:8092/` — mobile-friendly dashboard (camera preview + snapshot view)
+- `http://<pi-ip>:8092/snapshot` — JSON snapshot of selected runtime context keys
 
-See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for enable/disable steps.
+Configuration (example `config/settings.jsonc` snippet):
+
+```jsonc
+"telemetry_dashboard": {
+  "enabled": true,
+  "http": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8092,
+    // URL path to embed the camera stream or single-frame image.
+    // For MJPEG streams use "/stream.mjpg" or similar; for single-frame endpoints
+    // point to an image URL (the dashboard will auto-refresh with a cache-busting ts param).
+    "camera_path": "/camera"
+  },
+  "snapshot_interval_s": 0.5
+}
+```
+
+Notes:
+- `camera_path` can be any HTTP-accessible path served by your device (MJPEG stream or single-frame image).
+- For single-frame camera endpoints the dashboard reloads the image periodically (cache-busted). For MJPEG streams, set `camera_path` to the stream endpoint and the browser will display it directly.
+- The dashboard polls `/snapshot` to display telemetry (tick latency, vision FPS, CPU/memory) — disable or restrict access as needed for security.
+
+See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for detailed enable/disable steps and security recommendations.
 
 ## Project layout (key paths)
 - `src/houndmind_ai/` — core runtime and modules
