@@ -9,6 +9,10 @@ __pycache__/
 .venv/
 venv/
 
+# Local git hooks and dev scripts
+.githooks/
+scripts/
+
 # OS
 .DS_Store
 Thumbs.db
