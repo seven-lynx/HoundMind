@@ -17,7 +17,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
-          python -m pip install pytest ruff
+          python -m pip install pytest ruff numpy opencv-python-headless
       - name: Lint
         run: |
           ruff check src

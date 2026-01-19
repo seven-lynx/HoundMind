@@ -3,7 +3,7 @@ Test for VisionInferenceScheduler
 """
 import time
 import pytest
-from src.houndmind_ai.optional.vision_inference_scheduler import VisionInferenceScheduler
+from houndmind_ai.optional.vision_inference_scheduler import VisionInferenceScheduler
 
 def dummy_inference(frame):
     time.sleep(0.01)
