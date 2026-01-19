@@ -55,6 +55,24 @@ sudo apt-get update
 sudo apt-get install -y git python3-pip python3-setuptools python3-smbus
 ```
 
+### Full (Pi4) system dependencies for vision/face/SLAM
+
+If you plan to use the full feature set on Pi4 (OpenCV, `face_recognition`/`dlib`, RTAB-Map), install the additional build tools and libraries before attempting `pip install` for heavy packages. These are recommended when using the `--auto-system-deps` flag with the guided installer or when preparing a Pi4 for development:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+   build-essential cmake g++ git python3-dev pkg-config \
+   libatlas-base-dev libopenblas-dev liblapack-dev \
+   libjpeg-dev libtiff-dev libavcodec-dev libavformat-dev libswscale-dev \
+   libv4l-dev libxvidcore-dev libx264-dev libgtk-3-dev \
+   libboost-all-dev libeigen3-dev libusb-1.0-0-dev libsqlite3-dev libopenni2-dev libproj-dev
+```
+
+Notes:
+- `face_recognition` requires `dlib` which typically needs `cmake` and a C++ toolchain; installing the packages above will make building `dlib` much smoother.
+- RTAB-Map (`rtabmap-py`) is often built from source on Pi4; see `scripts/install_rtabmap_pi4.md` for detailed RTAB-Map build steps.
+
 ### 3) Install SunFounder PiDog libraries into the same Python environment
 
 ```bash
@@ -81,6 +99,12 @@ sudo bash i2samp.sh
 python -m pip install --upgrade pip
 python -m pip install -r requirements-lite.txt
 python -m pip install -e .
+
+If you are on Pi4 and want the full feature set, replace `requirements-lite.txt` with `requirements.txt` (or use the installer `--preset full` / `--auto-system-deps` to trigger a full install):
+
+```bash
+python -m pip install -r requirements.txt
+```
 ```
 
 ### 5) Verify the install

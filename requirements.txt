@@ -21,3 +21,11 @@ sounddevice
 # SLAM (RTAB-Map)
 # Note: rtabmap-py may need to be built from source on Pi4. See scripts/install_rtabmap_pi4.md for instructions.
 rtabmap-py
+
+# Web utilities (used by installer/model downloader on Pi4)
+flask
+
+# Notes:
+# - `face_recognition` depends on `dlib` which typically requires build tools
+#   (cmake, build-essential) and additional libs. Install system packages
+#   listed in docs/INSTALL.md before attempting to pip-install `face_recognition`.

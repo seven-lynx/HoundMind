@@ -62,18 +62,38 @@ def ensure_system_deps_linux() -> int:
     code = run(["sudo", "apt-get", "update"])
     if code != 0:
         return code
-    return run(
-        [
-            "sudo",
-            "apt-get",
-            "install",
-            "-y",
-            "git",
-            "python3-pip",
-            "python3-setuptools",
-            "python3-smbus",
-        ]
-    )
+    # For full/preset installs we include additional build tools and libs
+    # commonly required to build OpenCV, dlib, and RTAB-Map from source.
+    pkgs = [
+        "git",
+        "python3-pip",
+        "python3-setuptools",
+        "python3-smbus",
+        "build-essential",
+        "cmake",
+        "g++",
+        "python3-dev",
+        "libatlas-base-dev",
+        "libopenblas-dev",
+        "liblapack-dev",
+        "libjpeg-dev",
+        "libtiff-dev",
+        "libavcodec-dev",
+        "libavformat-dev",
+        "libswscale-dev",
+        "libv4l-dev",
+        "libxvidcore-dev",
+        "libx264-dev",
+        "libgtk-3-dev",
+        "libboost-all-dev",
+        "libeigen3-dev",
+        "libusb-1.0-0-dev",
+        "libsqlite3-dev",
+        "libopenni2-dev",
+        "libproj-dev",
+        "pkg-config",
+    ]
+    return run(["sudo", "apt-get", "install", "-y"] + pkgs)
 
 
 def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int:
