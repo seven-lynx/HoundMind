@@ -122,6 +122,8 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 
 
 
+## Primary Features
+
 | Feature                        | Default      | Notes (Enable/Disable)                |
 |--------------------------------|-------------|---------------------------------------|
 | Core Runtime                   | Enabled     | Always required                       |
