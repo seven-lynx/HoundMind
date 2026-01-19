@@ -63,6 +63,14 @@ This guide explains what each feature does, how to use it, and how to disable it
 ## 7) Behavior
 **What it does:** Picks actions based on state and rules.
 
+**Micro-idle behaviors (lifelike idle):** When enabled, the robot occasionally performs small idle actions (e.g., `"shake head"`, `"wag tail"`, `"stretch"`) to feel more lifelike. These are safe, optional actions that do not affect navigation or safety logic.
+
+**Settings:**
+- `settings.behavior.micro_idle_enabled` (default: true)
+- `settings.behavior.micro_idle_actions` (list of action names from your action catalog)
+- `settings.behavior.micro_idle_interval_s` (minimum seconds between micro-idle actions)
+- `settings.behavior.micro_idle_chance` (probability per eligible interval)
+
 **Disable:** `modules.behavior.enabled = false`
 
 ---
