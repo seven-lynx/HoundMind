@@ -80,7 +80,6 @@ class MotorModule(Module):
             "emergency_stop_use_hardware_stop", False
         ):
             self._hardware_stop()
-        perf = (context.get("settings") or {}).get("performance", {})
 
         try:
             now = time.time()
