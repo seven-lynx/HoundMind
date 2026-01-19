@@ -8,6 +8,7 @@
 - [x] All guides updated for unified system, no sim mode, and Pi OS Lite recommendation
 - [x] Changelog and README reflect all major changes
 - [x] Release QA checklist: tests, docs, tag, changelog, install validation
+- [ ] Expand troubleshooting checklist in `docs/INSTALL.md` (common errors + support bundle steps)
 
 Purpose: Track completion for each module needed for the PiDog hardware-only build (Pi 3 target). Check items as they’re implemented and verified on hardware.
 
@@ -56,28 +57,20 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Always return head to center after scan
 
 ## Navigation & Obstacle Avoidance
-	- [x] Navigation, Patrol, and Localization Improvements
-		- [x] Add WiFi-based localization module (scan for APs, record RSSI for each SSID)
-		- [x] Build and update a WiFi fingerprint map during exploration
-		- [x] Estimate position by matching current WiFi scan to stored fingerprints
-		- [x] Fuse WiFi-based localization with IMU, mapping, and vision for robust pose estimation
-		- [x] Use WiFi fingerprints for “lost” recovery and map anchoring
-		- [x] Log WiFi scan data for offline analysis and tuning
-		- [x] Make patrol and explore behaviors context-aware (adapt to map coverage, recent obstacles, or “boredom”)
-		- [x] Add “curiosity” or “goal-seeking” states to bias exploration toward unmapped or less-visited areas
-		- [x] Use a confidence score for navigation decisions; fallback to safe/known paths if confidence is low
-		- [x] Add “dead-end” and “loop” detection to avoid getting stuck in small spaces
-		- [x] Allow user-defined patrol routes or zones (not just random or pre-set patterns)
-		- [x] Add “pause and scan” or “linger” behaviors at patrol waypoints
-		- [x] Fuse more sensor data (vision, IMU, distance) for improved pose estimation
-		- [x] Add “lost” recovery: trigger search or return-to-home if localization confidence drops
-		- [x] Use map history to bias against repeatedly visiting the same area
-		- [x] Integrate global path planning (A* or similar) for Pi4, fallback to local planner on Pi3
-		- [x] Log navigation decisions, confidence, and localization status for later analysis
-		- [x] Expose current map, pose, and planned path in the streaming UI for real-time debugging
-		- [x] Add unit and scenario tests for new navigation and patrol behaviors
-		- [x] Document new behaviors and configuration options in the programming guide
-		- [x] Add roadmap review and tuning session after initial implementation
+- [x] Obstacle avoidance with scan-based direction selection and cooldowns
+- [x] Dead-end / loop avoidance (no-go memory + turn cooldowns)
+- [x] Gentle recovery after repeated stuck events
+- [x] Clear-path streak to reduce scan jitter when safe
+- [x] Emit compact `navigation_decision` snapshots for tuning
+- [ ] WiFi localization (Pi/Linux scan + AP parsing) for Pi hardware
+- [ ] Fingerprint matching to estimate position from WiFi scans
+- [ ] Fuse WiFi localization with IMU/mapping/vision and publish confidence
+- [ ] Lost recovery when localization confidence drops
+- [ ] Context-aware patrol/explore behaviors (coverage, recent obstacles, boredom)
+- [ ] Curiosity/goal-seeking bias toward unmapped areas
+- [ ] User-defined patrol routes/zones and waypoint linger behaviors
+- [ ] Map-history bias to reduce repeated visits
+- [ ] Scenario tests for navigation/patrol behaviors (dead-ends, loops, recovery)
 
 
 ## Mapping
@@ -89,8 +82,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Mapping sample retention (max count + max age)
 - [x] Home map snapshot sample cap
 - [x] Home map snapshot age cap
-- [ ] Path planning hooks (Pi4)
- - [x] Path planning hooks (Pi4) — default A* hook added, mapper calls `path_planning_hook`, tests and docs updated
+- [x] Path planning hooks (Pi4) — default A* hook added, mapper calls `path_planning_hook`, tests and docs updated
 
 ## Behavior
 - [x] Behavior FSM state definitions (`behavior/fsm.py`)
@@ -115,6 +107,21 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Session summary report (events, obstacles, interactions)
 - [x] Global logging setup (console + rotating file)
 - [x] Status log toggle + interval control
+
+## Logging Tasks
+
+The following checkable tasks cover robustness, observability, and supportability for logging and troubleshooting:
+
+- [ ] Centralize logger setup in `src/houndmind_ai/core/logging_setup.py` (JSON formatter, handlers, rotation, level overrides).
+- [ ] Add a `ContextFilter` to inject `device_id`, `runtime_tick`, `mission_id`/`trace_id` into all log records.
+- [ ] Implement log rotation and retention policy (daily rotate + gzip backups, configurable `backupCount`).
+- [ ] Add optional error aggregation (Sentry/Logstash) with explicit opt-in and privacy documentation in `docs/INSTALL.md`.
+- [ ] Implement log sampling and rate-limiting for high-frequency sensors and debug streams.
+- [ ] Provide `scripts/logs_collect.sh` or `tools/collect_support_bundle.py` to bundle logs, config, and a telemetry snapshot for support uploads.
+- [ ] Add `docs/LOGGING.md` runbook with collection commands, jq examples, and common troubleshooting steps.
+- [ ] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
+- [ ] Surface `trace_id` in `RuntimeContext` and include it in telemetry snapshots to correlate logs + telemetry + support bundles.
+
 
 ## Optional (Disabled until later)
 - [x] Vision module wiring (`optional/vision.py`) — disabled
@@ -229,30 +236,32 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Camera capture service (Pi4-optimized, low-latency).
 - [x] Frame pre-processing (resize, normalize, ROI selection).
 	- [x] Vision inference scheduler (separate process/thread).
-	- [x] Camera streaming UI (local preview + debug overlay).
-		- [x] Toggle overlays on/off (bounding boxes, labels, FPS, inference results)
-		- [x] Switch between raw and annotated video streams
-		- [x] Adjustable overlay transparency and color schemes
-		- [x] Real-time telemetry panel (FPS, CPU/GPU/RAM, temp, inference latency)
-		- [x] Show module health/status (vision, mapping, navigation)
-		- [x] Show last N inference results or detected objects
-		- [x] Click-to-inspect pixel/ROI or trigger actions
-		- [x] Draw/select regions of interest (ROI) live from UI
-		- [x] Multi-stream support (multiple cameras, PiP)
-		- [x] Event & alert overlay (highlight on detection, errors, warnings)
-		- [x] Timeline & playback (buffer/replay recent video, step through frames)
-		- [x] Remote control & tuning (adjust vision params, trigger calibration)
-		- [x] Data export & annotation (download frames/clips, mark for training)
-		- [x] WebSocket/REST API for telemetry and control
-		- [x] User authentication & access control (password, roles)
-		- [x] Modular overlay system for future extensibility
-		- [x] Mobile-friendly UI
-		- [x] Support for custom plugins/scripts
+	- [ ] Replace dummy inference with a pluggable model interface + reference model
+	- [ ] Camera streaming UI (local preview + debug overlay).
+		- [ ] Toggle overlays on/off (bounding boxes, labels, FPS, inference results)
+		- [ ] Switch between raw and annotated video streams
+		- [ ] Adjustable overlay transparency and color schemes
+		- [ ] Real-time telemetry panel (FPS, CPU/GPU/RAM, temp, inference latency)
+		- [ ] Show module health/status (vision, mapping, navigation)
+		- [ ] Show last N inference results or detected objects
+		- [ ] Click-to-inspect pixel/ROI or trigger actions
+		- [ ] Draw/select regions of interest (ROI) live from UI
+		- [ ] Multi-stream support (multiple cameras, PiP)
+		- [ ] Event & alert overlay (highlight on detection, errors, warnings)
+		- [ ] Timeline & playback (buffer/replay recent video, step through frames)
+		- [ ] Remote control & tuning (adjust vision params, trigger calibration)
+		- [ ] Data export & annotation (download frames/clips, mark for training)
+		- [ ] WebSocket/REST API for telemetry and control
+		- [ ] User authentication & access control (password, roles)
+		- [ ] Modular overlay system for future extensibility
+		- [ ] Mobile-friendly UI
+		- [ ] Support for custom plugins/scripts
 
 #### Facial Recognition & Identity
 - [x] Face detection model integration (fast on Pi4).
 - [x] Face embedding generation + storage.
 - [x] Face recognition (match/re-id) and enrollment flow.
+- [ ] Add unit tests + sample assets for face recognition backends (opencv + face_recognition).
 - [ ] Multi-person tracking with re-identification across frames.
 - [ ] Privacy controls (local-only data, easy reset).
 
@@ -271,6 +280,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 	- [x] Document SLAM usage, configuration, and troubleshooting in the features guide and programming guide (README + docs updated with RTAB-Map notes).
 	- [x] Add unit and scenario tests for SLAM integration and pose/map outputs (basic tests added; more scenarios recommended).
 	- [x] Expose SLAM status and map in the telemetry dashboard for live monitoring (download endpoints + snapshot keys added).
+	- [ ] Add simulated camera+IMU tests to CI to catch adapter regressions before hardware runs.
 - [ ] Sensor-fusion localization (IMU + vision + distance).
 - [ ] Global pathfinding (A* or similar) across mapped spaces.
 - [ ] Path planning hooks + planner integration in runtime.
@@ -278,6 +288,8 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 
 #### Semantic Understanding
 - [x] Object/obstacle semantic labeling (vision-based).
+- [ ] Provide default model assets + download helper for semantic labeler (OpenCV DNN).
+- [ ] Add unit tests for semantic labeler output schema and thresholds.
 - [ ] Semantic zones (e.g., “kitchen”, “charging area”).
 - [ ] Behavior hooks triggered by semantic labels.
 
@@ -294,6 +306,17 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [ ] Emotion/energy model (Pi4 variant; optional).
  - [x] Behavior parity: add explore/interact behaviors from legacy PackMind.
  - [x] Behavior parity: update action catalog for patrol/explore/interact.
+ - [ ] Add persistent internal state (energy/mood/engagement) that decays over minutes.
+ - [ ] Add behavior state transition cooldowns + confidence gates to reduce jitter.
+ - [x] Add behavior state transition cooldowns + confidence gates to reduce jitter.
+ - [ ] Add micro-behaviors (small head turns, posture shifts, idle breathing) for lifelike idle.
+ - [ ] Add habituation to repeated stimuli with recovery after quiet periods.
+ - [ ] Add intent blending (patrol/explore/rest mix) based on energy + recent stimuli.
+ - [ ] Add goal memory (recent waypoints, no-go zones) to reduce loops.
+ - [ ] Add return-to-home behavior when confidence/pose quality drops.
+ - [ ] Add safe exploration bounds (max distance/time) with automatic reset.
+ - [ ] Add a library of short behavior scripts (greet, investigate, stretch, rest).
+ - [ ] Ensure chest LED always reflects the current behavior/safety/emotion state (clear priority rules).
 
 #### Safety & Control
 - [ ] Dynamic balance service with active IMU corrections.
@@ -304,34 +327,21 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Telemetry server + dashboard (device status, map, logs).
 - [ ] Live map/scan/event visualization.
 - [ ] On-device debug UI for tuning thresholds.
-
-
-### Telemetry Improvements
-- [ ] Add telemetry UI overlay to visualize SLAM maps and trajectories in-browser (canvas/WebGL) using `/download_slam_map` and `/download_slam_trajectory`.
-
-#### Data & Logging
-- [ ] Structured logs for vision/SLAM decisions.
-- [ ] Map snapshot exports + session archives.
-- [ ] Dataset export tooling for training/debug.
+- [ ] Implement in-browser SLAM map/trajectory overlay (canvas/WebGL) consuming `/download_slam_map` and `/download_slam_trajectory`.
+- [ ] Add telemetry authentication/ACL options for remote access and mobile UI control.
+- [ ] Add a lightweight mobile debug view (last pose, recent events, map status).
 
 #### Installer & Packaging (Pi4)
 - [x] Pi4 installer preset (full dependencies).
 - [ ] Optional GPU acceleration toggles.
 - [ ] Post-install validation suite (vision/audio/mapping).
-
-- [ ] Provide an automated `scripts/install_rtabmap_pi4.sh` wrapper to run RTAB-Map build/install steps documented in `scripts/install_rtabmap_pi4.md`.
-- [ ] Add an optional `full` extras group in `pyproject.toml` (e.g. `extras = { "full": ["opencv-python","face_recognition","rtabmap-py"] }`) to simplify full-feature installs.
+- [ ] Add an optional `full` extras group in `pyproject.toml` to simplify full-feature installs.
 
 #### Tests & Validation
 - [ ] Pi4 hardware validation checklist.
 - [ ] End-to-end scenario tests (vision + mapping + behavior).
+- [ ] Add a post-install `scripts/smoke_check.sh` for sensors/logs/telemetry sanity.
+- [ ] Add CI fixtures for vision inference + SLAM (simulated frames/IMU) to validate adapters
+- [ ] Add CI smoke tests for optional modules (face recognition, semantic labeling, telemetry endpoints).
 
-- [ ] Add CI job or documented guidance for optional Pi4-heavy integration tests (hardware-in-the-loop or manual validation steps).
-- [ ] Expand SLAM unit and integration tests to include simulated camera+IMU stream scenarios to validate behavior before hardware runs.
-
-### Misc / Tooling
-- [x] GitHub Actions: test matrix for linting and unit tests (exclude hardware-only modules) 
-- [x] Release packaging checklist and tagging workflow (prepare for Pi3 and Pi4 presets)
-
-## Suggestions & Next Steps
 

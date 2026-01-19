@@ -28,6 +28,9 @@ class BehaviorModule(Module):
         self.state = BehaviorState.IDLE
         self.last_action: str | None = None
         self._last_action_ts = 0.0
+        self._last_state_ts = 0.0
+        self._candidate_state: BehaviorState | None = None
+        self._candidate_ticks = 0
         self._last_autonomy_ts = 0.0
         self._autonomy_mode: str | None = None
         self.library: BehaviorLibrary | None = None
@@ -146,65 +149,128 @@ class BehaviorModule(Module):
                     )
                     context.set("behavior_override", override_name)
 
+        desired_state: BehaviorState
+        desired_action: str
+
         override = context.get("behavior_override")
         if override:
-            action = self._resolve_override(override)
-            self.state = BehaviorState.IDLE
+            desired_state = BehaviorState.IDLE
+            desired_action = self._resolve_override(override)
         elif obstacle:
-            self.state = BehaviorState.AVOIDING
-            action = self.library.pick_avoid_action() if self.library else avoid_action
+            desired_state = BehaviorState.AVOIDING
+            desired_action = (
+                self.library.pick_avoid_action() if self.library else avoid_action
+            )
         elif touch != "N":
-            self.state = BehaviorState.ALERT
-            action = self.library.pick_alert_action() if self.library else touch_action
+            desired_state = BehaviorState.ALERT
+            desired_action = (
+                self.library.pick_alert_action() if self.library else touch_action
+            )
         elif sound:
-            self.state = BehaviorState.ALERT
-            action = self.library.pick_alert_action() if self.library else sound_action
+            desired_state = BehaviorState.ALERT
+            desired_action = (
+                self.library.pick_alert_action() if self.library else sound_action
+            )
         else:
             if settings.get("autonomy_enabled", True):
                 mode = self._select_autonomy_mode(settings, context)
                 if mode == "patrol":
-                    self.state = BehaviorState.PATROL
-                    action = (
+                    desired_state = BehaviorState.PATROL
+                    desired_action = (
                         self.library.pick_patrol_action()
                         if self.library
                         else patrol_action
                     )
                 elif mode == "explore":
-                    self.state = BehaviorState.EXPLORE
-                    action = (
+                    desired_state = BehaviorState.EXPLORE
+                    desired_action = (
                         self.library.pick_explore_action()
                         if self.library
                         else explore_action
                     )
                 elif mode == "interact":
-                    self.state = BehaviorState.INTERACT
-                    action = (
+                    desired_state = BehaviorState.INTERACT
+                    desired_action = (
                         self.library.pick_interact_action()
                         if self.library
                         else interact_action
                     )
                 elif mode == "play":
-                    self.state = BehaviorState.PLAY
-                    action = (
+                    desired_state = BehaviorState.PLAY
+                    desired_action = (
                         self.library.pick_play_action() if self.library else "stretch"
                     )
                 elif mode == "rest":
-                    self.state = BehaviorState.REST
-                    action = self.library.pick_rest_action() if self.library else "lie"
+                    desired_state = BehaviorState.REST
+                    desired_action = (
+                        self.library.pick_rest_action() if self.library else "lie"
+                    )
                 else:
-                    self.state = BehaviorState.IDLE
-                    action = (
+                    desired_state = BehaviorState.IDLE
+                    desired_action = (
                         self._select_idle_behavior(settings)
                         if self.library
                         else idle_action
                     )
             else:
-                self.state = BehaviorState.IDLE
-                action = (
+                desired_state = BehaviorState.IDLE
+                desired_action = (
                     self._select_idle_behavior(settings)
                     if self.library
                     else idle_action
                 )
+
+        transition_guard_enabled = bool(
+            settings.get("transition_guard_enabled", False)
+        )
+        if transition_guard_enabled:
+            immediate_states = settings.get(
+                "transition_immediate_states", ["avoiding", "alert"]
+            )
+            min_dwell_s = float(settings.get("transition_min_dwell_s", 0.6))
+            confirm_ticks = int(settings.get("transition_confirm_ticks", 2))
+            now = time.time()
+
+            if desired_state != self.state:
+                if override or desired_state.value in immediate_states:
+                    self._candidate_state = None
+                    self._candidate_ticks = 0
+                    self.state = desired_state
+                    self._last_state_ts = now
+                else:
+                    if self._candidate_state != desired_state:
+                        self._candidate_state = desired_state
+                        self._candidate_ticks = 1
+                    else:
+                        self._candidate_ticks += 1
+                    if (now - self._last_state_ts) < min_dwell_s or (
+                        self._candidate_ticks < confirm_ticks
+                    ):
+                        desired_state = self.state
+                        desired_action = self._pick_action_for_state(
+                            self.state,
+                            settings,
+                            idle_action,
+                            touch_action,
+                            sound_action,
+                            avoid_action,
+                            patrol_action,
+                            explore_action,
+                            interact_action,
+                            touch,
+                            sound,
+                        )
+                    else:
+                        self._candidate_state = None
+                        self._candidate_ticks = 0
+                        self.state = desired_state
+                        self._last_state_ts = now
+        else:
+            if desired_state != self.state:
+                self.state = desired_state
+                self._last_state_ts = time.time()
+
+        action = desired_action
 
         if action != self.last_action:
             cooldown = float(settings.get("action_cooldown_s", 0.0))
@@ -247,6 +313,44 @@ class BehaviorModule(Module):
             if result:
                 return result
         return self.library.pick_idle_action() if self.library else "stand"
+
+    def _pick_action_for_state(
+        self,
+        state: BehaviorState,
+        settings: dict,
+        idle_action: str,
+        touch_action: str,
+        sound_action: str,
+        avoid_action: str,
+        patrol_action: str,
+        explore_action: str,
+        interact_action: str,
+        touch: str,
+        sound: bool,
+    ) -> str:
+        if state == BehaviorState.AVOIDING:
+            return self.library.pick_avoid_action() if self.library else avoid_action
+        if state == BehaviorState.ALERT:
+            if touch != "N":
+                return self.library.pick_alert_action() if self.library else touch_action
+            if sound:
+                return self.library.pick_alert_action() if self.library else sound_action
+            return self.library.pick_alert_action() if self.library else sound_action
+        if state == BehaviorState.PATROL:
+            return self.library.pick_patrol_action() if self.library else patrol_action
+        if state == BehaviorState.EXPLORE:
+            return self.library.pick_explore_action() if self.library else explore_action
+        if state == BehaviorState.INTERACT:
+            return self.library.pick_interact_action() if self.library else interact_action
+        if state == BehaviorState.PLAY:
+            return self.library.pick_play_action() if self.library else "stretch"
+        if state == BehaviorState.REST:
+            return self.library.pick_rest_action() if self.library else "lie"
+        return (
+            self._select_idle_behavior(settings)
+            if self.library
+            else idle_action
+        )
 
     def _select_autonomy_mode(self, settings, context) -> str:
         now = time.time()

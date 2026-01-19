@@ -641,6 +641,14 @@
       "random_idle_chance": 0.05,
       // Minimum time between behavior action changes (seconds).
       "action_cooldown_s": 0.0,
+      // Enable behavior transition guard (cooldown + confirmation) to reduce jitter.
+      "transition_guard_enabled": false,
+      // Minimum time (seconds) to remain in a state before switching (when guard enabled).
+      "transition_min_dwell_s": 0.6,
+      // Confirmation ticks required before switching states (when guard enabled).
+      "transition_confirm_ticks": 2,
+      // States that bypass transition guard (always immediate).
+      "transition_immediate_states": ["avoiding", "alert"],
       // Autonomous mode selection.
       "autonomy_enabled": true,
       "autonomy_interval_s": 8.0,

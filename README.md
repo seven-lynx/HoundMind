@@ -11,10 +11,6 @@ HoundMind is a unified AI control framework for the SunFounder PiDog. Simulation
 - Vision, voice, and Pi4/5 optional modules are **disabled by default**; basic watchdogs are enabled.
 - Safety and throttling features are **opt-in** (disabled by default for bug testing).
 
-## Quick start
-- Run the main loop on PiDog hardware:
-  - `python -m houndmind_ai`
-
 ## Installer Quickstart (Recommended)
 Run the automated installer on a Raspberry Pi:
 
@@ -43,6 +39,10 @@ The guided installer can:
 - Verify imports and hardware access
 
 It is safe to re-run; it skips work that is already complete.
+
+## Start HoundMind
+- Run the main loop on PiDog hardware:
+  - `python -m houndmind_ai`
 
 ## Hardware checkup
 - Run a minimal sensor + motion check on the PiDog hardware:
