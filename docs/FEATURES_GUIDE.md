@@ -81,6 +81,25 @@ When enabled, habituation reduces jittery or annoying reactions to repeated iden
 
 **Disable:** `modules.behavior.enabled = false`
 
+**Energy (internal state)**
+The runtime can maintain a lightweight `energy_level` that persists in the runtime context, decays over time, and increases briefly in response to stimuli (touch, sound). This is an optional internal state used by autonomy selection (play/rest bias) and can be enabled for more lifelike energy/mood dynamics.
+
+**Settings:**
+- `settings.energy.enabled` (default: false) — enable/disable energy persistence
+- `settings.energy.initial` — initial energy when not present in context
+- `settings.energy.decay_per_tick` — amount to reduce energy each tick
+- `settings.energy.boost_touch` / `settings.energy.boost_sound` — per-stimulus energy boosts
+
+Enable with:
+
+```jsonc
+"settings": {
+    "energy": { "enabled": true }
+}
+```
+
+When disabled, `energy_level` is not updated by the behavior module.
+
 ---
 
 ## 8) Attention

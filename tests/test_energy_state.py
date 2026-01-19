@@ -14,7 +14,7 @@ class DummyContext:
 
 def test_energy_initial_and_decay():
     ctx = DummyContext()
-    ctx.set("settings", {"energy": {"initial": 0.5, "decay_per_tick": 0.1}})
+    ctx.set("settings", {"energy": {"enabled": True, "initial": 0.5, "decay_per_tick": 0.1}})
     module = BehaviorModule("behavior")
 
     # first tick: energy initialized then decayed
@@ -26,7 +26,7 @@ def test_energy_initial_and_decay():
 
 def test_energy_boost_on_touch_and_sound():
     ctx = DummyContext()
-    ctx.set("settings", {"energy": {"initial": 0.2, "decay_per_tick": 0.01, "boost_touch": 0.15, "boost_sound": 0.05}})
+    ctx.set("settings", {"energy": {"enabled": True, "initial": 0.2, "decay_per_tick": 0.01, "boost_touch": 0.15, "boost_sound": 0.05}})
     module = BehaviorModule("behavior")
 
     # touch stimulus should increase energy then decay
