@@ -267,6 +267,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 	- [ ] Implement loop-closure detection and map optimization (if supported by backend).
 	- [x] Add fallback to stub mode if backend is unavailable or fails.
 	- [ ] Validate SLAM accuracy and robustness in real-world Pi4 tests (varied lighting, movement, and environments) — hardware validation pending.
+	- [ ] Validate RTAB-Map adapter on Pi4 hardware and adapt adapter calls to the installed Python bindings if needed.
 	- [x] Document SLAM usage, configuration, and troubleshooting in the features guide and programming guide (README + docs updated with RTAB-Map notes).
 	- [x] Add unit and scenario tests for SLAM integration and pose/map outputs (basic tests added; more scenarios recommended).
 	- [x] Expose SLAM status and map in the telemetry dashboard for live monitoring (download endpoints + snapshot keys added).
@@ -304,6 +305,10 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [ ] Live map/scan/event visualization.
 - [ ] On-device debug UI for tuning thresholds.
 
+
+### Telemetry Improvements
+- [ ] Add telemetry UI overlay to visualize SLAM maps and trajectories in-browser (canvas/WebGL) using `/download_slam_map` and `/download_slam_trajectory`.
+
 #### Data & Logging
 - [ ] Structured logs for vision/SLAM decisions.
 - [ ] Map snapshot exports + session archives.
@@ -314,9 +319,15 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [ ] Optional GPU acceleration toggles.
 - [ ] Post-install validation suite (vision/audio/mapping).
 
+- [ ] Provide an automated `scripts/install_rtabmap_pi4.sh` wrapper to run RTAB-Map build/install steps documented in `scripts/install_rtabmap_pi4.md`.
+- [ ] Add an optional `full` extras group in `pyproject.toml` (e.g. `extras = { "full": ["opencv-python","face_recognition","rtabmap-py"] }`) to simplify full-feature installs.
+
 #### Tests & Validation
 - [ ] Pi4 hardware validation checklist.
 - [ ] End-to-end scenario tests (vision + mapping + behavior).
+
+- [ ] Add CI job or documented guidance for optional Pi4-heavy integration tests (hardware-in-the-loop or manual validation steps).
+- [ ] Expand SLAM unit and integration tests to include simulated camera+IMU stream scenarios to validate behavior before hardware runs.
 
 ### Misc / Tooling
 - [x] GitHub Actions: test matrix for linting and unit tests (exclude hardware-only modules) 
