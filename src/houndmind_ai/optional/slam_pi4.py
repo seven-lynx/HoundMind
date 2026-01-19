@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque
+from typing import Any
+import importlib
 
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
-
-from collections import deque
-from typing import Any
 
 
 class _RtabmapAdapter:
@@ -20,8 +20,7 @@ class _RtabmapAdapter:
 
     def available(self) -> bool:
         try:
-            import rtabmap  # type: ignore
-
+            importlib.import_module("rtabmap")
             return True
         except Exception:
             return False
