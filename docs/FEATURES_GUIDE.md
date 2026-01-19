@@ -72,12 +72,19 @@ This guide explains what each feature does, how to use it, and how to disable it
 - `settings.behavior.micro_idle_chance` (probability per eligible interval)
 
 **Habituation (suppress repeated stimuli):**
-When enabled, habituation reduces jittery or annoying reactions to repeated identical stimuli (touch or sound). The runtime tracks recent stimuli counts and will temporarily ignore a stimulus type after it has occurred a configurable number of times. Habituation automatically recovers after a quiet period.
+When enabled, habituation reduces repeated reactions to identical stimuli (touch or sound). The `HabituationModule` tracks recent stimulus counts and sets a runtime flag `habituation:<stimulus>:habituated` when the count exceeds the configured threshold. Other modules (for example `AttentionModule`) consult that flag and may suppress reactions while habituated. Habituation automatically recovers after a quiet period.
 
-**Settings:**
-- `settings.behavior.habituation_enabled` (default: false) — enable/disable habituation
-- `settings.behavior.habituation_threshold` (default: 3) — number of repeated events to suppress
-- `settings.behavior.habituation_recovery_s` (default: 30.0) — seconds without that stimulus to reset the count
+**Settings (top-level `settings.habituation`):**
+- `settings.habituation.enabled` (default: true) — enable/disable habituation module
+- `settings.habituation.stimuli` (default: `["sound","touch"]`) — list of stimulus keys to monitor
+- `settings.habituation.window_s` (default: 1.0) — window (seconds) used to count repeated events
+- `settings.habituation.threshold` (default: 3) — number of events within `window_s` to trigger habituation
+- `settings.habituation.recovery_s` (default: 6.0) — quiet period (seconds) to reset habituation
+- `settings.habituation.led_color` (default: "yellow") — LED color to use when signaling habituation
+- `settings.habituation.led_priority` (default: 50) — LED request priority
+
+**LED & Telemetry:**
+- When a stimulus becomes habituated the runtime emits an LED request under the key `led_request:habituation:<stimulus>` (mode `blink`) and a telemetry snapshot under `telemetry:habituation:<stimulus>` containing timestamp, count, threshold, and recovery window. The LED manager will handle display according to priority rules.
 
 **Disable:** `modules.behavior.enabled = false`
 
