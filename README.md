@@ -181,10 +181,24 @@ To use HoundMind with SunFounder PiDog hardware, install the following dependenc
    sudo python3 setup.py install
    ```
 5. **Install i2samp (for sound):**
-   ```sh
-   cd ~/pidog
-   sudo bash i2samp.sh
-   ```
+  ```sh
+  cd ~/pidog
+  sudo bash i2samp.sh
+  ```
+
+Note: The guided installer performs steps 1–4 automatically. Run the recommended installer to have `robot-hat`, `vilib`, and `pidog` cloned and installed into the same Python environment as HoundMind:
+
+```bash
+bash scripts/install_houndmind.sh
+```
+
+If you want the installer to also run the PiDog audio helper (`i2samp.sh`), pass the `--run-i2samp` flag which invokes the helper script with `sudo`:
+
+```bash
+bash scripts/install_houndmind.sh --run-i2samp
+```
+
+The shell wrapper forwards arguments to `scripts/pidog_install.py` (see `--help` on that script for more options, e.g. `--auto-system-deps`).
 
 For more details, see the [official PiDog repo](https://github.com/sunfounder/pidog) and [official docs](https://docs.sunfounder.com/projects/pidog/en/latest/).
 

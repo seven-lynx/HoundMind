@@ -29,6 +29,7 @@ src/houndmind_ai/logging/event_logger.py
 src/houndmind_ai/logging/led_manager.py
 src/houndmind_ai/mapping/__init__.py
 src/houndmind_ai/mapping/mapper.py
+src/houndmind_ai/mapping/path_planner.py
 src/houndmind_ai/navigation/__init__.py
 src/houndmind_ai/navigation/local_planner.py
 src/houndmind_ai/navigation/obstacle_avoidance.py
@@ -41,13 +42,17 @@ src/houndmind_ai/optional/semantic_labeler.py
 src/houndmind_ai/optional/slam_pi4.py
 src/houndmind_ai/optional/telemetry_dashboard.py
 src/houndmind_ai/optional/vision.py
+src/houndmind_ai/optional/vision_inference_scheduler.py
 src/houndmind_ai/optional/vision_pi4.py
+src/houndmind_ai/optional/vision_preprocessing.py
 src/houndmind_ai/optional/voice.py
+src/houndmind_ai/optional/wifi_localization.py
 src/houndmind_ai/perception/__init__.py
 src/houndmind_ai/perception/fusion.py
 src/houndmind_ai/safety/__init__.py
 src/houndmind_ai/safety/balance.py
 src/houndmind_ai/safety/health_monitor.py
+src/houndmind_ai/safety/sensor_health.py
 src/houndmind_ai/safety/service_watchdog.py
 src/houndmind_ai/safety/supervisor.py
 src/houndmind_ai/safety/watchdog.py
@@ -57,4 +62,8 @@ tests/test_config_validation.py
 tests/test_gentle_recovery.py
 tests/test_led_manager.py
 tests/test_mapping.py
+tests/test_path_planning.py
 tests/test_runtime.py
+tests/test_sensor_health.py
+tests/test_vision_inference_scheduler.py
+tests/test_vision_preprocessing.py

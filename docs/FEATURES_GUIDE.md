@@ -295,7 +295,7 @@ This populates `models/` with:
 - If RTAB-Map is not installed or fails, the module falls back to stub mode for safe operation.
 
 ## 24) Telemetry Dashboard (Pi4)
-**What it does:** Serves a simple web dashboard and JSON snapshot of runtime context, including `performance_telemetry` (FPS, latency, CPU/GPU/RAM).
+**What it does:** Serves a responsive web dashboard and JSON snapshot of the runtime context, including `performance_telemetry` (FPS, latency, CPU/GPU/RAM). The dashboard can optionally embed an MJPEG/HLS camera stream via a configurable `camera_path`.
 
 **Enable:**
 - `modules.telemetry_dashboard.enabled = true`
@@ -305,6 +305,34 @@ This populates `models/` with:
 **Open:**
 - Dashboard: `http://<pi-ip>:8092/`
 - Snapshot JSON: `http://<pi-ip>:8092/snapshot`
+
+**Camera preview / `camera_path`**
+- Purpose: If you run a separate camera stream (MJPEG, HLS, or a web preview) you can point the dashboard to it so a live preview appears on the dashboard.
+- Config key: `settings.telemetry_dashboard.camera_path`
+- Example values:
+    - Local MJPEG stream path on same host: `/stream` (dashboard will embed `http://<pi-ip>:<stream-port>/stream`)
+    - Full URL to another host: `http://camera-host:8090/stream`
+
+Example `config/settings.jsonc` snippet:
+```jsonc
+"modules": {
+    "telemetry_dashboard": { "enabled": true }
+},
+"settings": {
+    "telemetry_dashboard": {
+        "enabled": true,
+        "http": { "enabled": true, "port": 8092 },
+        "camera_path": "http://<pi-ip>:8090/stream"
+    }
+}
+```
+
+**Embedding notes & security**
+- The dashboard embeds the provided `camera_path` in an `<iframe>` or `<img>` depending on stream type. Ensure the camera stream allows same-origin embedding or configure a reverse proxy if needed.
+- The telemetry dashboard has no built-in authentication. Recommended deployment patterns:
+    - Run it bound to a LAN-only interface (or `127.0.0.1` behind an SSH tunnel) when used on untrusted networks.
+    - Place a reverse proxy (nginx/Caddy) in front and enable TLS + HTTP auth if exposing to wider networks.
+    - Use firewall rules to restrict access to known hosts.
 
 **Disable:** `modules.telemetry_dashboard.enabled = false`
 
@@ -357,6 +385,10 @@ Use `profile: "pi3" | "pi4"` in `config/settings.jsonc`, or set `HOUNDMIND_PROFI
 **Usage:**
 - The mapping module will call the path planning hook each tick if enabled.
 - The planned path will be available in the context as `path_planning`.
+ 
+Note: When `mapping.path_planning_enabled` is set, the runtime will automatically
+register the default A* hook into the context as `path_planning_hook`, so no
+further wiring is required for the basic grid-based planner.
 
 **Example:**
 ```python

@@ -71,17 +71,43 @@ Set the profile in [config/settings.jsonc](config/settings.jsonc) or via `HOUNDM
 
 Pi4/5 modules (vision, face recognition, semantic labeling, SLAM, telemetry) remain opt-in.
 
+
+## SLAM (RTAB-Map for Pi4/5)
+For robust mapping and localization on Pi4/5, HoundMind supports RTAB-Map as the recommended SLAM backend. See [scripts/install_rtabmap_pi4.md](scripts/install_rtabmap_pi4.md) for installation steps and troubleshooting.
+
 ## Feature Guide
 See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for what each feature does, how to use it, and how to disable it.
 
 ## Telemetry Dashboard (Pi4 Optional)
-Enable the dashboard module and open:
-- `http://<pi-ip>:8092/` for the live dashboard
-- `http://<pi-ip>:8092/snapshot` for JSON snapshots
+Enable the optional telemetry dashboard module and open the dashboard in a browser:
 
-Performance telemetry includes tick latency, FPS, and CPU/GPU/RAM when enabled.
+- `http://<pi-ip>:8092/` — mobile-friendly dashboard (camera preview + snapshot view)
+- `http://<pi-ip>:8092/snapshot` — JSON snapshot of selected runtime context keys
 
-See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for enable/disable steps.
+Configuration (example `config/settings.jsonc` snippet):
+
+```jsonc
+"telemetry_dashboard": {
+  "enabled": true,
+  "http": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8092,
+    // URL path to embed the camera stream or single-frame image.
+    // For MJPEG streams use "/stream.mjpg" or similar; for single-frame endpoints
+    // point to an image URL (the dashboard will auto-refresh with a cache-busting ts param).
+    "camera_path": "/camera"
+  },
+  "snapshot_interval_s": 0.5
+}
+```
+
+Notes:
+- `camera_path` can be any HTTP-accessible path served by your device (MJPEG stream or single-frame image).
+- For single-frame camera endpoints the dashboard reloads the image periodically (cache-busted). For MJPEG streams, set `camera_path` to the stream endpoint and the browser will display it directly.
+- The dashboard polls `/snapshot` to display telemetry (tick latency, vision FPS, CPU/memory) — disable or restrict access as needed for security.
+
+See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for detailed enable/disable steps and security recommendations.
 
 ## Project layout (key paths)
 - `src/houndmind_ai/` — core runtime and modules
@@ -103,6 +129,111 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for enable/disable steps.
 ## Fallback (Original PiDog Software)
 If HoundMind breaks, you can still run the official PiDog scripts from the SunFounder repo. See [docs/INSTALL.md](docs/INSTALL.md) for fallback instructions.
 
-## Migration status
-- Core runtime, safety/health, and logging foundations are complete.
-- Remaining: minor polish and documentation; emergency stop procedure implemented.
+
+
+| Feature                        | Default      | Notes (Enable/Disable)                |
+|--------------------------------|-------------|---------------------------------------|
+| Core Runtime                   | Enabled     | Always required                       |
+| HAL: Sensors & Motors          | Enabled     |                                       |
+| Perception                     | Enabled     |                                       |
+| Scanning                       | Enabled     |                                       |
+| Navigation & Obstacle Avoidance| Enabled     |                                       |
+| Mapping (Pi3-safe)             | Enabled     |                                       |
+| Behavior                       | Enabled     |                                       |
+| Attention                      | Enabled     |                                       |
+| Watchdog                       | Enabled     | Low-impact defaults                   |
+| Service Watchdog               | Enabled     |                                       |
+| Event Logging                  | Enabled     |                                       |
+| LED Manager                    | Enabled     |                                       |
+| Calibration                    | Enabled     |                                       |
+| Safety                         | Disabled    | Opt-in for emergency stop/tilt        |
+| Health Monitor                 | Disabled    | Opt-in for CPU/mem/temp/throttling    |
+| Balance                        | Disabled    | Opt-in for IMU posture                |
+| Vision (Pi3 legacy)            | Disabled    | Opt-in, legacy camera                 |
+| Voice (Pi3 legacy)             | Disabled    | Opt-in, legacy voice                  |
+| Voice Assistant (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
+| Face Recognition (Pi4)         | Disabled    | Opt-in, requires Pi4                  |
+| Pi4 Vision Feed (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
+| Semantic Labeler (Pi4)         | Disabled    | Opt-in, requires Pi4                  |
+| SLAM (Pi4)                     | Disabled    | Opt-in, requires Pi4                  |
+| Telemetry Dashboard (Pi4)      | Disabled    | Opt-in, requires Pi4                  |
+
+See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for details and enable/disable instructions for each module.
+
+## PiDog & Dependency Installation (Official)
+
+To use HoundMind with SunFounder PiDog hardware, install the following dependencies on your Raspberry Pi (Pi 4 recommended):
+
+1. **Install system tools:**
+   ```sh
+   sudo apt install git python3-pip python3-setuptools python3-smbus
+   ```
+2. **Install robot-hat library:**
+   ```sh
+   cd ~/
+   git clone -b v2.0 https://github.com/sunfounder/robot-hat.git
+   cd robot-hat
+   sudo python3 setup.py install
+   ```
+3. **Install vilib library:**
+   ```sh
+   cd ~/
+   git clone -b picamera2 https://github.com/sunfounder/vilib.git
+   cd vilib
+   sudo python3 install.py
+   ```
+4. **Install pidog library:**
+   ```sh
+   cd ~/
+   git clone https://github.com/sunfounder/pidog.git
+   cd pidog
+   sudo python3 setup.py install
+   ```
+5. **Install i2samp (for sound):**
+  ```sh
+  cd ~/pidog
+  sudo bash i2samp.sh
+  ```
+
+Note: The guided installer performs steps 1–4 automatically. Run the recommended installer to have `robot-hat`, `vilib`, and `pidog` cloned and installed into the same Python environment as HoundMind:
+
+```bash
+bash scripts/install_houndmind.sh
+```
+
+If you want the installer to also run the PiDog audio helper (`i2samp.sh`), pass the `--run-i2samp` flag which invokes the helper script with `sudo`:
+
+```bash
+bash scripts/install_houndmind.sh --run-i2samp
+```
+
+The shell wrapper forwards arguments to `scripts/pidog_install.py` (see `--help` on that script for more options, e.g. `--auto-system-deps`).
+
+For more details, see the [official PiDog repo](https://github.com/sunfounder/pidog) and [official docs](https://docs.sunfounder.com/projects/pidog/en/latest/).
+
+## Path Planning (A* for Pi4)
+HoundMind now supports grid-based path planning using the A* algorithm on Pi4. When enabled in `config/settings.jsonc`, the mapping module will plan a path from the current cell to a specified goal using the current map. The planned path is available in the runtime context for navigation and debugging.
+
+- Enable with `"path_planning_enabled": true` in the mapping section of your config.
+- Set a goal with `"goal": [x, y]`.
+- The planned path will be available in the context as `path_planning`.
+
+Example grid and output:
+```python
+from houndmind_ai.mapping.path_planner import astar
+
+grid = [
+    [0, 0, 0, 1, 0],
+    [1, 1, 0, 1, 0],
+    [0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0],
+]
+start = (0, 0)
+goal = (4, 4)
+path = astar(grid, start, goal)
+print("Path:", path)
+# Output: [(0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (3, 2), (4, 2), (4, 3), (4, 4)]
+```
+
+See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for more details.

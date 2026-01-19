@@ -90,6 +90,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Home map snapshot sample cap
 - [x] Home map snapshot age cap
 - [ ] Path planning hooks (Pi4)
+ - [x] Path planning hooks (Pi4) — default A* hook added, mapper calls `path_planning_hook`, tests and docs updated
 
 ## Behavior
 - [x] Behavior FSM state definitions (`behavior/fsm.py`)

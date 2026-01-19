@@ -7,6 +7,92 @@ from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
 
+from collections import deque
+from typing import Any
+
+
+class _RtabmapAdapter:
+    """Minimal defensive adapter for RTAB-Map Python bindings."""
+
+    def __init__(self, cfg: dict | None = None):
+        self._rtab = None
+        self._cfg = cfg or {}
+
+    def available(self) -> bool:
+        try:
+            import rtabmap  # type: ignore
+
+            return True
+        except Exception:
+            return False
+
+    def init(self, db_path: str) -> None:
+        import rtabmap  # type: ignore
+
+        self._rtab = getattr(rtabmap, "Rtabmap", None)
+        if callable(self._rtab):
+            self._rtab = self._rtab()
+        # Apply optional parameters from cfg if binding supports it
+        params = self._cfg.get("params") if isinstance(self._cfg, dict) else None
+        if params and hasattr(self._rtab, "set_parameters"):
+            try:
+                self._rtab.set_parameters(params)
+            except Exception:
+                # ignore if API differs
+                pass
+
+    def process(self, frame: Any, imu: dict | None = None, timestamp: float | None = None) -> None:
+        if self._rtab is None:
+            raise RuntimeError("RTAB-Map backend not initialized")
+        try:
+            if hasattr(self._rtab, "process"):
+                self._rtab.process(frame, imu=imu, timestamp=timestamp)
+            elif hasattr(self._rtab, "update"):
+                self._rtab.update(frame)
+            else:
+                try:
+                    self._rtab(frame)
+                except Exception:
+                    logger.debug("RTAB-Map: unknown process signature")
+        except Exception as exc:
+            logger.debug("RTAB-Map process error: %s", exc)
+
+    def get_pose(self):
+        if self._rtab is None:
+            return None
+        try:
+            if hasattr(self._rtab, "getPose"):
+                return self._rtab.getPose()
+            if hasattr(self._rtab, "get_pose"):
+                return self._rtab.get_pose()
+        except Exception as exc:
+            logger.debug("RTAB-Map get_pose failed: %s", exc)
+        return None
+
+    def get_map_data(self):
+        if self._rtab is None:
+            return None
+        try:
+            if hasattr(self._rtab, "getMapData"):
+                return self._rtab.getMapData()
+            if hasattr(self._rtab, "get_map_data"):
+                return self._rtab.get_map_data()
+        except Exception as exc:
+            logger.debug("RTAB-Map get_map_data failed: %s", exc)
+        return None
+
+    def get_trajectory(self):
+        if self._rtab is None:
+            return None
+        try:
+            if hasattr(self._rtab, "getTrajectory"):
+                return self._rtab.getTrajectory()
+            if hasattr(self._rtab, "get_trajectory"):
+                return self._rtab.get_trajectory()
+        except Exception as exc:
+            logger.debug("RTAB-Map get_trajectory failed: %s", exc)
+        return None
+
 
 
 class SlamPi4Module(Module):
@@ -23,38 +109,44 @@ class SlamPi4Module(Module):
         self.available = False
         self._last_ts = 0.0
         self._pose = {"x": 0.0, "y": 0.0, "yaw": 0.0, "confidence": 0.0}
-        self._rtabmap = None
-        self._rtabmap_cfg = None
+        self._adapter: _RtabmapAdapter | None = None
+        self._rtabmap_cfg: dict = {}
         self._rtabmap_failed = False
+
+        # Buffers for frame+imu pairing: store tuples (timestamp, frame, imu)
+        self._buffer: deque = deque()
+
+        # Track last map export time
+        self._last_map_export_ts = 0.0
 
     def start(self, context) -> None:
         if not self.status.enabled:
             return
         settings = (context.get("settings") or {}).get("slam_pi4", {})
-        self.backend = settings.get("backend", "stub")
+        self.backend = settings.get("backend", "rtabmap")
+        self._rtabmap_cfg = settings.get("rtabmap", {}) or {}
 
         if self.backend == "rtabmap":
-            try:
-                import rtabmap as rtabmap_py
-                self._rtabmap_cfg = settings.get("rtabmap", {})
-                # Initialize RTAB-Map (minimal, real pipeline needs camera/IMU)
-                self._rtabmap = rtabmap_py.Rtabmap()
-                db_path = self._rtabmap_cfg.get("database_path", "rtabmap.db")
-                self._rtabmap.init(db_path)
-                self.available = True
-                context.set("slam_status", {"status": "ready", "backend": self.backend})
-                return
-            except Exception as exc:
-                logger.warning(f"RTAB-Map backend unavailable: {exc}")
+            adapter = _RtabmapAdapter(self._rtabmap_cfg)
+            if adapter.available():
+                try:
+                    db_path = self._rtabmap_cfg.get("database_path", "rtabmap.db")
+                    adapter.init(db_path)
+                    self._adapter = adapter
+                    self.available = True
+                    context.set("slam_status", {"status": "ready", "backend": "rtabmap"})
+                    return
+                except Exception as exc:
+                    logger.warning("RTAB-Map initialization failed: %s", exc)
+                    self._rtabmap_failed = True
+                    self._adapter = None
+            else:
+                logger.info("RTAB-Map bindings not present; falling back to stub")
                 self._rtabmap_failed = True
-                self._rtabmap = None
-                self.available = False
-                # Fallback to stub
-        if self.backend == "stub" or self._rtabmap_failed:
-            self.available = True
-            context.set("slam_status", {"status": "ready", "backend": "stub"})
-            return
-        self.disable(f"Unknown SLAM backend: {self.backend}")
+
+        # Fallback to stub
+        self.available = True
+        context.set("slam_status", {"status": "ready", "backend": "stub"})
 
 
     def tick(self, context) -> None:
@@ -69,66 +161,121 @@ class SlamPi4Module(Module):
         if now - self._last_ts < interval:
             return
 
+        # Read incoming frame and sensor reading and push to buffer
+        frame = context.get("vision_frame")
+        sensor = context.get("sensor_reading") or {}
+        imu = None
+        if isinstance(sensor, dict):
+            imu = {"acc": sensor.get("acc"), "gyro": sensor.get("gyro"), "timestamp": sensor.get("timestamp")}
+        else:
+            imu = {"acc": getattr(sensor, "acc", None), "gyro": getattr(sensor, "gyro", None), "timestamp": getattr(sensor, "timestamp", None)}
 
-
-        if self.backend == "rtabmap" and self._rtabmap:
-            # --- Camera/IMU data pipeline ---
-            frame = context.get("vision_frame")
-            sensor = context.get("sensor_reading")
-            imu = None
-            if sensor:
-                acc = getattr(sensor, "acc", None)
-                gyro = getattr(sensor, "gyro", None)
-                imu = {"acc": acc, "gyro": gyro}
+        ts = None
+        if imu and imu.get("timestamp"):
             try:
-                # Feed frame and IMU to RTAB-Map (API may differ; adjust as needed)
-                if frame is not None:
-                    ts = getattr(sensor, "timestamp", time.time()) if sensor else time.time()
-                    self._rtabmap.process(frame, imu=imu, timestamp=ts)
-                pose = self._rtabmap.getPose() if hasattr(self._rtabmap, "getPose") else None
-                if pose:
-                    self._pose = {
-                        "x": float(pose[0]),
-                        "y": float(pose[1]),
-                        "yaw": float(pose[5]),
-                        "confidence": float(pose[6]) if len(pose) > 6 else 1.0,
-                    }
-                else:
-                    self._pose = {"x": 0.0, "y": 0.0, "yaw": 0.0, "confidence": 0.0}
+                ts = float(imu.get("timestamp"))
+            except Exception:
+                ts = time.time()
+        else:
+            ts = time.time()
 
-                # Expose map and trajectory for visualization/debugging
-                map_data = None
-                trajectory = None
-                if hasattr(self._rtabmap, "getMapData"):
+        if frame is not None or imu is not None:
+            self._buffer.append((ts, frame, imu))
+
+        # Trim buffer to configured max age
+        max_buffer_s = float(settings.get("max_buffer_s", 2.0))
+        cutoff = now - max_buffer_s
+        while self._buffer and (self._buffer[0][0] < cutoff):
+            self._buffer.popleft()
+
+        # Process buffer with RTAB-Map adapter if available
+        if self._adapter and not self._rtabmap_failed:
+            processed = 0
+            max_per_tick = int(settings.get("max_process_per_tick", 4))
+            while self._buffer and processed < max_per_tick:
+                item_ts, item_frame, item_imu = self._buffer.popleft()
+                try:
+                    self._adapter.process(item_frame, imu=item_imu, timestamp=item_ts)
+                except Exception as exc:
+                    logger.debug("RTAB-Map adapter process error: %s", exc)
+                processed += 1
+
+            # Retrieve pose and map data
+            try:
+                pose = self._adapter.get_pose() if self._adapter else None
+                if pose:
                     try:
-                        map_data = self._rtabmap.getMapData()
-                    except Exception as exc:
-                        logger.debug(f"RTAB-Map getMapData failed: {exc}")
-                if hasattr(self._rtabmap, "getTrajectory"):
-                    try:
-                        trajectory = self._rtabmap.getTrajectory()
-                    except Exception as exc:
-                        logger.debug(f"RTAB-Map getTrajectory failed: {exc}")
+                        x = float(pose[0])
+                        y = float(pose[1])
+                        yaw = float(pose[5]) if len(pose) > 5 else 0.0
+                        conf = float(pose[6]) if len(pose) > 6 else 1.0
+                        self._pose = {"x": x, "y": y, "yaw": yaw, "confidence": conf}
+                    except Exception:
+                        pass
+                map_data = self._adapter.get_map_data() if self._adapter else None
+                trajectory = self._adapter.get_trajectory() if self._adapter else None
                 context.set("slam_map_data", map_data)
                 context.set("slam_trajectory", trajectory)
             except Exception as exc:
-                logger.warning(f"RTAB-Map tick failed: {exc}")
-                self._pose = {"x": 0.0, "y": 0.0, "yaw": 0.0, "confidence": 0.0}
+                logger.warning("RTAB-Map retrieval failed: %s", exc)
                 context.set("slam_map_data", None)
                 context.set("slam_trajectory", None)
+
+            # Optionally export map to file with selectable format
+            map_export_interval = float(settings.get("map_export_interval_s", 0))
+            map_export_path = settings.get("map_export_path")
+            map_export_format = (settings.get("map_export_format") or "json").lower()
+            if map_export_interval > 0 and map_export_path:
+                if now - self._last_map_export_ts >= map_export_interval:
+                    try:
+                        md = self._adapter.get_map_data() if self._adapter else None
+                        if md is not None:
+                            try:
+                                if map_export_format == "json":
+                                    import json
+
+                                    with open(map_export_path, "w", encoding="utf-8") as fh:
+                                        fh.write(json.dumps({"exported_at": now, "map": md}))
+                                elif map_export_format == "ply":
+                                    # Expect md to be iterable of [x,y,z] points
+                                    try:
+                                        with open(map_export_path, "w", encoding="utf-8") as fh:
+                                            pts = list(md)
+                                            fh.write("ply\nformat ascii 1.0\nelement vertex %d\nproperty float x\nproperty float y\nproperty float z\nend_header\n" % len(pts))
+                                            for p in pts:
+                                                fh.write(f"{p[0]} {p[1]} {p[2]}\n")
+                                    except Exception:
+                                        logger.debug("Failed to export PLY; falling back to JSON")
+                                        import json
+
+                                        with open(map_export_path, "w", encoding="utf-8") as fh:
+                                            fh.write(json.dumps({"exported_at": now, "map": md}))
+                                else:
+                                    # Unknown format: default to JSON
+                                    import json
+
+                                    with open(map_export_path, "w", encoding="utf-8") as fh:
+                                        fh.write(json.dumps({"exported_at": now, "map": md}))
+                                self._last_map_export_ts = now
+                            except Exception as exc:
+                                logger.debug("Failed to write map export: %s", exc)
+                    except Exception as exc:
+                        logger.debug("Map export failed: %s", exc)
         else:
-            self._update_stub(context, settings)
+            self._update_stub(context, settings, imu)
 
         context.set("slam_pose", self._pose)
-        context.set("slam_status", {"status": "running", "backend": self.backend})
+        context.set("slam_status", {"status": "running", "backend": ("rtabmap" if self._adapter else "stub")})
         self._emit_nav_hint(context, settings)
         self._last_ts = now
 
-    def _update_stub(self, context, settings: dict) -> None:
-        imu = (context.get("sensor_reading") or {}).get("gyro")
+    def _update_stub(self, context, settings: dict, imu: dict | None = None) -> None:
         yaw = self._pose.get("yaw", 0.0)
-        if isinstance(imu, (list, tuple)) and len(imu) >= 3:
-            yaw += float(imu[2]) * float(settings.get("gyro_scale", 0.0))
+        gyro = None
+        if imu:
+            gyro = imu.get("gyro")
+        if isinstance(gyro, (list, tuple)) and len(gyro) >= 3:
+            yaw += float(gyro[2]) * float(settings.get("gyro_scale", 0.0))
         self._pose = {
             "x": float(self._pose.get("x", 0.0)),
             "y": float(self._pose.get("y", 0.0)),

@@ -134,6 +134,31 @@ class TelemetryDashboardModule(Module):
                 if self.path == "/snapshot":
                     self._send_json(module._snapshot)
                     return
+                if self.path == "/download_slam_map":
+                    data = module._snapshot.get("slam_map_data")
+                    if data is None:
+                        self._send_json({"error": "no map data"}, status=404)
+                        return
+                    # Serve as JSON
+                    self.send_response(200)
+                    payload = json.dumps({"map": data}, default=str).encode("utf-8")
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
+                if self.path == "/download_slam_trajectory":
+                    data = module._snapshot.get("slam_trajectory")
+                    if data is None:
+                        self._send_json({"error": "no trajectory"}, status=404)
+                        return
+                    self.send_response(200)
+                    payload = json.dumps({"trajectory": data}, default=str).encode("utf-8")
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 if self.path == "/status":
                     self._send_json({"status": "ok"})
                     return
@@ -213,8 +238,17 @@ _DASHBOARD_HTML = """
                     <pre id="output">Loading...</pre>
                 </div>
                 <div class="card">
-                    <strong>Quick Stats</strong>
-                    <div id="quick" class="meta">—</div>
+                        <strong>Quick Stats</strong>
+                        <div id="quick" class="meta">—</div>
+                    </div>
+                    <div class="card">
+                        <strong>SLAM</strong>
+                        <div class="meta">Map / Trajectory</div>
+                        <div style="margin-top:0.5rem">
+                            <button id="download_map">Download Map</button>
+                            <button id="download_traj">Download Trajectory</button>
+                        </div>
+                        <pre id="slam">No SLAM data</pre>
                 </div>
             </div>
         </div>
@@ -233,6 +267,12 @@ _DASHBOARD_HTML = """
                     const perf = data.performance_telemetry || {};
                     fpsLabel.textContent = perf.vision_fps ? perf.vision_fps.toFixed(1) : '-';
                     quick.textContent = `tick ${perf.tick_hz_actual || '-'} • mem ${perf.mem_used_pct || '-'}%`;
+                    const slamEl = document.getElementById('slam');
+                    if(data.slam_map_data || data.slam_trajectory){
+                        slamEl.textContent = JSON.stringify({map: data.slam_map_data, trajectory: data.slam_trajectory}, null, 2);
+                    } else {
+                        slamEl.textContent = 'No SLAM data';
+                    }
                 }catch(e){ out.textContent = 'Error: '+e }
             }
             // Avoid caching single-frame camera endpoints by adding a timestamp
@@ -241,6 +281,24 @@ _DASHBOARD_HTML = """
                 camera.src = base + '?ts=' + Date.now();
             }
             refresh.addEventListener('click', ()=>{ tick(); reloadCamera(); });
+            document.getElementById('download_map').addEventListener('click', async ()=>{
+                const res = await fetch('/download_slam_map');
+                if(res.ok){
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'slam_map.json'; a.click();
+                } else { alert('No map data') }
+            });
+            document.getElementById('download_traj').addEventListener('click', async ()=>{
+                const res = await fetch('/download_slam_trajectory');
+                if(res.ok){
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = 'slam_trajectory.json'; a.click();
+                } else { alert('No trajectory') }
+            });
             setInterval(()=>{ tick(); reloadCamera(); }, 500);
             tick();
         </script>
