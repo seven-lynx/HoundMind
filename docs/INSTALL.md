@@ -4,7 +4,7 @@ Version: v2026.01.18 • Author: 7Lynx
 
 This guide installs HoundMind, the unified AI system for SunFounder PiDog. Simulation mode is no longer supported. PackMind and CanineCore are now a single system.
 
-**Recommended OS:** Raspberry Pi OS Lite (no desktop environment) for best performance and reliability. (Download from the official Raspberry Pi website.)
+**Recommended OS:** Raspberry Pi OS Lite (no desktop environment) for best performance and reliability. Bookworm 64-bit (Python 3.11) is recommended because many Pi wheels are not yet available for Python 3.13 on Trixie.
 
 ## Prerequisites
 - Raspberry Pi OS Lite (no desktop environment) with I2C enabled.
@@ -66,12 +66,14 @@ sudo apt-get install -y \
    libatlas-base-dev libopenblas-dev liblapack-dev \
    libjpeg-dev libtiff-dev libavcodec-dev libavformat-dev libswscale-dev \
    libv4l-dev libxvidcore-dev libx264-dev libgtk-3-dev \
-   libboost-all-dev libeigen3-dev libusb-1.0-0-dev libsqlite3-dev libopenni2-dev libproj-dev
+   libboost-all-dev libeigen3-dev libusb-1.0-0-dev libsqlite3-dev libopenni2-dev libproj-dev \
+   libasound2-dev libportaudio2 portaudio19-dev
 ```
 
 Notes:
 - `face_recognition` requires `dlib` which typically needs `cmake` and a C++ toolchain; installing the packages above will make building `dlib` much smoother.
 - RTAB-Map (`rtabmap-py`) is often built from source on Pi4; see `scripts/install_rtabmap_pi4.md` for detailed RTAB-Map build steps.
+- On Raspberry Pi OS Trixie (Python 3.13), many packages (e.g., `face_recognition`, `pyaudio`) may not have wheels yet. If you hit build errors, use Bookworm (Python 3.11) or install the **lite** preset.
 
 ### 3) Install SunFounder PiDog libraries into the same Python environment
 

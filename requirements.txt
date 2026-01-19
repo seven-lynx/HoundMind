@@ -10,7 +10,8 @@ numpy
 scipy
 
 # Vision
-opencv-python
+# Use contrib build (includes core + extra modules). Avoid installing both opencv-python
+# and opencv-contrib-python at the same time.
 opencv-contrib-python
 face_recognition
 

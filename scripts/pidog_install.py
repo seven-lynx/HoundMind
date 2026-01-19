@@ -85,6 +85,9 @@ def ensure_system_deps_linux() -> int:
         "libxvidcore-dev",
         "libx264-dev",
         "libgtk-3-dev",
+        "libasound2-dev",
+        "libportaudio2",
+        "portaudio19-dev",
         "libboost-all-dev",
         "libeigen3-dev",
         "libusb-1.0-0-dev",
@@ -176,6 +179,14 @@ def main() -> int:
     if preset == "full" and pi_class == "pi3":
         print("Pi 3 detected: full preset is not supported. Use --preset lite.")
         return 2
+
+    if preset == "full" and sys.version_info >= (3, 12):
+        print(
+            "Warning: Python 3.12+ may lack Pi wheels for heavy packages "
+            "(face_recognition/dlib, pyaudio, rtabmap-py). "
+            "If installs fail, use Raspberry Pi OS Bookworm (Python 3.11) "
+            "or run with --preset lite."
+        )
 
     req = repo_root / "requirements-lite.txt"
     if preset == "full":

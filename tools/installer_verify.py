@@ -17,6 +17,14 @@ def check_python(min_major=3, min_minor=9):
     return ok
 
 
+IMPORT_NAME_MAP = {
+    "opencv-python": "cv2",
+    "opencv-contrib-python": "cv2",
+    "SpeechRecognition": "speech_recognition",
+    "rtabmap-py": "rtabmap",
+}
+
+
 def check_requirements(req_path: Path):
     if not req_path.exists():
         print(f"Requirements file not found: {req_path}")
@@ -27,8 +35,9 @@ def check_requirements(req_path: Path):
         if not line or line.startswith("#"):
             continue
         pkg = line.split("==")[0].split(">=")[0].strip()
+        import_name = IMPORT_NAME_MAP.get(pkg, pkg)
         try:
-            __import__(pkg)
+            __import__(import_name)
             print(f"{pkg}: OK")
         except Exception as exc:  # noqa: BLE001
             print(f"{pkg}: MISSING ({exc})")
@@ -51,8 +60,8 @@ def main():
     parser.add_argument("--preset", choices=["lite", "full"], default="lite")
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[1]
-    req = repo_root / "requirements-lite.txt"
-    print("HoundMind Pi3 installer verification")
+    req = repo_root / ("requirements.txt" if args.preset == "full" else "requirements-lite.txt")
+    print("HoundMind installer verification")
     py_ok = check_python(3, 9)
     req_ok = check_requirements(req)
     pidog_ok = check_import("pidog")
