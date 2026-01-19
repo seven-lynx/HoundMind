@@ -59,14 +59,17 @@ class BehaviorModule(Module):
             now = time.time()
             # decay / recovery: clear counts if enough quiet time has passed
             recovery_s = float(hab_settings.get("habituation_recovery_s", 30.0))
+            recovered = False
             for k, last in list(self._stim_last_ts.items()):
                 try:
                     if (now - last) >= recovery_s:
                         self._stim_counts.pop(k, None)
                         self._stim_last_ts.pop(k, None)
+                        recovered = True
                 except Exception:
                     self._stim_counts.pop(k, None)
                     self._stim_last_ts.pop(k, None)
+                    recovered = True
 
             # update counts for current stimuli and possibly suppress reactions
             threshold = int(hab_settings.get("habituation_threshold", 3))
@@ -87,6 +90,14 @@ class BehaviorModule(Module):
                     sound = False
                     suppressed = True
                     context.set("behavior_habituation", {"stimulus": "sound", "count": cnt})
+
+            # If we recovered from habituation (quiet period elapsed), clear
+            # last action so the next matching stimulus will be emitted again.
+            if recovered:
+                try:
+                    self.last_action = None
+                except Exception:
+                    pass
 
         # Behavior settings are centralized in settings.json for easy tuning.
         settings = (context.get("settings") or {}).get("behavior", {})
