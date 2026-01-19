@@ -1,4 +1,5 @@
 # Add only small, well-supported packages here for Pi3 installs.
 
 # Hardware bindings (platform-specific)
-pidog>=0.1.0
+# Note: `pidog` is not published to PyPI. It must be installed from the
+# official SunFounder repo (see scripts/pidog_install.py or docs/INSTALL.md).

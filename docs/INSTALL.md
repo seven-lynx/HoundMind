@@ -86,6 +86,8 @@ git clone https://github.com/sunfounder/pidog.git
 python -m pip install ./pidog
 ```
 
+Note: `pidog` is **not** published on PyPI. Do not add it to your `requirements.txt`; install from the repo as shown above or use the guided installer.
+
 Optional audio setup:
 
 ```bash

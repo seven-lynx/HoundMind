@@ -202,6 +202,8 @@ bash scripts/install_houndmind.sh --run-i2samp
 
 The shell wrapper forwards arguments to `scripts/pidog_install.py` (see `--help` on that script for more options, e.g. `--auto-system-deps`).
 
+Important: `pidog` is **not** available on PyPI, so it will never install via `pip install pidog`. Use the guided installer or clone the repo and install it manually.
+
 For more details, see the [official PiDog repo](https://github.com/sunfounder/pidog) and [official docs](https://docs.sunfounder.com/projects/pidog/en/latest/).
 
 ## Path Planning (A* for Pi4)

@@ -2,7 +2,8 @@
 # Includes vision, audio, and ML-friendly packages. Expect longer installs.
 
 # Hardware bindings
-pidog>=0.1.0
+# Note: `pidog` is not published to PyPI. It must be installed from the
+# official SunFounder repo (see scripts/pidog_install.py or docs/INSTALL.md).
 
 # Core numeric stack
 numpy
