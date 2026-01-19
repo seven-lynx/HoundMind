@@ -54,6 +54,7 @@ class BehaviorModule(Module):
         # habituation_recovery_s (float) - time without stimulus to reset count.
         hab_settings = (context.get("settings") or {}).get("behavior", {})
         hab_enabled = bool(hab_settings.get("habituation_enabled", False))
+        suppressed = False
         if hab_enabled:
             now = time.time()
             # decay / recovery: clear counts if enough quiet time has passed
@@ -76,6 +77,7 @@ class BehaviorModule(Module):
                 if cnt >= threshold:
                     # treat as no touch when habituated
                     touch = "N"
+                    suppressed = True
                     context.set("behavior_habituation", {"stimulus": "touch", "count": cnt})
             if sound:
                 cnt = self._stim_counts.get("sound", 0) + 1
@@ -83,6 +85,7 @@ class BehaviorModule(Module):
                 self._stim_last_ts["sound"] = now
                 if cnt >= threshold:
                     sound = False
+                    suppressed = True
                     context.set("behavior_habituation", {"stimulus": "sound", "count": cnt})
 
         # Behavior settings are centralized in settings.json for easy tuning.
@@ -329,6 +332,11 @@ class BehaviorModule(Module):
                 self._last_micro_ts = now
             except Exception:
                 pass
+
+        # If a stimulus was habituated this tick, avoid emitting an idle action
+        # to prevent swapping to a default idle action in place of the suppressed reaction.
+        if suppressed and not override and desired_state == BehaviorState.IDLE:
+            return
 
         action = desired_action
 
