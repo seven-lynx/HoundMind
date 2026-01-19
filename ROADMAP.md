@@ -307,9 +307,8 @@ The following checkable tasks cover robustness, observability, and supportabilit
  - [x] Behavior parity: add explore/interact behaviors from legacy PackMind.
  - [x] Behavior parity: update action catalog for patrol/explore/interact.
  - [ ] Add persistent internal state (energy/mood/engagement) that decays over minutes.
- - [ ] Add behavior state transition cooldowns + confidence gates to reduce jitter.
  - [x] Add behavior state transition cooldowns + confidence gates to reduce jitter.
- - [ ] Add micro-behaviors (small head turns, posture shifts, idle breathing) for lifelike idle.
+ - [x] Add micro-behaviors (small head turns, posture shifts, idle breathing) for lifelike idle.
  - [ ] Add habituation to repeated stimuli with recovery after quiet periods.
  - [ ] Add intent blending (patrol/explore/rest mix) based on energy + recent stimuli.
  - [ ] Add goal memory (recent waypoints, no-go zones) to reduce loops.

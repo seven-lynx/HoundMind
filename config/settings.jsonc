@@ -641,6 +641,14 @@
       "random_idle_chance": 0.05,
       // Minimum time between behavior action changes (seconds).
       "action_cooldown_s": 0.0,
+      // Optional micro-idle behaviors (lifelike idle). Disabled by default.
+      "micro_idle_enabled": true,
+      // Candidate actions to emit during idle (must exist in action catalog).
+      "micro_idle_actions": ["shake head", "wag tail", "stretch"],
+      // Minimum interval between micro-idle actions (seconds).
+      "micro_idle_interval_s": 12.0,
+      // Chance (0-1) to emit a micro-idle action when eligible.
+      "micro_idle_chance": 0.2,
       // Enable behavior transition guard (cooldown + confirmation) to reduce jitter.
       "transition_guard_enabled": false,
       // Minimum time (seconds) to remain in a state before switching (when guard enabled).

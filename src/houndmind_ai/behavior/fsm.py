@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 from enum import Enum
 
@@ -31,12 +32,14 @@ class BehaviorModule(Module):
         self._last_state_ts = 0.0
         self._candidate_state: BehaviorState | None = None
         self._candidate_ticks = 0
+        self._last_micro_ts = 0.0
         self._last_autonomy_ts = 0.0
         self._autonomy_mode: str | None = None
         self.library: BehaviorLibrary | None = None
         self.registry: BehaviorRegistry | None = None
 
     def tick(self, context) -> None:
+        now = time.time()
         # Perception is fused upstream; behavior maps it to actions.
         perception = context.get("perception") or {}
         obstacle = perception.get("obstacle", False)
@@ -229,8 +232,6 @@ class BehaviorModule(Module):
             )
             min_dwell_s = float(settings.get("transition_min_dwell_s", 0.6))
             confirm_ticks = int(settings.get("transition_confirm_ticks", 2))
-            now = time.time()
-
             if desired_state != self.state:
                 if override or desired_state.value in immediate_states:
                     self._candidate_state = None
@@ -268,7 +269,27 @@ class BehaviorModule(Module):
         else:
             if desired_state != self.state:
                 self.state = desired_state
-                self._last_state_ts = time.time()
+                self._last_state_ts = now
+
+        # Optional micro-idle behaviors for lifelike idle without affecting core logic.
+        micro_enabled = bool(settings.get("micro_idle_enabled", False))
+        micro_actions = settings.get("micro_idle_actions", [])
+        micro_interval_s = float(settings.get("micro_idle_interval_s", 12.0))
+        micro_chance = float(settings.get("micro_idle_chance", 0.2))
+        if (
+            micro_enabled
+            and self.state == BehaviorState.IDLE
+            and not override
+            and isinstance(micro_actions, list)
+            and micro_actions
+            and (now - self._last_micro_ts) >= micro_interval_s
+            and random.random() <= micro_chance
+        ):
+            try:
+                desired_action = str(random.choice(micro_actions))
+                self._last_micro_ts = now
+            except Exception:
+                pass
 
         action = desired_action
 
@@ -281,11 +302,11 @@ class BehaviorModule(Module):
                 except Exception:
                     quiet_cooldown = 0.0
                 cooldown = max(cooldown, quiet_cooldown)
-            if cooldown > 0 and (time.time() - self._last_action_ts) < cooldown:
+            if cooldown > 0 and (now - self._last_action_ts) < cooldown:
                 return
             context.set("behavior_action", action)
             self.last_action = action
-            self._last_action_ts = time.time()
+            self._last_action_ts = now
             logger.info("Behavior -> %s (%s)", action, self.state)
 
     def _resolve_override(self, override: object) -> str:
