@@ -63,6 +63,13 @@ def main():
     req = repo_root / ("requirements.txt" if args.preset == "full" else "requirements-lite.txt")
     print("HoundMind installer verification")
     py_ok = check_python(3, 9)
+    # Warn if running on newer Python where wheels may be missing (Trixie, etc.)
+    if sys.version_info >= (3, 13):
+        print(
+            "Warning: Detected Python %d.%d — heavy packages may lack prebuilt wheels on this runtime. "
+            "If installation fails, prefer Raspberry Pi OS Bookworm (Python 3.11) or use --preset lite."
+            % (sys.version_info.major, sys.version_info.minor)
+        )
     req_ok = check_requirements(req)
     pidog_ok = check_import("pidog")
     houndmind_ok = check_import("houndmind_ai")
