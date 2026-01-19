@@ -116,6 +116,8 @@ class TelemetryDashboardModule(Module):
             return
         host = http_settings.get("host", "0.0.0.0")
         port = int(http_settings.get("port", 8092))
+        # Configurable camera path for embedding a stream or single-frame URL
+        self._camera_path = http_settings.get("camera_path", "/camera")
 
         module = self
 
@@ -136,7 +138,10 @@ class TelemetryDashboardModule(Module):
                     self._send_json({"status": "ok"})
                     return
                 if self.path == "/":
-                    html = _DASHBOARD_HTML.encode("utf-8")
+                    # Inject configured camera path into the dashboard HTML
+                    html = _DASHBOARD_HTML.replace(
+                        "{{CAMERA_PATH}}", str(getattr(module, "_camera_path", "/camera"))
+                    ).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html")
                     self.send_header("Content-Length", str(len(html)))
@@ -162,31 +167,83 @@ class TelemetryDashboardModule(Module):
 _DASHBOARD_HTML = """
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>HoundMind Telemetry</title>
-    <style>
-      body { font-family: sans-serif; padding: 1rem; }
-      pre { background: #111; color: #0f0; padding: 1rem; border-radius: 6px; }
-    </style>
-  </head>
-  <body>
-    <h1>HoundMind Telemetry</h1>
-    <p>Live snapshot from <code>/snapshot</code></p>
-    <pre id="output">Loading...</pre>
-    <script>
-      async function tick() {
-        try {
-          const res = await fetch('/snapshot');
-          const data = await res.json();
-          document.getElementById('output').textContent = JSON.stringify(data, null, 2);
-        } catch (e) {
-          document.getElementById('output').textContent = 'Error: ' + e;
-        }
-      }
-      setInterval(tick, 500);
-      tick();
-    </script>
-  </body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>HoundMind Telemetry</title>
+        <style>
+            :root{--bg:#0f1720;--card:#0b1220;--muted:#9aa6b2;--accent:#38bdf8}
+            html,body{height:100%;margin:0}
+            body{font-family:system-ui,-apple-system,Segoe UI,Roboto;display:flex;flex-direction:column;gap:0.75rem;padding:0.75rem;background:linear-gradient(180deg,#071026, #05101a);color:#e6eef6}
+            header{display:flex;align-items:center;justify-content:space-between}
+            h1{font-size:1.1rem;margin:0}
+            .container{display:flex;flex:1;gap:0.75rem;flex-direction:column}
+            .camera{background:var(--card);border-radius:8px;padding:0.25rem;display:flex;align-items:center;justify-content:center}
+            #camera{width:100%;height:auto;max-height:60vh;border-radius:6px;background:#000}
+            .panels{display:flex;gap:0.75rem;flex-direction:column}
+            .card{background:var(--card);padding:0.5rem;border-radius:8px;overflow:auto}
+            pre{background:#071018;color:#dff3ff;padding:0.5rem;border-radius:6px;white-space:pre-wrap}
+            .row{display:flex;gap:0.75rem;flex-wrap:wrap}
+            @media(min-width:900px){.container{flex-direction:row}.panels{flex:1}.camera{flex:1}}
+            .meta{color:var(--muted);font-size:0.85rem}
+            .controls{display:flex;gap:0.5rem}
+            button{background:var(--accent);color:#042028;border:0;padding:0.4rem 0.6rem;border-radius:6px}
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>HoundMind Telemetry</h1>
+            <div class="meta">Live: <span id="vision_fps">-</span> FPS</div>
+        </header>
+        <div class="container">
+            <div class="camera card">
+                <img id="camera" src="{{CAMERA_PATH}}" alt="camera"/>
+            </div>
+            <div class="panels">
+                <div class="card">
+                    <div class="row">
+                        <div style="flex:1">
+                            <strong>Snapshot</strong>
+                            <div class="meta">Updates every 0.5s</div>
+                        </div>
+                        <div class="controls">
+                            <button id="refresh">Refresh</button>
+                        </div>
+                    </div>
+                    <pre id="output">Loading...</pre>
+                </div>
+                <div class="card">
+                    <strong>Quick Stats</strong>
+                    <div id="quick" class="meta">—</div>
+                </div>
+            </div>
+        </div>
+        <script>
+            const camera = document.getElementById('camera');
+            const out = document.getElementById('output');
+            const quick = document.getElementById('quick');
+            const fpsLabel = document.getElementById('vision_fps');
+            const refresh = document.getElementById('refresh');
+            let last = 0;
+            async function tick(){
+                try{
+                    const res = await fetch('/snapshot');
+                    const data = await res.json();
+                    out.textContent = JSON.stringify(data, null, 2);
+                    const perf = data.performance_telemetry || {};
+                    fpsLabel.textContent = perf.vision_fps ? perf.vision_fps.toFixed(1) : '-';
+                    quick.textContent = `tick ${perf.tick_hz_actual || '-'} • mem ${perf.mem_used_pct || '-'}%`;
+                }catch(e){ out.textContent = 'Error: '+e }
+            }
+            // Avoid caching single-frame camera endpoints by adding a timestamp
+            function reloadCamera(){
+                const base = camera.getAttribute('src').split('?')[0];
+                camera.src = base + '?ts=' + Date.now();
+            }
+            refresh.addEventListener('click', ()=>{ tick(); reloadCamera(); });
+            setInterval(()=>{ tick(); reloadCamera(); }, 500);
+            tick();
+        </script>
+    </body>
 </html>
 """
