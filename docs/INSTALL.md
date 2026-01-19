@@ -4,7 +4,9 @@ Version: v2026.01.18 • Author: 7Lynx
 
 This guide installs HoundMind, the unified AI system for SunFounder PiDog. Simulation mode is no longer supported. PackMind and CanineCore are now a single system.
 
-**Recommended OS:** Raspberry Pi OS Lite (no desktop environment) for best performance and reliability. Bookworm 64-bit (Python 3.11) is recommended because many Pi wheels are not yet available for Python 3.13 on Trixie.
+**Preferred OS (recommended):** Raspberry Pi OS Bookworm (64-bit) with Python 3.11.
+
+IMPORTANT: Bookworm is the preferred distribution for this project because many heavy, platform-specific packages (for example `dlib`/`face_recognition`, `pyaudio`, and `rtabmap-py`) provide prebuilt wheels for Bookworm but may not have wheels available for newer releases such as Trixie (Python 3.13). If you use Trixie and encounter build failures during the full install, switch to Bookworm or use the `--preset lite` option.
 
 ## Prerequisites
 - Raspberry Pi OS Lite (no desktop environment) with I2C enabled.
