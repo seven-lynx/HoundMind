@@ -101,6 +101,50 @@ class BehaviorModule(Module):
 
         # Behavior settings are centralized in settings.json for easy tuning.
         settings = (context.get("settings") or {}).get("behavior", {})
+        # Energy / internal state: initialize, apply stimulus boosts, decay, and persist.
+        energy_settings = (context.get("settings") or {}).get("energy", {})
+        try:
+            initial_energy = float(energy_settings.get("initial", 0.6))
+        except Exception:
+            initial_energy = 0.6
+        try:
+            decay_per_tick = float(energy_settings.get("decay_per_tick", 0.01))
+        except Exception:
+            decay_per_tick = 0.01
+        try:
+            boost_touch = float(energy_settings.get("boost_touch", 0.08))
+        except Exception:
+            boost_touch = 0.08
+        try:
+            boost_sound = float(energy_settings.get("boost_sound", 0.05))
+        except Exception:
+            boost_sound = 0.05
+        try:
+            energy_min = float(energy_settings.get("min", 0.0))
+        except Exception:
+            energy_min = 0.0
+        try:
+            energy_max = float(energy_settings.get("max", 1.0))
+        except Exception:
+            energy_max = 1.0
+
+        energy = context.get("energy_level")
+        if energy is None:
+            energy = initial_energy
+
+        # Only apply boosts for non-habituated stimuli (touch/sound may have been suppressed above)
+        if touch != "N":
+            energy = min(energy_max, energy + boost_touch)
+        if sound:
+            energy = min(energy_max, energy + boost_sound)
+
+        # Apply decay and clamp
+        try:
+            energy = float(energy) - decay_per_tick
+        except Exception:
+            pass
+        energy = max(energy_min, min(energy_max, energy))
+        context.set("energy_level", energy)
         idle_action = settings.get("idle_action", "stand")
         touch_action = settings.get("touch_action", "wag tail")
         sound_action = settings.get("sound_action", "shake head")
