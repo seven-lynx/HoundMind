@@ -299,10 +299,11 @@ _DASHBOARD_HTML = """
     <body>
         <header>
             <h1>HoundMind Telemetry</h1>
-            <div style="display:flex;gap:0.5rem;align-items:center">
+                <div style="display:flex;gap:0.5rem;align-items:center">
                 <div class="meta">Live: <span id="vision_fps">-</span> FPS</div>
                 <div class="meta">Trace: <span id="trace_id">-</span></div>
                 <button id="copy_trace" style="background:transparent;border:1px solid #274454;color:var(--accent);padding:0.15rem 0.4rem;border-radius:6px">Copy</button>
+                <button id="download_bundle" style="background:transparent;border:1px solid #274454;color:var(--accent);padding:0.15rem 0.4rem;border-radius:6px">Download Bundle</button>
             </div>
         </header>
         <div class="container">
@@ -372,6 +373,26 @@ _DASHBOARD_HTML = """
             document.getElementById('copy_trace').addEventListener('click', ()=>{
                 const txt = document.getElementById('trace_id').textContent || '';
                 if(!txt || txt === '-') return; try{ navigator.clipboard.writeText(txt); alert('Trace id copied') }catch(e){ alert('Copy failed') }
+            });
+
+            document.getElementById('download_bundle').addEventListener('click', async ()=>{
+                const txt = document.getElementById('trace_id').textContent || '';
+                if(!txt || txt === '-') { alert('No trace id available'); return }
+                try{
+                    const res = await fetch('/download_support_bundle?trace_id=' + encodeURIComponent(txt));
+                    if(!res.ok){
+                        const err = await res.json().catch(()=>null);
+                        alert('Failed to create bundle: ' + (err && err.error ? err.error : res.statusText));
+                        return
+                    }
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `support_bundle_${txt}.zip`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }catch(e){ alert('Download failed: '+e) }
             });
             document.getElementById('download_map').addEventListener('click', async ()=>{
                 const res = await fetch('/download_slam_map');
