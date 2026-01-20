@@ -13,6 +13,8 @@ Use the menu to select a demo or let it cycle through all of them.
 
 from __future__ import annotations
 
+import argparse
+import sys
 import time
 from typing import Callable, Sequence
 
@@ -226,6 +228,9 @@ EXAMPLES: list[tuple[str, Callable[[], None]]] = [
     ("Autonomy personality demo", example_autonomy_personality_demo),
     ("Micro-idle demo", example_micro_idle_demo),
     ("Autonomy cycle demo", example_autonomy_cycle_demo),
+    ("Scripted habituation demo", example_scripted_habituation_demo),
+    ("Energy demo", example_energy_demo),
+    ("Scripted stimuli demo", example_scripted_stimuli_demo),
 ]
 
 
@@ -237,14 +242,84 @@ def _print_menu(items: Sequence[tuple[str, Callable[[], None]]]) -> None:
     print("  q) Quit")
 
 
-def main() -> None:
+def _run_by_arg(arg: str) -> int:
+    """Run an example by index or name. Returns exit code."""
+    arg = arg.strip()
+    if arg.lower() in ("a", "all"):
+        for label, fn in EXAMPLES:
+            print(f"\n--- {label} ---")
+            try:
+                fn()
+            except KeyboardInterrupt:
+                print("Demo interrupted.")
+            time.sleep(0.5)
+        return 0
+
+    # Try index
+    try:
+        idx = int(arg) - 1
+        if 0 <= idx < len(EXAMPLES):
+            label, fn = EXAMPLES[idx]
+            print(f"\n--- {label} ---")
+            try:
+                fn()
+            except KeyboardInterrupt:
+                print("Demo interrupted.")
+            return 0
+    except ValueError:
+        pass
+
+    # Try name match (case-insensitive substring)
+    lower = arg.lower()
+    matches = [(i, e) for i, e in enumerate(EXAMPLES) if lower in e[0].lower()]
+    if len(matches) == 1:
+        _, (label, fn) = matches[0]
+        print(f"\n--- {label} ---")
+        try:
+            fn()
+        except KeyboardInterrupt:
+            print("Demo interrupted.")
+        return 0
+    if len(matches) > 1:
+        print("Multiple matches, be more specific:")
+        for i, (label, _) in matches:
+            print(f" {i+1}) {label}")
+        return 2
+
+    print("No matching example found.")
+    return 3
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint. If `argv` provided, run non-interactively.
+
+    Supported modes:
+    - no args: interactive menu
+    - `--list`: print available examples and exit
+    - `--all` or `all` or `a`: run all examples sequentially
+    - `<index>` or `<name substring>`: run a single example
+    """
+    argv = list(argv or sys.argv[1:])
+    parser = argparse.ArgumentParser(prog="pidog_examples")
+    parser.add_argument("run", nargs="?", help="index or name of example to run, or 'all' to run all")
+    parser.add_argument("--list", action="store_true", help="list available examples and exit")
+    ns = parser.parse_args(argv)
+
+    if ns.list:
+        _print_menu(EXAMPLES)
+        return 0
+
+    if ns.run:
+        return _run_by_arg(ns.run)
+
+    # Interactive fallback
     while True:
         _print_menu(EXAMPLES)
         choice = input("Select an option: ").strip().lower()
         # Placeholder for future edits
         if choice == "q":
             print("Goodbye.")
-            return
+            return 0
         if choice == "a":
             for label, fn in EXAMPLES:
                 print(f"\n--- {label} ---")
