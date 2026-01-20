@@ -109,6 +109,31 @@ When disabled, `energy_level` is not updated by the behavior module.
 
 ---
 
+## Personality & Behavior Tuning
+
+The runtime provides lightweight personality tuning to bias autonomous behavior selection. This is purely a behavior-level tuning — disabling it will not affect navigation, safety, or core runtime modules.
+
+Where to configure:
+- Edit `config/settings.jsonc` and add or modify the `personality` section.
+
+Keys:
+- `personality.curiosity` (float): Multiplier applied to exploratory/autonomy selection (default: 0.5).
+- `personality.sociability` (float): Multiplier applied to interaction/autonomy selection (default: 0.5).
+- `personality.activity` (float): Multiplier applied to patrol/play/autonomy selection (default: 0.5).
+- `personality.apply_to_autonomy` (bool): When `true` the personality multipliers bias autonomy mode selection; when `false` personality settings are ignored (default: true).
+
+How to disable personality effects:
+- To fully disable personality influence on autonomy selection, set:
+
+```jsonc
+"personality": { "apply_to_autonomy": false }
+```
+
+Notes:
+- The personality feature is implemented in `src/houndmind_ai/behavior/fsm.py` and covered by `tests/test_personality_bias.py`.
+- Disabling `personality.apply_to_autonomy` is safe and will not break other functionality; other behavior features (habituation, micro-idle, energy) remain independently configurable.
+
+
 ## 8) Attention
 **What it does:** Turns head toward sound direction.
 
