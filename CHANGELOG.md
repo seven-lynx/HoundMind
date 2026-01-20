@@ -14,6 +14,9 @@ Current Release: v2026.01.18 • Author: 7Lynx
 - PackMind and CanineCore have been unified into a single system; all features and docs reflect this change.
 - Release: bumped version and updated documentation headers to v2026.01.18.
 - No functional changes since `v2026.01.16`; this release consolidates docs, metadata, and release notes.
+ - Moved developer CLI/tools into a proper package: `src/tools` (removed top-level `tools/` copies). This fixes importability during CI and editable installs.
+ - Docs: added troubleshooting and support bundle collection instructions to `docs/INSTALL.md`.
+ - Fix: use timezone-aware UTC datetimes in logging and support-bundle metadata to avoid deprecation warnings.
 
 ### Notes
 - Files updated: `pyproject.toml`, top-level docs and guides (version header updates).
