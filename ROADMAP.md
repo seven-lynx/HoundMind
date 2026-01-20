@@ -83,6 +83,8 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Home map snapshot sample cap
 - [x] Home map snapshot age cap
 - [x] Path planning hooks (Pi4) — default A* hook added, mapper calls `path_planning_hook`, tests and docs updated
+ - [ ] Add map-based measurement functions (point landmark distance and line/wall distance) for use by localization and range-matching.
+ - [ ] Expose API in `mapping/mapper.py` to query nearest wall/landmark for ultrasonic range association.
 
 ## Behavior
 - [x] Behavior FSM state definitions (`behavior/fsm.py`)
@@ -141,6 +143,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Core runtime tests (non-hardware)
 - [x] Automated on-device smoke test script
 - [x] Gentle recovery test (navigation/obstacle avoidance)
+ - [ ] Add localization unit and replay tests (EKF convergence, ZUPT, range-corrections) to validate pose accuracy on Pi3.
 
 ## Bug Fixes / Hardening
 - [x] Runtime loop: account for tick duration when sleeping to reduce drift.
@@ -199,6 +202,11 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Persist calibration outputs to config or a JSON file (servo offsets + calibration results).
 - [x] Add `config/actions.jsonc` sanity validation for missing action sets.
 - [x] Add a Pi3 “safe mode” preset (reduced scan rates + conservative movement).
+ - [ ] Implement a lightweight `localization` module (EKF) that fuses IMU (accel/gyro) predictions with ultrasonic range corrections and publishes `pose_estimate` (position, heading + covariance) into `RuntimeContext`.
+ - [ ] Add ZUPT (zero-velocity update) detection and accelerometer-bias estimation to reduce dead-reckoning drift during stationary periods.
+ - [ ] Integrate map-based measurement models (point landmark & wall distance) into the EKF measurement updates for stronger corrections.
+ - [ ] Add telemetry/logging hooks for `pose_estimate` and estimator residuals so corrections can be inspected via the telemetry dashboard.
+ - [ ] Add unit and integration tests for localization (EKF convergence on synthetic trajectories, ZUPT behavior, and replay-based validation with real logs).
 
 ### Pi 3 — Enhancement Ideas (lightweight)
 - [x] Head-follow + attention coordination mode (avoid head follow right after attention).
