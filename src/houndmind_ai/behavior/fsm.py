@@ -501,7 +501,27 @@ class BehaviorModule(Module):
         modes = settings.get("autonomy_modes", ["idle", "patrol", "play", "rest"])
         if not isinstance(modes, list) or not modes:
             modes = ["idle"]
-        weights = settings.get("autonomy_weights", {})
+        base_weights = settings.get("autonomy_weights", {})
+
+        # Apply personality multipliers (if configured) to bias selection.
+        personality = (context.get("settings") or {}).get("personality", {})
+        apply_personality = bool(personality.get("apply_to_autonomy", True))
+        curiosity = float(personality.get("curiosity", 0.5))
+        sociability = float(personality.get("sociability", 0.5))
+        activity = float(personality.get("activity", 0.5))
+
+        weights: dict[str, float] = {}
+        for m in modes:
+            w = float(base_weights.get(m, 1.0))
+            if apply_personality:
+                if m == "explore":
+                    w *= curiosity
+                elif m == "interact":
+                    w *= sociability
+                elif m in ("patrol", "play"):
+                    w *= activity
+            weights[m] = w
+
         choice = (
             self.registry.pick_weighted(list(modes), weights) if self.registry else None
         )

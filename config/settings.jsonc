@@ -704,6 +704,18 @@
       "catalog": {}
     },
     // =====================================================================
+    // PERSONALITY & BEHAVIOR TUNING
+    // =====================================================================
+    "personality": {
+      // High-level personality multipliers (0-10). Values near 0 reduce the
+      // relative influence of a behavior; values >1 increase it.
+      "curiosity": 0.5,
+      "sociability": 0.5,
+      "activity": 0.5,
+      // Optionally apply personality multipliers to autonomy weights.
+      "apply_to_autonomy": true
+    },
+    // =====================================================================
     // ENERGY & EMOTION (optional)
     // =====================================================================
     "energy": {

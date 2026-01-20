@@ -207,6 +207,27 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Adaptive scan step (coarser when clear, finer when near obstacles).
 - [x] Sensor health summary badge (LED/log) with thresholds.
 
+### Pi 3 — Enhancement Ideas (lightweight)
+- [x] Head-follow + attention coordination mode (avoid head follow right after attention).
+	- [ ] Define head-follow state machine and avoidance cooldown in `behavior/fsm.py`.
+	- [ ] Add unit tests for coordination timing `tests/test_head_follow_coordination.py`.
+- [x] Quiet mode schedule (reduce scan cadence + action frequency on demand).
+	- [ ] Add `behavior.quiet_mode` config with schedule and implement cadence overrides in `core/runtime.py`.
+	- [ ] Tests: `tests/test_quiet_mode_schedule.py`.
+- [x] Battery/voltage alert hook to trigger rest behavior (if available).
+	- [ ] Add battery monitor hooks in `tools/hardware_checkup.py` and `core/health.py`.
+	- [ ] Add config thresholds and rest behavior trigger test `tests/test_battery_rest_trigger.py`.
+- [x] No-go memory for angles that repeatedly cause avoidance.
+	- [ ] Implement `no_go_angles` LRU in `core/runtime.py` and expose tuning in config.
+	- [ ] Integrate with navigation decision scoring and add tests `tests/test_no_go_memory.py`.
+- [x] Gentle recovery: reduce speed after repeated stuck events.
+	- [ ] Implement stuck counter and speed reduction policy in `navigation/avoidance.py`.
+	- [ ] Tests: `tests/test_gentle_recovery.py` (already exists; extend scenarios).
+- [x] Adaptive scan step (coarser when clear, finer when near obstacles).
+	- [ ] Add adaptive scan step logic in `mapping/scan_helpers.py` and tests `tests/test_adaptive_scan_step.py`.
+- [x] Sensor health summary badge (LED/log) with thresholds.
+	- [ ] Emit periodic sensor health snapshot to telemetry and LED manager; add tests `tests/test_sensor_health_snapshot.py`.
+
 ### Pi 3 — Audit Suggestions (module polish)
 - [x] Runtime: add tick overrun timing warnings and graceful shutdown handling.
 - [x] Config: validate action catalog references and missing action sets.
@@ -223,6 +244,38 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Watchdog: per-module restart cooldowns to reduce thrash.
 - [x] Health: emit high-water marks and last-degraded reasons.
 - [x] Logging: include `navigation_decision` in event log snapshots.
+
+### Pi 3 — Audit Suggestions (module polish)
+- [x] Runtime: add tick overrun timing warnings and graceful shutdown handling.
+	- [ ] Add regression/unit tests that simulate tick overruns and assert warnings are emitted.
+- [x] Config: validate action catalog references and missing action sets.
+	- [ ] Add config validation rules and tests `tests/test_config_action_catalog.py`.
+- [x] Sensors: publish per-sensor health/stale flags in context.
+	- [ ] Implement sensor health aggregation and tests `tests/test_sensor_health_flags.py`.
+- [x] Motors: use `energy_speed_hint` to bias turn/walk speed when enabled.
+	- [ ] Add integration tests that verify `energy_speed_hint` influences motor commands.
+- [x] Perception: include `sound_direction` in `perception` payload.
+	- [ ] Add unit tests for perception payload schema and ingest `tests/test_perception_schema.py`.
+- [x] Scanning: emit scan-quality summary (valid ratio, min distance).
+	- [ ] Implement scan-quality summary exporter and tests.
+- [x] Navigation: add dead-end memory and turn cooldown to avoid oscillation.
+	- [ ] Add scenario tests for dead-end avoidance and cooldown enforcement.
+- [x] Navigation: add clear-path streak to reduce scan jitter when safe.
+	- [ ] Add unit tests and telemetry assertions for clear-path streak logic.
+- [x] Navigation: log a compact `navigation_decision` snapshot for tuning.
+	- [ ] Add logging hooks and examples for `docs/LOGGING.md` with jq snippets.
+- [x] Mapping: save a final home-map snapshot on shutdown (optional).
+	- [ ] Add safe write + rotate behavior and test for permissions/failure modes.
+- [x] Behavior: add action cooldown to avoid rapid toggles.
+	- [ ] Ensure cooldowns are configurable and covered by `tests/test_action_cooldowns.py`.
+- [x] Safety: add tilt cooldown / recovery clear to avoid repeated triggers.
+	- [ ] Add tests simulating tilt events across ticks and ensure cooldown clearing works.
+- [x] Watchdog: per-module restart cooldowns to reduce thrash.
+	- [ ] Implement cooldown policy and tests that ensure restarts are rate-limited.
+- [x] Health: emit high-water marks and last-degraded reasons.
+	- [ ] Add telemetry snapshot fields and tests to validate high-water and reason fields.
+- [x] Logging: include `navigation_decision` in event log snapshots.
+	- [ ] Add unit test that composes an event snapshot including `navigation_decision` and validates JSON schema.
 
 ### Pi 4 — Heavy-Duty Variant Roadmap
 
@@ -301,21 +354,60 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [ ] Voice intent parsing and command routing.
 
 #### Behavior & Interaction
-- [ ] Gesture recognition for simple commands.
-- [ ] Multi-person attention model (follow owner priority).
-- [ ] Emotion/energy model (Pi4 variant; optional).
- - [x] Behavior parity: add explore/interact behaviors from legacy PackMind.
- - [x] Behavior parity: update action catalog for patrol/explore/interact.
- - [ ] Add persistent internal state (energy/mood/engagement) that decays over minutes.
- - [x] Add behavior state transition cooldowns + confidence gates to reduce jitter.
- - [x] Add micro-behaviors (small head turns, posture shifts, idle breathing) for lifelike idle.
- - [x] Add habituation to repeated stimuli with recovery after quiet periods.
- - [ ] Add intent blending (patrol/explore/rest mix) based on energy + recent stimuli.
- - [ ] Add goal memory (recent waypoints, no-go zones) to reduce loops.
- - [ ] Add return-to-home behavior when confidence/pose quality drops.
- - [ ] Add safe exploration bounds (max distance/time) with automatic reset.
- - [ ] Add a library of short behavior scripts (greet, investigate, stretch, rest).
- - [ ] Ensure chest LED always reflects the current behavior/safety/emotion state (clear priority rules).
+
+- **Gesture & Attention**
+	- [ ] Gesture recognition for simple commands.
+		- [ ] Define gesture schema and events (`behavior/gestures.py`).
+		- [ ] Add a gated handler that maps gestures to behavior intents.
+		- [ ] Unit test: `tests/test_gesture_integration.py` with simulated events.
+	- [ ] Multi-person attention model (follow owner priority).
+		- [ ] Define attention scorer (distance, recency, owner flag) in `behavior/attention.py`.
+		- [ ] Integrate with `behavior/fsm.py` as an attention input.
+		- [ ] Tests: simulated multi-attendee scenarios.
+
+- **Internal State & Personality**
+	- [ ] Add persistent internal state (energy/mood/engagement) that decays over minutes.
+		- [ ] Define `RuntimeContext` fields: `energy`, `mood`, `engagement` in `core/runtime.py`.
+		- [ ] Implement decay/update per tick and config-driven decay rates in `config/settings.jsonc`.
+		- [ ] Persist state snapshot on graceful shutdown and restore on startup.
+		- [ ] Unit tests: `tests/test_energy_decay.py`, `tests/test_state_persist.py`.
+	- [ ] Add a `personality` config section and multipliers.
+		- [ ] Add `personality.{curiosity,sociability,activity}` defaults to `config/settings.jsonc`.
+		- [ ] Read personality multipliers in action/selection code (`behavior/fsm.py`).
+		- [ ] Tests: `tests/test_personality_bias.py`.
+
+- **Behavior Mechanics & Quality**
+	- [x] Behavior parity: add explore/interact behaviors from legacy PackMind.
+	- [x] Behavior parity: update action catalog for patrol/explore/interact.
+	- [x] Add behavior state transition cooldowns + confidence gates to reduce jitter.
+	- [x] Add habituation to repeated stimuli with recovery after quiet periods.
+	- [ ] Add intent blending (patrol/explore/rest mix) based on energy + recent stimuli.
+		- [ ] Design a scoring-based arbiter that produces blended intent scores.
+		- [ ] Implement arbiter in `behavior/fsm.py` and expose debugging telemetry `behavior_snapshot`.
+		- [ ] Tests: `tests/test_intent_blending.py` (unit and scenario tests).
+	- [ ] Add action cooldowns and micro-behavior sequences.
+		- [ ] Define micro-behavior script format and cooldown metadata in `behavior/library.py`.
+		- [ ] Add sequencing runner + tests `tests/test_action_cooldowns.py`.
+
+- **Memory & Navigation Support**
+	- [ ] Add goal memory (recent waypoints, no-go zones) to reduce loops.
+		- [ ] Implement small LRU ring in `core/runtime.py` or `mapping/mapper.py` as `goal_memory`.
+		- [ ] Integrate as a soft cost in navigation decision heuristics.
+		- [ ] Tests: `tests/test_goal_memory.py` (simulated loop scenarios).
+	- [ ] Add return-to-home behavior when confidence/pose quality drops.
+		- [ ] Define confidence thresholds and safe return heuristic in `behavior/fsm.py`.
+		- [ ] Tests: `tests/test_return_home.py`.
+	- [ ] Add safe exploration bounds (max distance/time) with automatic reset.
+		- [ ] Add config settings `behavior.explore.max_distance` and `behavior.explore.max_time`.
+		- [ ] Implement bounding logic and add tests.
+
+- **Behaviors Library & UX**
+	- [ ] Add a library of short behavior scripts (greet, investigate, stretch, rest).
+		- [ ] Provide JSONC script examples in `config/actions.jsonc`.
+		- [ ] Add playback and interruptable semantics in `behavior/library.py`.
+		- [ ] Tests: `tests/test_behavior_scripts.py`.
+	- [ ] Ensure chest LED always reflects the current behavior/safety/emotion state (clear priority rules).
+		- [ ] Define LED priority mapping and unit tests `tests/test_led_priority.py`.
 
 #### Safety & Control
 - [ ] Dynamic balance service with active IMU corrections.
@@ -342,5 +434,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [ ] Add a post-install `scripts/smoke_check.sh` for sensors/logs/telemetry sanity.
 - [ ] Add CI fixtures for vision inference + SLAM (simulated frames/IMU) to validate adapters
 - [ ] Add CI smoke tests for optional modules (face recognition, semantic labeling, telemetry endpoints).
+
+Note: some vision-related tests require compiled C-extensions (NumPy/OpenCV). If your local Python environment lacks a compatible `numpy` wheel for your Python version/platform, these tests will fail during collection. Run vision tests on CI or a machine where `pip install numpy opencv-python` has been completed with matching binaries.
 
 
