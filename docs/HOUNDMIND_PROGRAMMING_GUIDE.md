@@ -52,11 +52,16 @@ Core flow:
 
 ## 4) Configuration
 All settings live in [config/settings.jsonc](config/settings.jsonc). Key sections:
-- modules: enable/disable modules
-- sensors: polling cadence and filtering
-- navigation: scan behavior and decision rules
-- safety: emergency stop and tilt options (opt-in)
-- mapping: home map settings
+ mapping: home map settings
+   - occupancy grid (optional): lightweight grid ingestion from ultrasonic sweeps
+     - `mapping.grid_enabled` (bool): enable/disable grid ingestion (default: true)
+     - `mapping.cell_size_cm` (int): cell size in cm used to bucket sweep hits
+     - `mapping.grid_size` (array): grid dimensions [width, height]
+   - navigation grid usage:
+     - `navigation.use_grid_map` (bool): consult grid when biasing turns (default: true)
+     - `navigation.grid_cell_size_cm` (int): cell size for grid-bias computations (defaults to mapping.cell_size_cm)
+     - `navigation.grid_influence_depth_cm` (int): depth ahead (cm) considered when computing left/right density
+     - `navigation.grid_bias_weight` (float): bias threshold weight to prefer sparser side (0-1)
 - behavior: action catalog settings
 - performance: safe mode, warnings, and throttling hooks
 
