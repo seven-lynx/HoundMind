@@ -18,9 +18,17 @@ def test_setup_logging_respects_config(tmp_path):
         "context": {"device_id": "cfg-test"},
     }
 
+    # Ensure a clean root logger so previous test runs don't leave handlers configured.
+    root = logging.getLogger()
+    for h in list(root.handlers):
+        try:
+            root.removeHandler(h)
+            h.close()
+        except Exception:
+            pass
+
     filt = setup_logging(cfg)
 
-    root = logging.getLogger()
     # root level should reflect `level`
     assert root.level == logging.WARNING
 

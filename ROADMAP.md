@@ -122,6 +122,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
  - [ ] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
  - [x] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
  - [ ] Surface `trace_id` in `RuntimeContext` and include it in telemetry snapshots to correlate logs + telemetry + support bundles.
+ - [x] Surface `trace_id` in `RuntimeContext` and include it in telemetry snapshots to correlate logs + telemetry + support bundles.
 
 
 ## Optional (Disabled until later)

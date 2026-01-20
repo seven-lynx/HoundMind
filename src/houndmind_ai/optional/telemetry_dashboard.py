@@ -99,6 +99,8 @@ class TelemetryDashboardModule(Module):
         snapshot = {"timestamp": now}
         for key in keys:
             snapshot[key] = context.get(key)
+        # Surface trace_id at the top-level of the snapshot for correlation.
+        snapshot["trace_id"] = context.get("trace_id")
         self._snapshot = snapshot
         self._last_ts = now
 

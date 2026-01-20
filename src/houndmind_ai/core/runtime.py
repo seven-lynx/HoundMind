@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import uuid
 import logging
 import time
 from datetime import datetime
@@ -31,6 +32,9 @@ class HoundMindRuntime:
         self.context.set("config", config)
         self.context.set("settings", config.settings)
         self.context.set("module_names", [module.name for module in modules])
+        # Generate a per-runtime trace id for correlating logs and telemetry.
+        trace_id = uuid.uuid4().hex
+        self.context.set("trace_id", trace_id)
 
     def start(self) -> None:
         for module in self.modules:
