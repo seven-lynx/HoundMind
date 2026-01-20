@@ -9,6 +9,8 @@
 - [x] Changelog and README reflect all major changes
 - [x] Release QA checklist: tests, docs, tag, changelog, install validation
 - [ ] Expand troubleshooting checklist in `docs/INSTALL.md` (common errors + support bundle steps)
+ - [ ] Improve and consolidate docs in `docs/` (API reference, programming guide, CONTRIBUTING.md, architecture overview)
+ - [ ] Packaging & release automation: complete `pyproject.toml` metadata, automate builds, changelog generation, and release pipelines
 
 Purpose: Track completion for each module needed for the PiDog hardware-only build (Pi 3 target). Check items as they’re implemented and verified on hardware.
 
@@ -16,12 +18,14 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Runtime loop + module lifecycle hardened (`core/runtime.py`)
 - [x] Config loading + validation (`core/config.py`)
 - [x] Module status/health reporting (`core/module.py`)
+ - [ ] Provide a JSON Schema for `config/settings.jsonc` and runtime validation with clear errors and examples
 
 ## HAL (Hardware Abstraction Layer)
 - [x] Motor control integration (servo actions, head/tail) (`hal/motors.py`)
 - [x] Sensor integration (ultrasonic, IMU, touch, sound dir) (`hal/sensors.py`)
 - [x] Emergency stop procedure (hardware-only)
 - [x] Calibration workflow hook (servo zero / offsets)
+ - [ ] Refactor HAL into clearer interfaces/adapters to allow Pi3/Pi4/simulator swaps and unit-testable adapters
 
 ## Sensor Stream
 - [x] Sensor polling service loop (single thread + fixed cadence)
@@ -96,6 +100,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Safety supervisor rules (`safety/supervisor.py`)
 - [x] Emergency stop command
 - [x] Watchdog heartbeat + timeout stop
+ - [ ] Review and tighten safety defaults (emergency stop, balance); add automated tests and an onboarding validation checklist before enabling on-device
 
 ## Calibration
 - [x] Wall-follow calibration routine
@@ -109,6 +114,9 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Session summary report (events, obstacles, interactions)
 - [x] Global logging setup (console + rotating file)
 - [x] Status log toggle + interval control
+ - [ ] Standardize structured JSON logging across modules (JSONL snapshots, consistent schema)
+ - [ ] Add log rotation configuration and retention defaults (config-driven)
+ - [ ] Add telemetry hooks for optional remote metrics/telemetry export (explicit opt-in)
 
 ## Logging Tasks
 
@@ -119,7 +127,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
  - [x] Implement log rotation and retention policy (daily rotate + gzip backups, configurable `backupCount`).
  - [ ] Add optional error aggregation (Sentry/Logstash) with explicit opt-in and privacy documentation in `docs/INSTALL.md`.
  - [ ] Implement log sampling and rate-limiting for high-frequency sensors and debug streams.
- - [x] Provide `scripts/logs_collect.sh` or `tools/collect_support_bundle.py` to bundle logs, config, and a telemetry snapshot for support uploads.
+ - [x] Provide `scripts/logs_collect.sh` or `python -m tools.collect_support_bundle` to bundle logs, config, and a telemetry snapshot for support uploads.
  - [x] Add `docs/LOGGING.md` runbook with collection commands, jq examples, and common troubleshooting steps.
  - [ ] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
  - [x] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
@@ -138,12 +146,17 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Health monitor module (CPU/mem/temp sampling)
 - [x] Scan throttling when health is degraded
 - [x] README usage + setup for Pi 3
+ - [ ] Add CI pipeline (GitHub Actions) to run linting, tests, type checks, build, and packaging on PRs
+ - [ ] Add typing and static checks (`mypy`, `ruff`/`flake8`) and enforce in CI
+ - [ ] Pin and manage dependencies, add Dependabot config and guidance for `requirements-lite.txt`
+ - [ ] Performance profiling harnesses for hot loops (navigation/scan processing) and document targets
 
 ## Tests (Hardware-validated)
 - [x] Core runtime tests (non-hardware)
 - [x] Automated on-device smoke test script
 - [x] Gentle recovery test (navigation/obstacle avoidance)
  - [ ] Add localization unit and replay tests (EKF convergence, ZUPT, range-corrections) to validate pose accuracy on Pi3.
+ - [ ] Increase unit and integration test coverage across HAL, navigation, mapping, and behavior; add hardware mocks for CI
 
 ## Bug Fixes / Hardening
 - [x] Runtime loop: account for tick duration when sleeping to reduce drift.
@@ -202,6 +215,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Persist calibration outputs to config or a JSON file (servo offsets + calibration results).
 - [x] Add `config/actions.jsonc` sanity validation for missing action sets.
 - [x] Add a Pi3 “safe mode” preset (reduced scan rates + conservative movement).
+ - [ ] Improve `examples/` with runnable demos, device setup scripts, and example configs for Pi3/Pi4
  - [ ] Implement a lightweight `localization` module (EKF) that fuses IMU (accel/gyro) predictions with ultrasonic range corrections and publishes `pose_estimate` (position, heading + covariance) into `RuntimeContext`.
  - [ ] Add ZUPT (zero-velocity update) detection and accelerometer-bias estimation to reduce dead-reckoning drift during stationary periods.
  - [ ] Integrate map-based measurement models (point landmark & wall distance) into the EKF measurement updates for stronger corrections.
@@ -225,7 +239,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
 	- [ ] Add `behavior.quiet_mode` config with schedule and implement cadence overrides in `core/runtime.py`.
 	- [ ] Tests: `tests/test_quiet_mode_schedule.py`.
 - [x] Battery/voltage alert hook to trigger rest behavior (if available).
-	- [ ] Add battery monitor hooks in `tools/hardware_checkup.py` and `core/health.py`.
+	- [ ] Add battery monitor hooks in `src/tools/hardware_checkup.py` and `core/health.py`.
 	- [ ] Add config thresholds and rest behavior trigger test `tests/test_battery_rest_trigger.py`.
 - [x] No-go memory for angles that repeatedly cause avoidance.
 	- [ ] Implement `no_go_angles` LRU in `core/runtime.py` and expose tuning in config.

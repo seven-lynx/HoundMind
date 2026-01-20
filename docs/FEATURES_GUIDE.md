@@ -239,8 +239,8 @@ Notes:
 
 **CLI helper:**
 ```bash
-python tools/voice_cli.py say --text "sit"
-python tools/voice_cli.py command --action "forward"
+python -m tools.voice_cli say --text "sit"  # recommended after `pip install -e .` or with `PYTHONPATH=src`
+python -m tools.voice_cli command --action "forward"
 ```
 
 **Disable:**
@@ -277,8 +277,8 @@ python tools/voice_cli.py command --action "forward"
 
 **Camera check tool:**
 ```bash
-python tools/camera_check.py --list-devices --max-index 5
-python tools/camera_check.py --index 0 --save frame.jpg
+python -m tools.camera_check --list-devices --max-index 5
+python -m tools.camera_check --index 0 --save frame.jpg
 ```
 
 **Disable:** `modules.vision_pi4.enabled = false`
@@ -326,7 +326,7 @@ python tools/camera_check.py --index 0 --save frame.jpg
 Run the downloader once to fetch a lightweight MobileNet-SSD model and labels:
 
 ```bash
-python tools/download_opencv_models.py
+python -m tools.download_opencv_models
 ```
 
 This populates `models/` with:

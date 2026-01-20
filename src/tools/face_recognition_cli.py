@@ -1,9 +1,9 @@
 """CLI helper for face recognition enrollment and status.
 
 Usage:
-    python tools/face_recognition_cli.py status
-    python tools/face_recognition_cli.py faces
-    python tools/face_recognition_cli.py enroll --name Alice
+    python -m tools.face_recognition_cli status
+    python -m tools.face_recognition_cli faces
+    python -m tools.face_recognition_cli enroll --name Alice
 """
 
 from __future__ import annotations

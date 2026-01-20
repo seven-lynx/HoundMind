@@ -41,6 +41,11 @@ Optional flags:
 - `--run-i2samp` (runs the PiDog audio setup script)
 - `--preset auto|lite|full` (auto detects Pi model)
 
+Installer behavior for i2samp:
+- If you pass `--run-i2samp` the installer will run `i2samp.sh` after installing `pidog`.
+- You can also set `RUN_I2SAMP=1` to enable the same behavior non-interactively (useful for CI or scripts).
+- When running the top-level `scripts/install_houndmind.sh` interactively, the installer will prompt to run the PiDog audio helper by default (you can answer yes/no).
+
 ## Manual Install (Step-by-Step, Advanced)
 
 ### 1) Create and activate a virtual environment
@@ -116,7 +121,7 @@ python -m pip install -r requirements.txt
 ### 5) Verify the install
 
 ```bash
-python tools/installer_verify.py
+python -m tools.installer_verify  # recommended after `pip install -e .` or with `PYTHONPATH=src`
 ```
 
 ## Troubleshooting & Support Bundles
@@ -133,7 +138,7 @@ If you run into install or runtime issues, follow this checklist to gather infor
    - Install the system build packages listed earlier before attempting `pip install` for heavy packages.
 
 - **How to collect a support bundle (useful when filing issues):**
-   - The repo includes a support-bundle helper available as a module: `python -m tools.collect_support_bundle` or run the script directly `python tools/collect_support_bundle.py`.
+    - The repo includes a support-bundle helper available as a module: `python -m tools.collect_support_bundle` or run the script directly `python src/tools/collect_support_bundle.py`.
    - Example: `python -m tools.collect_support_bundle /tmp/support.zip`.
    - Set a trace id to correlate logs and telemetry: on Linux/macOS `export HOUNDMIND_TRACE_ID=trace-12345`, on PowerShell `setx HOUNDMIND_TRACE_ID trace-12345` then reproduce the issue and collect a bundle.
    - Support bundles include `metadata.json` (timestamp, git commit, trace_id), logs, and key config files — include this bundle when opening issues.
@@ -148,7 +153,7 @@ If you run into install or runtime issues, follow this checklist to gather infor
 - **Common runtime checks:**
    - Inspect JSON logs in `logs/houndmind.log` or use the support bundle's `metadata.json` for timestamps and trace ids.
    - Run the lightweight smoke test for on-device validation: `python -m tools.smoke_test --cycles 5 --tick-hz 5` (use with caution on hardware).
-   - Re-run `python tools/installer_verify.py --preset lite` to validate a minimal working environment.
+   - Re-run `python -m tools.installer_verify --preset lite` to validate a minimal working environment.
 
 - **When opening an issue:**
    - Attach the support bundle and include the `metadata.json` trace id and git commit SHA.

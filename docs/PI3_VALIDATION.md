@@ -33,5 +33,5 @@ Use this checklist on the PiDog hardware before declaring Pi3 complete.
 - [ ] Navigation decision snapshots appear when enabled.
 
 ## Tools
-- [ ] `tools/hardware_checkup.py` passes basic checks.
-- [ ] `tools/smoke_test.py` completes with no errors.
+- [ ] Run `python -m tools.hardware_checkup` (recommended after `pip install -e .` or with `PYTHONPATH=src`) and ensure it passes basic checks.
+- [ ] Run `python -m tools.smoke_test` and ensure it completes with no errors.

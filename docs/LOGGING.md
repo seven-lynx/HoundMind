@@ -9,7 +9,7 @@ Paths
 
 Collect a support bundle (recommended):
 
-1. Gather files into a zip (script available at `tools/collect_support_bundle.py`).
+1. Gather files into a zip (module available as `python -m tools.collect_support_bundle` — recommended after `pip install -e .` or with `PYTHONPATH=src`).
 
 Quick manual commands
 

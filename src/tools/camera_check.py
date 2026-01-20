@@ -1,8 +1,8 @@
 """Camera diagnostic tool for Pi4 vision setup.
 
 Usage:
-    python tools/camera_check.py --list-devices --max-index 5
-    python tools/camera_check.py --index 0 --save frame.jpg
+    python -m tools.camera_check --list-devices --max-index 5
+    python -m tools.camera_check --index 0 --save frame.jpg
 """
 
 from __future__ import annotations

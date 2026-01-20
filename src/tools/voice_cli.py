@@ -1,8 +1,8 @@
 """CLI helper to inject voice commands/text into a running HoundMind session.
 
 Usage:
-    python tools/voice_cli.py say --text "sit"
-    python tools/voice_cli.py command --action "forward"
+    python -m tools.voice_cli say --text "sit"
+    python -m tools.voice_cli command --action "forward"
 """
 
 from __future__ import annotations

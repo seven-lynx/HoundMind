@@ -48,7 +48,7 @@ class TelemetryDashboardModule(Module):
     def create_support_bundle_for_trace(self, trace_id: str):
         """Create a support bundle zip file for the given trace_id and return its Path.
 
-        This uses the project's `tools/collect_support_bundle.py` helper to produce
+        This uses the project's `tools.collect_support_bundle` module to produce
         a zip file. The function returns the path to the created zip file or None
         on failure.
         """

@@ -1,7 +1,7 @@
 """Collect a support bundle including recent logs and config files.
 
 Usage:
-    python tools/collect_support_bundle.py /path/to/output.zip
+    python -m tools.collect_support_bundle /path/to/output.zip
 
 If no output path is provided the script will create `logs/support_bundle_{timestamp}.zip`.
 """

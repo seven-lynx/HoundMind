@@ -5,8 +5,8 @@ Run this on the Pi4 after RTAB-Map is installed. It attempts to import the adapt
 initialize it, and exercise `process`, `get_pose`, `get_map_data`, and `get_trajectory`.
 
 Usage:
-  python tools/validate_rtabmap_adapter.py --camera 0
-  python tools/validate_rtabmap_adapter.py --image /path/to/sample.jpg
+    python -m tools.validate_rtabmap_adapter --camera 0
+    python -m tools.validate_rtabmap_adapter --image /path/to/sample.jpg
 
 If OpenCV is not available, the script will generate a synthetic frame.
 """

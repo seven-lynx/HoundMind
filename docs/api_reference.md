@@ -26,7 +26,7 @@ finally:
 	dog.close()
 ```
 
-Need feature-level explanations? See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md).
+Need feature-level explanations? See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) and the [HoundMind Programming Guide](HOUNDMIND_PROGRAMMING_GUIDE.md).
 
 ---
 
@@ -130,25 +130,17 @@ These modules run each tick and publish data into the runtime context.
 ---
 
 ## HoundMind Mapping (Unified System)
-HoundMind’s `MappingModule` provides lightweight opening analysis and optional home-map snapshots. Example:
+HoundMind’s `MappingModule` provides lightweight opening analysis and optional home-map snapshots. Use the public MappingModule API rather than calling private methods. See the runnable demo `examples/houndmind_mapping_demo.py` for a complete example.
+
+Illustrative snippet (do not rely on private `_`-prefixed helpers in production):
 
 ```python
 from houndmind_ai.mapping.mapper import MappingModule
 
-settings = {
-	"opening_min_width_cm": 10,
-	"opening_max_width_cm": 1000,
-	"opening_cell_conf_min": 0.0,
-	"safe_path_min_width_cm": 1,
-	"safe_path_max_width_cm": 1000,
-	"safe_path_cell_conf_min": 0.0,
-	"safe_path_score_weight_width": 0.6,
-	"safe_path_score_weight_distance": 0.4,
-}
+# Configure mapping settings in config/settings.jsonc; use MappingModule instance APIs
+# rather than calling private implementation helpers. Refer to examples/houndmind_mapping_demo.py
+# for a runnable demo.
 
-angles = {"-60": 120.0, "0": 80.0, "60": 60.0}
-openings, safe_paths, best_path = MappingModule._analyze_scan_openings(angles, settings)
-print(openings, safe_paths, best_path)
 ```
 
 Runnable demo: [examples/houndmind_mapping_demo.py](examples/houndmind_mapping_demo.py)
@@ -156,11 +148,21 @@ Runnable demo: [examples/houndmind_mapping_demo.py](examples/houndmind_mapping_d
 ---
 
 ## Beginner Troubleshooting
-- **`ModuleNotFoundError: pidog`**: Install the official SunFounder PiDog software first, then install HoundMind in the same environment.
+-- **`ModuleNotFoundError: pidog`**: Install the official SunFounder PiDog software first, then install HoundMind in the same environment. Example:
+
+```bash
+git clone https://github.com/sunfounder/pidog.git
+python -m pip install ./pidog
+python -m pip install -e .
+```
 - **`ModuleNotFoundError: houndmind_ai`**: Ensure you installed HoundMind with `python -m pip install -e .` in the active environment.
 - **I2C / sensor errors**: Verify I2C is enabled in Raspberry Pi OS and reboot.
 - **Servo jitter**: Lower speed and reduce `step_count`, then try again.
-- **Audio not working**: Run the PiDog audio setup script (`i2samp.sh`) from the official repo.
+-- **Audio not working**: The guided installer can run the PiDog `i2samp.sh` helper for you. Use the top-level wrapper `scripts/install_houndmind.sh` and pass `--run-i2samp`, set `RUN_I2SAMP=1` for non-interactive runs, or answer the interactive prompt when running the script. Otherwise run it manually from the cloned `pidog` repo:
+
+```bash
+sudo bash .cache/houndmind_deps/pidog/i2samp.sh
+```
 
 ---
 
@@ -198,7 +200,7 @@ runtime.run()
 
 ## Compatibility Note (Pi3 vs Pi4)
 - **Pi3**: Supported target. Vision/voice are disabled by default.
-- **Pi4**: Not the current target in HoundMind. Heavier features are deferred.
+-- **Pi4**: Pi3 is the primary target; Pi4 features are optional and disabled by default (enable via the `pi4` profile in `config/settings.jsonc`).
 
 ---
 

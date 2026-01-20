@@ -46,12 +46,13 @@ It is safe to re-run; it skips work that is already complete.
 
 ## Hardware checkup
 - Run a minimal sensor + motion check on the PiDog hardware:
-  - `python tools/hardware_checkup.py`
+ - Run a minimal sensor + motion check on the PiDog hardware:
+  - `python -m tools.hardware_checkup` (recommended after `pip install -e .` or with `PYTHONPATH=src`)
 - Use `--skip-motion` to avoid any movement.
 
 ## Automated smoke test
 - Run a non-motion smoke test (sensors + scan + mapping):
-  - `python tools/smoke_test.py`
+  - `python -m tools.smoke_test` (recommended after `pip install -e .` or with `PYTHONPATH=src`)
 - Add `--include-motion` to allow navigation/motor actions.
 
 ## Configuration
@@ -120,7 +121,7 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for detailed enable/disable
 - **Audio not working** → Ensure PortAudio headers are installed; rerun audio setup.
 - **Port in use** → Change HTTP ports in `config/settings.jsonc` for vision/telemetry/voice.
 
-- **Build errors for heavy packages (face_recognition, dlib, pyaudio, rtabmap-py)** → These commonly occur on newer Raspberry Pi OS releases (for example, Trixie with Python 3.13) because prebuilt wheels are not yet available. Preferred OS: **Raspberry Pi OS Bookworm (64-bit, Python 3.11)**. If you see many `wheel`/`gcc`/`dlib` build failures during the full install, either switch to Bookworm or run the installer with `--preset lite`.
+- **Build errors for heavy packages (face_recognition, dlib, pyaudio, rtabmap-py)** → These commonly occur on newer Raspberry Pi OS releases (for example, Trixie with Python 3.13) because prebuilt wheels are not yet available. Preferred OS: **Raspberry Pi OS Bookworm (64-bit, Python 3.12)**. If you see many `wheel`/`gcc`/`dlib` build failures during the full install, either switch to Bookworm or run the installer with `--preset lite`.
 
 - **`ERROR: Could not find a version that satisfies the requirement pidog`** → `pidog` is not on PyPI; the guided installer or `scripts/pidog_install.py` will clone and install it from the SunFounder repo into the same environment. See `docs/INSTALL.md` for manual steps.
 
@@ -201,10 +202,22 @@ Note: The guided installer performs steps 1–4 automatically. Run the recommend
 bash scripts/install_houndmind.sh
 ```
 
-If you want the installer to also run the PiDog audio helper (`i2samp.sh`), pass the `--run-i2samp` flag which invokes the helper script with `sudo`:
+The installer can optionally run the PiDog audio helper (`i2samp.sh`). You can:
+
+- Pass `--run-i2samp` to `scripts/install_houndmind.sh`.
+- Set the environment variable `RUN_I2SAMP=1` to enable it non-interactively.
+- When run interactively the installer will prompt whether to run `i2samp.sh`.
+
+Example (interactive):
 
 ```bash
-bash scripts/install_houndmind.sh --run-i2samp
+bash scripts/install_houndmind.sh
+```
+
+Example (non-interactive):
+
+```bash
+RUN_I2SAMP=1 bash scripts/install_houndmind.sh
 ```
 
 The shell wrapper forwards arguments to `scripts/pidog_install.py` (see `--help` on that script for more options, e.g. `--auto-system-deps`).
