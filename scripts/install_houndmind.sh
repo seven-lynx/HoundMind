@@ -3,7 +3,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-PYTHON_BIN="${PYTHON:-python3}"
+# Prefer a Python interpreter that is compatible with heavy Pi packages.
+# Order: env $PYTHON, python3.10, python3.11, python3.9, python3
+if [ -n "${PYTHON:-}" ]; then
+	PYTHON_BIN="${PYTHON}"
+elif command -v python3.10 >/dev/null 2>&1; then
+	PYTHON_BIN=python3.10
+elif command -v python3.11 >/dev/null 2>&1; then
+	PYTHON_BIN=python3.11
+elif command -v python3.9 >/dev/null 2>&1; then
+	PYTHON_BIN=python3.9
+else
+	PYTHON_BIN=python3
+fi
 
 # If RUN_I2SAMP=1 is set, or user passes --run-i2samp, forward it.
 EXTRA_ARGS=("--auto-system-deps")
@@ -42,4 +54,4 @@ if [ -t 0 ] && [ "${RUN_I2SAMP:-}" != "1" ]; then
 	fi
 fi
 
-"${PYTHON_BIN}" "${ROOT_DIR}/scripts/pidog_install.py" "${EXTRA_ARGS[@]}"
+"${PYTHON_BIN}" "${ROOT_DIR}/scripts/installer_core.py" "${EXTRA_ARGS[@]}"

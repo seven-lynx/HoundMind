@@ -50,3 +50,19 @@ python3 -c "import rtabmap; print(rtabmap.__version__)"
 ## Integration
 - Once installed, the HoundMind SLAM module will auto-detect and use RTAB-Map if `settings.slam_pi4.backend = "rtabmap"`.
 - All dependencies should be installed in the same Python environment as HoundMind.
+
+## Automated build via installer
+
+The guided installer can optionally build RTAB-Map for you. On Pi4 use the `--build-rtabmap` flag and ensure system packages are present (or use `--auto-system-deps`):
+
+```bash
+# top-level helper that chooses a Python interpreter (prefers python3.10 when available)
+bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
+
+# or force a specific interpreter
+PYTHON=python3.10 bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
+```
+
+Notes:
+- Building RTAB-Map from source is long-running and requires `sudo` for `make install`.
+- The installer will exclude `rtabmap-py` from the initial `pip install -r` pass and build/install the bindings into the same environment afterwards.

@@ -2,4 +2,4 @@
 
 # Hardware bindings (platform-specific)
 # Note: `pidog` is not published to PyPI. It must be installed from the
-# official SunFounder repo (see scripts/pidog_install.py or docs/INSTALL.md).
+# official SunFounder repo (see scripts/install_houndmind.sh or docs/INSTALL.md).

@@ -7,4 +7,4 @@ if ([string]::IsNullOrWhiteSpace($Python)) {
     $Python = 'python'
 }
 
-& $Python (Join-Path $RootDir 'scripts\pidog_install.py') --auto-system-deps @args
+& $Python (Join-Path $RootDir 'scripts\installer_core.py') --auto-system-deps @args

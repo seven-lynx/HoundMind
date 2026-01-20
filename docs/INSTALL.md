@@ -4,14 +4,70 @@ Version: v2026.01.18 • Author: 7Lynx
 
 This guide installs HoundMind, the unified AI system for SunFounder PiDog. Simulation mode is no longer supported. PackMind and CanineCore are now a single system.
 
-**Preferred OS (recommended):** Raspberry Pi OS Bookworm (64-bit) with Python 3.11.
+**Preferred OS (recommended):** Raspberry Pi OS Bookworm (64-bit).
 
-IMPORTANT: Bookworm is the preferred distribution for this project because many heavy, platform-specific packages (for example `dlib`/`face_recognition`, `pyaudio`, and `rtabmap-py`) provide prebuilt wheels for Bookworm but may not have wheels available for newer releases such as Trixie (Python 3.13). If you use Trixie and encounter build failures during the full install, switch to Bookworm or use the `--preset lite` option.
+Python compatibility notes:
+- The installer supports Python 3.9+. For best compatibility with heavier native packages (OpenCV, `dlib`/`face_recognition`, `pyaudio`, `rtabmap-py`) we recommend creating the virtualenv with a Python 3.10 interpreter when performing a `full` install on Pi4. Several packages still have upper Python bounds (for example some require `<3.11`), so a 3.10 venv avoids those mismatches.
+- If Python 3.10 is not available, the installer will try `python3.11`, `python3.9`, or `python3` in that order. To force a specific interpreter, set the `PYTHON` environment variable when running the top-level script, e.g. `PYTHON=python3.10 bash scripts/install_houndmind.sh`.
+- If you encounter build failures on newer OS releases (Trixie or later), consider switching to Bookworm or use the `--preset lite` option.
 
 ## Prerequisites
 - Raspberry Pi OS Lite (no desktop environment) with I2C enabled.
 - Python 3.9+ available on the system.
 - Internet access for dependency downloads.
+
+### Checking & installing a compatible Python
+
+Some HoundMind dependencies (especially when using the `full` preset on Pi4) are sensitive to the Python minor version. We recommend using a Python 3.10 interpreter for best compatibility with available Pi wheels.
+
+Check what's available on your system:
+
+```bash
+python3 --version
+python3.10 --version   # if installed
+which python3.10        # shows path if present
+```
+
+If `python3.10` is available, create the virtualenv with it:
+
+```bash
+python3.10 -m venv .venv
+. .venv/bin/activate
+python -V   # confirm Python 3.10.x is active
+```
+
+If your OS package manager offers `python3.10`, you can install it (Debian/Raspberry Pi OS style):
+
+```bash
+sudo apt update
+sudo apt install -y python3.10 python3.10-venv python3.10-dev
+```
+
+If a distribution package is not available, use `pyenv` to build and install a specific Python version (recommended for reproducible environments):
+
+```bash
+# install pyenv (one-line installer)
+curl https://pyenv.run | bash
+# follow the printed instructions to add pyenv to your shell (e.g. update ~/.bashrc)
+exec $SHELL
+# list available versions and pick a 3.10.x release
+pyenv install --list
+pyenv install 3.10.16          # choose a 3.10.x version from the list
+pyenv local 3.10.16            # or `pyenv global 3.10.16` to set system-wide for the user
+python -V                       # shows the pyenv-selected interpreter
+
+# then create venv as above using the chosen interpreter
+python -m venv .venv
+. .venv/bin/activate
+```
+
+When running the top-level installer you can force a chosen interpreter by setting the `PYTHON` environment variable, for example:
+
+```bash
+PYTHON=python3.10 bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
+```
+
+This ensures the installer creates the virtual environment with the interpreter you select.
 
 ## Recommended: Guided Install (Beginner-Friendly)
 
@@ -41,10 +97,25 @@ Optional flags:
 - `--run-i2samp` (runs the PiDog audio setup script)
 - `--preset auto|lite|full` (auto detects Pi model)
 
+Additional installer flags (new):
+- `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make` and requires system build deps and `sudo`). Useful for Pi4 full installs.
+- `--no-rtabmap`: explicitly skip any RTAB‑Map build/install during this run (useful when you want the full preset but will install RTAB‑Map later by hand).
+- `--auto-system-deps`: automatically install system packages via `apt` (needed before building heavy native dependencies).
+
 Installer behavior for i2samp:
 - If you pass `--run-i2samp` the installer will run `i2samp.sh` after installing `pidog`.
 - You can also set `RUN_I2SAMP=1` to enable the same behavior non-interactively (useful for CI or scripts).
 - When running the top-level `scripts/install_houndmind.sh` interactively, the installer will prompt to run the PiDog audio helper by default (you can answer yes/no).
+
+Examples: build RTAB-Map during install (Pi4; long-running):
+
+```bash
+# Let the installer attempt to install apt system deps and build RTAB-Map
+bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
+
+# Force a specific interpreter when running the installer
+PYTHON=python3.10 bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
+```
 
 ## Manual Install (Step-by-Step, Advanced)
 
@@ -110,12 +181,12 @@ sudo bash i2samp.sh
 python -m pip install --upgrade pip
 python -m pip install -r requirements-lite.txt
 python -m pip install -e .
+```
 
 If you are on Pi4 and want the full feature set, replace `requirements-lite.txt` with `requirements.txt` (or use the installer `--preset full` / `--auto-system-deps` to trigger a full install):
 
 ```bash
 python -m pip install -r requirements.txt
-```
 ```
 
 ### 5) Verify the install

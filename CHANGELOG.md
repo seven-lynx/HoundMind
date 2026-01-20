@@ -46,7 +46,7 @@ Current Release: v2026.01.18 • Author: 7Lynx
 ## [v2025.11.04] - 2025-11-04
 
 ### Improved
-- Guided installer (`scripts/pidog_install.py`):
+- Guided installer (`scripts/install_houndmind.sh`):
   - I2S audio setup now installs `alsa-utils`, guides reboot after `i2samp.sh`, and adds a dedicated audio test option (lists devices, sets volume, plays a test sound).
   - Header shows Python version and prints clear notes when on 32‑bit OS or Python 3.13 (heavy ML wheels like mediapipe/tflite may be unavailable and are optional).
   - Verify step prints `robot_hat` load path and whether it exports `Robot` to catch mismatched installs early.
@@ -62,7 +62,7 @@ Current Release: v2026.01.18 • Author: 7Lynx
 ## [v2025.11.03] - 2025-11-03 - Guided installer launcher, vendor-aligned install docs, and telemetry version sync
 
 ### Added
-- Guided installer enhancements (`scripts/pidog_install.py`):
+- Guided installer enhancements (`scripts/install_houndmind.sh`):
   - New launcher options to start CanineCore (main/control) and PackMind (with optional `PACKMIND_CONFIG` preset) directly from the menu.
   - One-stop menu: install vendor modules (Robot HAT 2.5.x, Vilib, PiDog), set up I2S audio, run vendor demo, verify imports/I2C, install HoundMind deps for Pi 4/5 (full) or Pi 3B (lite), and launch systems.
 - Install guide overhaul (`docs/INSTALL.md`):

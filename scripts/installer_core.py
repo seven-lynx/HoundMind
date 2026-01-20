@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""PiDog + HoundMind installer (Pi3 focused).
+"""Internal installer core for HoundMind.
 
-This script installs the official SunFounder PiDog dependencies if missing,
-then installs HoundMind in the same Python environment. It favors a local
-virtual environment by default to reduce risk to the system Python.
+Do not call directly; use scripts/install_houndmind.sh.
 """
 
 from __future__ import annotations
@@ -113,8 +111,59 @@ def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int
     return run(cmd)
 
 
+def build_rtabmap(cache_root: Path, pip: Path, python: Path) -> int:
+    """Clone, build, and install RTAB-Map and its Python bindings into the active env.
+
+    Returns 0 on success, non-zero on failure.
+    """
+    rtabmap_path = cache_root / "rtabmap"
+    code = clone_or_update("https://github.com/introlab/rtabmap.git", rtabmap_path)
+    if code != 0:
+        return code
+
+    build_dir = rtabmap_path / "build"
+    build_dir.mkdir(parents=True, exist_ok=True)
+    # Configure with Python bindings enabled
+    code = run(
+        [
+            "cmake",
+            "..",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DWITH_PYTHON=ON",
+            f"-DPYTHON_EXECUTABLE={str(python)}",
+        ]
+    )
+    if code != 0:
+        return code
+    code = run(["make", "-j", str(os.cpu_count() or 1)])
+    if code != 0:
+        return code
+    code = run(["sudo", "make", "install"])
+    if code != 0:
+        return code
+
+    # Install Python bindings (use pip from the active environment)
+    rtabmap_python = rtabmap_path / "python"
+    if rtabmap_python.exists():
+        code = run([str(pip), "install", str(rtabmap_python)])
+        if code != 0:
+            return code
+    else:
+        # Fallback: try setup.py install
+        py_dir = rtabmap_path / "python"
+        if py_dir.exists():
+            code = run([str(python), str(py_dir / "setup.py"), "build"])
+            if code != 0:
+                return code
+            code = run(["sudo", str(python), str(py_dir / "setup.py"), "install"])
+            if code != 0:
+                return code
+
+    return 0
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="PiDog + HoundMind installer")
+    parser = argparse.ArgumentParser(description="HoundMind installer (internal core)")
     parser.add_argument("--venv", default=".venv", help="Path to virtualenv")
     parser.add_argument("--skip-venv", action="store_true", help="Skip venv creation")
     parser.add_argument(
@@ -130,6 +179,16 @@ def main() -> int:
         "--auto-system-deps",
         action="store_true",
         help="Auto-install system deps (Linux)",
+    )
+    parser.add_argument(
+        "--build-rtabmap",
+        action="store_true",
+        help="Build and install RTAB-Map (rtabmap) from source (Pi4 only)",
+    )
+    parser.add_argument(
+        "--no-rtabmap",
+        action="store_true",
+        help="Do not build or install RTAB-Map during this install",
     )
     parser.add_argument(
         "--pidog-repo", default="https://github.com/sunfounder/pidog.git"
@@ -153,6 +212,10 @@ def main() -> int:
 
     repo_root = Path(__file__).resolve().parents[1]
     venv_path = repo_root / args.venv
+
+    # Create cache root early so temporary files and cloned repos can be stored
+    cache_root = repo_root / ".cache" / "houndmind_deps"
+    cache_root.mkdir(parents=True, exist_ok=True)
 
     if not args.skip_venv:
         if not venv_path.exists():
@@ -189,6 +252,11 @@ def main() -> int:
         )
 
     req = repo_root / "requirements-lite.txt"
+    # Auto-build RTAB-Map for Pi4 full preset, or when explicitly requested.
+    should_build_rtabmap = args.build_rtabmap or (pi_class == "pi4" and preset == "full")
+    # Allow explicit opt-out
+    if args.no_rtabmap:
+        should_build_rtabmap = False
     if preset == "full":
         full_req = repo_root / "requirements.txt"
         if not full_req.exists():
@@ -199,7 +267,18 @@ def main() -> int:
     if code != 0:
         return code
     print(f"Detected platform: {pi_class}. Using preset: {preset}.")
-    code = run([str(pip), "install", "-r", str(req)])
+    # If we're going to build RTAB-Map, avoid pip failing on 'rtabmap-py'
+    # by excluding it from the automatic requirements installation.
+    req_to_install = req
+    if should_build_rtabmap and req.exists():
+        content = req.read_text(encoding="utf-8")
+        if "rtabmap-py" in content:
+            tmp_req = cache_root / "requirements-noslam.txt"
+            lines = [l for l in content.splitlines() if "rtabmap-py" not in l]
+            tmp_req.write_text("\n".join(lines), encoding="utf-8")
+            req_to_install = tmp_req
+
+    code = run([str(pip), "install", "-r", str(req_to_install)])
     if code != 0:
         return code
     # Always install Flask and run model downloader for Pi4/5
@@ -219,13 +298,11 @@ def main() -> int:
                 "PiDog hardware dependencies are not supported on Windows. Skipping PiDog install."
             )
         else:
-            if args.auto_system_deps:
+            # Install system deps if requested or required for RTAB-Map build
+            if args.auto_system_deps or should_build_rtabmap:
                 code = ensure_system_deps_linux()
                 if code != 0:
                     return code
-
-            cache_root = repo_root / ".cache" / "houndmind_deps"
-            cache_root.mkdir(parents=True, exist_ok=True)
 
             if not python_can_import(python, "pidog"):
                 print("Installing SunFounder PiDog dependencies...")
@@ -267,6 +344,13 @@ def main() -> int:
     code = run([str(pip), "install", "-e", str(repo_root)])
     if code != 0:
         return code
+
+    # If we intended to build RTAB-Map, perform the build now.
+    if should_build_rtabmap:
+        print("Building RTAB-Map from source (this may take a long time)...")
+        code = build_rtabmap(cache_root, pip, python)
+        if code != 0:
+            print("RTAB-Map build/install failed; SLAM support may be unavailable.")
 
     verifier = repo_root / "tools" / "installer_verify.py"
     return run([str(python), str(verifier), "--preset", preset])
