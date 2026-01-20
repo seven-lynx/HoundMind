@@ -101,6 +101,126 @@ def example_quick_runtime_demo() -> None:
     run_runtime(50, disable_hardware=True)
 
 
+def example_scripted_habituation_demo() -> None:
+    """Simulate repeated stimuli to show habituation behavior.
+
+    This demo starts the runtime (with hardware disabled), then injects
+    repeated `perception` updates into the runtime context to trigger
+    habituation logic. The example prints out emitted `behavior_action`
+    and any `behavior_habituation` markers in the context so beginners
+    can observe how repeated stimuli are suppressed.
+    """
+    print("Running: Scripted Habituation Demo (simulate repeated sounds)")
+    config = load_config()
+    _safe_disable_hardware(config)
+    # Make habituation easy to trigger for the demo
+    settings = config.settings or {}
+    hab = settings.get("habituation", {})
+    hab["enabled"] = True
+    hab["window_s"] = 1.0
+    hab["threshold"] = 3
+    hab["recovery_s"] = 3.0
+    settings["habituation"] = hab
+    config.settings = settings
+
+    runtime = HoundMindRuntime(config, build_modules(config))
+    # Start modules manually so we can inject perception between ticks.
+    runtime.start()
+    try:
+        # Simulate a burst of 6 sound events spaced 0.3s apart
+        for i in range(6):
+            runtime.context.set("perception", {"sound": True, "touch": "N", "obstacle": False})
+            runtime.tick()
+            # Print the last behavior action and any habituation flag
+            action = runtime.context.get("behavior_action")
+            hab_flag = runtime.context.get("behavior_habituation")
+            print(f"tick {i+1}: action={action} hab={hab_flag}")
+            time.sleep(0.3)
+
+        # Now wait quiet period for recovery and tick a few more times
+        print("Waiting for recovery window...")
+        time.sleep(float(hab.get("recovery_s", 3.0)) + 0.5)
+        for i in range(3):
+            runtime.context.set("perception", {"sound": True, "touch": "N", "obstacle": False})
+            runtime.tick()
+            print(f"recovery tick {i+1}: action={runtime.context.get('behavior_action')} hab={runtime.context.get('behavior_habituation')}")
+            time.sleep(0.3)
+    finally:
+        runtime.stop()
+
+
+def example_energy_demo() -> None:
+    """Show energy boosts and decay by injecting touch events.
+
+    Demonstrates `settings.energy` behavior: enable it and then simulate
+    touch stimuli that temporarily raise `energy_level`. The demo prints
+    energy_level each tick so beginners can see decay and boosts.
+    """
+    print("Running: Energy Demo (simulate touch boosts)")
+    config = load_config()
+    _safe_disable_hardware(config)
+    settings = config.settings or {}
+    energy = settings.get("energy", {})
+    energy["enabled"] = True
+    energy["initial"] = 0.2
+    energy["decay_per_tick"] = 0.02
+    energy["boost_touch"] = 0.15
+    settings["energy"] = energy
+    config.settings = settings
+
+    runtime = HoundMindRuntime(config, build_modules(config))
+    runtime.start()
+    try:
+        for i in range(20):
+            # Inject a touch every 5 ticks
+            touch = "T" if (i % 5 == 0) else "N"
+            runtime.context.set("perception", {"sound": False, "touch": touch, "obstacle": False})
+            runtime.tick()
+            energy_lvl = runtime.context.get("energy_level")
+            print(f"tick {i+1}: touch={touch} energy={energy_lvl}")
+            time.sleep(0.2)
+    finally:
+        runtime.stop()
+
+
+def example_scripted_stimuli_demo() -> None:
+    """General demo that injects different stimuli and prints runtime snapshots.
+
+    Useful for learning how modules communicate via the `RuntimeContext`.
+    Beginners can inspect keys under `runtime.context.data` to explore state.
+    """
+    print("Running: Scripted Stimuli Demo (varied stimuli)")
+    config = load_config()
+    _safe_disable_hardware(config)
+    config.loop.max_cycles = 20
+    runtime = HoundMindRuntime(config, build_modules(config))
+    runtime.start()
+    try:
+        # Sequence: sound -> touch -> obstacle -> quiet
+        seq = [
+            {"sound": True, "touch": "N", "obstacle": False},
+            {"sound": False, "touch": "T", "obstacle": False},
+            {"sound": False, "touch": "N", "obstacle": True},
+            {"sound": False, "touch": "N", "obstacle": False},
+        ]
+        for i in range(16):
+            perception = seq[i % len(seq)]
+            runtime.context.set("perception", perception)
+            runtime.tick()
+            # Dump a small snapshot for the beginner: behavior_action and module statuses
+            print(
+                {
+                    "tick": i + 1,
+                    "perception": perception,
+                    "behavior_action": runtime.context.get("behavior_action"),
+                    "module_statuses": runtime.context.get("module_statuses"),
+                }
+            )
+            time.sleep(0.2)
+    finally:
+        runtime.stop()
+
+
 EXAMPLES: list[tuple[str, Callable[[], None]]] = [
     ("Quick runtime demo", example_quick_runtime_demo),
     ("Autonomy personality demo", example_autonomy_personality_demo),
@@ -121,6 +241,7 @@ def main() -> None:
     while True:
         _print_menu(EXAMPLES)
         choice = input("Select an option: ").strip().lower()
+        # Placeholder for future edits
         if choice == "q":
             print("Goodbye.")
             return
@@ -152,3 +273,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    # Placeholder for future edits
