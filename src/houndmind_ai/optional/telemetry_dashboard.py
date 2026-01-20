@@ -45,6 +45,38 @@ class TelemetryDashboardModule(Module):
             return self._snapshot
         return None
 
+    def create_support_bundle_for_trace(self, trace_id: str):
+        """Create a support bundle zip file for the given trace_id and return its Path.
+
+        This uses the project's `tools/collect_support_bundle.py` helper to produce
+        a zip file. The function returns the path to the created zip file or None
+        on failure.
+        """
+        try:
+            import tempfile
+            from pathlib import Path
+            # Import the collect function from tools
+            from tools.collect_support_bundle import collect
+
+            tmp = Path(tempfile.mkdtemp()) / f"support_bundle_{trace_id}.zip"
+            # Set env var so the collector records the trace id
+            import os
+
+            old = os.environ.get("HOUNDMIND_TRACE_ID")
+            os.environ["HOUNDMIND_TRACE_ID"] = str(trace_id)
+            try:
+                collect(tmp)
+            finally:
+                if old is None:
+                    os.environ.pop("HOUNDMIND_TRACE_ID", None)
+                else:
+                    os.environ["HOUNDMIND_TRACE_ID"] = old
+            if tmp.exists():
+                return tmp
+        except Exception:
+            logger.exception("Failed to create support bundle for trace %s", trace_id)
+        return None
+
     def tick(self, context) -> None:
         if not self.available or not self.status.enabled:
             return
@@ -171,6 +203,31 @@ class TelemetryDashboardModule(Module):
                     self.end_headers()
                     self.wfile.write(payload)
                     return
+                if self.path.startswith("/download_support_bundle"):
+                    # Accept trace_id via header or query
+                    parsed = urlparse(self.path)
+                    params = parse_qs(parsed.query)
+                    header_trace = self.headers.get("X-Trace-Id")
+                    query_trace = params.get("trace_id", [None])[0]
+                    req_trace = header_trace or query_trace or module._snapshot.get("trace_id")
+                    if not req_trace:
+                        self._send_json({"error": "trace_id required"}, status=400)
+                        return
+                    zip_path = module.create_support_bundle_for_trace(req_trace)
+                    if not zip_path:
+                        self._send_json({"error": "failed to create bundle"}, status=500)
+                        return
+                    try:
+                        with open(zip_path, "rb") as fh:
+                            data = fh.read()
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/zip")
+                        self.send_header("Content-Length", str(len(data)))
+                        self.end_headers()
+                        self.wfile.write(data)
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json({"error": str(exc)}, status=500)
+                    return
                 if self.path == "/download_slam_trajectory":
                     data = module._snapshot.get("slam_trajectory")
                     if data is None:
@@ -242,7 +299,11 @@ _DASHBOARD_HTML = """
     <body>
         <header>
             <h1>HoundMind Telemetry</h1>
-            <div class="meta">Live: <span id="vision_fps">-</span> FPS</div>
+            <div style="display:flex;gap:0.5rem;align-items:center">
+                <div class="meta">Live: <span id="vision_fps">-</span> FPS</div>
+                <div class="meta">Trace: <span id="trace_id">-</span></div>
+                <button id="copy_trace" style="background:transparent;border:1px solid #274454;color:var(--accent);padding:0.15rem 0.4rem;border-radius:6px">Copy</button>
+            </div>
         </header>
         <div class="container">
             <div class="camera card">
@@ -288,6 +349,9 @@ _DASHBOARD_HTML = """
                     const res = await fetch('/snapshot');
                     const data = await res.json();
                     out.textContent = JSON.stringify(data, null, 2);
+                    // expose trace id in header for quick copying
+                    const traceEl = document.getElementById('trace_id');
+                    traceEl.textContent = data.trace_id || '-';
                     const perf = data.performance_telemetry || {};
                     fpsLabel.textContent = perf.vision_fps ? perf.vision_fps.toFixed(1) : '-';
                     quick.textContent = `tick ${perf.tick_hz_actual || '-'} • mem ${perf.mem_used_pct || '-'}%`;
@@ -305,6 +369,10 @@ _DASHBOARD_HTML = """
                 camera.src = base + '?ts=' + Date.now();
             }
             refresh.addEventListener('click', ()=>{ tick(); reloadCamera(); });
+            document.getElementById('copy_trace').addEventListener('click', ()=>{
+                const txt = document.getElementById('trace_id').textContent || '';
+                if(!txt || txt === '-') return; try{ navigator.clipboard.writeText(txt); alert('Trace id copied') }catch(e){ alert('Copy failed') }
+            });
             document.getElementById('download_map').addEventListener('click', async ()=>{
                 const res = await fetch('/download_slam_map');
                 if(res.ok){
