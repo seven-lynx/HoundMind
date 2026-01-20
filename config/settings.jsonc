@@ -511,6 +511,14 @@
       "mapping_bias_weight": 0.5,
       "mapping_bias_min_confidence": 0.6,
       "mapping_bias_cooldown_s": 1.0,
+      // Use a lightweight occupancy grid for short-range avoidance decisions.
+      "use_grid_map": true,
+      // Grid cell size (cm) used by grid-bias computations; defaults to mapping.cell_size_cm.
+      "grid_cell_size_cm": 10,
+      // How far ahead (cm) to consider cells when computing left/right density.
+      "grid_influence_depth_cm": 100,
+      // Weighting threshold for deciding to prefer one side over another (0-1).
+      "grid_bias_weight": 0.7,
       // Optional SLAM navigation hint integration (Pi4 only).
       "slam_nav_enabled": false,
       "slam_nav_override": true,
@@ -609,6 +617,8 @@
       "home_map_path": "data/home_map.json",
       // Metadata for future grid-based mapping.
       "cell_size_cm": 10,
+      // Enable the lightweight occupancy-grid ingestion from scan samples.
+      "grid_enabled": true,
       "grid_size": [100, 100],
       // Opening detection thresholds (from scan data).
       "opening_min_width_cm": 60,

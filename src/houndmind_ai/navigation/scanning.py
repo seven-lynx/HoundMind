@@ -309,4 +309,22 @@ class ScanningModule(Module):
 
 def settings_continuous(context) -> bool:
     settings = (context.get("settings") or {}).get("navigation", {})
-    return bool(settings.get("scan_continuous", True))
+    # Honor configured continuous scan flag first.
+    if bool(settings.get("scan_continuous", True)):
+        return True
+
+    # If movement/navigation actions are currently active, enforce continuous
+    # scanning to keep obstacle data fresh while walking/turning.
+    for key in ("safety_action", "watchdog_action", "navigation_action", "behavior_action"):
+        action = context.get(key)
+        if not action:
+            continue
+        try:
+            a = str(action).lower()
+        except Exception:
+            continue
+        # Treat basic locomotion or turn actions as movement.
+        if any(tok in a for tok in ("forward", "backward", "left", "right", "turn", "walk", "step")):
+            return True
+
+    return False

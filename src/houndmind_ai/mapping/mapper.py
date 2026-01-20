@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from pathlib import Path
 
@@ -73,6 +74,15 @@ class MappingModule(Module):
             },
         )
 
+        # Optionally ingest sweep angles into a simple occupancy grid for
+        # lightweight map-aware avoidance. This keeps a histogram of observed
+        # hits by grid cell (coordinates in centimeters relative to robot).
+        if bool(settings.get("grid_enabled", True)):
+            try:
+                self._ingest_into_grid(scan_angles, settings, mapping_state)
+            except Exception:  # noqa: BLE001
+                logger.debug("Grid ingestion failed", exc_info=True)
+
         # Optional path-planning hook (future expansion).
         if settings.get("path_planning_enabled", False):
             hook = context.get("path_planning_hook")
@@ -137,6 +147,46 @@ class MappingModule(Module):
         if settings.get("home_map_enabled", False):
             mapping_state = context.get("mapping_state") or {"samples": []}
             self.save_home_map(mapping_state, settings)
+
+    def _ingest_into_grid(self, angles: dict, settings: dict, mapping_state: dict) -> None:
+        if not isinstance(angles, dict) or not angles:
+            return
+        cell_size_cm = float(settings.get("cell_size_cm", 10.0))
+        grid_size = settings.get("grid_size", [100, 100])
+        try:
+            gx = int(grid_size[0])
+            gy = int(grid_size[1])
+        except Exception:
+            gx, gy = 100, 100
+        half_x = gx // 2
+        half_y = gy // 2
+
+        grid = mapping_state.get("grid") or {"cells": {}}
+        cells = grid.get("cells") or {}
+
+        for key, raw in angles.items():
+            try:
+                yaw = float(key)
+                dist = float(raw)
+            except Exception:
+                continue
+            if dist <= 0:
+                continue
+            # Convert polar (distance cm, yaw deg) to grid indices. Yaw is
+            # degrees where 0 = forward, positive = left.
+            rad = math.radians(yaw)
+            x_cm = dist * math.cos(rad)  # forward
+            y_cm = dist * math.sin(rad)  # left
+            ix = int(round(y_cm / cell_size_cm))
+            iy = int(round(x_cm / cell_size_cm))
+            # Bound to grid size
+            if abs(ix) > half_x or abs(iy) > half_y:
+                continue
+            k = f"{ix},{iy}"
+            cells[k] = cells.get(k, 0) + 1
+
+        grid["cells"] = cells
+        mapping_state["grid"] = grid
 
     @staticmethod
     def _analyze_scan_openings(

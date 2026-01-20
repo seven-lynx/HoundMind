@@ -182,6 +182,9 @@ class ObstacleAvoidanceModule(Module):
                         else:
                             direction = self._apply_no_go_bias(direction, now, settings)
                             if direction == "left":
+                                # First consult the lightweight occupancy grid (if enabled),
+                                # then apply the higher-level mapping bias and SLAM hints.
+                                direction = self._apply_grid_bias(context, settings, direction)
                                 direction = self._apply_mapping_bias(context, settings, direction)
                                 direction = self._apply_slam_bias(context, settings, direction)
                                 if self._is_dead_end(direction):
@@ -193,6 +196,7 @@ class ObstacleAvoidanceModule(Module):
                                 nav_led = "turn"
                                 self._record_turn(direction)
                             elif direction == "right":
+                                direction = self._apply_grid_bias(context, settings, direction)
                                 direction = self._apply_mapping_bias(context, settings, direction)
                                 direction = self._apply_slam_bias(context, settings, direction)
                                 if self._is_dead_end(direction):
@@ -580,6 +584,55 @@ class ObstacleAvoidanceModule(Module):
             choice = "right" if weight >= 0.5 else fallback
             self._emit_mapping_hint(context, fallback, choice, best_path)
             return choice
+        return fallback
+
+    def _apply_grid_bias(self, context, settings, fallback: str) -> str:
+        """Use the lightweight occupancy grid to bias turns away from denser sides.
+
+        Returns a direction string (left/right/forward).
+        """
+        if not settings.get("use_grid_map", True):
+            return fallback
+        mapping_state = context.get("mapping_state") or {}
+        grid = mapping_state.get("grid") or {}
+        cells = grid.get("cells") if isinstance(grid, dict) else None
+        if not isinstance(cells, dict) or not cells:
+            return fallback
+
+        # Depth to consider ahead of robot (cm) and cell size
+        cell_size = float(settings.get("grid_cell_size_cm", settings.get("cell_size_cm", 10)))
+        depth_cm = float(settings.get("grid_influence_depth_cm", 100))
+        depth_cells = max(1, int(depth_cm / max(1.0, cell_size)))
+
+        left_count = 0
+        right_count = 0
+        # cells keys are "ix,iy" where ix = lateral (left + / right -), iy = forward cells
+        for k, v in cells.items():
+            try:
+                ix_s, iy_s = k.split(",")
+                ix = int(ix_s)
+                iy = int(iy_s)
+            except Exception:
+                continue
+            if iy < 0 or iy > depth_cells:
+                continue
+            if ix < 0:
+                left_count += int(v or 0)
+            elif ix > 0:
+                right_count += int(v or 0)
+
+        total = left_count + right_count
+        if total <= 0:
+            return fallback
+
+        # Choose the side with fewer hits. Apply weight threshold to avoid flip-flopping.
+        ratio = (left_count + 1) / (right_count + 1)
+        weight = float(settings.get("grid_bias_weight", 0.7))
+        # If left is denser, prefer right; if right denser, prefer left.
+        if ratio > (1.0 / weight):
+            return "right"
+        if ratio < weight:
+            return "left"
         return fallback
 
     def _apply_slam_bias(self, context, settings, fallback: str) -> str:
