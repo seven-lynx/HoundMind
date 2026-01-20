@@ -120,6 +120,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
  - [x] Provide `scripts/logs_collect.sh` or `tools/collect_support_bundle.py` to bundle logs, config, and a telemetry snapshot for support uploads.
  - [x] Add `docs/LOGGING.md` runbook with collection commands, jq examples, and common troubleshooting steps.
  - [ ] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
+ - [x] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
  - [ ] Surface `trace_id` in `RuntimeContext` and include it in telemetry snapshots to correlate logs + telemetry + support bundles.
 
 
