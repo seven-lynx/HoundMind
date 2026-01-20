@@ -114,13 +114,13 @@ The following checkable tasks cover robustness, observability, and supportabilit
 
  - [x] Centralize logger setup in `src/houndmind_ai/core/logging_setup.py` (JSON formatter, handlers, rotation, level overrides).
  - [x] Add a `ContextFilter` to inject `device_id`, `runtime_tick`, `mission_id`/`trace_id` into all log records.
-- [ ] Implement log rotation and retention policy (daily rotate + gzip backups, configurable `backupCount`).
-- [ ] Add optional error aggregation (Sentry/Logstash) with explicit opt-in and privacy documentation in `docs/INSTALL.md`.
-- [ ] Implement log sampling and rate-limiting for high-frequency sensors and debug streams.
-- [ ] Provide `scripts/logs_collect.sh` or `tools/collect_support_bundle.py` to bundle logs, config, and a telemetry snapshot for support uploads.
-- [ ] Add `docs/LOGGING.md` runbook with collection commands, jq examples, and common troubleshooting steps.
-- [ ] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
-- [ ] Surface `trace_id` in `RuntimeContext` and include it in telemetry snapshots to correlate logs + telemetry + support bundles.
+ - [x] Implement log rotation and retention policy (daily rotate + gzip backups, configurable `backupCount`).
+ - [ ] Add optional error aggregation (Sentry/Logstash) with explicit opt-in and privacy documentation in `docs/INSTALL.md`.
+ - [ ] Implement log sampling and rate-limiting for high-frequency sensors and debug streams.
+ - [x] Provide `scripts/logs_collect.sh` or `tools/collect_support_bundle.py` to bundle logs, config, and a telemetry snapshot for support uploads.
+ - [x] Add `docs/LOGGING.md` runbook with collection commands, jq examples, and common troubleshooting steps.
+ - [ ] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
+ - [ ] Surface `trace_id` in `RuntimeContext` and include it in telemetry snapshots to correlate logs + telemetry + support bundles.
 
 
 ## Optional (Disabled until later)

@@ -70,11 +70,16 @@ def setup_logging(config: Optional[Dict[str, Any]] = None) -> ContextFilter:
     root = logging.getLogger()
     root.setLevel(getattr(logging, level_name, logging.INFO))
 
+    # create the context filter early so we can attach it to handlers directly
+    context_filter = ContextFilter(cfg.get("context", {}))
+
     # Avoid adding duplicate handlers on repeated setup calls
     if not any(isinstance(h, logging.handlers.RotatingFileHandler) and getattr(h, "_houndmind_managed", False) for h in root.handlers):
         file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=backup_count)
         file_handler.setLevel(getattr(logging, level_name, logging.INFO))
         file_handler.setFormatter(JsonFormatter())
+        # attach context filter directly to handler so formatted records include runtime context
+        file_handler.addFilter(context_filter)
         # mark handler so repeated setup_logging calls won't duplicate
         setattr(file_handler, "_houndmind_managed", True)
         root.addHandler(file_handler)
@@ -83,10 +88,12 @@ def setup_logging(config: Optional[Dict[str, Any]] = None) -> ContextFilter:
         console = logging.StreamHandler()
         console.setLevel(getattr(logging, console_level_name, logging.INFO))
         console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        # attach context filter to console as well for consistency
+        console.addFilter(context_filter)
         setattr(console, "_houndmind_console", True)
         root.addHandler(console)
 
-    context_filter = ContextFilter(cfg.get("context", {}))
+    # keep the filter on the root logger too for any other consumers
     root.addFilter(context_filter)
 
     return context_filter
