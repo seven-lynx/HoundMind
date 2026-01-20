@@ -119,6 +119,42 @@ python -m pip install -r requirements.txt
 python tools/installer_verify.py
 ```
 
+## Troubleshooting & Support Bundles
+
+If you run into install or runtime issues, follow this checklist to gather information and resolve common failures.
+
+- **Missing imports (ModuleNotFoundError like `No module named 'tools'`):**
+   - Ensure HoundMind is installed into the same environment where you run tests/commands: `python -m pip install -e .`.
+   - When running tests or scripts directly from the repo, set `PYTHONPATH=src` or use the editable install above.
+
+- **Build failures for heavy packages (OpenCV, dlib/face_recognition, rtabmap-py):**
+   - Prefer Raspberry Pi OS Bookworm (Python 3.11) for prebuilt wheels. On newer OS (Trixie/Python 3.13+) many wheels may be missing.
+   - Use the **lite** preset if you don't need vision/voice: `python -m pip install -r requirements-lite.txt`.
+   - Install the system build packages listed earlier before attempting `pip install` for heavy packages.
+
+- **How to collect a support bundle (useful when filing issues):**
+   - The repo includes a support-bundle helper available as a module: `python -m tools.collect_support_bundle` or run the script directly `python tools/collect_support_bundle.py`.
+   - Example: `python -m tools.collect_support_bundle /tmp/support.zip`.
+   - Set a trace id to correlate logs and telemetry: on Linux/macOS `export HOUNDMIND_TRACE_ID=trace-12345`, on PowerShell `setx HOUNDMIND_TRACE_ID trace-12345` then reproduce the issue and collect a bundle.
+   - Support bundles include `metadata.json` (timestamp, git commit, trace_id), logs, and key config files — include this bundle when opening issues.
+
+- **Pre-push local checks:**
+   - The repo provides a pre-push hook that runs `ruff` and `pytest` before pushing. Enable it with:
+      ```powershell
+      git config core.hooksPath .githooks
+      ```
+   - If the hook prevents a push during urgent work you can bypass it with `git push --no-verify` (use sparingly).
+
+- **Common runtime checks:**
+   - Inspect JSON logs in `logs/houndmind.log` or use the support bundle's `metadata.json` for timestamps and trace ids.
+   - Run the lightweight smoke test for on-device validation: `python -m tools.smoke_test --cycles 5 --tick-hz 5` (use with caution on hardware).
+   - Re-run `python tools/installer_verify.py --preset lite` to validate a minimal working environment.
+
+- **When opening an issue:**
+   - Attach the support bundle and include the `metadata.json` trace id and git commit SHA.
+   - Include the exact command you ran and the output of `python -m pip freeze` from the environment used.
+
+
 ## Run
 ```bash
 python -m houndmind_ai
