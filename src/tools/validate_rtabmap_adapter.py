@@ -71,7 +71,9 @@ def main():
             if img is None:
                 print("Failed to read image", args.image)
             else:
-                frame_supplier = lambda: img
+                def supplier_img():
+                    return img
+                frame_supplier = supplier_img
     except Exception:
         # OpenCV not installed — generate a synthetic frame
         frame_supplier = None
@@ -83,7 +85,9 @@ def main():
                 return (np.zeros((480,640,3), dtype='uint8'))
             frame_supplier = synth
         except Exception:
-            frame_supplier = lambda: None
+            def supplier_none():
+                return None
+            frame_supplier = supplier_none
 
     print("Sending frames to adapter...")
     for i in range(args.count):
