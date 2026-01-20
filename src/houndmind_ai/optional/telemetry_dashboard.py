@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
 
 from houndmind_ai.core.module import Module
 
@@ -35,6 +36,14 @@ class TelemetryDashboardModule(Module):
         settings = (context.get("settings") or {}).get("telemetry_dashboard", {})
         self._maybe_start_http(settings)
         context.set("telemetry_status", {"status": "ready"})
+
+    def get_snapshot_for_trace(self, trace_id: str) -> dict | None:
+        """Return the current snapshot if its trace_id matches, otherwise None."""
+        if not self._snapshot:
+            return None
+        if self._snapshot.get("trace_id") == trace_id:
+            return self._snapshot
+        return None
 
     def tick(self, context) -> None:
         if not self.available or not self.status.enabled:
@@ -133,7 +142,20 @@ class TelemetryDashboardModule(Module):
                 self.wfile.write(data)
 
             def do_GET(self):
-                if self.path == "/snapshot":
+                if self.path.startswith("/snapshot"):
+                    # Allow filtering by trace id via header or query parameter
+                    parsed = urlparse(self.path)
+                    params = parse_qs(parsed.query)
+                    header_trace = self.headers.get("X-Trace-Id")
+                    query_trace = params.get("trace_id", [None])[0]
+                    req_trace = header_trace or query_trace
+                    if req_trace:
+                        snap = module.get_snapshot_for_trace(req_trace)
+                        if snap is None:
+                            self._send_json({"error": "not found"}, status=404)
+                            return
+                        self._send_json(snap)
+                        return
                     self._send_json(module._snapshot)
                     return
                 if self.path == "/download_slam_map":

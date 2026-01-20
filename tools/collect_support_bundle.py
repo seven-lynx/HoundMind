@@ -8,6 +8,8 @@ If no output path is provided the script will create `logs/support_bundle_{times
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -32,9 +34,35 @@ def collect(bundle_path: Path) -> None:
     root = repo_root()
     logs = root / "logs"
     config = root / "config" / "settings.jsonc"
+    # try to gather a trace id for correlation: prefer env var, then scan recent logs
+    def _find_trace_in_logs(logs_dir: Path) -> str | None:
+        if not logs_dir.exists():
+            return None
+        # check latest files first
+        files = sorted([p for p in logs_dir.iterdir() if p.is_file()], key=lambda p: p.stat().st_mtime, reverse=True)
+        trace_re = re.compile(r'"trace_id"\s*:\s*"([^"]+)"')
+        for f in files:
+            try:
+                data = f.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+            # search for last occurrence
+            m = trace_re.search(data[::-1])
+            if m:
+                # reverse-match workaround: fallback to forward search
+                m2 = trace_re.search(data)
+                if m2:
+                    return m2.group(1)
+        return None
+
+    trace_id = os.environ.get("HOUNDMIND_TRACE_ID")
+    if not trace_id:
+        trace_id = _find_trace_in_logs(logs)
+
     metadata = {
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "git_commit": gather_git_commit(root),
+        "trace_id": trace_id,
     }
 
     bundle_path.parent.mkdir(parents=True, exist_ok=True)
