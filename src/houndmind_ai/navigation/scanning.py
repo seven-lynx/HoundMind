@@ -201,7 +201,7 @@ class ScanningService:
                 val = 0.0
             if val > 0:
                 values.append(val)
-                if between_reads_s:
+            if between_reads_s:
                 time.sleep(_safe_float(between_reads_s, 0.0))
         if not values:
             return 0.0
