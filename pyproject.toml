@@ -10,6 +10,13 @@ readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = []
 
+[project.optional-dependencies]
+# `lite` contains minimal, small dependencies suitable for Pi3 or development without heavy
+# vision/ML/audio packages. `full` is the heavy preset for Pi4 that enables vision/audio/SLAM
+# and may require system-level build tools and additional libraries on the target device.
+lite = []
+full = ["numpy", "scipy", "opencv-contrib-python", "face_recognition", "SpeechRecognition", "pyaudio", "sounddevice", "rtabmap-py", "flask"]
+
 [project.scripts]
 houndmind = "houndmind_ai.main:main"
 

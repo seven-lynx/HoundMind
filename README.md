@@ -63,6 +63,24 @@ python -m houndmind_ai
 python -m houndmind_ai
 ```
 
+### Developer installation (editable)
+
+For development you can install HoundMind in editable mode and select a dependency preset. Use the `lite` preset for a minimal developer environment, or the `full` preset to install optional vision/audio/SLAM packages (heavy, may require system build tools):
+
+```bash
+# Minimal (fast) development install
+pip install -e .[lite]
+
+# Full install (may need build tools and can take a long time on Pi)
+pip install -e .[full]
+```
+
+If you prefer not to install editable packages you can run code directly with `PYTHONPATH=src` (Linux/macOS) or by adding `src` to `PYTHONPATH` on Windows. For example:
+
+```bash
+PYTHONPATH=src python -m houndmind_ai
+```
+
 ## Hardware checkup
 - Run a minimal sensor + motion check on the PiDog hardware:
  - Run a minimal sensor + motion check on the PiDog hardware:
