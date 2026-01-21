@@ -360,6 +360,13 @@ def main() -> int:
             if not python_can_import(python, "pidog"):
                 print("Installing SunFounder PiDog dependencies...")
 
+                # Some vendor packages (robot_hat/pidog) rely on `gpiozero`.
+                # Ensure `gpiozero` and common Pi GPIO bindings are available
+                # inside the project's venv so imports succeed during verification.
+                code = run([str(pip), "install", "gpiozero", "RPi.GPIO"])
+                if code != 0:
+                    print("Warning: failed to install gpiozero/RPi.GPIO; continuing and attempting vendor installs.")
+
                 robot_hat_path = cache_root / "robot-hat"
                 code = clone_or_update(
                     args.robot_hat_repo, robot_hat_path, args.robot_hat_branch
