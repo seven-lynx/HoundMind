@@ -211,15 +211,34 @@ def build_rtabmap(cache_root: Path, pip: Path, python: Path) -> int:
     old_cwd = Path.cwd()
     try:
         os.chdir(build_dir)
-        code = run(
-            [
-                "cmake",
-                "..",
-                "-DCMAKE_BUILD_TYPE=Release",
-                "-DWITH_PYTHON=ON",
-                f"-DPYTHON_EXECUTABLE={str(python)}",
-            ]
-        )
+        # Ensure pybind11 CMake integration is available. Prefer an installed
+        # pybind11 that exposes CMake config files; try to detect the cmake
+        # dir via `python -m pybind11 --cmakedir`. If missing, attempt to
+        # install pybind11 into the active venv and re-check.
+        pybind11_dir = None
+        try:
+            out = subprocess.check_output([str(python), "-m", "pybind11", "--cmakedir"], stderr=subprocess.STDOUT)
+            pybind11_dir = out.decode("utf-8").strip()
+            print(f"Detected pybind11 cmake dir: {pybind11_dir}")
+        except Exception:
+            print("pybind11 not detected via python -m pybind11; attempting pip install pybind11 into venv...")
+            try:
+                run([str(pip), "install", "pybind11"])  # best-effort
+                out = subprocess.check_output([str(python), "-m", "pybind11", "--cmakedir"], stderr=subprocess.STDOUT)
+                pybind11_dir = out.decode("utf-8").strip()
+                print(f"Detected pybind11 cmake dir after pip install: {pybind11_dir}")
+            except Exception:
+                print("pybind11 CMake integration not found; continuing without pybind11_DIR (CMake may still find it system-wide)")
+        cmake_cmd = [
+            "cmake",
+            "..",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DWITH_PYTHON=ON",
+            f"-DPYTHON_EXECUTABLE={str(python)}",
+        ]
+        if pybind11_dir:
+            cmake_cmd.append(f"-Dpybind11_DIR={pybind11_dir}")
+        code = run(cmake_cmd)
         if code != 0:
             return code
         code = run(["make", "-j", str(os.cpu_count() or 1)])
