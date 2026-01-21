@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import logging
 import threading
 import time
-from typing import Callable, Any, Dict, List
+from typing import Callable, Any
 
 from houndmind_ai.core.module import Module
 
