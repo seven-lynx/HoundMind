@@ -23,6 +23,8 @@ class ModuleStatus:
     disabled_reason: str | None = None
     # Timestamp of the last successful tick (epoch seconds).
     last_tick_ts: float | None = None
+    # Duration in seconds of the last tick execution for this module.
+    last_tick_duration_s: float | None = None
     # Timestamp of the last heartbeat recorded by the runtime (epoch seconds).
     last_heartbeat_ts: float | None = None
     # Last error message encountered while starting or ticking.
@@ -36,6 +38,7 @@ class ModuleStatus:
             "started": self.started,
             "disabled_reason": self.disabled_reason,
             "last_tick_ts": self.last_tick_ts,
+            "last_tick_duration_s": self.last_tick_duration_s,
             "last_heartbeat_ts": self.last_heartbeat_ts,
             "last_error": self.last_error,
         }

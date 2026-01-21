@@ -60,20 +60,39 @@ class HoundMindRuntime:
     def tick(self) -> None:
         self.context.set("watchdog_heartbeat_ts", time.time())
         self._update_quiet_mode()
+        per_module_durations: dict[str, float] = {}
         for module in self.modules:
             if module.status.started:
                 try:
+                    m_start = time.time()
                     module.tick(self.context)
-                    # Record module heartbeat and health timing.
+                    m_elapsed = time.time() - m_start
+                    # Record module heartbeat, timing and health.
                     now = time.time()
                     module.status.last_tick_ts = now
                     module.status.last_heartbeat_ts = now
+                    module.status.last_tick_duration_s = m_elapsed
+                    per_module_durations[module.name] = m_elapsed
                     self.context.set(f"module_heartbeat:{module.name}", now)
+                    self.context.set(f"module_tick_duration:{module.name}", m_elapsed)
+                    # Log a warning if a module's tick consumed the whole loop budget.
+                    loop_hz = max(1, self.config.loop.tick_hz)
+                    budget = 1.0 / loop_hz
+                    if m_elapsed > budget:
+                        logger.warning(
+                            "Module tick overrun: %s took %.3fs (budget %.3fs)",
+                            module.name,
+                            m_elapsed,
+                            budget,
+                        )
                 except Exception as exc:  # noqa: BLE001
                     # Track module errors for status reporting.
                     module.status.last_error = str(exc)
                     self.context.set(f"module_error:{module.name}", str(exc))
                     logger.warning("Module tick failed: %s (%s)", module.name, exc)
+        # Publish per-module tick durations for diagnostics
+        if per_module_durations:
+            self.context.set("module_tick_durations", per_module_durations)
         # Publish a module status snapshot for diagnostics and dashboards.
         self.context.set(
             "module_statuses",
