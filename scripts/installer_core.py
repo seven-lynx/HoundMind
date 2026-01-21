@@ -364,7 +364,9 @@ def main() -> int:
                 # Some vendor packages (robot_hat/pidog) rely on `gpiozero` and
                 # SMBus Python bindings. Ensure these packages are available
                 # inside the project's venv so imports succeed during verification.
-                code = run([str(pip), "install", "gpiozero", "RPi.GPIO", "smbus2", "spidev"])
+                # Ensure PiDog runtime helpers and hardware bindings are present.
+                # Add `readchar` which `pidog` expects for keyboard input handling.
+                code = run([str(pip), "install", "gpiozero", "RPi.GPIO", "smbus2", "spidev", "readchar"])
                 if code != 0:
                     print("Warning: failed to install gpiozero/RPi.GPIO; continuing and attempting vendor installs.")
                 # Ensure a `smbus` import is available. Some vendor code
