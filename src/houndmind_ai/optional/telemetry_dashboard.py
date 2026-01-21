@@ -157,10 +157,19 @@ class TelemetryDashboardModule(Module):
         http_settings = settings.get("http", {})
         if not http_settings.get("enabled", False):
             return
-        host = http_settings.get("host", "0.0.0.0")
+        # Default to loopback for LAN-safe behavior. Allow overriding,
+        # but warn if binding to 0.0.0.0 (public) without explicit opt-in.
+        host = http_settings.get("host", "127.0.0.1")
         port = int(http_settings.get("port", 8092))
         # Configurable camera path for embedding a stream or single-frame URL
         self._camera_path = http_settings.get("camera_path", "/camera")
+        # Optional simple token-based auth for endpoints that can expose
+        # sensitive data (support bundle, map downloads). If set, requests
+        # must include this token in `X-Auth-Token` header or `auth_token` query.
+        self._auth_token = http_settings.get("auth_token")
+
+        if host == "0.0.0.0":
+            logger.warning("Telemetry dashboard configured to bind to 0.0.0.0 — ensure network access is restricted or enable auth_token in config")
 
         module = self
 
@@ -174,7 +183,28 @@ class TelemetryDashboardModule(Module):
                 self.wfile.write(data)
 
             def do_GET(self):
+                # Simple auth check: allow if no token configured; otherwise
+                # require header `X-Auth-Token` or query `auth_token`.
+                def _auth_ok():
+                    token = getattr(module, "_auth_token", None)
+                    if not token:
+                        return True
+                    # check header first
+                    hdr = self.headers.get("X-Auth-Token")
+                    if hdr == token:
+                        return True
+                    # then query param
+                    parsed = urlparse(self.path)
+                    params = parse_qs(parsed.query)
+                    q = params.get("auth_token", [None])[0]
+                    if q == token:
+                        return True
+                    return False
+
                 if self.path.startswith("/snapshot"):
+                    if not _auth_ok():
+                        self._send_json({"error": "unauthorized"}, status=401)
+                        return
                     # Allow filtering by trace id via header or query parameter
                     parsed = urlparse(self.path)
                     params = parse_qs(parsed.query)
@@ -191,6 +221,9 @@ class TelemetryDashboardModule(Module):
                     self._send_json(module._snapshot)
                     return
                 if self.path == "/download_slam_map":
+                    if not _auth_ok():
+                        self._send_json({"error": "unauthorized"}, status=401)
+                        return
                     data = module._snapshot.get("slam_map_data")
                     if data is None:
                         self._send_json({"error": "no map data"}, status=404)
@@ -204,6 +237,9 @@ class TelemetryDashboardModule(Module):
                     self.wfile.write(payload)
                     return
                 if self.path.startswith("/download_support_bundle"):
+                    if not _auth_ok():
+                        self._send_json({"error": "unauthorized"}, status=401)
+                        return
                     # Accept trace_id via header or query
                     parsed = urlparse(self.path)
                     params = parse_qs(parsed.query)
