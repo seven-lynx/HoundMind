@@ -2,6 +2,42 @@ name: CI
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.11]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[lite]
+          pip install ruff pytest
+
+      - name: Lint (ruff)
+        run: |
+          python -m ruff check src
+
+      - name: Run tests
+        run: |
+          PYTHONPATH=src python -m pytest -q
+name: CI
+
+on:
+  push:
   pull_request:
 
 jobs:

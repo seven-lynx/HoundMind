@@ -147,6 +147,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Scan throttling when health is degraded
 - [x] README usage + setup for Pi 3
  - [ ] Add CI pipeline (GitHub Actions) to run linting, tests, type checks, build, and packaging on PRs
+ - [x] Add CI pipeline (GitHub Actions) to run linting, tests, type checks, build, and packaging on PRs
  - [ ] Add typing and static checks (`mypy`, `ruff`/`flake8`) and enforce in CI
  - [ ] Pin and manage dependencies, add Dependabot config and guidance for `requirements-lite.txt`
  - [ ] Performance profiling harnesses for hot loops (navigation/scan processing) and document targets
