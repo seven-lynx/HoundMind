@@ -928,7 +928,8 @@
       // Status log output to terminal can be disabled.
       "status_log_enabled": true,
       "status_log_interval_s": 10,
-      "log_level": "INFO",
+      // Default to verbose logging for better support bundles.
+      "log_level": "DEBUG",
       "log_file_max_mb": 10,
       "log_file_backups": 5,
       // Event logger (ring buffer + JSONL).

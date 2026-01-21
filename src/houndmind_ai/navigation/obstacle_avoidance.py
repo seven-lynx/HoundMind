@@ -431,16 +431,24 @@ class ObstacleAvoidanceModule(Module):
             return None
 
         try:
-            if scan_mode == "three_way":
-                reading = scan_service.scan_three_way()
-            else:
-                angles = scan_service.build_angles()
-                reading = scan_service.sweep_scan(angles)
+            # Avoid performing potentially blocking, on-demand scans from the
+            # navigation tick path. Prefer the scanning service's latest
+            # background reading (if available) to keep the tick short. If no
+            # latest reading is available, return None so navigation falls back
+            # to safe_action instead of blocking on head movement and sleeps.
+            latest = None
+            try:
+                latest = scan_service.latest()
+            except Exception:
+                latest = None
+            if latest is None:
+                return None
+            reading = latest
             context.set("scan_reading", reading)
             context.set("scan_latest", reading.to_dict())
             return self._process_scan(reading, settings)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("On-demand scan failed: %s", exc)
+            logger.warning("On-demand scan processing failed: %s", exc)
             return None
 
     def _process_scan(self, reading, settings) -> tuple[str, float, bool] | None:
