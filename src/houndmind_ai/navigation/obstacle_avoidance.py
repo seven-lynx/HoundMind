@@ -417,7 +417,6 @@ class ObstacleAvoidanceModule(Module):
         """
         scan_reading = context.get("scan_reading")
         scan_service = context.get("scan_service")
-        scan_mode = str(settings.get("scan_mode", "sweep"))
         scan_stale_s = float(
             settings.get("scan_stale_s", settings.get("scan_interval_s", 0.5))
         )
