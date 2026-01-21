@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         collect(out)
         return 0
-    except Exception as exc:
+    except Exception:
         logger.exception("Failed to create support bundle")
         return 2
 
