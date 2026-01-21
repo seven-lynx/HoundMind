@@ -153,6 +153,33 @@ def ensure_rtabmap_deps_linux() -> int:
     return 1
 
 
+def ensure_pybind11_deps_linux(python: Path, pip: Path) -> int:
+    """Ensure pybind11 is available for RTAB-Map CMake (try apt then pip).
+
+    Returns 0 on success, non-zero on failure. Installing `pybind11-dev`
+    via apt is preferred because it provides the CMake config files; if
+    that fails, attempt to install `pybind11` into the venv via pip as a
+    fallback (may not provide CMake integration on all platforms).
+    """
+    if shutil.which("apt-get") is not None:
+        print("Attempting to install pybind11-dev via apt...")
+        code = run(["sudo", "apt-get", "install", "-y", "pybind11-dev"])
+        if code == 0:
+            print("pybind11-dev installed via apt")
+            return 0
+        print("pybind11-dev apt install failed; attempting pip fallback...")
+    else:
+        print("apt-get not available; attempting pip install for pybind11")
+
+    # Pip fallback: install into the active venv
+    code = run([str(pip), "install", "pybind11"]) if pip.exists() else run([str(python), "-m", "pip", "install", "pybind11"])  # type: ignore[assignment]
+    if code == 0:
+        print("pybind11 installed via pip (pip fallback).")
+        return 0
+    print("Failed to install pybind11 via apt or pip.")
+    return 1
+
+
 def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int:
     if dest.exists():
         code = run(["git", "-C", str(dest), "fetch", "--all", "--prune"])
@@ -503,6 +530,16 @@ def main() -> int:
         return code
 
     # If we intended to build RTAB-Map, perform the build now.
+    if should_build_rtabmap:
+        # Ensure pybind11 exists before attempting the RTAB-Map build; if
+        # pybind11 cannot be installed, disable the build and continue.
+        pybind_code = ensure_pybind11_deps_linux(python, pip)
+        if pybind_code != 0:
+            print(
+                "Warning: pybind11 not available; disabling RTAB-Map build."
+            )
+            should_build_rtabmap = False
+
     if should_build_rtabmap:
         print("Building RTAB-Map from source (this may take a long time)...")
         code = build_rtabmap(cache_root, pip, python)
