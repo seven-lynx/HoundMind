@@ -31,10 +31,24 @@ class Config:
     @staticmethod
     def from_dict(raw: dict) -> "Config":
         loop_raw = raw.get("loop", {})
-        loop = LoopConfig(
-            tick_hz=int(loop_raw.get("tick_hz", 5)),
-            max_cycles=loop_raw.get("max_cycles"),
-        )
+        # Coerce loop numeric settings to the expected types. Ensure max_cycles
+        # is either an int or None to avoid runtime type errors when compared
+        # against counters in the runtime loop.
+        tick_hz_raw = loop_raw.get("tick_hz", 5)
+        try:
+            tick_hz = int(tick_hz_raw)
+        except (TypeError, ValueError):
+            tick_hz = 5
+        max_cycles_raw = loop_raw.get("max_cycles")
+        if max_cycles_raw is None:
+            max_cycles = None
+        else:
+            try:
+                max_cycles = int(max_cycles_raw)
+            except (TypeError, ValueError):
+                max_cycles = None
+
+        loop = LoopConfig(tick_hz=tick_hz, max_cycles=max_cycles)
 
         modules: dict[str, ModuleConfig] = {}
         for name, mod in raw.get("modules", {}).items():
