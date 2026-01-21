@@ -214,11 +214,9 @@ class HoundMindRuntime:
             self.stop()
 
 
-def build_default_modules(config: Config) -> list[Module]:
-    from houndmind_ai.safety.sensor_health import SensorHealthModule
-    # ... import other modules as needed ...
-    modules = []
-    # ...existing module instantiation logic...
-    # Add sensor health module (disabled by default)
-    modules.append(SensorHealthModule("sensor_health", enabled=config.settings.get("sensor_health", {}).get("enabled", False)))
-    return modules
+# NOTE: `build_default_modules` was a placeholder that duplicated module
+# construction logic. Module building is centralized in `main.build_modules`.
+# The old placeholder has been removed to avoid accidental, out-of-sync
+# module lists. If a canonical default builder is needed in the future,
+# implement it in a single place (for example `main.build_modules`) and
+# import/use it explicitly.
