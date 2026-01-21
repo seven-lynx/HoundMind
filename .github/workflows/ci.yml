@@ -32,8 +32,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[lite]
-          pip install ruff pytest
+          pip install -e .[lite,dev]
 
       - name: Lint (ruff)
         run: |
@@ -61,8 +60,7 @@ jobs:
       - name: Install deps for mypy
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[lite]
-          pip install mypy
+          pip install -e .[lite,dev]
       - name: Run mypy
         run: |
           mypy src --ignore-missing-imports

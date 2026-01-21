@@ -1,0 +1,4 @@
+ruff
+pytest
+mypy
+pytest-cov
