@@ -55,7 +55,7 @@ class HoundMindRuntime:
             if module.status.started:
                 try:
                     module.stop(self.context)
-                except Exception as exc:  # noqa: BLE001
+                except Exception:  # noqa: BLE001
                     logger.exception("Failed to stop module %s", module.name)
 
     def tick(self) -> None:
@@ -147,7 +147,7 @@ class HoundMindRuntime:
                     module.start(self.context)
                     module.status.started = True
                 logger.warning("Restarted module: %s", name)
-            except Exception as exc:  # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 logger.exception("Failed to restart module %s", name)
 
     def run(self) -> None:
