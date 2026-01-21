@@ -93,6 +93,7 @@ def ensure_system_deps_linux() -> int:
         "liblapack-dev",
         "libjpeg-dev",
         "libtiff-dev",
+        "libopencv-dev",
         "libavcodec-dev",
         "libavformat-dev",
         "libswscale-dev",
