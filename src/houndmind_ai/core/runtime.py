@@ -45,6 +45,7 @@ class HoundMindRuntime:
                 module.status.started = True
                 logger.info("Started module: %s", module.name)
             except Exception as exc:  # noqa: BLE001 - capture hardware failures
+                logger.exception("Failed to start module: %s", module.name)
                 if module.status.required:
                     raise ModuleError(f"Required module failed: {module.name}") from exc
                 module.disable(str(exc))
@@ -55,7 +56,7 @@ class HoundMindRuntime:
                 try:
                     module.stop(self.context)
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("Failed to stop module %s: %s", module.name, exc)
+                    logger.exception("Failed to stop module %s", module.name)
 
     def tick(self) -> None:
         self.context.set("watchdog_heartbeat_ts", time.time())
@@ -89,7 +90,7 @@ class HoundMindRuntime:
                     # Track module errors for status reporting.
                     module.status.last_error = str(exc)
                     self.context.set(f"module_error:{module.name}", str(exc))
-                    logger.warning("Module tick failed: %s (%s)", module.name, exc)
+                    logger.exception("Module tick failed: %s", module.name)
         # Publish per-module tick durations for diagnostics
         if per_module_durations:
             self.context.set("module_tick_durations", per_module_durations)
@@ -147,7 +148,7 @@ class HoundMindRuntime:
                     module.status.started = True
                 logger.warning("Restarted module: %s", name)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Failed to restart module %s: %s", name, exc)
+                logger.exception("Failed to restart module %s", name)
 
     def run(self) -> None:
         self.start()
