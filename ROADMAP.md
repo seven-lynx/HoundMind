@@ -175,7 +175,7 @@ The following fixes are planned and prioritized. Each item should be implemented
 - [x] **Fix config numeric coercions (HIGH):** Ensure numeric config fields (for example `loop.max_cycles`) are coerced to the expected types to avoid runtime TypeError. File: src/houndmind_ai/core/config.py
 - **Clarify packaging and dependencies (HIGH):** Update `pyproject.toml` to declare core dependencies or document installer-only install flow. File: pyproject.toml
 - [x] **Remove/implement placeholder `build_default_modules` (MEDIUM):** Clean up or implement the placeholder in `src/houndmind_ai/core/runtime.py` to avoid duplicate module builders.
-- **Harden JSONC parsing (MEDIUM):** Replace or harden the in-house `_load_jsonc` parser (consider `json5`/`commentjson`) in `src/houndmind_ai/core/config.py`.
+- [x] **Harden JSONC parsing (MEDIUM):** Replace or harden the in-house `_load_jsonc` parser (consider `json5`/`commentjson`) in `src/houndmind_ai/core/config.py`.
 - **Improve exception logging (MEDIUM):** Use `logger.exception` or include stack traces in broad `except Exception` blocks for actionable diagnostics. Files: core/runtime.py and module start/stop/tick handlers.
 - **Add CI and test automation (MEDIUM):** Add GitHub Actions CI to run tests/lint and keep test/dev dependencies in `requirements-dev.txt` or `pyproject.toml`.
 - **Telemetry security hardening (LOW→MEDIUM):** Add config options to bind dashboard to `127.0.0.1` and document authentication/ACL guidance. File: src/houndmind_ai/optional/telemetry_dashboard.py

@@ -69,55 +69,70 @@ def default_config_path() -> Path:
 def _load_jsonc(path: Path) -> dict:
     raw_text = path.read_text(encoding="utf-8")
 
-    # Allow JSONC-style comments for user-friendly config files.
-    cleaned: list[str] = []
-    in_string = False
-    escape = False
-    i = 0
-    length = len(raw_text)
-    while i < length:
-        ch = raw_text[i]
-        nxt = raw_text[i + 1] if i + 1 < length else ""
-        if in_string:
-            cleaned.append(ch)
-            if escape:
-                escape = False
-            elif ch == "\\":
-                escape = True
-            elif ch == '"':
-                in_string = False
-            i += 1
-            continue
+    # Prefer a robust third-party JSONC/JSON5 parser if available.
+    try:
+        import json5  # type: ignore
 
-        if ch == '"':
-            in_string = True
-            cleaned.append(ch)
-            i += 1
-            continue
+        return json5.loads(raw_text)
+    except Exception:
+        # Fall back to the built-in sanitizer below. Provide clearer errors
+        # for common failure modes such as unterminated block comments.
+        if "/*" in raw_text and "*/" not in raw_text:
+            raise ValueError(
+                f"Unterminated block comment in config file: {path}. "
+                "Install 'json5' (pip install json5) to allow JSONC comments "
+                "or fix the comment block."
+            )
 
-        if ch == "/" and nxt == "/":
-            # Skip line comment.
-            i += 2
-            while i < length and raw_text[i] not in "\r\n":
+        # Allow JSONC-style comments for user-friendly config files.
+        cleaned: list[str] = []
+        in_string = False
+        escape = False
+        i = 0
+        length = len(raw_text)
+        while i < length:
+            ch = raw_text[i]
+            nxt = raw_text[i + 1] if i + 1 < length else ""
+            if in_string:
+                cleaned.append(ch)
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
                 i += 1
-            continue
-        if ch == "/" and nxt == "*":
-            # Skip block comment.
-            i += 2
-            while i + 1 < length and not (
-                raw_text[i] == "*" and raw_text[i + 1] == "/"
-            ):
+                continue
+
+            if ch == '"':
+                in_string = True
+                cleaned.append(ch)
                 i += 1
-            i += 2
-            continue
+                continue
 
-        cleaned.append(ch)
-        i += 1
+            if ch == "/" and nxt == "/":
+                # Skip line comment.
+                i += 2
+                while i < length and raw_text[i] not in "\r\n":
+                    i += 1
+                continue
+            if ch == "/" and nxt == "*":
+                # Skip block comment.
+                i += 2
+                while i + 1 < length and not (
+                    raw_text[i] == "*" and raw_text[i + 1] == "/"
+                ):
+                    i += 1
+                i += 2
+                continue
 
-    cleaned_text = "".join(cleaned)
-    # Remove trailing commas before closing braces/brackets.
-    cleaned_text = re.sub(r",\s*([}\]])", r"\1", cleaned_text)
-    return json.loads(cleaned_text)
+            cleaned.append(ch)
+            i += 1
+
+        cleaned_text = "".join(cleaned)
+        # Remove trailing commas before closing braces/brackets.
+        cleaned_text = re.sub(r",\s*([}\]])", r"\1", cleaned_text)
+        return json.loads(cleaned_text)
 
 
 def load_config(path: Path | None = None) -> Config:
