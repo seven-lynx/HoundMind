@@ -59,7 +59,8 @@ def main():
     parser = argparse.ArgumentParser(description="HoundMind installer verification")
     parser.add_argument("--preset", choices=["lite", "full"], default="lite")
     args = parser.parse_args()
-    repo_root = Path(__file__).resolve().parents[1]
+    # The verifier file lives in src/tools/. The repository root is two levels up.
+    repo_root = Path(__file__).resolve().parents[2]
     req = repo_root / ("requirements.txt" if args.preset == "full" else "requirements-lite.txt")
     print("HoundMind installer verification")
     py_ok = check_python(3, 10)
