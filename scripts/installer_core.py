@@ -366,6 +366,25 @@ def main() -> int:
                 code = run([str(pip), "install", "gpiozero", "RPi.GPIO", "smbus2"])
                 if code != 0:
                     print("Warning: failed to install gpiozero/RPi.GPIO; continuing and attempting vendor installs.")
+                # Ensure a `smbus` import is available. Some vendor code
+                # imports `smbus` (not `smbus2`). Try installing a PyPI
+                # package named `smbus` first; if unavailable, create a
+                # lightweight shim in the venv that re-exports `smbus2`.
+                if not python_can_import(python, "smbus"):
+                    code = run([str(pip), "install", "smbus"])
+                    if code != 0 or not python_can_import(python, "smbus"):
+                        try:
+                            out = subprocess.check_output([
+                                str(python), "-c",
+                                "import site,sys; print(site.getsitepackages()[0])",
+                            ])
+                            site_packages = Path(out.decode("utf-8").strip())
+                            shim = site_packages / "smbus.py"
+                            shim_text = "from smbus2 import *\nfrom smbus2 import SMBus\n"
+                            shim.write_text(shim_text, encoding="utf-8")
+                            print(f"Wrote smbus shim to {shim}")
+                        except Exception as exc:  # noqa: BLE001
+                            print("Warning: unable to create smbus shim:", exc)
 
                 robot_hat_path = cache_root / "robot-hat"
                 code = clone_or_update(
