@@ -109,6 +109,7 @@ def ensure_system_deps_linux() -> int:
         "libsqlite3-dev",
         "libopenni2-dev",
         "libproj-dev",
+        "python3-spidev",
         "pkg-config",
     ]
     return run(["sudo", "apt-get", "install", "-y"] + pkgs)
@@ -363,7 +364,7 @@ def main() -> int:
                 # Some vendor packages (robot_hat/pidog) rely on `gpiozero` and
                 # SMBus Python bindings. Ensure these packages are available
                 # inside the project's venv so imports succeed during verification.
-                code = run([str(pip), "install", "gpiozero", "RPi.GPIO", "smbus2"])
+                code = run([str(pip), "install", "gpiozero", "RPi.GPIO", "smbus2", "spidev"])
                 if code != 0:
                     print("Warning: failed to install gpiozero/RPi.GPIO; continuing and attempting vendor installs.")
                 # Ensure a `smbus` import is available. Some vendor code
