@@ -10,7 +10,7 @@
 - [x] Release QA checklist: tests, docs, tag, changelog, install validation
 - [ ] Expand troubleshooting checklist in `docs/INSTALL.md` (common errors + support bundle steps)
  - [ ] Improve and consolidate docs in `docs/` (API reference, programming guide, CONTRIBUTING.md, architecture overview)
- - [ ] Packaging & release automation: complete `pyproject.toml` metadata, automate builds, changelog generation, and release pipelines
+- [x] Packaging & release automation: complete `pyproject.toml` metadata, automate builds, changelog generation, and release pipelines
 
 Purpose: Track completion for each module needed for the PiDog hardware-only build (Pi 3 target). Check items as they’re implemented and verified on hardware.
 
