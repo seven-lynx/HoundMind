@@ -4,11 +4,29 @@ from dataclasses import dataclass
 import logging
 import threading
 import time
-from typing import Callable
+from typing import Callable, Any, Dict, List
 
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val: Any, default: int) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass
@@ -68,15 +86,17 @@ class ScanningService:
         if interval_s is None:
             self._interval_override = None
             return
-        self._interval_override = max(0.0, float(interval_s))
+        self._interval_override = max(0.0, _safe_float(interval_s, 0.0))
 
     def scan_three_way(self) -> ScanReading:
-        left_deg = float(self._settings.get("scan_yaw_max_deg", 60))
-        right_deg = float(self._settings.get("scan_yaw_max_deg", 60))
-        settle_s = float(self._settings.get("scan_settle_s", 0.12))
-        samples = int(self._settings.get("scan_samples", 3))
-        between_reads_s = float(self._settings.get("scan_between_reads_s", 0.04))
-        speed = int(self._settings.get("head_scan_speed", 70))
+        left_deg = _safe_float(self._settings.get("scan_yaw_max_deg", 60), 60.0)
+        right_deg = _safe_float(self._settings.get("scan_yaw_max_deg", 60), 60.0)
+        settle_s = _safe_float(self._settings.get("scan_settle_s", 0.12), 0.12)
+        samples = _safe_int(self._settings.get("scan_samples", 3), 3)
+        between_reads_s = _safe_float(
+            self._settings.get("scan_between_reads_s", 0.04), 0.04
+        )
+        speed = _safe_int(self._settings.get("head_scan_speed", 70), 70)
 
         result: dict[str, float] = {}
         try:
@@ -100,10 +120,12 @@ class ScanningService:
         return ScanReading(mode="three_way", data=result, timestamp=time.time())
 
     def sweep_scan(self, angles: list[int]) -> ScanReading:
-        settle_s = float(self._settings.get("scan_settle_s", 0.12))
-        samples = int(self._settings.get("scan_samples", 3))
-        between_reads_s = float(self._settings.get("scan_between_reads_s", 0.04))
-        speed = int(self._settings.get("head_scan_speed", 70))
+        settle_s = _safe_float(self._settings.get("scan_settle_s", 0.12), 0.12)
+        samples = _safe_int(self._settings.get("scan_samples", 3), 3)
+        between_reads_s = _safe_float(
+            self._settings.get("scan_between_reads_s", 0.04), 0.04
+        )
+        speed = _safe_int(self._settings.get("head_scan_speed", 70), 70)
         result: dict[int, float] = {}
         try:
             for yaw in angles:
@@ -138,23 +160,23 @@ class ScanningService:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Scanning loop failed: %s", exc)
             elapsed = time.time() - start
-            interval = float(self._settings.get("scan_interval_s", 0.5))
-            min_interval = float(self._settings.get("scan_interval_min_s", 0.2))
-            max_interval = float(self._settings.get("scan_interval_max_s", 2.0))
+            interval = _safe_float(self._settings.get("scan_interval_s", 0.5), 0.5)
+            min_interval = _safe_float(self._settings.get("scan_interval_min_s", 0.2), 0.2)
+            max_interval = _safe_float(self._settings.get("scan_interval_max_s", 2.0), 2.0)
             if self._interval_override is not None:
                 interval = self._interval_override
             # Safe-mode override from settings.
             if self._settings.get("safe_mode_enabled", False):
                 interval = max(
                     interval,
-                    float(self._settings.get("safe_mode_scan_interval_s", interval)),
+                    _safe_float(self._settings.get("safe_mode_scan_interval_s", interval), interval),
                 )
             interval = min(max(interval, min_interval), max_interval)
             time.sleep(max(0.0, interval - elapsed))
 
     def build_angles(self) -> list[int]:
-        yaw_max = int(self._settings.get("scan_yaw_max_deg", 60))
-        step = max(1, int(self._settings.get("scan_step_deg", 15)))
+        yaw_max = _safe_int(self._settings.get("scan_yaw_max_deg", 60), 60)
+        step = max(1, _safe_int(self._settings.get("scan_step_deg", 15), 15))
         angles = list(range(-yaw_max, yaw_max + 1, step))
         if not angles or angles[0] != -yaw_max or angles[-1] != yaw_max:
             angles = [-yaw_max, 0, yaw_max]
@@ -179,8 +201,8 @@ class ScanningService:
                 val = 0.0
             if val > 0:
                 values.append(val)
-            if between_reads_s:
-                time.sleep(between_reads_s)
+                if between_reads_s:
+                time.sleep(_safe_float(between_reads_s, 0.0))
         if not values:
             return 0.0
         values.sort()
