@@ -376,9 +376,31 @@ This populates `models/` with:
 - `settings.telemetry_dashboard.enabled = true`
 - `settings.telemetry_dashboard.http.enabled = true`
 
+**Security (recommended):**
+- The dashboard binds to `127.0.0.1` by default to be LAN-safe. To expose it to the LAN,
+    set `settings.telemetry_dashboard.http.host` to `0.0.0.0` **and** configure an
+    `auth_token` to protect sensitive endpoints.
+
 **Open:**
-- Dashboard: `http://<pi-ip>:8092/`
-- Snapshot JSON: `http://<pi-ip>:8092/snapshot`
+- Dashboard (default, local only): `http://127.0.0.1:8092/`
+- Snapshot JSON: `http://127.0.0.1:8092/snapshot`
+
+**Auth token example:**
+Add the following to your `config/settings.jsonc` under `settings.telemetry_dashboard.http`:
+
+```jsonc
+"http": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 8092,
+    // Optional token to require on protected endpoints. Keep this secret.
+    "auth_token": "change-this-to-a-secret"
+}
+```
+
+When `auth_token` is set, requests must include it in an `X-Auth-Token` header
+or as `?auth_token=<token>` in the query string. Protected endpoints include
+`/snapshot`, `/download_slam_map`, and `/download_support_bundle`.
 
 **Camera preview / `camera_path`**
 - Purpose: If you run a separate camera stream (MJPEG, HLS, or a web preview) you can point the dashboard to it so a live preview appears on the dashboard.

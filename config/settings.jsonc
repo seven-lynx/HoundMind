@@ -382,9 +382,16 @@
         "semantic_labels"
       ],
       "http": {
+        // Bind to localhost by default for LAN-safe behavior. Set to "0.0.0.0"
+        // only when you intentionally want the dashboard reachable on the LAN
+        // and have secured access (see `auth_token` below).
         "enabled": false,
-        "host": "0.0.0.0",
-        "port": 8092
+        "host": "127.0.0.1",
+        "port": 8092,
+        // Optional simple token required on protected endpoints. When set,
+        // requests must include `X-Auth-Token: <token>` or `?auth_token=<token>`.
+        // Example (uncomment to enable):
+        // "auth_token": "change-this-to-a-secret",
       }
     },
     // =====================================================================
