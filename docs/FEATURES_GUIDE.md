@@ -433,6 +433,29 @@ Example `config/settings.jsonc` snippet:
 **Disable:** `modules.telemetry_dashboard.enabled = false`
 
 
+### Generating an auth token
+
+Use the included helper script to generate a secure token and optionally print a config snippet or write the token to a file with restricted permissions.
+
+Examples:
+
+```bash
+python tools/generate_auth_token.py
+python tools/generate_auth_token.py --length 48 --print-config
+python tools/generate_auth_token.py --output ~/.houndmind/auth_token.txt
+```
+
+The `--print-config` flag prints a small JSON snippet you can paste into `config/settings.jsonc` under `settings.telemetry_dashboard.http`:
+
+```json
+{
+    "telemetry": {
+        "auth_token": "<generated-token-here>"
+    }
+}
+```
+
+
 ## 25) WiFi Localization (Pi4/5)
 **What it does:** Scans for nearby WiFi access points, records signal strengths (RSSI), and provides fingerprint-based localization for indoor positioning. Useful for context-aware behaviors and navigation.
 
