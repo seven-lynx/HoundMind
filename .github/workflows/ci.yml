@@ -33,6 +33,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[lite,dev]
+          # Ensure numpy and OpenCV are available for vision tests (installed separately
+          # so we avoid pulling the entire `full` extras which may include heavy native
+          # packages not needed for CI).
+          pip install numpy opencv-contrib-python
 
       - name: Lint (ruff)
         run: |
