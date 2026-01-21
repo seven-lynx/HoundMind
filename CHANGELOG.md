@@ -83,14 +83,14 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ### Added
 - `pidog_sim` package: explicit simulator alias that forces sim mode and re-exports the `pidog` shim. Use `from pidog_sim import Pidog` for examples/tests that must not touch hardware.
-- Telemetry server runner: `tools/run_telemetry.py` now starts the FastAPI dashboard using config defaults with `--host/--port` overrides and `--force` to run when disabled.
+ - Telemetry server runner: `src/tools/run_telemetry.py` now starts the FastAPI dashboard using config defaults with `--host/--port` overrides and `--force` to run when disabled.
 - Telemetry quickstart: `docs/telemetry_quickstart.md` with install instructions and usage.
 
 ### Changed
 - `pidog` shim hardened to avoid self-import and to support multiple vendor class name variants (`Pidog`, `PiDog`, `PIDog`, `PIDOG`). On the Pi with the official package installed, the shim now reliably delegates to the real hardware library; otherwise it falls back to the simulator.
 - `packmind/orchestrator.py` can be run directly (`python3 packmind/orchestrator.py`) without `PYTHONPATH` tweaks; a small bootstrap adds the repo root to `sys.path` when needed.
 - `packmind/__main__.py` added so `python3 -m packmind` starts the orchestrator.
-- `tools/caninecore_checkup.py` now prepends the repo root to `sys.path` when run from `tools/`, fixing `ModuleNotFoundError: canine_core` on the Pi.
+ - `src/tools/caninecore_checkup.py` now prepends the repo root to `sys.path` when run from `src/tools/`, fixing `ModuleNotFoundError: canine_core` on the Pi.
 - README updated with a new "Hardware vs Simulator imports: pidog vs pidog_sim" section for clarity.
 - Telemetry config flags (`TELEMETRY_ENABLED`, `TELEMETRY_HOST`, `TELEMETRY_PORT`, `TELEMETRY_BASIC_AUTH`) consolidated in `packmind/packmind_config.py`; duplicate `TELEMETRY_ENABLED` key removed from the logging section.
 
@@ -109,7 +109,7 @@ Current Release: v2026.01.18 • Author: 7Lynx
 - Configurable via `FACE_BACKEND = "lite"`; uses `FACE_LITE_DATA_DIR` for simple training assets.
 - Pi 3B preset now defaults to the lite backend when face recognition is enabled.
 - `scripts/train_faces_lite.py` — trains LBPH from `data/faces_lite/<name>/*.jpg`.
-- `tools/lite_face_smoke_test.py` — runs the lite backend and logs detections for N seconds.
+ - `src/tools/lite_face_smoke_test.py` — runs the lite backend and logs detections for N seconds.
 
 ### Changed
 - Added desktop simulation mode instructions and PowerShell/Bash examples.
