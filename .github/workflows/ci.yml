@@ -19,15 +19,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - name: Verify Python version
+          python-version: '3.11'
+        - name: Verify Python version
         run: |
           python - <<'PY'
           import sys
           v = sys.version_info
-          if v < (3,12):
-              print(f"Python {v.major}.{v.minor} detected; require >=3.12")
-              sys.exit(1)
+          if not (v.major == 3 and v.minor in (10, 11)):
+            print(f"Python {v.major}.{v.minor} detected; require 3.10 or 3.11")
+            sys.exit(1)
           print(f"Python {v.major}.{v.minor} OK")
           PY
       - name: Install dependencies
