@@ -141,24 +141,33 @@ def build_rtabmap(cache_root: Path, pip: Path, python: Path) -> int:
 
     build_dir = rtabmap_path / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
-    # Configure with Python bindings enabled
-    code = run(
-        [
-            "cmake",
-            "..",
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DWITH_PYTHON=ON",
-            f"-DPYTHON_EXECUTABLE={str(python)}",
-        ]
-    )
-    if code != 0:
-        return code
-    code = run(["make", "-j", str(os.cpu_count() or 1)])
-    if code != 0:
-        return code
-    code = run(["sudo", "make", "install"])
-    if code != 0:
-        return code
+    # Configure with Python bindings enabled. Run CMake and make inside the
+    # build directory so relative paths like ".." resolve to the source dir.
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(build_dir)
+        code = run(
+            [
+                "cmake",
+                "..",
+                "-DCMAKE_BUILD_TYPE=Release",
+                "-DWITH_PYTHON=ON",
+                f"-DPYTHON_EXECUTABLE={str(python)}",
+            ]
+        )
+        if code != 0:
+            return code
+        code = run(["make", "-j", str(os.cpu_count() or 1)])
+        if code != 0:
+            return code
+        code = run(["sudo", "make", "install"])
+        if code != 0:
+            return code
+    finally:
+        try:
+            os.chdir(old_cwd)
+        except Exception:
+            pass
 
     # Install Python bindings (use pip from the active environment)
     rtabmap_python = rtabmap_path / "python"
