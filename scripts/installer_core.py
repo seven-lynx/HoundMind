@@ -263,14 +263,20 @@ def main() -> int:
             print("requirements.txt not found; full preset is unavailable.")
             return 2
         req = full_req
+    # Install system deps early when requested or needed for full installs.
+    if not is_windows() and (args.auto_system_deps or preset == "full" or should_build_rtabmap):
+        code = ensure_system_deps_linux()
+        if code != 0:
+            return code
+
     code = run([str(pip), "install", "--upgrade", "pip"])
     if code != 0:
         return code
     print(f"Detected platform: {pi_class}. Using preset: {preset}.")
-    # If we're going to build RTAB-Map, avoid pip failing on 'rtabmap-py'
-    # by excluding it from the automatic requirements installation.
+    # Avoid pip failing on 'rtabmap-py' when we will build it or when user
+    # explicitly opts out of RTAB-Map.
     req_to_install = req
-    if should_build_rtabmap and req.exists():
+    if (should_build_rtabmap or args.no_rtabmap) and req.exists():
         content = req.read_text(encoding="utf-8")
         if "rtabmap-py" in content:
             tmp_req = cache_root / "requirements-noslam.txt"
@@ -280,7 +286,17 @@ def main() -> int:
 
     code = run([str(pip), "install", "-r", str(req_to_install)])
     if code != 0:
-        return code
+        if preset == "full":
+            print(
+                "Warning: full preset dependencies failed to install. "
+                "Continuing with lite dependencies; optional modules may be unavailable."
+            )
+            fallback_req = repo_root / "requirements-lite.txt"
+            code = run([str(pip), "install", "-r", str(fallback_req)])
+            if code != 0:
+                return code
+        else:
+            return code
     # Always install Flask and run model downloader for Pi4/5
     if pi_class == "pi4":
         code = run([str(pip), "install", "flask"])
@@ -298,12 +314,6 @@ def main() -> int:
                 "PiDog hardware dependencies are not supported on Windows. Skipping PiDog install."
             )
         else:
-            # Install system deps if requested or required for RTAB-Map build
-            if args.auto_system_deps or should_build_rtabmap:
-                code = ensure_system_deps_linux()
-                if code != 0:
-                    return code
-
             if not python_can_import(python, "pidog"):
                 print("Installing SunFounder PiDog dependencies...")
 
