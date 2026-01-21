@@ -116,6 +116,21 @@ def ensure_system_deps_linux() -> int:
     return run(["sudo", "apt-get", "install", "-y"] + pkgs)
 
 
+def ensure_rtabmap_deps_linux() -> int:
+    """Attempt to install PCL/VTK packages needed by RTAB-Map. Return apt exit code.
+
+    This is separate from the general system deps install so failures here
+    can be handled gracefully by the caller (installer can continue without
+    building RTAB-Map).
+    """
+    if shutil.which("apt-get") is None:
+        print("apt-get not found; cannot attempt RTAB-Map system deps install")
+        return 1
+    pkgs = ["libpcl-dev", "libpcl-tools", "libvtk7-dev"]
+    print("Attempting to install RTAB-Map system packages:", " ".join(pkgs))
+    return run(["sudo", "apt-get", "install", "-y"] + pkgs)
+
+
 def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int:
     if dest.exists():
         code = run(["git", "-C", str(dest), "fetch", "--all", "--prune"])
@@ -322,6 +337,19 @@ def main() -> int:
         code = ensure_system_deps_linux()
         if code != 0:
             return code
+        # If we intended to build RTAB-Map, attempt to install PCL/VTK packages.
+        # Failure to install these packages should not abort the entire
+        # installer; instead disable the RTAB-Map build and continue.
+        if should_build_rtabmap:
+            code = ensure_rtabmap_deps_linux()
+            if code != 0:
+                print(
+                    "Warning: failed to install RTAB-Map system packages (PCL/VTK)."
+                )
+                print(
+                    "Disabling RTAB-Map build; SLAM support will be unavailable."
+                )
+                should_build_rtabmap = False
 
     code = run([str(pip), "install", "--upgrade", "pip"])
     if code != 0:
