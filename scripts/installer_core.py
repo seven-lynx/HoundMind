@@ -53,6 +53,23 @@ def python_can_import(python: Path, module: str) -> bool:
     return code == 0
 
 
+def python_version_tuple(python: Path) -> tuple[int, int] | None:
+    try:
+        out = subprocess.check_output(
+            [str(python), "-c", "import sys; print(sys.version_info.major, sys.version_info.minor)"]
+        )
+        parts = out.decode("utf-8").strip().split()
+        if len(parts) >= 2:
+            return int(parts[0]), int(parts[1])
+    except Exception:
+        return None
+    return None
+
+
+def is_supported_python(version: tuple[int, int]) -> bool:
+    return (version[0] == 3 and version[1] in (10, 11))
+
+
 def ensure_system_deps_linux() -> int:
     if shutil.which("apt-get") is None:
         print("apt-get not found; skipping system dependency install")
@@ -167,6 +184,11 @@ def main() -> int:
     parser.add_argument("--venv", default=".venv", help="Path to virtualenv")
     parser.add_argument("--skip-venv", action="store_true", help="Skip venv creation")
     parser.add_argument(
+        "--force-recreate-venv",
+        action="store_true",
+        help="Delete and recreate the venv even if it already exists",
+    )
+    parser.add_argument(
         "--preset",
         choices=["auto", "lite", "full"],
         default="auto",
@@ -206,8 +228,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if sys.version_info < (3, 9):
-        print("Python 3.9+ required")
+    if sys.version_info < (3, 10) or sys.version_info >= (3, 12):
+        print(
+            "Unsupported Python version: "
+            f"{sys.version_info.major}.{sys.version_info.minor}. "
+            "Use Python 3.10 or 3.11 (set PYTHON=python3.10 or PYTHON=python3.11)."
+        )
         return 2
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -218,6 +244,31 @@ def main() -> int:
     cache_root.mkdir(parents=True, exist_ok=True)
 
     if not args.skip_venv:
+        python, pip = venv_paths(venv_path)
+        if venv_path.exists():
+            if args.force_recreate_venv:
+                print("Forcing venv recreation...")
+                shutil.rmtree(venv_path, ignore_errors=True)
+            venv_version = python_version_tuple(python)
+            current_version = (sys.version_info.major, sys.version_info.minor)
+            if venv_version is None:
+                print("Existing venv is invalid or missing Python; recreating...")
+                shutil.rmtree(venv_path, ignore_errors=True)
+            elif not is_supported_python(venv_version):
+                print(
+                    "Existing venv uses unsupported Python "
+                    f"{venv_version[0]}.{venv_version[1]}; recreating with "
+                    f"{current_version[0]}.{current_version[1]}..."
+                )
+                shutil.rmtree(venv_path, ignore_errors=True)
+            elif venv_version != current_version:
+                print(
+                    "Existing venv uses Python "
+                    f"{venv_version[0]}.{venv_version[1]} but installer is "
+                    f"running on {current_version[0]}.{current_version[1]}; recreating..."
+                )
+                shutil.rmtree(venv_path, ignore_errors=True)
+
         if not venv_path.exists():
             code = run([sys.executable, "-m", "venv", str(venv_path)])
             if code != 0:
@@ -242,14 +293,6 @@ def main() -> int:
     if preset == "full" and pi_class == "pi3":
         print("Pi 3 detected: full preset is not supported. Use --preset lite.")
         return 2
-
-    if preset == "full" and sys.version_info >= (3, 12):
-        print(
-            "Warning: Python 3.12+ may lack Pi wheels for heavy packages "
-            "(face_recognition/dlib, pyaudio, rtabmap-py). "
-            "If installs fail, use Raspberry Pi OS Bookworm (Python 3.11) "
-            "or run with --preset lite."
-        )
 
     req = repo_root / "requirements-lite.txt"
     # Auto-build RTAB-Map for Pi4 full preset, or when explicitly requested.

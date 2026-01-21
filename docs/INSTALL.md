@@ -7,13 +7,15 @@ This guide installs HoundMind, the unified AI system for SunFounder PiDog. Simul
 **Preferred OS (recommended):** Raspberry Pi OS Bookworm (64-bit).
 
 Python compatibility notes:
-- The installer supports Python 3.9+. For best compatibility with heavier native packages (OpenCV, `dlib`/`face_recognition`, `pyaudio`, `rtabmap-py`) we recommend creating the virtualenv with a Python 3.10 interpreter when performing a `full` install on Pi4. Several packages still have upper Python bounds (for example some require `<3.11`), so a 3.10 venv avoids those mismatches.
-- If Python 3.10 is not available, the installer will try `python3.11`, `python3.9`, or `python3` in that order. To force a specific interpreter, set the `PYTHON` environment variable when running the top-level script, e.g. `PYTHON=python3.10 bash scripts/install_houndmind.sh`.
+- The installer supports **Python 3.10–3.11 only**. For best compatibility with heavier native packages (OpenCV, `dlib`/`face_recognition`, `pyaudio`, `rtabmap-py`) we recommend creating the virtualenv with a Python 3.10 interpreter when performing a `full` install on Pi4.
+- If Python 3.10 is not available, the installer will try `python3.11`. If neither is found, the installer will stop with an actionable error. To force a specific interpreter, set the `PYTHON` environment variable when running the top-level script, e.g. `PYTHON=python3.10 bash scripts/install_houndmind.sh`.
+- Python 3.12+ is not supported yet; use Bookworm with Python 3.11 or install Python 3.10.
+- If an existing `.venv` was created with an unsupported or different Python minor version, the installer will automatically recreate it to keep the environment consistent.
 - If you encounter build failures on newer OS releases (Trixie or later), consider switching to Bookworm or use the `--preset lite` option.
 
 ## Prerequisites
 - Raspberry Pi OS Lite (no desktop environment) with I2C enabled.
-- Python 3.9+ available on the system.
+- Python 3.10 or 3.11 available on the system.
 - Internet access for dependency downloads.
 
 ### Checking & installing a compatible Python
@@ -23,9 +25,10 @@ Some HoundMind dependencies (especially when using the `full` preset on Pi4) are
 Check what's available on your system:
 
 ```bash
-python3 --version
 python3.10 --version   # if installed
+python3.11 --version   # if installed
 which python3.10        # shows path if present
+which python3.11        # shows path if present
 ```
 
 If `python3.10` is available, create the virtualenv with it:
@@ -34,6 +37,8 @@ If `python3.10` is available, create the virtualenv with it:
 python3.10 -m venv .venv
 . .venv/bin/activate
 python -V   # confirm Python 3.10.x is active
+
+If you only have Python 3.11, substitute `python3.11` for `python3.10` in the commands above.
 ```
 
 If your OS package manager offers `python3.10`, you can install it (Debian/Raspberry Pi OS style):
@@ -93,6 +98,7 @@ bash scripts/install_houndmind.sh
 
 Optional flags:
 - `--skip-venv` (use the current Python environment)
+- `--force-recreate-venv` (delete and recreate the venv even if it exists)
 - `--skip-pidog` (skip SunFounder install if already done)
 - `--run-i2samp` (runs the PiDog audio setup script)
 - `--preset auto|lite|full` (auto detects Pi model)
@@ -122,8 +128,10 @@ PYTHON=python3.10 bash scripts/install_houndmind.sh --build-rtabmap --auto-syste
 ### 1) Create and activate a virtual environment
 
 ```bash
-python3 -m venv .venv
+python3.10 -m venv .venv
 . .venv/bin/activate
+
+If you only have Python 3.11, substitute `python3.11` in the command above.
 ```
 
 ### 2) Install PiDog system dependencies (Linux, Raspberry Pi OS Lite)

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 
-def check_python(min_major=3, min_minor=9):
+def check_python(min_major=3, min_minor=10):
     maj, mino = sys.version_info.major, sys.version_info.minor
     ok = (maj > min_major) or (maj == min_major and mino >= min_minor)
     print(f"Python: {maj}.{mino} -> {'OK' if ok else 'TOO OLD'}")
@@ -62,9 +62,9 @@ def main():
     repo_root = Path(__file__).resolve().parents[1]
     req = repo_root / ("requirements.txt" if args.preset == "full" else "requirements-lite.txt")
     print("HoundMind installer verification")
-    py_ok = check_python(3, 9)
+    py_ok = check_python(3, 10)
     # Warn if running on newer Python where wheels may be missing (Trixie, etc.)
-    if sys.version_info >= (3, 13):
+    if sys.version_info >= (3, 12):
         print(
             "Warning: Detected Python %d.%d — heavy packages may lack prebuilt wheels on this runtime. "
             "If installation fails, prefer Raspberry Pi OS Bookworm (Python 3.11) or use --preset lite."

@@ -121,7 +121,7 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for detailed enable/disable
 - **Audio not working** → Ensure PortAudio headers are installed; rerun audio setup.
 - **Port in use** → Change HTTP ports in `config/settings.jsonc` for vision/telemetry/voice.
 
-- **Build errors for heavy packages (face_recognition, dlib, pyaudio, rtabmap-py)** → These commonly occur on newer Raspberry Pi OS releases (for example, Trixie with Python 3.13) because prebuilt wheels are not yet available. Preferred OS: **Raspberry Pi OS Bookworm (64-bit, Python 3.12)**. If you see many `wheel`/`gcc`/`dlib` build failures during the full install, either switch to Bookworm or run the installer with `--preset lite`.
+- **Build errors for heavy packages (face_recognition, dlib, pyaudio, rtabmap-py)** → These commonly occur on newer Raspberry Pi OS releases (for example, Trixie with Python 3.13) because prebuilt wheels are not yet available. Preferred OS: **Raspberry Pi OS Bookworm (64-bit, Python 3.11)**. If you see many `wheel`/`gcc`/`dlib` build failures during the full install, either switch to Bookworm or run the installer with `--preset lite`.
 
 - **`ERROR: Could not find a version that satisfies the requirement pidog`** → `pidog` is not on PyPI; the guided installer (`scripts/install_houndmind.sh`) will clone and install it from the SunFounder repo into the same environment. See `docs/INSTALL.md` for manual steps.
 
