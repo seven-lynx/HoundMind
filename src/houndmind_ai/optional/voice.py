@@ -296,9 +296,39 @@ class VoiceModule(Module):
         """
         settings = (context.get("settings") or {}).get("voice_assistant", {})
         stt_cfg = settings.get("stt", {})
-        backend = stt_cfg.get("backend", "auto")
+        backend = stt_cfg.get("backend", "speech_recognition")
 
-        # Try VOSK first if requested or auto
+        # Prefer SpeechRecognition (network or local via installed engines)
+        if backend in ("auto", "speech_recognition", "speech-recognition"):
+            try:
+                import speech_recognition as sr  # type: ignore
+
+                r = sr.Recognizer()
+                mic = sr.Microphone()
+                with mic as source:
+                    r.adjust_for_ambient_noise(source, duration=1)
+                logger.info("SpeechRecognition STT started (using default recognizer)")
+                while not self._stt_stop.is_set():
+                    try:
+                        with mic as source:
+                            audio = r.listen(source, phrase_time_limit=5)
+                        try:
+                            text = r.recognize_google(audio)
+                        except sr.RequestError:
+                            logger.exception("SpeechRecognition service error")
+                            continue
+                        except sr.UnknownValueError:
+                            continue
+                        if text:
+                            self._pending.append({"text": text})
+                    except Exception:
+                        logger.exception("STT listen error")
+                        time.sleep(0.5)
+                return
+            except Exception:
+                logger.debug("SpeechRecognition not available or failed to initialize")
+
+        # Fallback to VOSK if configured or available
         if backend in ("auto", "vosk"):
             try:
                 from vosk import Model, KaldiRecognizer  # type: ignore
@@ -327,7 +357,6 @@ class VoiceModule(Module):
                                 if text:
                                     self._pending.append({"text": text})
                             else:
-                                # partial = rec.PartialResult()
                                 pass
                         try:
                             stream.stop_stream()
@@ -342,36 +371,6 @@ class VoiceModule(Module):
                     logger.info("VOSK backend requested but no model path provided")
             except Exception:
                 logger.debug("VOSK not available or failed to import")
-
-        # Fallback to SpeechRecognition
-        try:
-            import speech_recognition as sr  # type: ignore
-
-            r = sr.Recognizer()
-            mic = sr.Microphone()
-            with mic as source:
-                r.adjust_for_ambient_noise(source, duration=1)
-            logger.info("SpeechRecognition STT started (using default recognizer)")
-            while not self._stt_stop.is_set():
-                try:
-                    with mic as source:
-                        audio = r.listen(source, phrase_time_limit=5)
-                    try:
-                        text = r.recognize_google(audio)
-                    except sr.RequestError:
-                        # API was unreachable or unresponsive
-                        logger.exception("SpeechRecognition service error")
-                        continue
-                    except sr.UnknownValueError:
-                        continue
-                    if text:
-                        self._pending.append({"text": text})
-                except Exception:
-                    logger.exception("STT listen error")
-                    time.sleep(0.5)
-            return
-        except Exception:
-            logger.debug("SpeechRecognition not available")
 
         logger.info("No STT backend available; STT loop exiting")
 

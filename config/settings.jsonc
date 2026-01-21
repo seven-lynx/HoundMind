@@ -285,6 +285,17 @@
       "enabled": false,
       // Minimum seconds between accepted commands.
       "cooldown_s": 1.0,
+      // Speech-to-text settings
+      "stt": {
+        "enabled": false,
+        "backend": "speech_recognition",
+        "vosk_model_path": ""
+      },
+      // Text-to-speech settings
+      "tts": {
+        "enabled": false,
+        "backend": "pidog"
+      },
       // Map phrases to PiDog actions.
       "command_map": {
         "sit": "sit",
