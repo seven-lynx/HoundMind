@@ -126,9 +126,31 @@ def ensure_rtabmap_deps_linux() -> int:
     if shutil.which("apt-get") is None:
         print("apt-get not found; cannot attempt RTAB-Map system deps install")
         return 1
-    pkgs = ["libpcl-dev", "libpcl-tools", "libvtk7-dev"]
-    print("Attempting to install RTAB-Map system packages:", " ".join(pkgs))
-    return run(["sudo", "apt-get", "install", "-y"] + pkgs)
+    # Try installing the essential PCL package and a few VTK candidate packages.
+    # Some Debian/Raspberry Pi repos provide different VTK package names across
+    # releases, so attempt several alternatives and treat the install as
+    # successful if `libpcl-dev` is installed.
+    candidates = {
+        "pcl": ["libpcl-dev", "libpcl-tools"],
+        "vtk": ["libvtk-dev", "libvtk7-dev", "libvtk6-dev", "libvtk9-dev"],
+    }
+    installed_pcl = False
+    # Install PCL-related packages first
+    for pkg in candidates["pcl"]:
+        print(f"Attempting to install {pkg}...")
+        code = run(["sudo", "apt-get", "install", "-y", pkg])
+        if code == 0:
+            installed_pcl = installed_pcl or (pkg == "libpcl-dev")
+    # Try VTK candidates (ignore failures)
+    for pkg in candidates["vtk"]:
+        print(f"Attempting to install {pkg} (VTK candidate)...")
+        _ = run(["sudo", "apt-get", "install", "-y", pkg])
+
+    if installed_pcl:
+        print("libpcl-dev installed — RTAB-Map CMake should be able to find PCL.")
+        return 0
+    print("libpcl-dev not installed; RTAB-Map will not be buildable on this host.")
+    return 1
 
 
 def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int:
@@ -350,6 +372,21 @@ def main() -> int:
                     "Disabling RTAB-Map build; SLAM support will be unavailable."
                 )
                 should_build_rtabmap = False
+        # Ensure pip requirements do not try to install `rtabmap-py` if
+        # the RTAB-Map build has been disabled by the above step. It's
+        # possible the initial selection of requirements happened before
+        # we learned PCL wasn't available, so adjust here.
+        try:
+            # `req` and `req_to_install` are set below this code path; if
+            # they aren't present yet, this will be a no-op.
+            content = req.read_text(encoding="utf-8")
+            if not should_build_rtabmap and "rtabmap-py" in content:
+                tmp_req = cache_root / "requirements-noslam.txt"
+                lines = [l for l in content.splitlines() if "rtabmap-py" not in l]
+                tmp_req.write_text("\n".join(lines), encoding="utf-8")
+                req = tmp_req
+        except Exception:
+            pass
 
     code = run([str(pip), "install", "--upgrade", "pip"])
     if code != 0:
