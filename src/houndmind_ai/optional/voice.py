@@ -6,6 +6,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+from typing import Any
 
 from houndmind_ai.core.module import Module
 
@@ -13,6 +14,24 @@ logger = logging.getLogger(__name__)
 
 
 class VoiceModule(Module):
+    """Voice module with STT (VOSK or SpeechRecognition) and TTS (pidog or pyttsx3).
+
+    Behavior:
+    - Listens for microphone input (optional) and/or accepts HTTP commands (`/say`, `/command`).
+    - Maps phrases to actions via `settings.voice_assistant.command_map` and `aliases`.
+    - If a recognized utterance is a question and a `voice_question_handler` is present in
+      `RuntimeContext`, forwards the question and will TTS the response.
+    Config (settings.voice_assistant):
+    - enabled: bool
+    - cooldown_s: float
+    - http.enabled/host/port
+    - stt.enabled: bool
+    - stt.backend: auto|vosk|speech_recognition
+    - stt.vosk_model_path: path to VOSK model directory (optional)
+    - tts.enabled: bool
+    - tts.backend: auto|pyttsx3|pidog
+    """
+
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self.available = False
@@ -21,19 +40,42 @@ class VoiceModule(Module):
         self._http_thread: threading.Thread | None = None
         self._pending: list[dict] = []
 
+        # STT/TTS runtime
+        self._stt_thread: threading.Thread | None = None
+        self._stt_stop = threading.Event()
+        self._tts_engine: Any | None = None
+        self._pidog: Any | None = None
+
     def start(self, context) -> None:
         if not self.status.enabled:
             return
+
+        # pidog is optional; if present it may provide robot TTS and other helpers
         try:
-            import pidog  # type: ignore[import-not-found]  # noqa: F401
-        except Exception as exc:  # noqa: BLE001
-            self.disable(f"Voice unavailable: {exc}")
-            return
+            import pidog  # type: ignore[import-not-found]
+
+            self._pidog = pidog
+        except Exception:
+            self._pidog = None
+
         self.available = True
         context.set("voice", {"status": "ready"})
-        self._maybe_start_http(
-            (context.get("settings") or {}).get("voice_assistant", {})
-        )
+
+        settings = (context.get("settings") or {}).get("voice_assistant", {})
+
+        # Start HTTP control surface if enabled
+        try:
+            self._maybe_start_http(settings)
+        except Exception:
+            logger.exception("Failed to start voice HTTP server")
+
+        # Start STT listener if requested
+        stt_cfg = settings.get("stt", {})
+        if stt_cfg.get("enabled", False):
+            self._stt_thread = threading.Thread(
+                target=self._stt_loop, args=(context,), daemon=True
+            )
+            self._stt_thread.start()
 
     def tick(self, context) -> None:
         if not self.available or not self.status.enabled:
@@ -48,6 +90,7 @@ class VoiceModule(Module):
         if now - self._last_command_ts < cooldown:
             return None
 
+        # Handle explicit command injected via context
         command = context.get("voice_command")
         if isinstance(command, dict):
             action = command.get("action") or command.get("pidog_action")
@@ -60,32 +103,36 @@ class VoiceModule(Module):
         mapping = settings.get("command_map", {})
         aliases = settings.get("aliases", {})
 
+        # Drain pending HTTP/recognition items
         if self._pending:
             for item in list(self._pending):
                 if "action" in item:
                     self._apply_action(str(item["action"]), context)
                     self._last_command_ts = now
                 elif "text" in item:
-                    action = self._resolve_action(
-                        self._normalize(str(item["text"])), mapping, aliases
-                    )
+                    text = str(item["text"])
+                    normalized = self._normalize(text)
+                    action = self._resolve_action(normalized, mapping, aliases)
                     if action:
                         self._apply_action(action, context)
-                        self._last_command_ts = now
+                    else:
+                        # Treat as question if ends with ? or if configured
+                        self._handle_utterance(text, context)
+                    self._last_command_ts = now
                 self._pending.remove(item)
 
+        # Also handle direct `voice_text` in context (other components may set it)
         text = context.get("voice_text")
-        if not isinstance(text, str) or not text.strip():
-            return None
-
-        normalized = self._normalize(text)
-
-        action = self._resolve_action(normalized, mapping, aliases)
-        if action:
-            self._apply_action(action, context)
+        if isinstance(text, str) and text.strip():
+            normalized = self._normalize(text)
+            action = self._resolve_action(normalized, mapping, aliases)
+            if action:
+                self._apply_action(action, context)
+            else:
+                self._handle_utterance(text, context)
             context.set("voice_text", None)
             self._last_command_ts = now
-            return None
+
         return None
 
     @staticmethod
@@ -110,6 +157,54 @@ class VoiceModule(Module):
         # Use behavior override so safety/navigation still take priority.
         context.set("behavior_override", action)
         logger.info("Voice command -> %s", action)
+
+    def _handle_utterance(self, text: str, context) -> None:
+        # If a question handler exists in context, call it and speak the response.
+        handler = context.get("voice_question_handler")
+        try:
+            # If it's a question (ends with ?) or handler is present, forward
+            if (isinstance(text, str) and text.strip().endswith("?")) or callable(handler):
+                if callable(handler):
+                    try:
+                        resp = handler(text)
+                    except Exception:
+                        logger.exception("voice_question_handler failed")
+                        resp = None
+                else:
+                    resp = None
+                if isinstance(resp, str) and resp.strip():
+                    self._speak(resp)
+                else:
+                    # default fallback: echo
+                    self._speak(f"I heard: {text}")
+        except Exception:
+            logger.exception("Failed handling utterance")
+
+    def _speak(self, text: str) -> None:
+        # Try pidog speak first
+        try:
+            if self._pidog is not None and hasattr(self._pidog, "speak"):
+                try:
+                    self._pidog.speak(text)
+                    return
+                except Exception:
+                    logger.exception("pidog.speak failed")
+        except Exception:
+            logger.exception("pidog TTS check failed")
+
+        # Try pyttsx3
+        try:
+            if self._tts_engine is None:
+                import pyttsx3
+
+                self._tts_engine = pyttsx3.init()
+            self._tts_engine.say(text)
+            self._tts_engine.runAndWait()
+            return
+        except Exception:
+            logger.exception("pyttsx3 TTS failed")
+
+        logger.info("TTS not available to speak: %s", text)
 
     def _maybe_start_http(self, settings: dict) -> None:
         http_settings = settings.get("http", {})
@@ -193,10 +288,115 @@ class VoiceModule(Module):
         self._http_thread.start()
         logger.info("Voice HTTP server listening on %s:%s", host, port)
 
+    def _stt_loop(self, context) -> None:
+        """Background STT loop. Supports VOSK if available, otherwise SpeechRecognition.
+
+        Recognized text is appended to self._pending as {'text': ...} so the main
+        tick loop handles mapping and action invocation.
+        """
+        settings = (context.get("settings") or {}).get("voice_assistant", {})
+        stt_cfg = settings.get("stt", {})
+        backend = stt_cfg.get("backend", "auto")
+
+        # Try VOSK first if requested or auto
+        if backend in ("auto", "vosk"):
+            try:
+                from vosk import Model, KaldiRecognizer  # type: ignore
+                import pyaudio  # type: ignore
+
+                model_path = stt_cfg.get("vosk_model_path")
+                if model_path:
+                    try:
+                        model = Model(model_path)
+                        pa = pyaudio.PyAudio()
+                        stream = pa.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=8000)
+                        stream.start_stream()
+                        rec = KaldiRecognizer(model, 16000)
+                        logger.info("VOSK STT started")
+                        while not self._stt_stop.is_set():
+                            data = stream.read(4000, exception_on_overflow=False)
+                            if len(data) == 0:
+                                continue
+                            if rec.AcceptWaveform(data):
+                                res = rec.Result()
+                                try:
+                                    j = json.loads(res)
+                                    text = j.get("text", "").strip()
+                                except Exception:
+                                    text = ""
+                                if text:
+                                    self._pending.append({"text": text})
+                            else:
+                                # partial = rec.PartialResult()
+                                pass
+                        try:
+                            stream.stop_stream()
+                            stream.close()
+                            pa.terminate()
+                        except Exception:
+                            pass
+                        return
+                    except Exception:
+                        logger.exception("VOSK model init failed")
+                else:
+                    logger.info("VOSK backend requested but no model path provided")
+            except Exception:
+                logger.debug("VOSK not available or failed to import")
+
+        # Fallback to SpeechRecognition
+        try:
+            import speech_recognition as sr  # type: ignore
+
+            r = sr.Recognizer()
+            mic = sr.Microphone()
+            with mic as source:
+                r.adjust_for_ambient_noise(source, duration=1)
+            logger.info("SpeechRecognition STT started (using default recognizer)")
+            while not self._stt_stop.is_set():
+                try:
+                    with mic as source:
+                        audio = r.listen(source, phrase_time_limit=5)
+                    try:
+                        text = r.recognize_google(audio)
+                    except sr.RequestError:
+                        # API was unreachable or unresponsive
+                        logger.exception("SpeechRecognition service error")
+                        continue
+                    except sr.UnknownValueError:
+                        continue
+                    if text:
+                        self._pending.append({"text": text})
+                except Exception:
+                    logger.exception("STT listen error")
+                    time.sleep(0.5)
+            return
+        except Exception:
+            logger.debug("SpeechRecognition not available")
+
+        logger.info("No STT backend available; STT loop exiting")
+
     def stop(self, context) -> None:
+        # Stop STT thread
+        try:
+            if self._stt_thread is not None:
+                self._stt_stop.set()
+                self._stt_thread.join(timeout=1)
+        except Exception:
+            logger.exception("Failed to stop STT thread")
+
         if self._http_server is not None:
             try:
                 self._http_server.shutdown()
                 self._http_server.server_close()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Failed to stop voice HTTP server: %s", exc)
+
+        # Stop pyttsx3 engine if present
+        try:
+            if self._tts_engine is not None:
+                try:
+                    self._tts_engine.stop()
+                except Exception:
+                    pass
+        except Exception:
+            pass
