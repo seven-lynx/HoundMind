@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 from pathlib import Path
 import json
 import logging
@@ -215,7 +216,7 @@ def _ensure_action_sets(behavior_settings: dict) -> None:
     behavior_settings["catalog"] = catalog
 
 
-def _to_float(value: object | None) -> float | None:
+def _to_float(value: Any | None) -> float | None:
     try:
         if value is None:
             return None

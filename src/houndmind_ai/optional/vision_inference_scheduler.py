@@ -20,8 +20,8 @@ class VisionInferenceScheduler:
     def __init__(self, inference_fn: Callable[[Any], Any], result_callback: Optional[Callable[[Any], None]] = None, max_queue_size: int = 4):
         self.inference_fn = inference_fn
         self.result_callback = result_callback
-        self.frame_queue = queue.Queue(maxsize=max_queue_size)
-        self.result_queue = queue.Queue()
+        self.frame_queue: queue.Queue[Any] = queue.Queue(maxsize=max_queue_size)
+        self.result_queue: queue.Queue[Any] = queue.Queue()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
