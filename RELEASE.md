@@ -9,6 +9,8 @@ This checklist provides a minimal, repeatable release process for Pi3 and Pi4 pr
 - [ ] Run unit tests (pytest)
 - [ ] Run smoke test on hardware (tools/smoke_test.py)
 - [ ] Run hardware checkup (tools/hardware_checkup.py)
+ - [ ] Run smoke test on hardware (src/tools/smoke_test.py)
+ - [ ] Run hardware checkup (src/tools/hardware_checkup.py)
  - [ ] Run smoke test on hardware (`python -m tools.smoke_test`)
  - [ ] Run hardware checkup (`python -m tools.hardware_checkup`)
 - [ ] Verify config defaults (config/settings.jsonc)
