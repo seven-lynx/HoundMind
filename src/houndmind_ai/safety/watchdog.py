@@ -9,6 +9,24 @@ from houndmind_ai.core.module import Module
 logger = logging.getLogger(__name__)
 
 
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val: Any, default: int) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
 class WatchdogModule(Module):
     """Watchdog that triggers recovery when sensor/scan data goes stale."""
 
@@ -24,13 +42,6 @@ class WatchdogModule(Module):
             return
 
         now = time.time()
-        def _safe_float(val: Any, default: float) -> float:
-            try:
-                if val is None:
-                    return default
-                return float(val)
-            except (TypeError, ValueError):
-                return default
 
         sensor_timeout = _safe_float(settings.get("sensor_timeout_s", 2.0), 2.0)
         scan_timeout = _safe_float(settings.get("scan_timeout_s", 2.0), 2.0)
@@ -103,14 +114,6 @@ class WatchdogModule(Module):
     def _eligible_restarts(
         self, names: Iterable[str], settings: dict[str, object]
     ) -> list[str]:
-        def _safe_int(val: Any, default: int) -> int:
-            try:
-                if val is None:
-                    return default
-                return int(val)
-            except (TypeError, ValueError):
-                return default
-
         max_restarts = _safe_int(settings.get("max_restarts", 3), 3)
         module_cooldown = _safe_float(settings.get("restart_module_cooldown_s", 10.0), 10.0)
         eligible: list[str] = []
