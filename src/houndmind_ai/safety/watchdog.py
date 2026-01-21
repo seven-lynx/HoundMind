@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Iterable
+from typing import Iterable, Any
 
 from houndmind_ai.core.module import Module
 
@@ -24,19 +24,31 @@ class WatchdogModule(Module):
             return
 
         now = time.time()
-        sensor_timeout = float(settings.get("sensor_timeout_s", 2.0))
-        scan_timeout = float(settings.get("scan_timeout_s", 2.0))
-        module_timeout = float(settings.get("module_timeout_s", 4.0))
-        cooldown = float(settings.get("restart_cooldown_s", 5.0))
+        def _safe_float(val: Any, default: float) -> float:
+            try:
+                if val is None:
+                    return default
+                return float(val)
+            except (TypeError, ValueError):
+                return default
+
+        sensor_timeout = _safe_float(settings.get("sensor_timeout_s", 2.0), 2.0)
+        scan_timeout = _safe_float(settings.get("scan_timeout_s", 2.0), 2.0)
+        module_timeout = _safe_float(settings.get("module_timeout_s", 4.0), 4.0)
+        cooldown = _safe_float(settings.get("restart_cooldown_s", 5.0), 5.0)
 
         sensor_reading = context.get("sensor_reading")
         scan_reading = context.get("scan_reading")
 
         sensor_ts = (
-            float(getattr(sensor_reading, "timestamp", 0.0)) if sensor_reading else 0.0
+            _safe_float(getattr(sensor_reading, "timestamp", 0.0), 0.0)
+            if sensor_reading
+            else 0.0
         )
         scan_ts = (
-            float(getattr(scan_reading, "timestamp", 0.0)) if scan_reading else 0.0
+            _safe_float(getattr(scan_reading, "timestamp", 0.0), 0.0)
+            if scan_reading
+            else 0.0
         )
 
         sensor_stale = sensor_reading is None or (now - sensor_ts) > sensor_timeout
@@ -48,7 +60,8 @@ class WatchdogModule(Module):
         stale_modules: list[str] = []
         for name in list(module_names):
             last_ts = context.get(f"module_heartbeat:{name}") or 0.0
-            if now - float(last_ts) > module_timeout:
+            last_ts_f = _safe_float(last_ts, 0.0)
+            if now - last_ts_f > module_timeout:
                 stale_modules.append(str(name))
 
         if not sensor_stale and not scan_stale and not stale_modules:
@@ -90,8 +103,16 @@ class WatchdogModule(Module):
     def _eligible_restarts(
         self, names: Iterable[str], settings: dict[str, object]
     ) -> list[str]:
-        max_restarts = int(settings.get("max_restarts", 3))
-        module_cooldown = float(settings.get("restart_module_cooldown_s", 10.0))
+        def _safe_int(val: Any, default: int) -> int:
+            try:
+                if val is None:
+                    return default
+                return int(val)
+            except (TypeError, ValueError):
+                return default
+
+        max_restarts = _safe_int(settings.get("max_restarts", 3), 3)
+        module_cooldown = _safe_float(settings.get("restart_module_cooldown_s", 10.0), 10.0)
         eligible: list[str] = []
         for name in names:
             last_ts = self._last_restart_ts.get(str(name), 0.0)
