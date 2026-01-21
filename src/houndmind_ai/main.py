@@ -38,56 +38,40 @@ from houndmind_ai.mapping import default_path_planning_hook
 
 
 def build_modules(config) -> list:
-    module_configs = config.modules
+    module_configs = config.modules or {}
+    # module_configs may be a dict (from JSON) or an object; normalize to dicts
+    def cfg(name: str) -> dict:
+        val = module_configs.get(name, {})
+        return val if isinstance(val, dict) else getattr(val, "__dict__", {})
+
     return [
-        SensorModule("hal_sensors", **module_configs.get("hal_sensors", {}).__dict__),
-        MotorModule("hal_motors", **module_configs.get("hal_motors", {}).__dict__),
-        PerceptionModule("perception", **module_configs.get("perception", {}).__dict__),
-        ScanningModule("scanning", **module_configs.get("scanning", {}).__dict__),
-        OrientationModule(
-            "orientation", **module_configs.get("orientation", {}).__dict__
-        ),
-        CalibrationModule(
-            "calibration", **module_configs.get("calibration", {}).__dict__
-        ),
-        MappingModule("mapping", **module_configs.get("mapping", {}).__dict__),
-        LocalPlannerModule(
-            "local_planner", **module_configs.get("navigation", {}).__dict__
-        ),
-        ObstacleAvoidanceModule(
-            "navigation", **module_configs.get("navigation", {}).__dict__
-        ),
-        BehaviorModule("behavior", **module_configs.get("behavior", {}).__dict__),
-        HabituationModule("habituation", **module_configs.get("habituation", {}).__dict__),
-        AttentionModule("attention", **module_configs.get("attention", {}).__dict__),
-        EventLoggerModule("event_log", **module_configs.get("event_log", {}).__dict__),
-        LedManagerModule(
-            "led_manager", **module_configs.get("led_manager", {}).__dict__
-        ),
-        HealthMonitorModule("health", **module_configs.get("health", {}).__dict__),
-        ServiceWatchdogModule(
-            "service_watchdog", **module_configs.get("service_watchdog", {}).__dict__
-        ),
-        WatchdogModule("watchdog", **module_configs.get("watchdog", {}).__dict__),
-        BalanceModule("balance", **module_configs.get("balance", {}).__dict__),
-        SafetyModule("safety", **module_configs.get("safety", {}).__dict__),
-        EnergyEmotionModule(
-            "energy_emotion", **module_configs.get("energy_emotion", {}).__dict__
-        ),
-        VisionModule("vision", **module_configs.get("vision", {}).__dict__),
-        VisionPi4Module("vision_pi4", **module_configs.get("vision_pi4", {}).__dict__),
-        VoiceModule("voice", **module_configs.get("voice", {}).__dict__),
-        FaceRecognitionModule(
-            "face_recognition", **module_configs.get("face_recognition", {}).__dict__
-        ),
-        SemanticLabelerModule(
-            "semantic_labeler", **module_configs.get("semantic_labeler", {}).__dict__
-        ),
-        SlamPi4Module("slam_pi4", **module_configs.get("slam_pi4", {}).__dict__),
-        TelemetryDashboardModule(
-            "telemetry_dashboard",
-            **module_configs.get("telemetry_dashboard", {}).__dict__,
-        ),
+        SensorModule("hal_sensors", **cfg("hal_sensors")),
+        MotorModule("hal_motors", **cfg("hal_motors")),
+        PerceptionModule("perception", **cfg("perception")),
+        ScanningModule("scanning", **cfg("scanning")),
+        OrientationModule("orientation", **cfg("orientation")),
+        CalibrationModule("calibration", **cfg("calibration")),
+        MappingModule("mapping", **cfg("mapping")),
+        LocalPlannerModule("local_planner", **cfg("navigation")),
+        ObstacleAvoidanceModule("navigation", **cfg("navigation")),
+        BehaviorModule("behavior", **cfg("behavior")),
+        HabituationModule("habituation", **cfg("habituation")),
+        AttentionModule("attention", **cfg("attention")),
+        EventLoggerModule("event_log", **cfg("event_log")),
+        LedManagerModule("led_manager", **cfg("led_manager")),
+        HealthMonitorModule("health", **cfg("health")),
+        ServiceWatchdogModule("service_watchdog", **cfg("service_watchdog")),
+        WatchdogModule("watchdog", **cfg("watchdog")),
+        BalanceModule("balance", **cfg("balance")),
+        SafetyModule("safety", **cfg("safety")),
+        EnergyEmotionModule("energy_emotion", **cfg("energy_emotion")),
+        VisionModule("vision", **cfg("vision")),
+        VisionPi4Module("vision_pi4", **cfg("vision_pi4")),
+        VoiceModule("voice", **cfg("voice")),
+        FaceRecognitionModule("face_recognition", **cfg("face_recognition")),
+        SemanticLabelerModule("semantic_labeler", **cfg("semantic_labeler")),
+        SlamPi4Module("slam_pi4", **cfg("slam_pi4")),
+        TelemetryDashboardModule("telemetry_dashboard", **cfg("telemetry_dashboard")),
     ]
 
 
