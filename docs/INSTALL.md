@@ -217,7 +217,7 @@ If you run into install or runtime issues, follow this checklist to gather infor
    - Install the system build packages listed earlier before attempting `pip install` for heavy packages.
 
 - **How to collect a support bundle (useful when filing issues):**
-    - The repo includes a support-bundle helper available as a module: `python -m tools.collect_support_bundle` or run the script directly `python src/tools/collect_support_bundle.py`.
+   - The repo includes a support-bundle helper available as a module: `python -m tools.collect_support_bundle` (run inside the venv) or run the script directly `python src/tools/collect_support_bundle.py`.
    - Example: `python -m tools.collect_support_bundle /tmp/support.zip`.
    - Set a trace id to correlate logs and telemetry: on Linux/macOS `export HOUNDMIND_TRACE_ID=trace-12345`, on PowerShell `setx HOUNDMIND_TRACE_ID trace-12345` then reproduce the issue and collect a bundle.
    - Support bundles include `metadata.json` (timestamp, git commit, trace_id), logs, and key config files — include this bundle when opening issues.
@@ -240,7 +240,21 @@ If you run into install or runtime issues, follow this checklist to gather infor
 
 
 ## Run
+Run HoundMind from the install virtualenv. Recommended methods:
+
 ```bash
+# Activate venv then run
+source .venv/bin/activate
+python -m houndmind_ai
+
+# Or run with the venv Python directly
+.venv/bin/python -m houndmind_ai
+```
+
+On Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
 python -m houndmind_ai
 ```
 

@@ -41,8 +41,27 @@ The guided installer can:
 It is safe to re-run; it skips work that is already complete.
 
 ## Start HoundMind
-- Run the main loop on PiDog hardware:
-  - `python -m houndmind_ai`
+- Recommended: run HoundMind inside the install virtualenv.
+
+- Activate the venv, then run:
+
+```bash
+source .venv/bin/activate
+python -m houndmind_ai
+```
+
+- Or run directly with the venv Python (no activation):
+
+```bash
+.venv/bin/python -m houndmind_ai
+```
+
+- On Windows PowerShell use:
+
+```powershell
+.venv\Scripts\Activate.ps1
+python -m houndmind_ai
+```
 
 ## Hardware checkup
 - Run a minimal sensor + motion check on the PiDog hardware:

@@ -3,7 +3,21 @@
 This quick start shows how to run the HoundMind AI and customize its behavior safely.
 
 ## 1) Run the runtime
+Run HoundMind from the install virtualenv. Recommended methods:
+
 ```bash
+# Activate the venv then run
+source .venv/bin/activate
+python -m houndmind_ai
+
+# Or run with the venv Python directly
+.venv/bin/python -m houndmind_ai
+```
+
+On Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
 python -m houndmind_ai
 ```
 

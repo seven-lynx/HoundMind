@@ -13,7 +13,14 @@ This guide explains what each feature does, how to use it, and how to disable it
 ## 1) Core Runtime
 **What it does:** Runs the main loop and coordinates all modules.
 
-**How to use:** Start with `python -m houndmind_ai`.
+**How to use:** Start HoundMind from the install venv. For example, activate the venv and run:
+
+```
+source .venv/bin/activate
+python -m houndmind_ai
+```
+
+Or run directly with the venv Python: `.venv/bin/python -m houndmind_ai`.
 
 **How to disable:** Not applicable (core runtime is always required).
 
