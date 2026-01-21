@@ -14,8 +14,8 @@
         "vision_pi4": {"enabled": true},
         "face_recognition": {"enabled": false},
         "semantic_labeler": {"enabled": false},
-        "slam_pi4": {"enabled": true},
-        "telemetry_dashboard": {"enabled": true}
+        "slam_pi4": {"enabled": false},
+        "telemetry_dashboard": {"enabled": false}
       },
       "settings": {
         "navigation": {
@@ -155,13 +155,13 @@
       "required": false
     },
     "slam_pi4": {
-      // Pi4 SLAM module (enabled for validation).
-      "enabled": true,
+      // Pi4 SLAM module (disabled by default).
+      "enabled": false,
       "required": false
     },
     "telemetry_dashboard": {
-      // Pi4 telemetry dashboard (enabled for validation).
-      "enabled": true,
+      // Pi4 telemetry dashboard (disabled by default).
+      "enabled": false,
       "required": false
     },
     "energy_emotion": {
