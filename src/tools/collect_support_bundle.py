@@ -15,6 +15,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def repo_root() -> Path:
@@ -26,6 +29,7 @@ def gather_git_commit(root: Path) -> str | None:
         out = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, stderr=subprocess.DEVNULL)
         return out.decode().strip()
     except Exception:
+        logger.exception("Failed to resolve git commit")
         return None
 
 
@@ -44,6 +48,7 @@ def collect(bundle_path: Path) -> None:
             try:
                 data = f.read_text(encoding="utf-8", errors="replace")
             except Exception:
+                logger.exception("Failed to read log file: %s", f)
                 continue
             # search for last occurrence
             m = trace_re.search(data[::-1])
@@ -97,10 +102,12 @@ def collect(bundle_path: Path) -> None:
                         tail = f.read_text(encoding="utf-8", errors="replace").splitlines()[-2000:]
                         z.writestr(str(Path("logs") / (f.name + ".tail.txt")), "\n".join(tail))
                 except Exception:
-                    # best-effort
+                    logger.exception("Failed to include log file in support bundle: %s", f)
+                    # best-effort fallback
                     try:
                         z.write(f, arcname=str(Path("logs") / f.name))
                     except Exception:
+                        logger.exception("Failed fallback include for file: %s", f)
                         pass
 
     print(f"Support bundle created: {bundle_path}")
@@ -122,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         collect(out)
         return 0
     except Exception as exc:
-        print("Failed to create support bundle:", exc, file=sys.stderr)
+        logger.exception("Failed to create support bundle")
         return 2
 
 

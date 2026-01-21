@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import logging
 
 from houndmind_ai.core.config import load_config
 from houndmind_ai.core.logging_setup import setup_logging
@@ -35,6 +36,8 @@ from houndmind_ai.optional.vision import VisionModule
 from houndmind_ai.optional.vision_pi4 import VisionPi4Module
 from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
 from houndmind_ai.mapping import default_path_planning_hook
+
+logger = logging.getLogger(__name__)
 
 
 def build_modules(config) -> list:
@@ -97,6 +100,7 @@ def main() -> None:
         if not device_id:
             device_id = socket.gethostname()
     except Exception:
+        logger.exception("Failed to determine device id; using hostname fallback")
         device_id = socket.gethostname()
 
     # Attach the runtime's mutable dict so updates are reflected in logs.
