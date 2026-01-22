@@ -1,2 +1,0 @@
-[console_scripts]
-houndmind = houndmind_ai.main:main

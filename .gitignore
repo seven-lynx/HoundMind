@@ -7,6 +7,9 @@ __pycache__/
 # Environments
 .venv/
 venv/
+# Specific local venv used for testing
+.venv311/
+.venv*/
 
 # Local git hooks and dev scripts
 .githooks/
