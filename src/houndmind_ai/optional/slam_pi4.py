@@ -5,6 +5,7 @@ import time
 from collections import deque
 from typing import Any
 import importlib
+from houndmind_ai.core.module import Module
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:
@@ -12,8 +13,6 @@ def _safe_float(v: Any, default: float = 0.0) -> float:
         return float(v)
     except Exception:
         return default
-
-from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
 
