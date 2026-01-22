@@ -4,6 +4,8 @@ import logging
 import time
 from typing import Any
 
+from houndmind_ai.core.module import Module
+
 
 def _safe_float(val: Any, default: float) -> float:
     try:
@@ -12,8 +14,6 @@ def _safe_float(val: Any, default: float) -> float:
         return float(val)
     except (TypeError, ValueError):
         return default
-
-from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
 

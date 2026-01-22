@@ -4,7 +4,7 @@ import logging
 import time
 from collections import Counter, deque
 
-from typing import Any, cast
+from typing import Any
 
 from houndmind_ai.core.module import Module
 
