@@ -104,11 +104,11 @@ class ScanningService:
             time.sleep(settle_s)
             result["forward"] = self._read_distance(samples, between_reads_s)
 
-            self._head_move(-int(right_deg), speed)
+            self._head_move(-_safe_int(right_deg, 0), speed)
             time.sleep(settle_s)
             result["right"] = self._read_distance(samples, between_reads_s)
 
-            self._head_move(int(left_deg), speed)
+            self._head_move(_safe_int(left_deg, 0), speed)
             time.sleep(settle_s)
             result["left"] = self._read_distance(samples, between_reads_s)
         finally:
@@ -129,9 +129,10 @@ class ScanningService:
         result: dict[int, float] = {}
         try:
             for yaw in angles:
-                self._head_move(int(yaw), speed)
+                y = _safe_int(yaw, 0)
+                self._head_move(y, speed)
                 time.sleep(settle_s)
-                result[int(yaw)] = self._read_distance(samples, between_reads_s)
+                result[y] = self._read_distance(samples, between_reads_s)
         finally:
             try:
                 self._head_move(0, speed)
@@ -152,7 +153,7 @@ class ScanningService:
                     reading = self.sweep_scan(angles)
                 self._latest = reading
                 self._history.append(reading)
-                max_len = max(1, int(self._settings.get("scan_history_size", 10)))
+                max_len = max(1, _safe_int(self._settings.get("scan_history_size", 10), 10))
                 if len(self._history) > max_len:
                     self._history = self._history[-max_len:]
                 for cb in list(self._callbacks):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from typing import Dict, Optional
 
 from houndmind_ai.core.module import Module
 
@@ -73,7 +74,7 @@ class HealthMonitorModule(Module):
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self._last_sample_ts = 0.0
-        self._high_water = {
+        self._high_water: Dict[str, Optional[float]] = {
             "load_1m": None,
             "temp_c": None,
             "gpu_temp_c": None,

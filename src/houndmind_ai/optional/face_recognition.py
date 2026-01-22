@@ -27,9 +27,9 @@ class FaceRecognitionModule(Module):
         self.available = False
         self.repo_root = Path(__file__).resolve().parents[3]
 
-        self._cv2 = None
-        self._cascade = None
-        self._recognizer = None
+        self._cv2: Any | None = None
+        self._cascade: Any | None = None
+        self._recognizer: Any | None = None
         self._label_map: dict[int, str] = {}
 
         self._embeddings_path: Path | None = None
@@ -66,9 +66,15 @@ class FaceRecognitionModule(Module):
             self._cv2 = cv2
             haar_path = settings.get("opencv_haar_path")
             if not haar_path:
-                haar_path = str(
-                    Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"
-                )
+                data_obj = getattr(self._cv2, "data", None)
+                if data_obj is not None and getattr(data_obj, "haaracascades", None) is None:
+                    # some cv2 distributions expose haarcascades under 'haaracascades' attribute
+                    pass
+                # best-effort default path when cv2 provides haarcascades
+                if data_obj is not None and getattr(data_obj, "haarcascades", None) is not None:
+                    haar_path = str(Path(getattr(data_obj, "haarcascades")) / "haarcascade_frontalface_default.xml")
+                else:
+                    haar_path = ""
             haar_path = self._resolve_path(haar_path)
             if not haar_path.exists():
                 self.disable(f"Haar cascade not found: {haar_path}")

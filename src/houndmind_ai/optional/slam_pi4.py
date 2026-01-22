@@ -4,6 +4,13 @@ import logging
 import time
 from collections import deque
 from typing import Any
+
+
+def _safe_float(v: Any, default: float = 0.0) -> float:
+    try:
+        return float(v)
+    except Exception:
+        return default
 import importlib
 
 from houndmind_ai.core.module import Module
@@ -15,7 +22,7 @@ class _RtabmapAdapter:
     """Minimal defensive adapter for RTAB-Map Python bindings."""
 
     def __init__(self, cfg: dict | None = None):
-        self._rtab = None
+        self._rtab: Any | None = None
         self._cfg = cfg or {}
 
     def available(self) -> bool:
@@ -33,9 +40,10 @@ class _RtabmapAdapter:
             self._rtab = self._rtab()
         # Apply optional parameters from cfg if binding supports it
         params = self._cfg.get("params") if isinstance(self._cfg, dict) else None
-        if params and hasattr(self._rtab, "set_parameters"):
+        r = self._rtab
+        if params and r is not None and hasattr(r, "set_parameters"):
             try:
-                self._rtab.set_parameters(params)
+                r.set_parameters(params)
             except Exception:
                 # ignore if API differs
                 pass
@@ -155,7 +163,7 @@ class SlamPi4Module(Module):
         if not settings.get("enabled", True):
             return
 
-        interval = float(settings.get("interval_s", 0.2))
+        interval = _safe_float(settings.get("interval_s", 0.2), 0.2)
         now = time.time()
         if now - self._last_ts < interval:
             return
@@ -172,7 +180,7 @@ class SlamPi4Module(Module):
         ts = None
         if imu and imu.get("timestamp"):
             try:
-                ts = float(imu.get("timestamp"))
+                ts = _safe_float(imu.get("timestamp"), time.time())
             except Exception:
                 ts = time.time()
         else:
@@ -182,7 +190,7 @@ class SlamPi4Module(Module):
             self._buffer.append((ts, frame, imu))
 
         # Trim buffer to configured max age
-        max_buffer_s = float(settings.get("max_buffer_s", 2.0))
+        max_buffer_s = _safe_float(settings.get("max_buffer_s", 2.0), 2.0)
         cutoff = now - max_buffer_s
         while self._buffer and (self._buffer[0][0] < cutoff):
             self._buffer.popleft()
@@ -204,10 +212,10 @@ class SlamPi4Module(Module):
                 pose = self._adapter.get_pose() if self._adapter else None
                 if pose:
                     try:
-                        x = float(pose[0])
-                        y = float(pose[1])
-                        yaw = float(pose[5]) if len(pose) > 5 else 0.0
-                        conf = float(pose[6]) if len(pose) > 6 else 1.0
+                        x = _safe_float(pose[0], 0.0)
+                        y = _safe_float(pose[1], 0.0)
+                        yaw = _safe_float(pose[5], 0.0) if len(pose) > 5 else 0.0
+                        conf = _safe_float(pose[6], 1.0) if len(pose) > 6 else 1.0
                         self._pose = {"x": x, "y": y, "yaw": yaw, "confidence": conf}
                     except Exception:
                         pass
@@ -221,7 +229,7 @@ class SlamPi4Module(Module):
                 context.set("slam_trajectory", None)
 
             # Optionally export map to file with selectable format
-            map_export_interval = float(settings.get("map_export_interval_s", 0))
+            map_export_interval = _safe_float(settings.get("map_export_interval_s", 0), 0.0)
             map_export_path = settings.get("map_export_path")
             map_export_format = (settings.get("map_export_format") or "json").lower()
             if map_export_interval > 0 and map_export_path:
@@ -274,7 +282,7 @@ class SlamPi4Module(Module):
         if imu:
             gyro = imu.get("gyro")
         if isinstance(gyro, (list, tuple)) and len(gyro) >= 3:
-            yaw += float(gyro[2]) * float(settings.get("gyro_scale", 0.0))
+            yaw += _safe_float(gyro[2], 0.0) * _safe_float(settings.get("gyro_scale", 0.0), 0.0)
         self._pose = {
             "x": float(self._pose.get("x", 0.0)),
             "y": float(self._pose.get("y", 0.0)),

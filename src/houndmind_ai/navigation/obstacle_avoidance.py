@@ -4,7 +4,7 @@ import logging
 import time
 from collections import Counter, deque
 
-from typing import Any
+from typing import Any, cast
 
 from houndmind_ai.core.module import Module
 
@@ -38,7 +38,7 @@ class ObstacleAvoidanceModule(Module):
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self._baseline_cm: dict[int, float] = {}
-        self._confirm_votes: deque[bool] = deque(maxlen=1)
+        self._confirm_votes: deque[str] = deque(maxlen=1)
         self._last_scan_ts = 0.0
         self._last_approach_ts = 0.0
         self._approach_votes: deque[bool] = deque(maxlen=1)
@@ -572,12 +572,14 @@ class ObstacleAvoidanceModule(Module):
         self._turn_cooldown_ts = time.time()
 
     def _is_dead_end(self, direction: str) -> bool:
-        if len(self._dead_end_cache) < self._dead_end_cache.maxlen:
+        maxlen = self._dead_end_cache.maxlen
+        if maxlen is None or len(self._dead_end_cache) < maxlen:
             return False
-        total = sum(self._dead_end_cache)
-        if direction == "left" and total < 0:
+        neg = sum(1 for v in self._dead_end_cache if v < 0)
+        pos = sum(1 for v in self._dead_end_cache if v > 0)
+        if direction == "left" and neg > pos:
             return True
-        if direction == "right" and total > 0:
+        if direction == "right" and pos > neg:
             return True
         return False
 
@@ -610,11 +612,7 @@ class ObstacleAvoidanceModule(Module):
             conf = 0.0
         if conf < min_conf:
             return fallback
-        yaw = best_path.get("yaw")
-        try:
-            yaw = float(yaw)
-        except Exception:
-            return fallback
+        yaw = _safe_float(best_path.get("yaw", 0.0), 0.0)
         if yaw < 0:
             self._last_mapping_bias_ts = now
             choice = "left" if weight >= 0.5 else fallback
@@ -744,7 +742,11 @@ class ObstacleAvoidanceModule(Module):
         acc = getattr(reading, "acc", None) if reading else None
         if acc is None:
             return False
-        magnitude = abs(float(acc[0])) + abs(float(acc[1])) + abs(float(acc[2]))
+        magnitude = (
+            abs(_safe_float(acc[0], 0.0))
+            + abs(_safe_float(acc[1], 0.0))
+            + abs(_safe_float(acc[2], 0.0))
+        )
         self._movement_history.append((now, magnitude))
 
         window_s = float(settings.get("stuck_time_window_s", 5.0))

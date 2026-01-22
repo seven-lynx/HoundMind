@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Optional, Any
 
 from houndmind_ai.core.module import Module
 from houndmind_ai.optional.vision_preprocessing import VisionPreprocessor
@@ -22,17 +23,17 @@ class VisionPi4Module(Module):
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self.available = False
-        self._camera = None
-        self._cv2 = None
-        self._capture = None
+        self._camera: Any | None = None
+        self._cv2: Any | None = None
+        self._capture: Any | None = None
         self._last_frame_ts = 0.0
         self._last_frame = None
 
         self._http_server: ThreadingHTTPServer | None = None
         self._http_thread: threading.Thread | None = None
 
-        self._preprocessor = None
-        self._inference_scheduler = None
+        self._preprocessor: Optional[VisionPreprocessor] = None
+        self._inference_scheduler: Optional[VisionInferenceScheduler] = None
         self._last_inference_result = None
 
     def start(self, context) -> None:
@@ -51,7 +52,10 @@ class VisionPi4Module(Module):
             def _dummy_inference(frame):
                 time.sleep(0.05)
                 return {"frame_id": id(frame), "result": "ok"}
-            self._inference_scheduler = VisionInferenceScheduler(_dummy_inference, result_callback=_on_inference_result)
+            self._inference_scheduler = VisionInferenceScheduler(
+                _dummy_inference, result_callback=_on_inference_result
+            )
+            assert self._inference_scheduler is not None
             self._inference_scheduler.start()
 
         if backend == "picamera2":

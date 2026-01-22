@@ -2,6 +2,16 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
+
+
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
 
 from houndmind_ai.core.module import Module
 
@@ -32,7 +42,7 @@ class AttentionModule(Module):
             return
 
         now = time.time()
-        cooldown = float(settings.get("sound_cooldown_s", 0.5))
+        cooldown = _safe_float(settings.get("sound_cooldown_s", 0.5), 0.5)
         if now - self._last_attention_ts < cooldown:
             return
 
@@ -44,14 +54,14 @@ class AttentionModule(Module):
         if settings.get("respect_scanning", True):
             scan_reading = context.get("scan_reading")
             scan_ts = (
-                float(getattr(scan_reading, "timestamp", 0.0)) if scan_reading else 0.0
+                _safe_float(getattr(scan_reading, "timestamp", 0.0), 0.0) if scan_reading else 0.0
             )
-            block_s = float(settings.get("scan_block_s", 0.4))
+            block_s = _safe_float(settings.get("scan_block_s", 0.4), 0.4)
             if now - scan_ts < block_s:
                 return
 
         yaw = _direction_to_yaw(
-            sound_direction, float(settings.get("head_yaw_max_deg", 60.0))
+            sound_direction, _safe_float(settings.get("head_yaw_max_deg", 60.0), 60.0)
         )
         dog = context.get("pidog")
         if dog is None:
@@ -77,11 +87,8 @@ class AttentionModule(Module):
         )
 
 
-def _direction_to_yaw(direction: object, yaw_max: float) -> float:
-    try:
-        direction = float(direction) % 360.0
-    except Exception:
-        return 0.0
+def _direction_to_yaw(direction: Any, yaw_max: float) -> float:
+    direction = _safe_float(direction, 0.0) % 360.0
     if direction > 180:
         yaw = (direction - 360.0) / 2.0
     else:

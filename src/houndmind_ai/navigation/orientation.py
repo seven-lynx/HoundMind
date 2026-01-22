@@ -109,7 +109,7 @@ class OrientationModule(Module):
                 time.sleep(0.05)
                 continue
             try:
-                samples.append(float(gyro[2]))
+                samples.append(_safe_float(gyro[2], 0.0))
             except Exception:
                 pass
             time.sleep(0.05)
@@ -119,7 +119,7 @@ class OrientationModule(Module):
             logger.warning("Orientation calibration failed: no samples")
             return
         bias = sum(samples) / len(samples)
-        max_bias = float(settings.get("calibration_max_bias_abs", 0.0))
+        max_bias = _safe_float(settings.get("calibration_max_bias_abs", 0.0), 0.0)
         if max_bias > 0:
             if bias > max_bias:
                 bias = max_bias

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from houndmind_ai.core.module import Module
+
+
+def _safe_float(v: Any, default: float = 0.0) -> float:
+    try:
+        return float(v)
+    except Exception:
+        return default
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +57,8 @@ class PerceptionModule(Module):
         # This is intentionally coarse — it emits a `pose_hint` into the
         # context for downstream modules to use as a soft localization cue.
         fusion_cfg = settings.get("fusion", {}) if isinstance(settings, dict) else {}
-        anchor_max_cm = float(fusion_cfg.get("fusion_anchor_distance_cm", 120))
-        min_conf = float(fusion_cfg.get("fusion_min_confidence", 0.3))
+        anchor_max_cm = _safe_float(fusion_cfg.get("fusion_anchor_distance_cm", 120), 120.0)
+        min_conf = _safe_float(fusion_cfg.get("fusion_min_confidence", 0.3), 0.3)
 
         obstacle = False
         if isinstance(distance, (int, float)) and distance > 0:
@@ -78,15 +86,15 @@ class PerceptionModule(Module):
                     hint = {
                         "timestamp": getattr(reading, "timestamp", None) or None,
                         "type": "anchor_distance",
-                        "distance_cm": float(distance),
-                        "heading_deg": float(heading),
+                        "distance_cm": _safe_float(distance, 0.0),
+                        "heading_deg": _safe_float(heading, 0.0),
                         "confidence": min(
                             1.0,
-                            (anchor_max_cm - float(distance)) / max(1.0, anchor_max_cm),
+                            (anchor_max_cm - _safe_float(distance, 0.0)) / max(1.0, anchor_max_cm),
                         ),
                     }
                     # Apply min confidence filter.
-                    if float(hint.get("confidence", 0.0)) >= min_conf:
+                    if _safe_float(hint.get("confidence", 0.0), 0.0) >= min_conf:
                         context.set("pose_hint", hint)
         except Exception:
             logger.debug("pose_hint calc failed", exc_info=True)

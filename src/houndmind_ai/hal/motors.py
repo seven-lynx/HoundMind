@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, Optional
 
 from houndmind_ai.calibration.servo_calibration import apply_servo_offsets
 from houndmind_ai.core.module import Module
@@ -31,9 +31,9 @@ def _safe_int(val: Any, default: int) -> int:
 class MotorModule(Module):
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
-        self.dog = None
+        self.dog: Optional[Any] = None
         self.last_action: str | None = None
-        self.action_flow = None
+        self.action_flow: Optional[Any] = None
         self.last_action_ts = 0.0
 
     def start(self, context) -> None:
@@ -196,11 +196,15 @@ class MotorModule(Module):
                 return True
             step_dir = "turn left" if remaining > 0 else "turn right"
             try:
-                self.dog.do_action(
+                dog = self.dog
+                if dog is None:
+                    self._apply_head_center(context)
+                    return False
+                dog.do_action(
                     step_dir.replace("turn ", "turn_"), step_count=1, speed=speed
                 )
-                if hasattr(self.dog, "wait_all_done"):
-                    self.dog.wait_all_done()
+                if hasattr(dog, "wait_all_done"):
+                    dog.wait_all_done()
             except Exception:  # noqa: BLE001
                 self._apply_head_center(context)
                 return False

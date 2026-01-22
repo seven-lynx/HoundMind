@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import logging
 import threading
 import time
-from typing import Callable, Deque, Any
+from typing import Callable, Deque, Any, Tuple, cast
 
 from houndmind_ai.core.module import Module
 
@@ -265,34 +265,34 @@ class SensorService:
         try:
             acc_raw = self._dog.accData
             gyro_raw = self._dog.gyroData
-            acc = (
+            acc = cast(Tuple[float, float, float], (
                 _safe_float(acc_raw[0], 0.0),
                 _safe_float(acc_raw[1], 0.0),
                 _safe_float(acc_raw[2], 0.0),
-            )
-            gyro = (
+            ))
+            gyro = cast(Tuple[float, float, float], (
                 _safe_float(gyro_raw[0], 0.0),
                 _safe_float(gyro_raw[1], 0.0),
                 _safe_float(gyro_raw[2], 0.0),
-            )
+            ))
         except Exception:  # noqa: BLE001
             logger.debug("IMU read failed", exc_info=True)
             return None, None, False
         alpha = _safe_float(self._settings.get("imu_lpf_alpha", 0.0), 0.0)
         if 0.0 < alpha <= 1.0:
             if self._acc_lpf is None:
-                self._acc_lpf = acc
+                self._acc_lpf = cast(Tuple[float, float, float], acc)
             else:
-                self._acc_lpf = tuple(
-                    (1 - alpha) * prev + alpha * cur
-                    for prev, cur in zip(self._acc_lpf, acc)
+                self._acc_lpf = cast(
+                    Tuple[float, float, float],
+                    tuple((1 - alpha) * prev + alpha * cur for prev, cur in zip(self._acc_lpf, acc)),
                 )
             if self._gyro_lpf is None:
-                self._gyro_lpf = gyro
+                self._gyro_lpf = cast(Tuple[float, float, float], gyro)
             else:
-                self._gyro_lpf = tuple(
-                    (1 - alpha) * prev + alpha * cur
-                    for prev, cur in zip(self._gyro_lpf, gyro)
+                self._gyro_lpf = cast(
+                    Tuple[float, float, float],
+                    tuple((1 - alpha) * prev + alpha * cur for prev, cur in zip(self._gyro_lpf, gyro)),
                 )
             acc = self._acc_lpf
             gyro = self._gyro_lpf

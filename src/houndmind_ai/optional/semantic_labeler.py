@@ -22,8 +22,8 @@ class SemanticLabelerModule(Module):
         super().__init__(name, enabled=enabled, required=required)
         self.available = False
         self.backend = "stub"
-        self._cv2 = None
-        self._net = None
+        self._cv2: Any | None = None
+        self._net: Any | None = None
         self._labels: list[str] = []
         self._repo_root = Path(__file__).resolve().parents[3]
         self._last_ts = 0.0
