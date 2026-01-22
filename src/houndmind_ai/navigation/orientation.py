@@ -2,10 +2,29 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val: Any, default: int) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 
 
 class OrientationModule(Module):
@@ -21,7 +40,7 @@ class OrientationModule(Module):
     def start(self, context) -> None:
         self._context = context
         settings = (context.get("settings") or {}).get("orientation", {})
-        initial = float(settings.get("initial_heading_deg", 0.0))
+        initial = _safe_float(settings.get("initial_heading_deg", 0.0), 0.0)
         self._heading_deg = initial % 360.0
         context.set("current_heading", self._heading_deg)
         service = context.get("sensor_service")
@@ -52,17 +71,14 @@ class OrientationModule(Module):
 
     def _update_from_reading(self, context, reading) -> None:
         gyro = getattr(reading, "gyro", None)
-        ts = float(getattr(reading, "timestamp", time.time()))
+        ts = _safe_float(getattr(reading, "timestamp", time.time()), time.time())
         if gyro is None:
             return
-        try:
-            gz = float(gyro[2])
-        except Exception:
-            return
+        gz = _safe_float(gyro[2] if len(gyro) > 2 else None, 0.0)
 
         settings = (context.get("settings") or {}).get("orientation", {})
-        scale = float(settings.get("gyro_scale", 1.0))
-        bias = float(context.get("orientation_bias_z") or settings.get("bias_z", 0.0))
+        scale = _safe_float(settings.get("gyro_scale", 1.0), 1.0)
+        bias = _safe_float(context.get("orientation_bias_z") or settings.get("bias_z", 0.0), 0.0)
 
         if self._last_ts is None:
             self._last_ts = ts
@@ -75,9 +91,9 @@ class OrientationModule(Module):
         context.set("current_heading", self._heading_deg)
 
     def _calibrate_bias(self, context, settings: dict[str, object]) -> None:
-        settle_s = float(settings.get("calibration_settle_s", 0.0))
-        duration_s = float(settings.get("calibration_duration_s", 2.0))
-        max_samples = int(settings.get("calibration_samples", 30))
+        settle_s = _safe_float(settings.get("calibration_settle_s", 0.0), 0.0)
+        duration_s = _safe_float(settings.get("calibration_duration_s", 2.0), 2.0)
+        max_samples = _safe_int(settings.get("calibration_samples", 30), 30)
         start = time.time()
         if settle_s > 0:
             time.sleep(settle_s)

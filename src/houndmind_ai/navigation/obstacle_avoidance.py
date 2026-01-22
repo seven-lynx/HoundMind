@@ -4,9 +4,29 @@ import logging
 import time
 from collections import Counter, deque
 
+from typing import Any
+
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val: Any, default: int) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 
 
 class ObstacleAvoidanceModule(Module):
@@ -53,21 +73,25 @@ class ObstacleAvoidanceModule(Module):
         settings = (context.get("settings") or {}).get("navigation", {})
         avoid_action = settings.get("avoid_action", "backward")
         safe_action = settings.get("safe_action", "stand")
-        scan_interval_s = settings.get("scan_interval_s", 0.5)
-        emergency_stop_cm = settings.get("emergency_stop_cm", 12)
-        safe_distance_cm = settings.get("safe_distance_cm", 35)
-        approach_delta_cm = settings.get("approach_delta_cm", 10)
-        approach_delta_pct = settings.get("approach_delta_pct", 0.25)
-        approach_cooldown_s = settings.get("approach_cooldown_s", 2.0)
-        backup_steps = settings.get("backup_steps", 2)
+        scan_interval_s = _safe_float(settings.get("scan_interval_s", 0.5), 0.5)
+        emergency_stop_cm = _safe_float(settings.get("emergency_stop_cm", 12), 12)
+        safe_distance_cm = _safe_float(settings.get("safe_distance_cm", 35), 35)
+        approach_delta_cm = _safe_float(settings.get("approach_delta_cm", 10), 10)
+        approach_delta_pct = _safe_float(settings.get("approach_delta_pct", 0.25), 0.25)
+        approach_cooldown_s = _safe_float(settings.get("approach_cooldown_s", 2.0), 2.0)
+        backup_steps = _safe_int(settings.get("backup_steps", 2), 2)
         retreat_turn_direction = settings.get("retreat_turn_direction", "auto")
 
         # Gentle recovery config
-        gentle_recovery_threshold = int(settings.get("gentle_recovery_stuck_count", 3))
-        gentle_recovery_cooldown = float(settings.get("gentle_recovery_cooldown_s", 8.0))
+        gentle_recovery_threshold = _safe_int(
+            settings.get("gentle_recovery_stuck_count", 3), 3
+        )
+        gentle_recovery_cooldown = _safe_float(
+            settings.get("gentle_recovery_cooldown_s", 8.0), 8.0
+        )
 
         now = time.time()
-        turn_degrees_on_gap = settings.get("turn_degrees_on_gap", 30)
+        turn_degrees_on_gap = _safe_int(settings.get("turn_degrees_on_gap", 30), 30)
 
         # Action/result variables
         nav_action = None
@@ -114,8 +138,10 @@ class ObstacleAvoidanceModule(Module):
                         score,
                         confirmed,
                     )
-                    low_confidence_cooldown = float(settings.get("low_confidence_cooldown_s", 0.8))
-                    retry_limit = int(settings.get("scan_retry_limit", 2))
+                    low_confidence_cooldown = _safe_float(
+                        settings.get("low_confidence_cooldown_s", 0.8), 0.8
+                    )
+                    retry_limit = _safe_int(settings.get("scan_retry_limit", 2), 2)
                     if not confirmed:
                         self._last_low_confidence_ts = now
                         self._low_confidence_retries += 1
@@ -144,12 +170,15 @@ class ObstacleAvoidanceModule(Module):
                             approaching = (delta >= approach_delta_cm) or (pct >= approach_delta_pct)
 
                         # Confirm approach events via vote window to avoid noise.
-                        approach_window = max(1, int(settings.get("approach_confirm_window", 3)))
+                        approach_window = max(
+                            1, _safe_int(settings.get("approach_confirm_window", 3), 3)
+                        )
                         if self._approach_votes.maxlen != approach_window:
                             self._approach_votes = deque(self._approach_votes, maxlen=approach_window)
                         self._approach_votes.append(bool(approaching))
-                        approach_confirmed = sum(1 for v in self._approach_votes if v) >= settings.get(
-                            "approach_confirm_threshold", 2
+                        approach_confirmed = (
+                            sum(1 for v in self._approach_votes if v)
+                            >= _safe_int(settings.get("approach_confirm_threshold", 2), 2)
                         )
 
                         if approach_confirmed and now - self._last_approach_ts >= approach_cooldown_s:
@@ -256,7 +285,7 @@ class ObstacleAvoidanceModule(Module):
             )
             return
 
-        clear_streak_min = int(settings.get("clear_path_streak_min", 0))
+        clear_streak_min = _safe_int(settings.get("clear_path_streak_min", 0), 0)
         if (
             not obstacle
             and clear_streak_min > 0
@@ -289,8 +318,10 @@ class ObstacleAvoidanceModule(Module):
             confirmed,
         )
 
-        low_confidence_cooldown = float(settings.get("low_confidence_cooldown_s", 0.8))
-        retry_limit = int(settings.get("scan_retry_limit", 2))
+        low_confidence_cooldown = _safe_float(
+            settings.get("low_confidence_cooldown_s", 0.8), 0.8
+        )
+        retry_limit = _safe_int(settings.get("scan_retry_limit", 2), 2)
         if not confirmed:
             self._last_low_confidence_ts = now
             self._low_confidence_retries += 1
@@ -322,12 +353,13 @@ class ObstacleAvoidanceModule(Module):
             approaching = (delta >= approach_delta_cm) or (pct >= approach_delta_pct)
 
         # Confirm approach events via vote window to avoid noise.
-        approach_window = max(1, int(settings.get("approach_confirm_window", 3)))
+        approach_window = max(1, _safe_int(settings.get("approach_confirm_window", 3), 3))
         if self._approach_votes.maxlen != approach_window:
             self._approach_votes = deque(self._approach_votes, maxlen=approach_window)
         self._approach_votes.append(bool(approaching))
-        approach_confirmed = sum(1 for v in self._approach_votes if v) >= settings.get(
-            "approach_confirm_threshold", 2
+        approach_confirmed = (
+            sum(1 for v in self._approach_votes if v)
+            >= _safe_int(settings.get("approach_confirm_threshold", 2), 2)
         )
 
         if approach_confirmed and now - self._last_approach_ts >= approach_cooldown_s:
@@ -451,26 +483,26 @@ class ObstacleAvoidanceModule(Module):
             return None
 
     def _process_scan(self, reading, settings) -> tuple[str, float, bool] | None:
-        yaw_max = int(settings.get("scan_yaw_max_deg", 60))
-        ema_alpha = settings.get("baseline_ema", 0.25)
-        min_gap_width_deg = settings.get("min_gap_width_deg", 30)
-        min_score_cm = settings.get("min_score_cm", 60)
-        confirm_window = max(1, int(settings.get("confirm_window", 2)))
-        confirm_threshold = max(1, int(settings.get("confirm_threshold", 2)))
-        turn_confidence_min = float(settings.get("turn_confidence_min", 0.6))
-        min_valid_points = int(settings.get("scan_min_valid_points", 3))
-        min_valid_ratio = float(settings.get("scan_min_valid_ratio", 0.5))
+        yaw_max = _safe_int(settings.get("scan_yaw_max_deg", 60), 60)
+        ema_alpha = _safe_float(settings.get("baseline_ema", 0.25), 0.25)
+        min_gap_width_deg = _safe_int(settings.get("min_gap_width_deg", 30), 30)
+        min_score_cm = _safe_float(settings.get("min_score_cm", 60), 60)
+        confirm_window = max(1, _safe_int(settings.get("confirm_window", 2), 2))
+        confirm_threshold = max(1, _safe_int(settings.get("confirm_threshold", 2), 2))
+        turn_confidence_min = _safe_float(settings.get("turn_confidence_min", 0.6), 0.6)
+        min_valid_points = _safe_int(settings.get("scan_min_valid_points", 3), 3)
+        min_valid_ratio = _safe_float(settings.get("scan_min_valid_ratio", 0.5), 0.5)
 
         mode = getattr(reading, "mode", "three_way")
         data = getattr(reading, "data", {})
         distances: dict[int, float] = {}
         if mode == "sweep":
-            distances = {int(k): float(v) for k, v in data.items()}
+            distances = {int(k): _safe_float(v, 0.0) for k, v in data.items()}
             angles = sorted(distances.keys())
         else:
-            left = float(data.get("left", 0.0))
-            right = float(data.get("right", 0.0))
-            forward = float(data.get("forward", 0.0))
+            left = _safe_float(data.get("left", 0.0), 0.0)
+            right = _safe_float(data.get("right", 0.0), 0.0)
+            forward = _safe_float(data.get("forward", 0.0), 0.0)
             distances = {-yaw_max: left, 0: forward, yaw_max: right}
             angles = [-yaw_max, 0, yaw_max]
 
@@ -550,7 +582,7 @@ class ObstacleAvoidanceModule(Module):
         return False
 
     def _turn_cooldown_active(self, settings) -> bool:
-        cooldown = float(settings.get("turn_cooldown_s", 0.0))
+        cooldown = _safe_float(settings.get("turn_cooldown_s", 0.0), 0.0)
         if cooldown <= 0:
             return False
         return (time.time() - self._turn_cooldown_ts) < cooldown
@@ -558,9 +590,11 @@ class ObstacleAvoidanceModule(Module):
     def _apply_mapping_bias(self, context, settings, fallback: str) -> str:
         if not settings.get("use_mapping_bias", True):
             return fallback
-        weight = float(settings.get("mapping_bias_weight", 0.5))
-        min_conf = float(settings.get("mapping_bias_min_confidence", 0.6))
-        cooldown = float(settings.get("mapping_bias_cooldown_s", 1.0))
+        weight = _safe_float(settings.get("mapping_bias_weight", 0.5), 0.5)
+        min_conf = _safe_float(
+            settings.get("mapping_bias_min_confidence", 0.6), 0.6
+        )
+        cooldown = _safe_float(settings.get("mapping_bias_cooldown_s", 1.0), 1.0)
         if weight <= 0:
             return fallback
         now = time.time()
@@ -571,7 +605,7 @@ class ObstacleAvoidanceModule(Module):
         if not isinstance(best_path, dict):
             return fallback
         try:
-            conf = float(best_path.get("confidence", 0.0))
+            conf = _safe_float(best_path.get("confidence", 0.0), 0.0)
         except Exception:
             conf = 0.0
         if conf < min_conf:

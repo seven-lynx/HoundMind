@@ -2,11 +2,30 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 from houndmind_ai.calibration.servo_calibration import apply_servo_offsets
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val: Any, default: int) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 
 
 class MotorModule(Module):
@@ -65,15 +84,12 @@ class MotorModule(Module):
 
         # Configurable cooldown keeps actions from spamming the action queue.
         settings = (context.get("settings") or {}).get("motors", {})
-        min_interval = settings.get("min_action_interval_s", 0.2)
+        min_interval = _safe_float(settings.get("min_action_interval_s", 0.2), 0.2)
         quiet = (context.get("settings") or {}).get("quiet_mode", {})
         if context.get("quiet_mode_active"):
-            try:
-                quiet_interval = float(
-                    quiet.get("motor_min_action_interval_s", min_interval)
-                )
-            except Exception:
-                quiet_interval = min_interval
+            quiet_interval = _safe_float(
+                quiet.get("motor_min_action_interval_s", min_interval), min_interval
+            )
             min_interval = max(min_interval, quiet_interval)
         safety_settings = (context.get("settings") or {}).get("safety", {})
         if context.get("emergency_stop_active") and safety_settings.get(
@@ -102,7 +118,7 @@ class MotorModule(Module):
             followup = context.get("navigation_followup")
             if isinstance(followup, dict):
                 if followup.get("type") == "retreat_turn":
-                    backup_steps = int(followup.get("backup_steps", 2))
+                    backup_steps = _safe_int(followup.get("backup_steps", 2), 2)
                     direction = str(followup.get("direction", "auto"))
                     if direction == "auto":
                         direction = "left"
@@ -128,7 +144,7 @@ class MotorModule(Module):
             return
         if self._turn_by_angle(context, {"direction": direction, "steps": steps}):
             return
-        for _ in range(max(1, int(steps))):
+        for _ in range(max(1, _safe_int(steps, 1))):
             self.action_flow.add_action(f"turn {direction}")
 
     def _turn_by_angle(self, context, payload: dict) -> bool:
@@ -137,43 +153,43 @@ class MotorModule(Module):
             return False
         direction = str(payload.get("direction", "left"))
         degrees = payload.get("degrees")
-        steps = int(payload.get("steps", 1))
+        steps = _safe_int(payload.get("steps", 1), 1)
 
         settings = context.get("settings") or {}
         movement = settings.get("movement", {})
         orientation = settings.get("orientation", {})
         perf = settings.get("performance", {})
         safe_mode = bool(perf.get("safe_mode_enabled", False))
-        degrees_per_step = float(movement.get("turn_degrees_per_step", 15.0))
+        degrees_per_step = _safe_float(movement.get("turn_degrees_per_step", 15.0), 15.0)
         if degrees is None:
             degrees = degrees_per_step * steps
-        degrees = float(degrees)
+        degrees = _safe_float(degrees, degrees_per_step * steps)
         if direction == "right":
             degrees = -degrees
 
-        tolerance = float(orientation.get("turn_tolerance_deg", 5.0))
-        timeout_s = float(orientation.get("turn_timeout_s", 3.0))
-        speed = int(movement.get("speed_turn_normal", 200))
+        tolerance = _safe_float(orientation.get("turn_tolerance_deg", 5.0), 5.0)
+        timeout_s = _safe_float(orientation.get("turn_timeout_s", 3.0), 3.0)
+        speed = _safe_int(movement.get("speed_turn_normal", 200), 200)
         if safe_mode:
-            speed = int(perf.get("safe_mode_turn_speed", speed))
+            speed = _safe_int(perf.get("safe_mode_turn_speed", speed), speed)
         hint = context.get("energy_speed_hint")
         if hint == "fast":
-            speed = int(movement.get("speed_turn_fast", speed))
+            speed = _safe_int(movement.get("speed_turn_fast", speed), speed)
         elif hint == "slow":
-            speed = int(movement.get("speed_turn_slow", speed))
+            speed = _safe_int(movement.get("speed_turn_slow", speed), speed)
 
         def ang_diff(a: float, b: float) -> float:
             d = (a - b + 180.0) % 360.0 - 180.0
             return d
 
-        start = float(heading)
+        start = _safe_float(heading, 0.0)
         target = (start + degrees) % 360.0
         end_time = time.time() + timeout_s
 
         self._apply_head_follow(direction, context)
 
         while time.time() < end_time:
-            current = float(context.get("current_heading") or start)
+            current = _safe_float(context.get("current_heading"), start)
             remaining = ang_diff(target, current)
             if abs(remaining) <= tolerance:
                 self._apply_head_center(context)
@@ -224,16 +240,16 @@ class MotorModule(Module):
     ) -> tuple[bool, float, int, float, bool, float, bool, float]:
         settings = (context.get("settings") or {}).get("motors", {})
         enabled = bool(settings.get("head_turn_follow_enabled", True))
-        degrees = float(settings.get("head_turn_follow_deg", 0.0))
-        speed = int(settings.get("head_turn_follow_speed", 70))
-        hold_s = float(settings.get("head_turn_follow_hold_s", 0.4))
+        degrees = _safe_float(settings.get("head_turn_follow_deg", 0.0), 0.0)
+        speed = _safe_int(settings.get("head_turn_follow_speed", 70), 70)
+        hold_s = _safe_float(settings.get("head_turn_follow_hold_s", 0.4), 0.4)
         respect_scanning = bool(settings.get("head_turn_follow_respect_scanning", True))
-        scan_block_s = float(settings.get("head_turn_follow_scan_block_s", 0.4))
+        scan_block_s = _safe_float(settings.get("head_turn_follow_scan_block_s", 0.4), 0.4)
         respect_attention = bool(
             settings.get("head_turn_follow_respect_attention", True)
         )
-        attention_block_s = float(
-            settings.get("head_turn_follow_attention_block_s", 0.6)
+        attention_block_s = _safe_float(
+            settings.get("head_turn_follow_attention_block_s", 0.6), 0.6
         )
         return (
             enabled,
@@ -264,14 +280,12 @@ class MotorModule(Module):
         blocked = False
         if scan_block_s > 0:
             scan_reading = context.get("scan_reading")
-            scan_ts = (
-                float(getattr(scan_reading, "timestamp", 0.0)) if scan_reading else 0.0
-            )
+            scan_ts = _safe_float(getattr(scan_reading, "timestamp", 0.0) if scan_reading else 0.0, 0.0)
             blocked = blocked or (time.time() - scan_ts) < max(0.0, scan_block_s)
         if attention_block_s > 0:
             attention_ts = context.get("attention_active_ts")
             try:
-                attention_ts = float(attention_ts) if attention_ts is not None else 0.0
+                attention_ts = _safe_float(attention_ts, 0.0) if attention_ts is not None else 0.0
             except Exception:
                 attention_ts = 0.0
             blocked = blocked or (time.time() - attention_ts) < max(

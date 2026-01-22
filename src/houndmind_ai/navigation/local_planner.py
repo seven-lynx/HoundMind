@@ -2,10 +2,29 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val: Any, default: int) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 
 
 class LocalPlannerModule(Module):
@@ -32,20 +51,15 @@ class LocalPlannerModule(Module):
 
         plan = {"timestamp": now, "source": "mapping", "valid": False}
         if isinstance(best_path, dict):
-            try:
-                conf = float(best_path.get("confidence", best_path.get("score", 0.0)))
-            except Exception:
-                conf = 0.0
-            min_conf = float(settings.get("planner_min_confidence", 0.6))
-            max_age_s = float(settings.get("planner_max_age_s", 2.0))
+            conf = _safe_float(best_path.get("confidence", best_path.get("score", 0.0)), 0.0)
+            min_conf = _safe_float(settings.get("planner_min_confidence", 0.6), 0.6)
+            max_age_s = _safe_float(settings.get("planner_max_age_s", 2.0), 2.0)
             sample_ts = mapping.get("timestamp", now)
-            age_ok = (now - float(sample_ts)) <= max_age_s if max_age_s > 0 else True
+            sample_ts_val = _safe_float(sample_ts, now)
+            age_ok = (now - sample_ts_val) <= max_age_s if max_age_s > 0 else True
             if conf >= min_conf and age_ok:
                 yaw = best_path.get("yaw")
-                try:
-                    yaw = float(yaw)
-                except Exception:
-                    yaw = 0.0
+                yaw = _safe_float(yaw, 0.0)
                 direction = "forward"
                 if yaw < 0:
                     direction = "left"
@@ -56,7 +70,7 @@ class LocalPlannerModule(Module):
                         "valid": True,
                         "yaw": yaw,
                         "direction": direction,
-                        "score": float(best_path.get("score", 0.0)),
+                        "score": _safe_float(best_path.get("score", 0.0), 0.0),
                         "confidence": conf,
                     }
                 )

@@ -5,11 +5,29 @@ from dataclasses import dataclass
 import logging
 import threading
 import time
-from typing import Callable, Deque
+from typing import Callable, Deque, Any
 
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(val: Any, default: int) -> int:
+    try:
+        if val is None:
+            return default
+        return int(val)
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass
@@ -89,7 +107,7 @@ class SensorService:
             return list(self._history)
 
     def _loop(self) -> None:
-        interval = 1.0 / max(1.0, float(self._settings.get("poll_hz", 10)))
+        interval = 1.0 / max(1.0, _safe_float(self._settings.get("poll_hz", 10), 10.0))
         while not self._stop.is_set():
             start = time.time()
             reading = self._read_once()
@@ -110,7 +128,7 @@ class SensorService:
             time.sleep(max(0.0, interval - elapsed))
 
     def _history_size(self) -> int:
-        return max(1, int(self._settings.get("history_size", 10)))
+        return max(1, _safe_int(self._settings.get("history_size", 10), 10))
 
     def _read_once(self) -> SensorReading:
         now = time.time()
@@ -156,17 +174,17 @@ class SensorService:
         )
 
     def _read_distance(self, now: float) -> tuple[float | None, bool]:
-        debounce_s = max(0.0, float(self._settings.get("distance_debounce_s", 0.0)))
+        debounce_s = max(0.0, _safe_float(self._settings.get("distance_debounce_s", 0.0), 0.0))
         if debounce_s > 0 and self._last_distance is not None:
             if (now - self._last_distance_ts) < debounce_s:
                 return self._last_distance, True
-        samples = max(1, int(self._settings.get("distance_samples", 3)))
-        delay = max(0.0, float(self._settings.get("distance_sample_delay_s", 0.03)))
-        min_cm = float(self._settings.get("distance_min_cm", 2))
-        max_cm = float(self._settings.get("distance_max_cm", 200))
+        samples = max(1, _safe_int(self._settings.get("distance_samples", 3), 3))
+        delay = max(0.0, _safe_float(self._settings.get("distance_sample_delay_s", 0.03), 0.03))
+        min_cm = _safe_float(self._settings.get("distance_min_cm", 2), 2.0)
+        max_cm = _safe_float(self._settings.get("distance_max_cm", 200), 200.0)
         use_median = bool(self._settings.get("distance_use_median", True))
-        outlier_z = float(self._settings.get("distance_outlier_reject_z", 0.0))
-        ema_alpha = float(self._settings.get("distance_ema_alpha", 0.0))
+        outlier_z = _safe_float(self._settings.get("distance_outlier_reject_z", 0.0), 0.0)
+        ema_alpha = _safe_float(self._settings.get("distance_ema_alpha", 0.0), 0.0)
 
         values: list[float] = []
         for _ in range(samples):
@@ -211,7 +229,7 @@ class SensorService:
         return result, True
 
     def _read_touch(self, now: float) -> tuple[str, bool]:
-        debounce_s = max(0.0, float(self._settings.get("touch_debounce_s", 0.05)))
+        debounce_s = max(0.0, _safe_float(self._settings.get("touch_debounce_s", 0.05), 0.05))
         try:
             raw = self._dog.dual_touch.read() or "N"
         except Exception:  # noqa: BLE001
@@ -247,12 +265,20 @@ class SensorService:
         try:
             acc_raw = self._dog.accData
             gyro_raw = self._dog.gyroData
-            acc = (float(acc_raw[0]), float(acc_raw[1]), float(acc_raw[2]))
-            gyro = (float(gyro_raw[0]), float(gyro_raw[1]), float(gyro_raw[2]))
+            acc = (
+                _safe_float(acc_raw[0], 0.0),
+                _safe_float(acc_raw[1], 0.0),
+                _safe_float(acc_raw[2], 0.0),
+            )
+            gyro = (
+                _safe_float(gyro_raw[0], 0.0),
+                _safe_float(gyro_raw[1], 0.0),
+                _safe_float(gyro_raw[2], 0.0),
+            )
         except Exception:  # noqa: BLE001
             logger.debug("IMU read failed", exc_info=True)
             return None, None, False
-        alpha = float(self._settings.get("imu_lpf_alpha", 0.0))
+        alpha = _safe_float(self._settings.get("imu_lpf_alpha", 0.0), 0.0)
         if 0.0 < alpha <= 1.0:
             if self._acc_lpf is None:
                 self._acc_lpf = acc
@@ -311,7 +337,7 @@ class SensorModule(Module):
                 "sensor_health",
                 {
                     "timestamp": latest.timestamp,
-                    "age_s": max(0.0, time.time() - float(latest.timestamp)),
+                    "age_s": max(0.0, time.time() - _safe_float(latest.timestamp, time.time())),
                     "distance_valid": latest.distance_valid,
                     "touch_valid": latest.touch_valid,
                     "sound_valid": latest.sound_valid,
@@ -342,7 +368,7 @@ class SensorModule(Module):
             "sensor_health",
             {
                 "timestamp": reading.timestamp,
-                "age_s": max(0.0, time.time() - float(reading.timestamp)),
+                "age_s": max(0.0, time.time() - _safe_float(reading.timestamp, time.time())),
                 "distance_valid": reading.distance_valid,
                 "touch_valid": reading.touch_valid,
                 "sound_valid": reading.sound_valid,

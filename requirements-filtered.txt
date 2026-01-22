@@ -1,0 +1,31 @@
+# Full dependencies for Pi4 (heavy preset)
+# Includes vision, audio, and ML-friendly packages. Expect longer installs.
+
+# Hardware bindings
+# Note: `pidog` is not published to PyPI. It must be installed from the
+# official SunFounder repo (see scripts/install_houndmind.sh or docs/INSTALL.md).
+
+# Core numeric stack
+numpy
+scipy
+
+# Vision
+# Use contrib build (includes core + extra modules). Avoid installing both opencv-python
+# and opencv-contrib-python at the same time.
+opencv-contrib-python
+face_recognition
+
+# Audio / speech
+SpeechRecognition
+pyaudio
+sounddevice
+
+# SLAM (RTAB-Map)
+
+# Web utilities (used by installer/model downloader on Pi4)
+flask
+
+# Notes:
+# - `face_recognition` depends on `dlib` which typically requires build tools
+#   (cmake, build-essential) and additional libs. Install system packages
+#   listed in docs/INSTALL.md before attempting to pip-install `face_recognition`.
