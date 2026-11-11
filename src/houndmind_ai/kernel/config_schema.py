@@ -853,7 +853,6 @@ _FACE_RECOGNITION = Section(
         ),
         "embeddings_path": StrSpec(),
         "match_threshold": _FRACTION,
-        "http": _HTTP,
     }
 )
 

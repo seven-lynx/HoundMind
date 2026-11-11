@@ -277,12 +277,7 @@
       },
       // face_recognition (heavy) settings.
       "embeddings_path": "data/face_embeddings.json",
-      "match_threshold": 0.6,
-      "http": {
-        "enabled": false,
-        "host": "0.0.0.0",
-        "port": 8088
-      }
+      "match_threshold": 0.6
     },
     // =====================================================================
     // PI4 VISION FEED

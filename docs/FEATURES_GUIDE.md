@@ -269,10 +269,16 @@ recognition (`settings.voice_assistant.stt.enabled`) is the input that replaces 
 - `modules.face_recognition.enabled = true`
 - `settings.face_recognition.backend = "opencv"` or `"face_recognition"`
 
-**HTTP endpoints (optional):**
-- `settings.face_recognition.http.enabled = true`
-- `GET /enroll?name=Alice`
-- `POST /enroll {"name":"Alice"}`
+**Enrolling a face:** there is no `/enroll` endpoint. Enrollment is a runtime command —
+
+```python
+context.set("face_recognition_command", {"action": "enroll", "name": "Alice"})
+```
+
+The next tick enrolls against the newest `vision_frame` (requires exactly one face in frame).
+The legacy port-8088 server is gone: `/status` is now `GET /api/v1/modules`, `/faces` is
+`GET /api/v1/state`, and enrollment has no v1 route yet. `python -m tools.face_recognition_cli`
+was deleted with the port.
 
 **Disable:** `modules.face_recognition.enabled = false`
 
