@@ -158,7 +158,10 @@ def resolve_profile(raw: dict, board: BoardInfo | None = None) -> str:
 
 def _unknown_profile(name: str, profiles: dict) -> Problem:
     available = sorted(profiles)
-    suggestion = get_close_matches(name, available, n=1)
+    # A suggestion has to be a near-miss, not merely a shared prefix. At the default cutoff
+    # `pi3` earns "did you mean pi5?", which is advice a Pi 3 owner should not be given: they
+    # need the dropped-board message, not a different edition's name.
+    suggestion = get_close_matches(name, available, n=1, cutoff=0.8)
     listed = ", ".join(available) if available else "none"
     return Problem(
         "config.profile",
