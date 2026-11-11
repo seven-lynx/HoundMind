@@ -50,6 +50,12 @@ def _canonical(action: str) -> str:
     return action.strip().lower().replace(" ", "_")
 
 
+# Actions whose parameters are the whole command. A `sound` with no effect name, or an `rgb` with
+# no colour, is a no-op, so these must reach the HAL verbatim. Locomotion stays out on purpose: a
+# `speed`/`steps` pair takes the HAL's synchronous `_direct` path, which can hold the tick.
+_PARAM_ACTIONS = frozenset({"sound", "speak", "rgb", "rpy", "head"})
+
+
 class MotorModule(Module):
     """Executes the gateway's command through the HAL."""
 
@@ -127,8 +133,20 @@ class MotorModule(Module):
                 direction = "left" if action == "turn_left" else "right"
                 self._schedule_head_follow(context, direction)
 
-            # Execute action; optionally follow with a retreat/turn sequence.
-            self.hal.action(action, {})
+            # Execute action; optionally follow with a retreat/turn sequence. The actions whose
+            # params are the whole command get them; everything else stays fire-and-forget.
+            if action in _PARAM_ACTIONS:
+                raw_params = command.get("params")
+                payload: dict[str, Any] = (
+                    dict(raw_params) if isinstance(raw_params, dict) else {}
+                )
+                if action == "head":
+                    # The API answers 202 before the head arrives; blocking here would let a
+                    # cosmetic command set the loop's cadence (P3-2).
+                    payload["wait"] = False
+                self.hal.action(action, payload)
+            else:
+                self.hal.action(action, {})
             self._apply_followup(context)
             self.last_action = action
             self.last_action_ts = now

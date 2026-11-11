@@ -15,10 +15,10 @@ name — decides which part of the envelope applies (`act/interlock.py`):
 
 Membership is data in `config/actions.jsonc` — the catalog is already user-editable, and a user
 who adds an action must be able to classify it in the same file. What lives *here* is the floor:
-``forward``, ``backward``, ``turn_left`` and ``turn_right`` move the dog, and a config file cannot
-say otherwise. The floor is applied twice on purpose — once at load, so a misclassification is a
-loud `ConfigError` instead of a missing obstacle stop, and once at lookup, so a repertoire built
-by a test or a hand-written dict cannot slip past it either.
+``forward``, ``backward``, ``turn_left``, ``turn_right`` and ``trot`` move the dog, and a config
+file cannot say otherwise. The floor is applied twice on purpose — once at load, so a
+misclassification is a loud `ConfigError` instead of a missing obstacle stop, and once at lookup,
+so a repertoire built by a test or a hand-written dict cannot slip past it either.
 """
 
 from __future__ import annotations

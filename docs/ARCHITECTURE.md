@@ -168,9 +168,10 @@ loaded by `kernel/actions.py`, and it selects which limits apply without ever ed
 | 7 | Obstacle veto | `locomotion`, **forward family** only: the last **valid** distance ≤ `emergency_stop_cm`. |
 | 8 | Speed clamp | `speed` clamped to `max_speed`; the clamp is logged once per session. |
 
-`forward`, `backward`, `turn_left` and `turn_right` are `locomotion` in every repertoire. A config
-that tries to classify one as anything weaker is refused at load with the action named, because the
-obstacle stop is not user config — the envelope belongs to the board, not to `settings.jsonc`.
+`forward`, `backward`, `turn_left`, `turn_right` and `trot` are `locomotion` in every repertoire.
+A config that tries to classify one as anything weaker is refused at load with the action named,
+because the obstacle stop is not user config — the envelope belongs to the board, not to
+`settings.jsonc`.
 `backward` and the turns stay outside the obstacle rule on purpose: they are how the dog leaves a
 corner.
 

@@ -90,7 +90,7 @@ def test_a_gait_cannot_be_reclassified_as_something_harmless() -> None:
     problems = check_repertoire({"forward": {"class": "non_motion"}}, {})
     assert any("moves the dog" in str(problem) for problem in problems)
 
-    assert LOCOMOTION_FLOOR == {"forward", "backward", "turn_left", "turn_right"}
+    assert LOCOMOTION_FLOOR == {"forward", "backward", "turn_left", "turn_right", "trot"}
     unvalidated = build_repertoire({"forward": {"class": "non_motion"}})
     assert unvalidated.classify("forward") is ActionClass.LOCOMOTION
 

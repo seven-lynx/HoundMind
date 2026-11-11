@@ -68,6 +68,15 @@ def test_forward_is_refused_at_the_emergency_distance() -> None:
     assert verdict.veto == "obstacle"
 
 
+def test_trot_is_refused_at_the_emergency_distance() -> None:
+    """A trot is a forward gait: the sonar gate covers it exactly as it covers `forward`."""
+    interlock, clock, dog = make()
+    dog.set_distance(8.0)
+    verdict = interlock.evaluate(Command("trot", issued_at=clock()), dog.read())
+    assert verdict.accepted is False
+    assert verdict.veto == "obstacle"
+
+
 def test_backward_is_allowed_at_the_emergency_distance() -> None:
     """Retreat must stay available when something is in front of the dog."""
     interlock, clock, dog = make()

@@ -66,6 +66,13 @@ Current Release: v2026.01.18 • Author: 7Lynx
   runtime's to the same answers.
 - The installer's OpenCV model downloader pointed at a repo-root `tools/` directory deleted with the
   legacy servers, so it had silently done nothing. It resolves `src/tools/` now.
+- A classified non-motion command returned `202` and then did nothing: `hal/motors.py` passed an
+  empty dict to the HAL, so a `sound` had no effect name and an `rgb` no colour. The actions whose
+  parameters are the whole command now reach the HAL verbatim; locomotion keeps the empty-params
+  path, because `speed`/`steps` would make the HAL block the tick.
+- `trot` skipped the obstacle stop: the forward family was `{"forward"}` even though `trot` is a
+  forward gait. `trot` is a motion action now (so it also counts for the watchdog hold and the
+  scan lock) and the sonar gate applies to it.
 
 ### Docs
 - `docs/CONTROL_API.md` §2/§3 document `GET /api/v1/repertoire` and the four action classes;

@@ -72,6 +72,9 @@ def test_commands_do_not_share_a_params_dict() -> None:
 def test_catalog_sets_are_consistent() -> None:
     assert MOTION_ACTIONS <= KNOWN_ACTIONS
     assert FORWARD_ACTIONS <= MOTION_ACTIONS
+    # `trot` carries the dog forward, so the sonar gate covers it like `forward`.
+    assert "trot" in FORWARD_ACTIONS
+    assert "trot" in MOTION_ACTIONS
     assert "stop" in KNOWN_ACTIONS
     # stop is deliberately not a motion action: it must never be vetoed.
     assert "stop" not in MOTION_ACTIONS
