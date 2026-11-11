@@ -1,10 +1,10 @@
 """The legacy HTTP servers stay deleted.
 
-Four modules used to open their own `ThreadingHTTPServer` — face recognition on 8098/8088, the
-vision feed on 8090, voice control on 8091 and the telemetry dashboard on 8092. Three of them
-answered without any token at all, and one of those was a motion path: `GET /command?action=` on
-8091 set `behavior_override` and moved the dog without passing the interlock, the deadman or the
-audit log. The control plane (`services/api.py`, port 8420) is the only listener now.
+Four modules used to open their own `ThreadingHTTPServer` — face recognition on 8088, the vision
+feed on 8090, voice control on 8091 and the telemetry dashboard on 8092. Three of them answered
+without any token at all, and one of those was a motion path: `GET /command?action=` on 8091 set
+`behavior_override` and moved the dog without passing the interlock, the deadman or the audit log.
+The control plane (`services/api.py`, port 8420) is the only listener now.
 
 This test is the reason a future module cannot quietly add a fifth one. It is cheaper than
 re-auditing four files, and it fails at review time rather than on a user's LAN.
