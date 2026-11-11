@@ -49,8 +49,15 @@ class ScanReading:
 
 
 class ScanningService:
-    def __init__(self, dog, settings: dict[str, object]) -> None:
-        self._dog = dog
+    """Head sweep + distance sampling through the HAL.
+
+    `hal` is a `DogHAL`; the sweep is synchronous and blocking, which is the known H-01 defect
+    and a Phase 3 problem, not something this refactor pretends to fix. What it does fix is that
+    a scan no longer needs a vendor object: `hal/fake.py` drives this whole path in a test.
+    """
+
+    def __init__(self, hal, settings: dict[str, object]) -> None:
+        self._hal = hal
         self._settings = settings
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -185,30 +192,19 @@ class ScanningService:
         return angles
 
     def _head_move(self, yaw: int, speed: int) -> None:
-        self._dog.head_move([[int(yaw), 0, 0]], speed=speed)
-        if hasattr(self._dog, "wait_head_done"):
-            self._dog.wait_head_done()
+        if self._hal is None:
+            return
+        self._hal.action("head", {"yaw": int(yaw), "pitch": 0, "speed": speed, "wait": True})
         time.sleep(0.05)
 
     def _read_distance(self, samples: int, between_reads_s: float) -> float:
-        values: list[float] = []
-        for _ in range(max(1, samples)):
-            if hasattr(self._dog, "read_distance"):
-                value = self._dog.read_distance()
-            else:
-                value = self._dog.ultrasonic.read_distance()
-            try:
-                val = float(value)
-            except Exception:
-                val = 0.0
-            if val > 0:
-                values.append(val)
-            if between_reads_s:
-                time.sleep(_safe_float(between_reads_s, 0.0))
-        if not values:
+        if self._hal is None:
             return 0.0
-        values.sort()
-        return values[len(values) // 2]
+        try:
+            value = self._hal.sample_distance(max(1, samples), between_reads_s)
+        except Exception:  # noqa: BLE001 - an unreadable distance is 0, as before
+            value = None
+        return 0.0 if value is None else float(value)
 
 
 class ScanningModule(Module):
@@ -221,14 +217,11 @@ class ScanningModule(Module):
     def start(self, context) -> None:
         if not self.status.enabled:
             return
+        hal = context.get("hal")
+        if hal is None:
+            self.disable("no HAL available")
+            return
         self._context = context
-        dog = context.get("pidog")
-        if dog is None:
-            from pidog import Pidog  # type: ignore
-
-            dog = Pidog()
-            context.set("pidog", dog)
-            context.set("pidog_owner", self.name)
         settings = (context.get("settings") or {}).get("navigation", {})
         perf = (context.get("settings") or {}).get("performance", {})
         merged = dict(settings)
@@ -236,7 +229,7 @@ class ScanningModule(Module):
         merged["safe_mode_scan_interval_s"] = perf.get(
             "safe_mode_scan_interval_s", merged.get("scan_interval_s", 0.5)
         )
-        self.service = ScanningService(dog, merged)
+        self.service = ScanningService(hal, merged)
         self.service.subscribe(self._publish_reading)
         context.set("scan_service", self.service)
 

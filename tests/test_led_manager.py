@@ -1,17 +1,5 @@
+from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.logging.led_manager import LedManagerModule
-
-
-class DummyStrip:
-    def __init__(self):
-        self.calls = []
-
-    def set_mode(self, mode, color, brightness=0.7, bps=None):
-        self.calls.append((mode, color, brightness, bps))
-
-
-class DummyDog:
-    def __init__(self):
-        self.rgb_strip = DummyStrip()
 
 
 class DummyContext:
@@ -27,7 +15,10 @@ class DummyContext:
 
 def test_led_manager_priority_selection():
     ctx = DummyContext()
-    ctx.set("pidog", DummyDog())
+    hal = FakeDogHAL()
+    ctx.set("hal", hal)
+    # The legacy vendor handle is present and must be ignored: the LED path goes via `hal`.
+    ctx.set("pidog", type("Legacy", (), {})())
     ctx.set(
         "settings",
         {
@@ -50,7 +41,8 @@ def test_led_manager_priority_selection():
     module.tick(ctx)
 
     dog = ctx.get("pidog")
-    assert dog.rgb_strip.calls, "LED manager should update strip"
-    mode, color, _, _ = dog.rgb_strip.calls[-1]
-    assert mode == "boom"
-    assert color == "red"
+    assert dog is not None, "the legacy handle should still be untouched by the LED module"
+    rgb_calls = [params for name, params in hal.calls if name == "rgb"]
+    assert rgb_calls, "LED manager should update the strip"
+    assert rgb_calls[-1]["style"] == "boom"
+    assert rgb_calls[-1]["color"] == "red"

@@ -20,6 +20,19 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `motion_command` / `motion_verdict` / `tilt_latched`.
 - `kernel/config_schema.py`: config validation is enforced, not advisory. Unknown keys are an
   error with a did-you-mean suggestion.
+- `hal/vendor.py`: `PidogHAL`, the vendor-backed `DogHAL`, plus `hal/module.py`: `HalModule` owns
+  the dog and publishes it as the context key `hal`. Before this, `hal/sensors.py`,
+  `hal/motors.py` and `navigation/scanning.py` each opened their own `Pidog()` and raced over
+  one servo bus; the last one to start also won the `pidog_owner` key that decided who closed it.
+- `hal/sensors.py`: `SensorService` polls a `DogHAL` instead of a vendor object, and the sensor
+  signal conditioning (multi-sample median, outlier rejection, debounce, EMA, IMU low-pass)
+  lives in `PidogHAL` next to the reads it belongs to.
+- `DogHAL` gained `sample_distance()` (a head scan needs the distance *after* the head moved) and
+  `apply_offsets()` (calibration offsets are user data, applied by the owner of the servos).
+  `SensorSnapshot` carries `acc`, `gyro` and `sound_detected`, which consumers already read.
+- `main.build_registry(config, hal=...)` injects a `DogHAL`; `FakeDogHAL` is now enough to run
+  the sensor, scan, LED, head and posture paths, and `tests/test_runtime_tick.py` no longer
+  carries a `HARDWARE_MODULES` exclusion list.
 - `kernel/config_schema.py`: `settings` is validated section by section. Every section the
   repo ships — `attention`, `balance`, `battery`, `behavior`, `calibration`, `emotion`,
   `energy`, `face_recognition`, `habituation`, `led`, `logging`, `mapping`, `motors`,
@@ -39,6 +52,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
 - `hal_motors` executes `motion_command` only; it no longer merges four context keys by `or` and
   deduplicates on the action string, which had made a `forward` from navigation and one from
   behaviour indistinguishable.
+- `attention`, `led_manager`, `balance` and `scanning` reach the hardware through `hal.action()`
+  instead of grabbing `context["pidog"]` and calling vendor methods themselves. `import pidog` in
+  `src/` is now confined to `hal/vendor.py` (plus the optional voice module and the device CLI).
+- `calibration/workflow.py` is the one remaining consumer of the raw vendor handle;
+  `HalModule` still publishes it as `pidog` so a calibration run behaves as before until the
+  wizard is rebuilt.
 - `SensorHealthModule` is wired into the runtime (disabled by default, as before).
 - Logging reads the keys `config/settings.jsonc` actually ships (`log_level`, `log_file_name`,
   `log_file_backups`, `log_file_max_mb`, `enable_console`, `enable_file`). Previously the

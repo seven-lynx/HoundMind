@@ -1,10 +1,14 @@
 """The whole loop, on a machine with no dog attached.
 
-This is the closest thing to a smoke test that CI can run: every module is constructed from the
-shipped config, the ones that need a camera or a servo bus are switched off, and the runtime
-ticks twice. It catches the failures that unit tests miss — a module whose `start` needs
-hardware it should not need, a context key that nothing publishes, a gateway that was
-registered but never reached.
+Every module is constructed from the shipped config and the runtime ticks on a `FakeDogHAL`.
+There is no `HARDWARE_MODULES` exclusion list any more: the sensor, scan, LED, head and posture
+paths all go through the HAL, so the fake is enough. What is still switched off is the modules
+that need something the fake cannot provide — a camera, a microphone, a network listener or an
+optional wheel — and that list is about *hardware*, not about the refactor.
+
+This is the closest thing to a smoke test CI can run: it catches a module whose `start` needs
+hardware it should not need, a context key nobody publishes, and a gateway that was registered
+but never reached.
 """
 
 from __future__ import annotations
@@ -13,20 +17,13 @@ import pytest
 
 from houndmind_ai.core.config import load_config
 from houndmind_ai.core.runtime import HoundMindRuntime
+from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.main import build_modules
 
-# Modules whose `start` genuinely needs hardware. `hal/fake.py` is what eventually lets these
-# run in CI; until the sensor service sits behind the HAL, they are switched off here.
-HARDWARE_MODULES = frozenset(
+# Camera, microphone, network listeners and optional wheels: the fake HAL says nothing about
+# these, so they stay off in CI. Everything else runs on the fake dog.
+OPTIONAL_MODULES = frozenset(
     {
-        "hal_sensors",
-        "hal_motors",
-        "scanning",
-        "led_manager",
-        "calibration",
-        "orientation",
-        "balance",
-        "health",
         "vision",
         "vision_pi4",
         "voice",
@@ -39,72 +36,97 @@ HARDWARE_MODULES = frozenset(
 
 
 @pytest.fixture
-def headless_config(tmp_path):
+def headless(tmp_path):
+    """A config plus the fake dog the runtime will use."""
     config = load_config()
     for name, entry in (config.modules or {}).items():
         if hasattr(entry, "enabled"):
-            entry.enabled = name not in HARDWARE_MODULES
+            entry.enabled = name not in OPTIONAL_MODULES
     logging_settings = config.settings.setdefault("logging", {})
     logging_settings["event_log_file_enabled"] = False
     logging_settings["event_log_path"] = str(tmp_path / "events.jsonl")
-    return config
+    # The continuous scan runs on its own thread with fixed settle times; a runtime test wants
+    # the loop, not a three-second sweep. The scan path itself is covered in test_hal_wiring.
+    config.settings.setdefault("navigation", {})["scan_continuous"] = False
+    return config, FakeDogHAL()
 
 
-def test_the_runtime_starts_and_ticks(headless_config) -> None:
-    runtime = HoundMindRuntime(headless_config, build_modules(headless_config))
-    runtime.start()
+@pytest.fixture
+def runtime(headless):
+    config, hal = headless
+    instance = HoundMindRuntime(config, build_modules(config, hal=hal))
+    instance.start()
     try:
-        runtime.tick()
-        runtime.tick()
+        instance.tick()
+        yield instance, hal
     finally:
-        runtime.stop()
+        instance.stop()
 
-    started = [module.name for module in runtime.modules if module.status.started]
+
+def test_the_runtime_starts_and_ticks(runtime) -> None:
+    instance, _ = runtime
+    started = [module.name for module in instance.modules if module.status.started]
     assert started, "no module started at all"
-    assert "motion_gateway" in [module.name for module in runtime.modules]
+    assert "hal" in started
+    assert "hal_sensors" in started
+    assert "hal_motors" in started, "the fake dog is enough for the motors to start"
 
 
-def test_the_gateway_is_reached_by_the_loop(headless_config) -> None:
+def test_the_gateway_is_reached_by_the_loop(runtime) -> None:
     """A module registered but never ticked is the failure this catches."""
-    runtime = HoundMindRuntime(headless_config, build_modules(headless_config))
-    runtime.start()
+    instance, _ = runtime
+    assert "motion_verdict" in instance.context
+    assert "motion_command" in instance.context
+    assert "tilt_latched" in instance.context
+
+
+def test_the_fake_dog_publishes_sensor_readings(headless) -> None:
+    config, hal = headless
+    hal.set_distance(150.0)
+    hal.set_touch("L")
+    hal.set_gyro((0.0, 0.0, 1.0))
+    hal.set_acc((0.0, 0.0, 1.0))
+
+    instance = HoundMindRuntime(config, build_modules(config, hal=hal))
+    instance.start()
     try:
-        runtime.tick()
+        instance.tick()
+        instance.tick()
+        reading = instance.context.get("sensor_reading")
+        assert reading is not None, "the sensor module should have published a reading"
+        assert reading.distance_valid is True
+        assert reading.touch == "L"
+        assert instance.context.get("sensors")["distance"] == 150.0
     finally:
-        runtime.stop()
-
-    assert "motion_verdict" in runtime.context
-    assert "motion_command" in runtime.context
-    assert "tilt_latched" in runtime.context
+        instance.stop()
 
 
-def test_no_enabled_module_records_an_error(headless_config) -> None:
-    runtime = HoundMindRuntime(headless_config, build_modules(headless_config))
-    runtime.start()
-    try:
-        runtime.tick()
-    finally:
-        runtime.stop()
-
+def test_no_enabled_module_records_an_error(runtime) -> None:
+    instance, _ = runtime
     broken = {
         module.name: module.status.last_error
-        for module in runtime.modules
+        for module in instance.modules
         if module.status.enabled and module.status.last_error
     }
     assert not broken, broken
 
 
-def test_a_hardware_module_that_cannot_start_is_disabled_not_fatal(headless_config) -> None:
-    """`required=True` belongs to the HAL only, so nothing else may abort the runtime."""
-    runtime = HoundMindRuntime(headless_config, build_modules(headless_config))
-    runtime.start()
+def test_a_module_with_no_hal_is_disabled_not_fatal() -> None:
+    """`required=True` belongs to the pieces that cannot work at all, so nothing here may abort."""
+    config = load_config()
+    instance = HoundMindRuntime(config, build_modules(config, hal=None))
     try:
-        runtime.tick()
+        instance.start()
+        # HalModule is the one that discovers the missing dog; nobody else may crash on it.
+        reason = {
+            module.name: module.status.disabled_reason for module in instance.modules
+        }
+        assert reason.get("hal") is not None
     finally:
-        runtime.stop()
+        instance.stop()
 
 
-def test_the_shipped_config_still_has_the_safety_modules_off(headless_config) -> None:
+def test_the_shipped_config_still_has_the_safety_modules_off() -> None:
     """Turning safety on by default is a product decision, not a side effect of a refactor."""
     for name in ("safety", "health", "balance", "sensor_health"):
         entry = load_config().modules.get(name)

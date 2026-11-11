@@ -39,8 +39,14 @@
     "max_cycles": null
   },
   "modules": {
+    "hal": {
+      // Owns the dog. Every hardware-facing module asks the context for `hal`, so this must
+      // stay enabled: with it off nothing can move and no sensor is read.
+      "enabled": true,
+      "required": false
+    },
     "hal_sensors": {
-      // Enable sensor HAL (ultrasonic, touch, sound direction, IMU).
+      // Sensor polling on top of the HAL (ultrasonic, touch, sound direction, IMU).
       "enabled": true,
       // Required modules will stop the runtime if they fail to start.
       "required": true

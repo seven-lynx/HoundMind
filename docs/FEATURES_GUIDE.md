@@ -27,13 +27,25 @@ Or run directly with the venv Python: `.venv/bin/python -m houndmind_ai`.
 ---
 
 ## 2) HAL — Sensors & Motors
-### Sensors (HAL)
-**What it does:** Reads ultrasonic, touch, sound direction, and IMU data.
+### HAL (`modules.hal`)
+**What it does:** Opens the dog and publishes it as the runtime context key `hal`. It is the only
+place that imports `pidog`; every other module asks for `hal` and disables itself with a reason
+if it is absent. On a workstation or in CI a `FakeDogHAL` is injected instead, so the sensor,
+scan, LED, head and posture paths run without hardware.
+
+**Disable:** `modules.hal.enabled = false` — with it off nothing can move and no sensor is read.
+
+### Sensors (`modules.hal_sensors`)
+**What it does:** Polls the HAL at `sensors.poll_hz` and publishes `sensor_reading`, `sensors`,
+`sensor_history` and `sensor_health`. The multi-sample distance, debounce, EMA and IMU low-pass
+live in the HAL, next to the reads they belong to.
 
 **Disable:** `modules.hal_sensors.enabled = false`
 
-### Motors (HAL)
-**What it does:** Controls servos and executes actions.
+### Motors (`modules.hal_motors`)
+**What it does:** Executes the one `motion_command` per tick that `motion_gateway` produced after
+the interlock, plus the action cooldown, quiet mode, retreat/turn followups and the closed-loop
+turn that reads the heading between steps. It performs no vendor call of its own.
 
 **Disable:** `modules.hal_motors.enabled = false`
 
