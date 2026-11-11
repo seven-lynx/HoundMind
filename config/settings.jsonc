@@ -972,9 +972,9 @@
       // Scan interval bounds used by validation warnings.
       "scan_interval_min_s": 0.2,
       "scan_interval_max_s": 2.0,
-      // Upper bound for sensor polling on Pi 3.
+      // Upper bound for sensor polling, enforced against sensors.poll_hz at load.
       "sensor_poll_hz_max": 20,
-      // Health thresholds (future wiring).
+      // Health thresholds used by the health monitor to decide when to degrade.
       "health_load_per_core_warn_multiplier": 1.5,
       "health_temp_warn_c": 70.0,
       "health_gpu_temp_warn_c": 75.0,
@@ -984,13 +984,16 @@
       "health_scan_interval_abs_delta": 1.0,
       "health_vision_frame_interval_multiplier": 2.0,
       "health_vision_frame_interval_abs_delta": 0.2,
+      // Degradation levers the health monitor may pull: throttle_scans, throttle_vision.
       "health_actions": [],
-      // Safe mode: reduces scan cadence and turn speed on Pi3.
+      // Safe mode: reduces scan cadence and turn speed on a loaded board.
       "safe_mode_enabled": false,
       "safe_mode_scan_interval_s": 1.2,
       "safe_mode_turn_speed": 140,
       // Warn when a runtime tick exceeds this duration (seconds).
-      "runtime_tick_warn_s": 0.4
+      "runtime_tick_warn_s": 0.4,
+      // Smoothing factor for the reported tick-duration average (0-1].
+      "runtime_ema_alpha": 0.2
     },
     // =====================================================================
     // BATTERY / VOLTAGE (optional)

@@ -155,10 +155,94 @@ def test_settings_must_be_a_table() -> None:
     assert validate_config_tree({"settings": []})
 
 
-def test_settings_contents_are_not_yet_strict() -> None:
-    """Section-by-section validation of `settings` lands incrementally."""
+def test_settings_sections_not_yet_audited_stay_permissive() -> None:
+    """Sections arrive in groups; an unaudited one keeps loading untouched."""
     tree = {"settings": {"navigation": {"anything_at_all": 1}}}
     assert validate_config_tree(tree) == []
+
+
+# ----------------------------------------------------- audited settings sections
+#
+# One row per covered section: a value of the wrong type must be rejected at load. The point
+# is coverage breadth — a section that is added to `_SETTINGS_SECTIONS` without a row here is
+# a section nobody proved was reachable.
+
+BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
+    ("sensors", "poll_hz", "often"),
+    ("motors", "min_action_interval_s", "soon"),
+    ("sensor_health", "enabled", "yes"),
+    ("service_watchdog", "max_restarts", "many"),
+    ("watchdog", "module_timeout_s", None),
+    ("balance", "lpf_alpha", 1.5),
+    ("safety", "tilt_threshold_deg", "steep"),
+    ("logging", "log_level", "LOUD"),
+    ("performance", "runtime_ema_alpha", 0.0),
+    ("battery", "low_voltage_v", "empty"),
+    ("quiet_mode", "start_hour", 24),
+    ("attention", "head_yaw_max_deg", 91.0),
+]
+
+
+@pytest.mark.parametrize(("section", "key", "bad_value"), BAD_SETTINGS_VALUES)
+def test_a_covered_section_rejects_a_bad_value(section, key, bad_value) -> None:
+    problems = validate_config_tree({"settings": {section: {key: bad_value}}})
+    assert paths(problems) == [f"config.settings.{section}.{key}"], problems
+
+
+def test_the_schema_and_this_table_agree() -> None:
+    """A section added to the schema without a rejection case here is untested."""
+    assert set(_settings_section().fields) == {
+        section for section, _, _ in BAD_SETTINGS_VALUES
+    }
+
+
+def test_every_covered_section_exists_in_the_shipped_file() -> None:
+    covered = {section for section, _, _ in BAD_SETTINGS_VALUES}
+    shipped = set(json5.loads(default_config_path().read_text(encoding="utf-8"))["settings"])
+    assert covered <= shipped, covered - shipped
+
+
+def test_an_unknown_key_inside_a_covered_section_is_an_error() -> None:
+    problems = validate_config_tree({"settings": {"logging": {"log_levels": "DEBUG"}}})
+    assert paths(problems) == ["config.settings.logging.log_levels"]
+    assert problems[0].hint == "log_level"
+
+
+def test_an_unknown_settings_section_is_still_tolerated() -> None:
+    """Until a section is audited, a new section name cannot be told from a typo."""
+    assert validate_config_tree({"settings": {"voice": {}}}) == []
+
+
+def test_a_misspelled_enum_value_suggests_the_real_one() -> None:
+    problems = validate_config_tree({"settings": {"watchdog": {"recovery_mode": "behaviour"}}})
+    assert problems[0].hint == "behavior"
+
+
+def test_a_nullable_setting_accepts_null_but_not_a_number() -> None:
+    tree = {"settings": {"watchdog": {"recovery_action": None}}}
+    assert validate_config_tree(tree) == []
+    assert validate_config_tree({"settings": {"watchdog": {"recovery_action": 3}}})
+
+
+def test_profile_settings_overrides_are_validated() -> None:
+    tree = {"profiles": {"pi5": {"settings": {"logging": {"log_level": "LOUD"}}}}}
+    assert paths(validate_config_tree(tree)) == [
+        "config.profiles.pi5.settings.logging.log_level"
+    ]
+
+
+def test_shipped_settings_values_all_validate() -> None:
+    """Every value the repo ships must satisfy the section spec that now covers it."""
+    raw = json5.loads(default_config_path().read_text(encoding="utf-8"))
+    for section in sorted(raw["settings"]):
+        _, problems = _settings_section().validate(raw["settings"][section], section)
+        assert not problems, problems
+
+
+def _settings_section():
+    from houndmind_ai.kernel import config_schema
+
+    return config_schema._SETTINGS
 
 
 # ------------------------------------------------------------------ the real file

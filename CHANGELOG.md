@@ -20,6 +20,15 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `motion_command` / `motion_verdict` / `tilt_latched`.
 - `kernel/config_schema.py`: config validation is enforced, not advisory. Unknown keys are an
   error with a did-you-mean suggestion.
+- `kernel/config_schema.py`: `settings` is validated section by section. The twelve sections
+  audited so far — `sensors`, `motors`, `sensor_health`, `service_watchdog`, `watchdog`,
+  `balance`, `safety`, `logging`, `performance`, `battery`, `quiet_mode`, `attention` — now
+  reject an unknown key (with a suggestion) and a value of the wrong type, and profile
+  overrides are validated the same way. Sections not yet audited still load untouched.
+- `settings.performance.runtime_ema_alpha` is a documented key (default `0.2`): the runtime
+  read it with a hard-coded fallback but the shipped file never mentioned it.
+- `settings.logging.console_level` is an accepted key, so the console can be quieter than the
+  file without editing code.
 
 ### Changed
 - `hal_motors` executes `motion_command` only; it no longer merges four context keys by `or` and
