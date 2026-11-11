@@ -1,0 +1,3 @@
+# Only the structured form above is offered, so a report always carries the surface, the board
+# and the version. Free-form issues stay possible for a maintainer through `gh issue create`.
+blank_issues_enabled: false
