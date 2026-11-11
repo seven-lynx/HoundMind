@@ -1,5 +1,9 @@
 # Baseline — pre-resurrection state
 
+Status: **historical** — a measurement at one commit. Append to it; never rewrite a number in place.
+Version: v2026.01.18 • Author: 7Lynx
+Pairs with: `ROADMAP.md` (the findings it references), `docs/ARCHITECTURE.md` (what replaced it)
+
 Captured 2026-11-10 at commit `20f79a0` (tag `legacy-2026.01.18`).
 This is the reference point every later phase is measured against. Do not edit it; append.
 
@@ -107,3 +111,43 @@ mypy src --ignore-missing-imports
 
 Expect `pytest` and `mypy` to pass and `ruff` to fail, matching the numbers above unless
 the unpinned ruff version has changed again — which is exactly finding H-11.
+
+---
+
+## Addendum — 2026-11-11, after Phases 1–3
+
+Appended, not substituted: the numbers above describe commit `20f79a0` and stay true of it. This
+section records what has moved and what has not.
+
+### Fixed since the baseline
+
+| Baseline item | Now | Evidence |
+|---|---|---|
+| `requires-python = ">=3.10,<3.12"` | `">=3.11,<3.14"` | `pyproject.toml:13` |
+| "no `[tool.ruff]` anywhere; ruff unpinned" (**H-11**) | `ruff==0.17.4` pinned and configured with an explicit `select` | `pyproject.toml:29,46-55` |
+| `src/tools/smoke_test.py` collected as a test (**H-12**) | fixed — `testpaths = ["tests"]` | `pyproject.toml:61-65` |
+| "no test touches `hal/motors`, `safety/watchdog`, `main.build_modules`" (**H-09**) | superseded: `test_hal_lock`, `test_hal_wiring`, `test_watchdog`, `test_supervisor`, `test_gateway`, `test_intents`, `test_runtime_tick`, `test_scanning_worker` | `tests/` |
+| `ruff check src` → 238 errors | **clean** | see below |
+
+### Re-measured on the same workstation (2026-11-11)
+
+| Item | Value |
+|---|---|
+| Interpreter | **Python 3.14.5** |
+| `pytest` | `370 passed, 2 skipped` across **53** test files |
+| `pytest tests/test_api_routes.py` | `14 passed` — the route table still matches `docs/CONTROL_API.md` |
+| `ruff check src` | `All checks passed` |
+| `mypy src --ignore-missing-imports` | `Success: no issues found in 82 source files` |
+
+The interpreter caveat above still applies, and it is now sharper rather than softer: 3.14 is outside
+the declared `>=3.11,<3.14`, so these are **tooling evidence, not compatibility evidence**. Nothing
+here was run on 3.11 or on a Pi. The one gate that is safe to trust is `mypy`, exactly as the
+baseline said.
+
+### Known gap, not fixed here
+
+`scripts/installer_core.py:70,325` accepts **Python 3.10 and 3.11 only** and refuses 3.12+, while
+`pyproject.toml:13` declares `>=3.11,<3.14`. The installer is the stricter of the two, so a 3.12 or
+3.13 install is refused by the script even though the package metadata would allow it.
+`docs/INSTALL.md` documents the installer's behaviour and is therefore correct; the metadata and the
+installer need to be reconciled in a change that touches dependencies, which is not this one.

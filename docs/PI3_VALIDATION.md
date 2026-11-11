@@ -1,5 +1,9 @@
 # Pi3 On-Device Validation Checklist
 
+Status: **guide** — a checklist, not prose. Nothing here is proven until it is ticked on a dog.
+Version: v2026.01.18 • Author: 7Lynx
+Pairs with: `docs/INSTALL.md` (get it running first), `docs/FEATURES_GUIDE.md` (what each module does)
+
 Use this checklist on the PiDog hardware before declaring Pi3 complete.
 
 ## Sensors

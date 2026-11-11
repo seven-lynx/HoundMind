@@ -1,12 +1,17 @@
-# HoundMind Features Guide (Unified System)
+# HoundMind Features Guide
 
+Status: **reference** — what each module does, its default, and how to turn it off. Not a tutorial.
 Version: v2026.01.18 • Author: 7Lynx
+Pairs with: `config/settings.jsonc` (every default quoted here), `docs/CONTROL_API.md` (the wire
+contract), `docs/ARCHITECTURE.md` (why the modules are shaped this way)
 
-This guide explains what each feature does, how to use it, and how to disable it. All features are configured in `config/settings.jsonc`.
+Every feature is configured in `config/settings.jsonc`. Simulation mode is not supported: all features
+require real PiDog hardware, and `lite` on a workstation imports cleanly but moves nothing.
 
-**Note:** Simulation mode is no longer supported. PackMind and CanineCore are now unified into a single system.
+> **Rule of thumb:** if a feature is misbehaving, set its module `enabled` to `false` and restart.
+> `§29` is the procedure; `§30` is the list of things that usually caused it.
 
-> **Rule of thumb:** If a feature is misbehaving, set its module `enabled` to `false` and restart.
+Section numbers are stable references — other files cite them. Append, do not renumber.
 
 ---
 
@@ -133,7 +138,7 @@ When disabled, `energy_level` is not updated by the behavior module.
 
 ---
 
-## Personality & Behavior Tuning
+### Personality & Behavior Tuning
 
 The runtime provides lightweight personality tuning to bias autonomous behavior selection. This is purely a behavior-level tuning — disabling it will not affect navigation, safety, or core runtime modules.
 
@@ -192,6 +197,23 @@ because a sweep takes seconds and a fixed sub-second window called a healthy sca
 
 ---
 
+## 11) Sensor Health
+**What it does:** Paints a per-sensor staleness badge through `led_request:health`, using the
+validity flags the HAL already publishes. It is a display, not a gate: the raw `distance_valid`,
+`touch_valid`, `sound_valid`, `imu_valid` and `battery_valid` flags are published whether this module
+runs or not, and the interlock reads those, never this.
+
+**Default:** Disabled (`modules.sensor_health.enabled = false`), like the other safety-adjacent
+modules. `SensorHealthModule` also starts life outside `main.build_registry`, so enabling it in config
+is necessary but not yet sufficient — it must be registered before it ticks.
+
+**Settings** (`settings.sensor_health`): the staleness windows per sensor family and the LED colour
+used for the badge.
+
+**Disable:** `modules.sensor_health.enabled = false`
+
+---
+
 ## 12) Health Monitor
 **What it does:** Monitors CPU/memory/temp and throttles scans if needed.
 
@@ -239,7 +261,35 @@ because a sweep takes seconds and a fixed sub-second window called a healthy sca
 ---
 
 ## 18) Voice (Pi3 legacy)
-**What it does:** Voice subsystem wiring only (disabled by default).
+**What it does:** Wires the voice subsystem into the runtime. It is the *input* side only — speech
+recognition fills `voice_text` / `voice_command`, which `§19` then maps to actions.
+
+**Default:** Disabled. Enable it only after the microphone works at the OS level.
+
+**Enable:**
+- `modules.voice.enabled = true`
+
+**Audio dependencies first.** `pyaudio` needs the PortAudio headers and `sounddevice` needs ALSA, so
+install the system audio stack before the wheel, then the vendor helper that configures the PiDog's
+I2S microphone:
+
+```bash
+sudo apt update && sudo apt install -y portaudio19-dev libasound2-dev
+sudo bash .cache/houndmind_deps/pidog/i2samp.sh
+```
+
+The guided installer can run that helper for you: `bash scripts/install_houndmind.sh --run-i2samp`,
+or `RUN_I2SAMP=1 bash scripts/install_houndmind.sh` for a non-interactive run.
+
+**Test it:** start the runtime and check that the module reports ready in the log rather than
+`disabled`. A module that could not open the microphone disables itself with a reason — it does not
+crash the runtime.
+
+**Troubleshooting:**
+- If the mic is missing, the module disables itself and logs why. Fix the device, not the config.
+- Confirm the microphone is visible to the OS (`python -m tools.list_audio_devices`) before enabling.
+- Voice never reaches the dog over HTTP: there is no port-8091 endpoint. A client drives motion with
+  `POST /api/v1/command` (`§26`), through the interlock and the audit log.
 
 **Disable:** `modules.voice.enabled = false`
 
@@ -483,25 +533,7 @@ device first).
 
 ---
 
-## 27) How to Disable Any Feature
-1) Open `config/settings.jsonc`
-2) Find the module under `modules`.
-3) Set `enabled` to `false`.
-4) Restart HoundMind.
-
-## Profiles
-Use `profile: "pi3" | "pi4"` in `config/settings.jsonc`, or set `HOUNDMIND_PROFILE=pi4`.
-
----
-
-## 25) Troubleshooting
-- If `pidog` import fails: install SunFounder PiDog first, then HoundMind.
-- If a module fails: disable it in `modules` and restart.
-- For camera issues: switch `settings.vision_pi4.backend` to `opencv`.
-
----
-
-## 22) Path Planning (A* for Pi4)
+## 27) Path Planning (A* for Pi4)
 **What it does:**
 - Plans a path from the current cell to a specified goal using the A* algorithm on a grid map.
 - The planned path is available in the runtime context for navigation and debugging.
@@ -540,3 +572,43 @@ print("Path:", path)
 - Set `"path_planning_enabled": false` in the mapping config.
 
 ---
+
+## 28) Profiles
+
+`profile` in `config/settings.jsonc` selects a bundle of defaults; `HOUNDMIND_PROFILE` overrides it at
+launch.
+
+| Profile | What it sets |
+|---|---|
+| `pi3` | Default. `loop.tick_hz: 5`, conservative scan cadence, Pi4-only modules off. |
+| `pi4` | `loop.tick_hz: 10`, faster scan cadence, and Pi4-only modules **permitted** — still individually `enabled: false`. |
+
+A profile enables capability, never a feature. Pi4/5 modules (vision feed, face recognition, semantic
+labeling, SLAM, voice assistant) stay off until you turn that module on and validate it on the bench.
+
+---
+
+## 29) How to Disable Any Feature
+
+1. Open `config/settings.jsonc`.
+2. Find the module under `modules`.
+3. Set `"enabled": false`.
+4. Restart HoundMind.
+
+Disabling is always safe: a module that is off publishes nothing, and every consumer reads the
+validity flags instead of assuming a value. To remove the network surface entirely, disable
+`modules.api` — the dog keeps running with nothing listening.
+
+---
+
+## 30) Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| `ModuleNotFoundError: pidog` | Install the SunFounder PiDog software first, then HoundMind in the **same** venv. It is not on PyPI. |
+| A module shows `failed` in `GET /api/v1/modules` | Read its `detail`. A `failed` module is a bug; a `disabled` one is configured. |
+| Config refuses to load | An unknown or misspelled key is a load-time error with a did-you-mean. Delete or fix the key — the runtime will not start on a bad config. |
+| Camera frames never arrive | `settings.vision_pi4.backend` to `"opencv"` if `picamera2` fails. Check `python -m tools.camera_check --list-devices`. |
+| `409 vetoed` on every forward | `veto` says why: `obstacle` (something is 12 cm away), `tilt` (right the dog), `low_voltage`, `mode` (`rest` refuses clients), or `expired` (the deadman ran out). |
+| No logs on disk | `settings.logging.log_dir` and `logging.enable_file`. See `docs/LOGGING.md`. |
+| Servos jitter | Lower `speed`, reduce `step_count`, and check the servo offsets were not overwritten.
