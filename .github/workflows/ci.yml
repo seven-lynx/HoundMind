@@ -86,3 +86,47 @@ jobs:
       - name: Build sdist and wheel
         run: |
           python -m build --sdist --wheel
+
+  identity_guard:
+    name: Identity guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Every commit is authored by the sanctioned account
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Every published commit carries one human account. The accepted addresses are
+          # the ones linked to that account; anything else is an automation account or a
+          # wrong git config, and history keeps it. The local hooks only see the unpushed
+          # range, so a commit created server-side is invisible to them - this is the gate
+          # that does see it.
+          accepted='53497955\+seven-lynx@users\.noreply\.github\.com|j\.s\.coleman00@gmail\.com|developer@roamtheweb\.app'
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE"
+            head="$PR_HEAD"
+          else
+            base="$PUSH_BEFORE"
+            head="$PUSH_AFTER"
+          fi
+          # A brand new branch has no before-commit; compare against nothing and check the tip.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            range="-1"
+          else
+            range="$base..$head"
+          fi
+          echo "range: $range"
+          bad="$(git log --format='%h %an <%ae> %s' $range | grep -vE "<($accepted)>" || true)"
+          if [ -n "$bad" ]; then
+            echo "::error::these commits are not authored by the sanctioned account:"
+            printf '%s\n' "$bad"
+            exit 1
+          fi
+          echo "ok: every commit in $range is authored by the sanctioned account"
