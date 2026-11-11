@@ -4,9 +4,7 @@ import json
 import logging
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import parse_qs, urlparse
 
 from houndmind_ai.core.module import Module
 
@@ -17,14 +15,19 @@ class VoiceModule(Module):
     """Voice module with STT (VOSK or SpeechRecognition) and TTS (pidog or pyttsx3).
 
     Behavior:
-    - Listens for microphone input (optional) and/or accepts HTTP commands (`/say`, `/command`).
+    - Listens for microphone input (optional) and/or accepts commands injected into the
+      runtime context as `voice_command` / `voice_text`.
     - Maps phrases to actions via `settings.voice_assistant.command_map` and `aliases`.
     - If a recognized utterance is a question and a `voice_question_handler` is present in
       `RuntimeContext`, forwards the question and will TTS the response.
+
+    There is no HTTP server here. The legacy port-8091 `/say` and `/command` endpoints were an
+    unauthenticated motion path: they are gone, and a client drives the dog through
+    `POST /api/v1/command` like everything else.
+
     Config (settings.voice_assistant):
     - enabled: bool
     - cooldown_s: float
-    - http.enabled/host/port
     - stt.enabled: bool
     - stt.backend: auto|vosk|speech_recognition
     - stt.vosk_model_path: path to VOSK model directory (optional)
@@ -36,8 +39,6 @@ class VoiceModule(Module):
         super().__init__(name, enabled=enabled, required=required)
         self.available = False
         self._last_command_ts = 0.0
-        self._http_server: ThreadingHTTPServer | None = None
-        self._http_thread: threading.Thread | None = None
         self._pending: list[dict] = []
 
         # STT/TTS runtime
@@ -62,12 +63,6 @@ class VoiceModule(Module):
         context.set("voice", {"status": "ready"})
 
         settings = (context.get("settings") or {}).get("voice_assistant", {})
-
-        # Start HTTP control surface if enabled
-        try:
-            self._maybe_start_http(settings)
-        except Exception:
-            logger.exception("Failed to start voice HTTP server")
 
         # Start STT listener if requested
         stt_cfg = settings.get("stt", {})
@@ -206,88 +201,6 @@ class VoiceModule(Module):
 
         logger.info("TTS not available to speak: %s", text)
 
-    def _maybe_start_http(self, settings: dict) -> None:
-        http_settings = settings.get("http", {})
-        if not http_settings.get("enabled", False):
-            return
-        host = http_settings.get("host", "0.0.0.0")
-        port = int(http_settings.get("port", 8091))
-
-        module = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def _send_json(self, payload, status=200):
-                data = json.dumps(payload).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-
-            def do_GET(self):
-                parsed = urlparse(self.path)
-                if parsed.path == "/status":
-                    self._send_json({"status": "ok"})
-                    return
-                if parsed.path == "/say":
-                    qs = parse_qs(parsed.query)
-                    text = (qs.get("text") or [None])[0]
-                    if not text:
-                        self._send_json({"error": "Missing text"}, status=400)
-                        return
-                    module._pending.append({"text": text})
-                    self._send_json({"status": "queued", "text": text})
-                    return
-                if parsed.path == "/command":
-                    qs = parse_qs(parsed.query)
-                    action = (qs.get("action") or [None])[0]
-                    if not action:
-                        self._send_json({"error": "Missing action"}, status=400)
-                        return
-                    module._pending.append({"action": action})
-                    self._send_json({"status": "queued", "action": action})
-                    return
-                self._send_json({"error": "Not found"}, status=404)
-
-            def do_POST(self):
-                parsed = urlparse(self.path)
-                length = int(self.headers.get("Content-Length", "0"))
-                body = self.rfile.read(length).decode("utf-8") if length > 0 else ""
-                if parsed.path in ("/say", "/command"):
-                    try:
-                        payload = json.loads(body) if body else {}
-                    except Exception:
-                        payload = {}
-                    if parsed.path == "/say":
-                        text = payload.get("text")
-                        if not text:
-                            self._send_json({"error": "Missing text"}, status=400)
-                            return
-                        module._pending.append({"text": text})
-                        self._send_json({"status": "queued", "text": text})
-                        return
-                    action = payload.get("action")
-                    if not action:
-                        self._send_json({"error": "Missing action"}, status=400)
-                        return
-                    module._pending.append({"action": action})
-                    self._send_json({"status": "queued", "action": action})
-                    return
-                self._send_json({"error": "Not found"}, status=404)
-
-            def log_message(self, format, *args):
-                return
-
-        try:
-            server = ThreadingHTTPServer((host, port), Handler)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to start voice HTTP server: %s", exc)
-            return
-        self._http_server = server
-        self._http_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        self._http_thread.start()
-        logger.info("Voice HTTP server listening on %s:%s", host, port)
-
     def _stt_loop(self, context) -> None:
         """Background STT loop. Supports VOSK if available, otherwise SpeechRecognition.
 
@@ -382,13 +295,6 @@ class VoiceModule(Module):
                 self._stt_thread.join(timeout=1)
         except Exception:
             logger.exception("Failed to stop STT thread")
-
-        if self._http_server is not None:
-            try:
-                self._http_server.shutdown()
-                self._http_server.server_close()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Failed to stop voice HTTP server: %s", exc)
 
         # Stop pyttsx3 engine if present
         try:

@@ -829,7 +829,6 @@ _VOICE = Section(
         ),
         "command_map": MapOf(StrSpec()),
         "aliases": MapOf(StrSpec()),
-        "http": _HTTP,
     }
 )
 

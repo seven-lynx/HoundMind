@@ -251,16 +251,11 @@ Notes:
 - `modules.voice.enabled = true`
 - `settings.voice_assistant.enabled = true`
 
-**HTTP endpoints (optional):**
-- `settings.voice_assistant.http.enabled = true`
-- `GET /say?text=sit`
-- `GET /command?action=forward`
-
-**CLI helper:**
-```bash
-python -m tools.voice_cli say --text "sit"  # recommended after `pip install -e .` or with `PYTHONPATH=src`
-python -m tools.voice_cli command --action "forward"
-```
+**Driving it:** there is no `/say` or `/command` HTTP endpoint. The legacy port-8091 server was an
+unauthenticated path to `behavior_override`, so it is gone; a client sends
+`POST /api/v1/command` (§26), which goes through the interlock and is audited. Speech
+recognition (`settings.voice_assistant.stt.enabled`) is the input that replaces it. The
+`python -m tools.voice_cli` helper was deleted with the port.
 
 **Disable:**
 - `modules.voice.enabled = false` or `settings.voice_assistant.enabled = false`
