@@ -1,15 +1,5 @@
 from houndmind_ai.behavior.attention import AttentionModule
-
-
-class DummyDog:
-    def __init__(self):
-        self.calls = []
-
-    def head_move(self, coords, speed=70):
-        self.calls.append((coords, speed))
-
-    def wait_head_done(self):
-        return None
+from houndmind_ai.hal.fake import FakeDogHAL
 
 
 class DummyContext:
@@ -25,12 +15,14 @@ class DummyContext:
 
 def test_attention_turns_head_on_sound():
     ctx = DummyContext()
-    ctx.set("pidog", DummyDog())
+    hal = FakeDogHAL()
+    ctx.set("hal", hal)
     ctx.set("settings", {"attention": {"enabled": True, "respect_scanning": False}})
     ctx.set("perception", {"sound": True, "sound_direction": 90})
 
     module = AttentionModule("attention")
     module.tick(ctx)
 
-    dog = ctx.get("pidog")
-    assert dog.calls, "head_move should be called when sound is detected"
+    head_moves = [params for name, params in hal.calls if name == "head"]
+    assert head_moves, "the head should be asked to turn when sound is detected"
+    assert head_moves[0]["wait"] is True

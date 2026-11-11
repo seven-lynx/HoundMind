@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import time
 from collections import Counter, deque
-
 from typing import Any
 
 from houndmind_ai.core.module import Module

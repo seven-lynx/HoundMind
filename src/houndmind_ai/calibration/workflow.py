@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
-from typing import Any
 from pathlib import Path
-import json
+from typing import Any
 
 from houndmind_ai.calibration.servo_calibration import collect_servo_defaults
 from houndmind_ai.core.module import Module

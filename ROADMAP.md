@@ -179,8 +179,7 @@ The following fixes are planned and prioritized. Each item should be implemented
 - [x] **Harden JSONC parsing (MEDIUM):** Replace or harden the in-house `_load_jsonc` parser (consider `json5`/`commentjson`) in `src/houndmind_ai/core/config.py`.
 - [x] **Improve exception logging (MEDIUM):** Use `logger.exception` or include stack traces in broad `except Exception` blocks for actionable diagnostics. Files: core/runtime.py and module start/stop/tick handlers.
 - **Add CI and test automation (MEDIUM):** Add GitHub Actions CI to run tests/lint and keep test/dev dependencies in `requirements-dev.txt` or `pyproject.toml`.
-- **Telemetry security hardening (LOW→MEDIUM):** Add config options to bind dashboard to `127.0.0.1` and document authentication/ACL guidance. File: src/houndmind_ai/optional/telemetry_dashboard.py
-- [x] **Telemetry security hardening (LOW→MEDIUM):** Add config options to bind dashboard to `127.0.0.1` and document authentication/ACL guidance. File: src/houndmind_ai/optional/telemetry_dashboard.py
+- [x] **Telemetry security hardening (LOW→MEDIUM):** Add config options to bind dashboard to `127.0.0.1` and document authentication/ACL guidance. **Superseded:** the dashboard module and its port-8092 server were removed; the control plane on 8420 is token-gated and is the only listener. See `docs/FEATURES_GUIDE.md` §24 and §26.
 - **Add unit tests for config & runtime edge cases (LOW):** Add tests for JSONC parsing, numeric coercion, and `max_cycles` loop behavior. Files: tests/
 - **Document installer expectations (LOW):** Clarify in README and `pyproject.toml` whether the package is installer-first or pip-installable by developers.
 

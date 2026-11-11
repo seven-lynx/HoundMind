@@ -68,7 +68,10 @@ Need feature-level explanations? See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUID
 ## HoundMind Runtime (`houndmind_ai`) Modules
 These modules run each tick and publish data into the runtime context.
 
-- **SensorModule**: publishes `sensor_reading`, `sensors`, `sensor_history`, `sensor_health`.
+- **HalModule**: owns the dog and publishes `hal` (a `DogHAL`). The only module that opens
+  hardware; `main.build_registry(config, hal=FakeDogHAL())` swaps in a scripted dog for tests.
+- **SensorModule**: polls `hal` at `sensors.poll_hz` and publishes `sensor_reading`, `sensors`, `sensor_history`, `sensor_health`.
+- **MotionGatewayModule**: resolves the competing motion intents (`safety_action`, `watchdog_action`, `navigation_action`, `behavior_action`) into one command, runs it through the interlock, and publishes `motion_command`, `motion_verdict`, `tilt_latched`. Runs before `hal_motors` so a decision made this tick is the one executed this tick.
 - **ScanningModule**: publishes `scan_reading`, `scan_latest`, `scan_history`, `scan_quality`.
 - **OrientationModule**: updates `current_heading`.
 - **MappingModule**: publishes `mapping_openings`, `mapping_state`; optional home-map snapshots.
@@ -79,13 +82,28 @@ These modules run each tick and publish data into the runtime context.
 - **SafetyModule**: sets `safety_action`, `safety_active`, `emergency_stop_active`, `tilt_warning`.
 - **WatchdogModule**: sets `watchdog_action`, `behavior_override`, `restart_modules`.
 - **HealthMonitorModule**: sets `health_status`, `health_degraded`, `scan_interval_override_s`.
-- **BalanceModule**: IMU-based balance compensation via `dog.set_rpy`.
-- **EventLoggerModule**: writes event logs and summary.
+- **SensorHealthModule**: paints the sensor staleness badge via `led_request:health`. Ships disabled.
+- **BalanceModule**: IMU-based balance compensation, applied through `hal.action("rpy", ...)`.
+- **EventLoggerModule**: writes event logs and summary; the JSONL file rotates at `logging.event_log_max_mb`.
 - **LedManagerModule**: centralizes RGB LEDs using `led_request:*` signals.
+
+`hal_motors` no longer reads the four producer keys: it executes `motion_command` only. The
+gateway is the single place where precedence is decided, and `act/interlock.py` is the single
+place where a command can be refused.
+
+### Module registry
+
+`main.build_registry` constructs every module and labels it with a `Capability`
+(`sensors`, `perception`, `motion`, `safety`, `navigation`, `behaviour`, `mapping`,
+`vision`, `audio`, `telemetry`, `diagnostics`, `calibration`). Registration order is tick
+order. `registry.provider(Capability.MOTION)` raises if two modules ever claim the same
+exclusive capability, which is how "two things own the servo bus" becomes a startup error
+instead of a mystery.
 
 ---
 
 ## Core Context Keys
+- `hal` (DogHAL) — the only way to reach hardware; `None` when nothing opened
 - `sensor_reading` (SensorReading)
 - `sensors` (dict) and `sensor_health` (dict)
 - `scan_reading` (ScanReading), `scan_latest` (dict), `scan_quality` (dict)
@@ -96,6 +114,7 @@ These modules run each tick and publish data into the runtime context.
 - `led_request:safety` | `led_request:navigation` | `led_request:attention` | `led_request:emotion`
 - `safety_action` (str), `safety_active` (bool)
 - `watchdog_action` (str)
+- `motion_command` (dict | None), `motion_verdict` (dict | None), `tilt_latched` (bool)
 - `health_status` (dict), `health_degraded` (bool)
 
 ---
@@ -204,20 +223,20 @@ runtime.run()
 
 ---
 
-## Pi4 Vision Stream (HTTP)
-If `vision_pi4.http.enabled` is true, the module serves a live MJPEG stream:
+## Vision and face recognition — no dedicated ports
 
-- `GET /stream` → MJPEG video stream
+There are no per-feature HTTP servers any more. The legacy ports 8088 (face recognition),
+8090 (vision stream), 8091 (voice) and 8092 (telemetry dashboard) were removed in favour of the
+single control plane (`docs/CONTROL_API.md`, port 8420):
 
-Example (browser):
-http://<pi-ip>:8090/stream
+| What | Now |
+|---|---|
+| Camera frames | `GET /api/v1/camera/stream`, `GET /api/v1/camera/snapshot` (`state:read`) |
+| Module status (`/status` on every legacy server) | `GET /api/v1/modules` (`state:read`) |
+| Runtime snapshot (telemetry `/snapshot`) | `GET /api/v1/state` (`state:read`) |
+| Logs and support bundle | `GET /api/v1/logs`, `GET /api/v1/support-bundle` (`admin`) |
+| Face enrollment | In-process: set `face_recognition_command` in the runtime context (§`optional/face_recognition.py`). No v1 route yet. |
+| SLAM map/trajectory download | Not exposed in v1; `slam_map_data` and `slam_trajectory` remain on the context. |
 
----
-
-## Face Recognition HTTP Endpoints
-If `face_recognition.http.enabled` is true:
-
-- `GET /status` → backend status
-- `GET /faces` → last detections
-- `GET /enroll?name=Alice` → enqueue enrollment
-- `POST /enroll` with `{ "name": "Alice" }`
+A config that still contains `settings.<module>.http` fails to load with a did-you-mean pointing
+at the offending block — delete it.

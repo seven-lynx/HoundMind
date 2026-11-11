@@ -14,8 +14,7 @@
         "vision_pi4": {"enabled": true},
         "face_recognition": {"enabled": false},
         "semantic_labeler": {"enabled": false},
-        "slam_pi4": {"enabled": false},
-        "telemetry_dashboard": {"enabled": false}
+        "slam_pi4": {"enabled": false}
       },
       "settings": {
         "navigation": {
@@ -33,11 +32,20 @@
     // Main loop frequency in Hz.
     "tick_hz": 5,
     // Max cycles to run; set null for continuous operation.
-    "max_cycles": 10
+    // A finite value here stops the runtime, which is useful for tests and useless for a
+    // robot: the shipped default used to be 10, so a fresh install ran for two seconds and
+    // quit. Continuous is the only sane default for a service.
+    "max_cycles": null
   },
   "modules": {
+    "hal": {
+      // Owns the dog. Every hardware-facing module asks the context for `hal`, so this must
+      // stay enabled: with it off nothing can move and no sensor is read.
+      "enabled": true,
+      "required": false
+    },
     "hal_sensors": {
-      // Enable sensor HAL (ultrasonic, touch, sound direction, IMU).
+      // Sensor polling on top of the HAL (ultrasonic, touch, sound direction, IMU).
       "enabled": true,
       // Required modules will stop the runtime if they fail to start.
       "required": true
@@ -57,26 +65,43 @@
       "enabled": true,
       "required": true
     },
+    "motion_gateway": {
+      // Resolves competing motion intents and applies the interlock.
+      // Leave this on: with it off, the motors receive no command at all.
+      "enabled": true,
+      "required": false
+    },
+    "api": {
+      // The control plane: REST + WebSocket + MJPEG + the web app on one port.
+      // This is the only network surface in the runtime. Turning it off leaves the dog fully
+      // operational with nothing listening, which is the right choice for a dog that should
+      // never be reachable. Authentication is not optional when it is on: every route except
+      // /api/v1/meta and /api/v1/health requires the install-issued token.
+      "enabled": true,
+      "required": false
+    },
+    "sensor_health": {
+      // Per-sensor staleness badge and LED colour. Off by default, like the other safety
+      // modules; the raw validity flags are published regardless.
+      "enabled": false,
+      "required": false
+    },
     "perception": {
       // Sensor fusion and signal extraction.
       "enabled": true,
       "required": false
     },
     "navigation": {
-      // Gentle recovery: reduce speed after repeated stuck events
-      // Number of stuck events before gentle recovery triggers
-      "gentle_recovery_stuck_count": 3,
-      // Cooldown period (seconds) for gentle recovery
-      "gentle_recovery_cooldown_s": 8.0,
       // Obstacle avoidance + navigation cues.
+      // Tuning lives under settings.navigation: anything else placed here is ignored,
+      // because the runtime only reads `enabled` and `required` from this entry.
       "enabled": true,
       "required": false
     },
     "mapping": {
-      // Mapping and optional home map storage.
+      // Mapping and optional home map storage. Tuning lives under settings.mapping.
       "enabled": true,
-      "required": false,
-      "path_planning_enabled": true
+      "required": false
     },
     "behavior": {
       // High-level behavior selection.
@@ -118,12 +143,6 @@
         "enabled": false,
         "required": false
       },
-      "wifi_localization": {
-        // WiFi-based localization (disabled by default)
-        "enabled": false,
-        "required": false,
-        "scan_interval": 10.0
-      },
     "safety": {
       // Safety overrides (emergency backing, etc.).
       "enabled": false,
@@ -156,11 +175,6 @@
     },
     "slam_pi4": {
       // Pi4 SLAM module (disabled by default).
-      "enabled": false,
-      "required": false
-    },
-    "telemetry_dashboard": {
-      // Pi4 telemetry dashboard (disabled by default).
       "enabled": false,
       "required": false
     },
@@ -257,12 +271,7 @@
       },
       // face_recognition (heavy) settings.
       "embeddings_path": "data/face_embeddings.json",
-      "match_threshold": 0.6,
-      "http": {
-        "enabled": false,
-        "host": "0.0.0.0",
-        "port": 8088
-      }
+      "match_threshold": 0.6
     },
     // =====================================================================
     // PI4 VISION FEED
@@ -271,12 +280,7 @@
       "enabled": false,
       "backend": "picamera2",
       "device_index": 0,
-      "frame_interval_s": 0.2,
-      "http": {
-        "enabled": false,
-        "host": "0.0.0.0",
-        "port": 8090
-      }
+      "frame_interval_s": 0.2
     },
     // =====================================================================
     // VOICE ASSISTANT (Pi4 optional)
@@ -319,11 +323,6 @@
         "reverse": "backward",
         "halt": "stop",
         "sleep": "lie"
-      },
-      "http": {
-        "enabled": false,
-        "host": "0.0.0.0",
-        "port": 8091
       }
     },
     // =====================================================================
@@ -374,37 +373,6 @@
         "nav_target_heading_deg": null,
         "nav_deadband_deg": 10.0
       },
-    // =====================================================================
-    // TELEMETRY DASHBOARD (Pi4 optional)
-    // =====================================================================
-    "telemetry_dashboard": {
-      "enabled": false,
-      "snapshot_interval_s": 0.5,
-      "context_keys": [
-        "sensor_reading",
-        "scan_latest",
-        "mapping_openings",
-        "navigation_action",
-        "behavior_action",
-        "safety_action",
-        "performance_telemetry",
-        "slam_pose",
-        "faces",
-        "semantic_labels"
-      ],
-      "http": {
-        // Bind to localhost by default for LAN-safe behavior. Set to "0.0.0.0"
-        // only when you intentionally want the dashboard reachable on the LAN
-        // and have secured access (see `auth_token` below).
-        "enabled": false,
-        "host": "127.0.0.1",
-        "port": 8092,
-        // Optional simple token required on protected endpoints. When set,
-        // requests must include `X-Auth-Token: <token>` or `?auth_token=<token>`.
-        // Example (uncomment to enable):
-        // "auth_token": "change-this-to-a-secret",
-      }
-    },
     // =====================================================================
     // NAVIGATION & SCANNING (Pi 3 friendly)
     // =====================================================================
@@ -461,20 +429,12 @@
       "scan_stale_s": 0.8,
       // Head scan sweep range (degrees).
       "scan_yaw_max_deg": 60,
-      // Use a smaller sweep when the forward path is consistently clear.
-      "enable_dynamic_scan": true,
-      // Narrow sweep limit when dynamic scanning is enabled.
-      "dynamic_scan_yaw_max_deg": 30,
       // Head scan step size (degrees).
       "scan_step_deg": 15,
       // Time to settle after a head move (seconds).
       "scan_settle_s": 0.12,
       // Delay between reads in a sweep (seconds).
       "scan_between_reads_s": 0.04,
-      // Scan debouncing (ignore overly-frequent reads).
-      "scan_debounce_s": 0.05,
-      // Distance EMA smoothing during scans (0 = off, 1 = no smoothing).
-      "scan_smoothing_alpha": 0.4,
       // Minimum valid scan points before acting on turn decisions.
       "scan_min_valid_points": 3,
       // Minimum fraction of valid points (0-1) required.
@@ -547,7 +507,6 @@
       // Lightweight local planner (uses mapping.best_path as a short-range hint)
       "planner_enabled": true,
       "planner_min_confidence": 0.6,
-      "planner_influence_weight": 0.0,
       "planner_max_age_s": 2.0,
       // Stuck detection (movement magnitude) and avoidance strategy.
       "stuck_time_window_s": 5.0,
@@ -557,6 +516,9 @@
       "stuck_strategy_repeat_window_s": 10.0,
       "stuck_strategy_repeat_threshold": 3,
       "avoidance_strategies": ["smart_turn", "backup_turn", "zigzag", "reverse_escape"],
+      // Gentle recovery: repeated stuck events reduce the walking speed for a while.
+      "gentle_recovery_stuck_count": 3,
+      "gentle_recovery_cooldown_s": 8.0,
       // LED feedback for navigation states.
       "led_enabled": true,
       "led_priority": 50,
@@ -566,32 +528,18 @@
       "led_retreat_color": "red"
     },
     // =====================================================================
-    // MOVEMENT & ACTION TUNING (future wiring)
+    // MOVEMENT & ACTION TUNING
     // =====================================================================
     "movement": {
-      // Speed to use during gentle recovery (0-255)
-      "gentle_recovery_speed": 80,
-      // Step counts for turns/walks.
-      "turn_steps_small": 1,
-      "turn_steps_normal": 2,
-      "turn_steps_large": 4,
-      "walk_steps_short": 1,
-      "walk_steps_normal": 2,
-      "walk_steps_long": 3,
-      "backup_steps": 3,
       // Approximate degrees per single turn step (fallback when orientation is off).
       "turn_degrees_per_step": 15.0,
-      // Movement speeds (0-255).
-      "speed_slow": 80,
+      // Servo speeds (0-255). `speed_normal` is the reference walking speed the turn
+      // speeds are validated against; the turn speeds are what actually reach a servo.
       "speed_normal": 120,
-      "speed_fast": 200,
-      "speed_emergency": 100,
       // Turn speeds (should be faster than walk speeds).
       "speed_turn_slow": 100,
       "speed_turn_normal": 200,
-      "speed_turn_fast": 220,
-      // Micro pause between queued steps.
-      "step_pause_s": 0.02
+      "speed_turn_fast": 220
     },
     // =====================================================================
     // ORIENTATION (IMU heading integration)
@@ -645,7 +593,6 @@
       // Safe path thresholds.
       "safe_path_min_width_cm": 40,
       "safe_path_max_width_cm": 200,
-      "safe_path_min_length_cells": 6,
       "safe_path_cell_conf_min": 0.5,
       // Safe path scoring weights.
       "safe_path_score_weight_width": 0.6,
@@ -955,7 +902,10 @@
       "event_log_interval_s": 0.5,
       "event_log_max_entries": 1000,
       "event_log_file_enabled": true,
-      "event_log_path": "logs/houndmind_events.jsonl"
+      "event_log_path": "logs/houndmind_events.jsonl",
+      // Cap on the JSONL file itself. When it reaches this size it is renamed to `.1` and a
+      // fresh file is started, so a dog left running cannot fill the SD card.
+      "event_log_max_mb": 5,
     },
     // =====================================================================
     // PERFORMANCE SAFEGUARDS (Pi 3 friendly)
@@ -964,9 +914,9 @@
       // Scan interval bounds used by validation warnings.
       "scan_interval_min_s": 0.2,
       "scan_interval_max_s": 2.0,
-      // Upper bound for sensor polling on Pi 3.
+      // Upper bound for sensor polling, enforced against sensors.poll_hz at load.
       "sensor_poll_hz_max": 20,
-      // Health thresholds (future wiring).
+      // Health thresholds used by the health monitor to decide when to degrade.
       "health_load_per_core_warn_multiplier": 1.5,
       "health_temp_warn_c": 70.0,
       "health_gpu_temp_warn_c": 75.0,
@@ -976,13 +926,16 @@
       "health_scan_interval_abs_delta": 1.0,
       "health_vision_frame_interval_multiplier": 2.0,
       "health_vision_frame_interval_abs_delta": 0.2,
+      // Degradation levers the health monitor may pull: throttle_scans, throttle_vision.
       "health_actions": [],
-      // Safe mode: reduces scan cadence and turn speed on Pi3.
+      // Safe mode: reduces scan cadence and turn speed on a loaded board.
       "safe_mode_enabled": false,
       "safe_mode_scan_interval_s": 1.2,
       "safe_mode_turn_speed": 140,
       // Warn when a runtime tick exceeds this duration (seconds).
-      "runtime_tick_warn_s": 0.4
+      "runtime_tick_warn_s": 0.4,
+      // Smoothing factor for the reported tick-duration average (0-1].
+      "runtime_ema_alpha": 0.2
     },
     // =====================================================================
     // BATTERY / VOLTAGE (optional)
@@ -1010,6 +963,34 @@
       "behavior_action_cooldown_s": 1.5,
       // Minimum delay between motor actions (seconds).
       "motor_min_action_interval_s": 0.6
+    },
+    // =====================================================================
+    // CONTROL PLANE (services/api.py) — one port for REST, WebSocket, MJPEG
+    // =====================================================================
+    "api": {
+      // Bind address. Reachable on the LAN on purpose: the token is the security boundary.
+      // Use "127.0.0.1" to keep it on the device, or disable `modules.api` to remove it.
+      "host": "0.0.0.0",
+      "port": 8420,
+      // The install-issued API token. Generated on first start, 0600, never pasted into this
+      // file and never written to a log.
+      "token_path": "~/.houndmind/api_token",
+      // Pre-built web app location. Null means the copy bundled with the package.
+      "static_root": null,
+      // Telemetry push rate on /api/v1/events.
+      "state_hz": 10.0,
+      // Pairing codes for the Android app and a second browser: 6 digits, 5 minutes, one use.
+      "pairing_enabled": true,
+      "pairing_attempts_per_minute": 5,
+      // Bounded command inbox. A full queue is a 429, never latency on the servo bus.
+      "command_queue": 64,
+      // How long POST /api/v1/command waits for the interlock's verdict before answering 503.
+      "command_ack_timeout_s": 0.5,
+      // A connected client that stops pinging for this long loses its command.
+      "link_loss_s": 6.0,
+      "max_clients": 8,
+      // Default and maximum `GET /api/v1/logs?tail=`.
+      "log_tail": 200
     }
   }
 }

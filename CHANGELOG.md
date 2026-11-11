@@ -7,6 +7,172 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18 • Author: 7Lynx
 
 
+## [Unreleased]
+
+### Added
+- `services/`: the control plane — one process, one port (8420), one authenticated API (D7).
+  REST, WebSocket telemetry, MJPEG and the web app are routes on the same aiohttp application,
+  and it runs on its own thread so the decision loop never blocks on a socket. This is what
+  B-05 was: there was no way to command the dog from anything but the dog.
+- `services/auth.py`: the device token is generated on first start into `~/.houndmind/api_token`
+  (0600, never logged, never in the repo), with `state:read` / `move` / `config` / `admin`
+  scopes, a single-use 6-digit pairing code for phones, a pairing rate limit, and a bounded
+  motion audit recording the reason for every veto (D8, M-13).
+- `kernel/commands.py`: `CommandBus`, the bounded, acknowledged hand-off between the control
+  plane and the actuator gateway. A full queue answers `429` instead of adding latency to the
+  servo bus, and every submitted command gets exactly one verdict back.
+- `services/state.py`: the `docs/CONTROL_API.md` §4 snapshot, including the validity flags a
+  client must honour — an invalid reading stays `null`, it never becomes a plausible zero.
+- `services/stream.py`: WebSocket fan-out at 10 Hz where `state` is a latest value (a slow
+  client skips frames) and `event`/`command_ack` are never dropped (a client that cannot keep up
+  is disconnected, because losing a veto reason is worse than losing a socket).
+- `services/camera.py`: one MJPEG producer, many viewers, per-client frame cap (M-04).
+- `services/sessions.py`: client sessions keyed by a token *fingerprint*, so "what did I ask and
+  what happened" is answerable without storing a credential.
+- `services/module.py`: `ControlPlaneModule` owns the thread, the socket and the shutdown. A
+  port already in use disables the module with the reason instead of taking the runtime down.
+- `main.build_registry` creates one `CommandBus`, hands it to the gateway and to the API module.
+- `docs/CONTROL_API.md` gained `GET /api/v1/history`, and the route table is now asserted against
+  the code by `tests/test_api_routes.py`.
+- `settings.api`: typed section for host, port, token path, telemetry rate, pairing, queue size,
+  ack timeout, link-loss window, client cap and log tail.
+- `kernel/state.py`: a lock-protected state store behind `RuntimeContext`. Sensor and scan
+  services publish from daemon threads while the loop reads, so the shared mapping now has a
+  lock and snapshot reads instead of relying on `dict` operations being individually atomic.
+- `kernel/registry.py`: modules are registered with a `Capability`, and asking for the sole
+  provider of an exclusive capability (the servo bus) raises instead of guessing.
+- `act/gateway.py`: one motion path. The gateway resolves `safety` > `watchdog` > `navigation` >
+  `behavior` in a single declared place, sends the winner through the interlock, and publishes
+  `motion_command` / `motion_verdict` / `tilt_latched`.
+- `kernel/config_schema.py`: config validation is enforced, not advisory. Unknown keys are an
+  error with a did-you-mean suggestion.
+- `hal/vendor.py`: `PidogHAL`, the vendor-backed `DogHAL`, plus `hal/module.py`: `HalModule` owns
+  the dog and publishes it as the context key `hal`. Before this, `hal/sensors.py`,
+  `hal/motors.py` and `navigation/scanning.py` each opened their own `Pidog()` and raced over
+  one servo bus; the last one to start also won the `pidog_owner` key that decided who closed it.
+- `hal/sensors.py`: `SensorService` polls a `DogHAL` instead of a vendor object, and the sensor
+  signal conditioning (multi-sample median, outlier rejection, debounce, EMA, IMU low-pass)
+  lives in `PidogHAL` next to the reads it belongs to.
+- `DogHAL` gained `sample_distance()` (a head scan needs the distance *after* the head moved) and
+  `apply_offsets()` (calibration offsets are user data, applied by the owner of the servos).
+  `SensorSnapshot` carries `acc`, `gyro` and `sound_detected`, which consumers already read.
+- `main.build_registry(config, hal=...)` injects a `DogHAL`; `FakeDogHAL` is now enough to run
+  the sensor, scan, LED, head and posture paths, and `tests/test_runtime_tick.py` no longer
+  carries a `HARDWARE_MODULES` exclusion list.
+- `kernel/config_schema.py`: `settings` is validated section by section. Every section the
+  repo ships — `attention`, `balance`, `battery`, `behavior`, `calibration`, `emotion`,
+  `energy`, `face_recognition`, `habituation`, `led`, `logging`, `mapping`, `motors`,
+  `movement`, `navigation`, `orientation`, `perception`, `performance`, `personality`,
+  `quiet_mode`, `safety`, `semantic_labeler`, `sensor_health`, `sensors`, `service_watchdog`,
+  `slam_pi4`, `vision_pi4`, `voice_assistant`, `watchdog` — rejects an
+  unknown key (with a suggestion) and a value of the wrong type, and profile overrides are
+  validated the same way. An unknown *section* is an error too, so `settings.voice` instead of
+  `settings.voice_assistant` no longer loads a table nothing reads. Enum-valued keys carry the
+  choices the code branches on, and nullable keys say so.
+- `settings.performance.runtime_ema_alpha` is a documented key (default `0.2`): the runtime
+  read it with a hard-coded fallback but the shipped file never mentioned it.
+- `settings.logging.console_level` is an accepted key, so the console can be quieter than the
+  file without editing code.
+
+### Changed
+- `optional/vision_pi4.py` publishes `vision_frame_jpeg` next to `vision_frame`, and
+  `services/camera.py` reads the encoded key. The raw array is still what face recognition, the
+  semantic labeler and SLAM consume; encoding once per frame replaces the old encode loop that ran
+  once per client. OpenCV is now imported before the backend branch, because the picamera2 path
+  needed it to encode and previously skipped every frame when it was absent.
+- The gateway accepts `Command` objects from the bus in addition to the legacy context keys. A
+  client command can be vetoed by the interlock like any other producer, and each client is told
+  the fate of its own command even when a higher-priority producer wins the tick.
+- `aiohttp` is a base dependency. It is the only new dependency in this phase; its resident cost
+  on a Pi 4 has not been measured yet, which is a Phase 3 device task.
+- `mode` is a typed value (`idle`, `patrol`, `manual`, `rest`) published as `runtime_mode`.
+  `rest` vetoes client motion with a reason; nothing else does, and `POST /stop` is never vetoed.
+- `hal_motors` executes `motion_command` only; it no longer merges four context keys by `or` and
+  deduplicates on the action string, which had made a `forward` from navigation and one from
+  behaviour indistinguishable.
+- `attention`, `led_manager`, `balance` and `scanning` reach the hardware through `hal.action()`
+  instead of grabbing `context["pidog"]` and calling vendor methods themselves. `import pidog` in
+  `src/` is now confined to `hal/vendor.py` (plus the optional voice module and the device CLI).
+- `calibration/workflow.py` is the one remaining consumer of the raw vendor handle;
+  `HalModule` still publishes it as `pidog` so a calibration run behaves as before until the
+  wizard is rebuilt.
+- `SensorHealthModule` is wired into the runtime (disabled by default, as before).
+- Logging reads the keys `config/settings.jsonc` actually ships (`log_level`, `log_file_name`,
+  `log_file_backups`, `log_file_max_mb`, `enable_console`, `enable_file`). Previously the
+  configured DEBUG level was ignored and rotation was hardcoded to 10 MB.
+- Log records carry four whitelisted context fields instead of every key in the runtime context,
+  so a log line no longer serialises the whole config, the sensor history and the vendor
+  hardware handle.
+- The event log JSONL rotates at `logging.event_log_max_mb` (one generation) instead of growing
+  until the SD card filled.
+- `requires-python` is `>=3.11,<3.14`; Pi 3 support is dropped. `json5` is now a real dependency.
+- Ruff is pinned (`0.17.4`) with an explicit rule set.
+- `core/config.py` parses JSON5 with `json5` and nothing else. The 60-line comment stripper
+  that duplicated it is deleted: it was only there because `json5` used to be optional, and a
+  syntax error now names the file it came from instead of a hand-rolled message.
+- `core/config.validate_config` is down to the cross-field rules a per-value schema cannot
+  express (distance ordering, an interval inside its own bounds, turn speed above walk speed,
+  `override_priority` keeping `safety`). The type and range checks it duplicated are gone with
+  the schema that enforces them.
+- CI runs on every branch and every pull request (`.github/workflows/ci.yml`), not just on
+  `main`. Work now lands on one branch per phase and merges into `refactor/resurrection`, so a
+  `main`-only trigger meant phase PRs were reviewed with no `ruff`/`pytest`/`mypy` result at
+  all. Jobs, order and interpreter are unchanged: this widens the trigger, it does not relax the
+  gate.
+
+### Fixed
+- A client command that sat in a tunnel can no longer execute on arrival: the deadman starts
+  when the device receives it, and an expired command is refused by the interlock.
+
+### Removed
+- **The four per-feature HTTP servers.** Face recognition on 8088, the vision feed on 8090, voice
+  control on 8091 and the telemetry dashboard on 8092 are gone, with their `http` config blocks.
+  Three of them bound `0.0.0.0` and answered without any token; `GET /command?action=` on 8091 set
+  `behavior_override` and moved the dog without passing the interlock, the deadman or the audit
+  log (B-06). The control plane on 8420 replaces all four, behind one token.
+- `optional/telemetry_dashboard.py` and `modules.telemetry_dashboard`. Every endpoint it served is
+  a control-plane route: `/snapshot` is `/api/v1/state`, the HTML page is the web app, the support
+  bundle is `/api/v1/support-bundle`, the camera is `/api/v1/camera/*`. Two things have no v1
+  route yet and are documented gaps, not silent losses: the SLAM map/trajectory downloads
+  (`slam_map_data` and `slam_trajectory` are still published by `slam_pi4`) and face enrollment by
+  URL. Enrollment itself still works — `face_recognition_command` on the runtime context is the
+  path the old `/enroll` handler used internally too.
+- `tools/generate_auth_token.py` and the root `tools/` directory. The script printed a
+  `{telemetry: {auth_token}}` snippet for a section that no longer exists; the token is written by
+  `services/auth.py::TokenStore` on first start. Removing it also removes the root `tools/`, which
+  shadowed `src/tools` on `sys.path` and broke `python -m tools.*` after a real install (H-05).
+- `tools/voice_cli.py`, `tools/face_recognition_cli.py` and `tools/run_telemetry.py`: each existed
+  only to talk to one of the deleted ports.
+- `optional/wifi_localization.py` and `modules.wifi_localization`. It shelled out to `netsh wlan
+  show networks`, which does not exist on Raspberry Pi OS, had no test, and was never registered.
+- Eighteen `settings` keys that nothing in `src/`, `tests/` or `src/tools/` read:
+  `navigation.enable_dynamic_scan`, `navigation.dynamic_scan_yaw_max_deg`,
+  `navigation.scan_debounce_s`, `navigation.scan_smoothing_alpha`,
+  `navigation.planner_influence_weight`, `mapping.safe_path_min_length_cells`, and the whole
+  `movement` step/speed table except `turn_degrees_per_step`, `speed_normal` and
+  `speed_turn_slow|normal|fast` (`gentle_recovery_speed`, `turn_steps_*`, `walk_steps_*`,
+  `backup_steps`, `speed_slow`, `speed_fast`, `speed_emergency`, `step_pause_s`). They were
+  documented as tuning knobs and changed nothing; the gentle-recovery threshold that does work
+  (`navigation.gentle_recovery_stuck_count`, `navigation.gentle_recovery_cooldown_s`) was read
+  by the module but missing from the file, and is now shipped.
+
+### Fixed
+- `python -m houndmind_ai` no longer dies with `ModuleNotFoundError: cv2` on an install without
+  OpenCV, which included the installer's own lite fallback.
+- `loop.max_cycles` defaults to `null`; a fresh install used to run for two seconds and exit.
+- `src/tools/smoke_test.py` is no longer collected as a test, so the suite can collect at all.
+- `src/houndmind_ai/core` has an `__init__.py`; it was an accidental namespace package that
+  package discovery could not see by name.
+- The built wheel contains `tools/` and `houndmind_ai/core/`, so the documented
+  `python -m tools.*` commands work after a real install.
+
+### Notes
+- **Upgrading a config.** If `config/settings.jsonc` still has a `settings.<module>.http` block or
+  a `telemetry_dashboard` section, the runtime now refuses to start and names the offending path.
+  Delete those blocks; nothing in them has an effect any more. `tests/test_no_legacy_http.py`
+  keeps the servers deleted rather than relying on review to notice a fifth one.
+
+
 ## [v2026.01.18] - 2026-01-18
 
 ### Changed
