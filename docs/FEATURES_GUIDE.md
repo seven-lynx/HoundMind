@@ -82,7 +82,7 @@ what "stale" means for this board.
 
 ---
 
-## 6) Mapping (Pi3-safe)
+## 6) Mapping
 **What it does:** Analyzes scan openings and saves lightweight home-map snapshots.
 
 **Disable:** `modules.mapping.enabled = false`
@@ -253,14 +253,14 @@ used for the badge.
 
 ---
 
-## 17) Vision (Pi3 legacy)
+## 17) Vision (legacy vilib)
 **What it does:** Uses Vilib for camera output and preview.
 
 **Disable:** `modules.vision.enabled = false`
 
 ---
 
-## 18) Voice (Pi3 legacy)
+## 18) Voice (legacy input)
 **What it does:** Wires the voice subsystem into the runtime. It is the *input* side only — speech
 recognition fills `voice_text` / `voice_command`, which `§19` then maps to actions.
 
@@ -575,13 +575,17 @@ print("Path:", path)
 
 ## 28) Profiles
 
-`profile` in `config/settings.jsonc` selects a bundle of defaults; `HOUNDMIND_PROFILE` overrides it at
-launch.
+`profile` in `config/settings.jsonc` ships as `auto`, which asks `board/detect.py` which Raspberry Pi
+this is; `HOUNDMIND_PROFILE` overrides it at launch.
 
 | Profile | What it sets |
 |---|---|
-| `pi3` | Default. `loop.tick_hz: 5`, conservative scan cadence, Pi4-only modules off. |
-| `pi4` | `loop.tick_hz: 10`, faster scan cadence, and Pi4-only modules **permitted** — still individually `enabled: false`. |
+| `auto` | Default. Use the detected board's profile: `pi4` or `pi5`. On a host with no device tree (CI, a workstation, a container) it uses `pi4` and logs a warning. |
+| `pi4` | `loop.tick_hz: 10`, faster scan cadence, and Pi4/5-only modules **permitted** — still individually `enabled: false`. |
+| `pi5` | Same cadence and enablement as `pi4`, plus thermal warning thresholds that suit a board which idles near 65 °C and throttles at 80 °C. |
+
+An unsupported board (Pi 3 and older) is a load-time error, not a silent fallback: the message names
+the model and the last release that supported it. `v2026.01.18` is that release.
 
 A profile enables capability, never a feature. Pi4/5 modules (vision feed, face recognition, semantic
 labeling, SLAM, voice assistant) stay off until you turn that module on and validate it on the bench.

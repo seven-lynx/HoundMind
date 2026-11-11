@@ -30,7 +30,7 @@ def _safe_int(val: Any, default: int) -> int:
 class LocalPlannerModule(Module):
     """Simple local planner that exposes mapping-derived short-range hints.
 
-    This module is intentionally lightweight for Pi3: it reads `mapping_openings`
+    This module is intentionally lightweight: it reads `mapping_openings`
     from the runtime context and publishes a `local_plan` entry. It does not
     perform heavy pathfinding or global planning.
     """

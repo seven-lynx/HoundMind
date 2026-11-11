@@ -46,7 +46,7 @@ Edit `config/settings.jsonc`. The keys that change behaviour most per keystroke:
 
 | Key | Default | Effect |
 |---|---|---|
-| `loop.tick_hz` | `5` (`pi3`) / `10` (`pi4`) | Decision-loop rate. Lower is safer and cheaper on a Pi 3. |
+| `loop.tick_hz` | `10` (`pi4`/`pi5`) | Decision-loop rate. Higher reacts faster and costs more CPU; the budget is `1/tick_hz`. |
 | `sensors.poll_hz` | `10` | Sensor sampling rate, capped by `performance.sensor_poll_hz_max`. |
 | `navigation.scan_interval_s` | `0.3` | How often the sweep runs; bounded by `scan_interval_min_s` / `_max_s`. |
 | `behavior.idle_action`, `behavior.action_sets` | see config | What the dog does with no reason to do anything else. |
@@ -73,9 +73,9 @@ HoundMind can patrol, play and rest without input. The knobs all live under `set
 
 ### Validating and stopping
 
-Bench validation is `docs/PI3_VALIDATION.md`. Optional modules stay off until it passes. Stop the
-runtime with `Ctrl-C` and let the process exit: the module `stop()` hooks run and the HAL closes the
-servo bus. Do not kill -9 a moving dog.
+Bench validation is the checklist in `docs/INSTALL.md`. Optional modules stay off until it passes.
+Stop the runtime with `Ctrl-C` and let the process exit: the module `stop()` hooks run and the HAL
+closes the servo bus. Do not kill -9 a moving dog.
 
 ---
 
@@ -89,7 +89,7 @@ scanning/navigation/behavior, and finally emits at most one motion command.
 - **`Module` lifecycle** — `start(context)`, `tick(context)`, `stop(context)`. A module that cannot
   start calls `self.disable(reason)` and stops; it does not raise unless it was registered
   `required=True`.
-- **Tick rate** — `loop.tick_hz`. Lowering it cuts CPU on a Pi 3 and costs reaction time.
+- **Tick rate** — `loop.tick_hz`. Lowering it cuts CPU and costs reaction time; the shipped profiles use 10.
 - **Motion never comes from a module writing an action string.** Producers publish an intent to the
   `IntentBoard`; `motion_gateway` ranks them, runs the winner through `act/interlock.py`, and publishes
   `motion_command`. `hal_motors` executes nothing else.
@@ -336,7 +336,7 @@ Enable the safety module and slow everything down for a bench test:
 
 ```jsonc
 {
-  "profile": "pi3",
+  "profile": "auto",
   "modules": { "safety": { "enabled": true }, "balance": { "enabled": false } },
   "navigation": { "max_speed_cm_s": 10, "turn_cooldown_s": 1.2 },
   "motors": { "min_action_interval_s": 1.0 }
@@ -503,7 +503,7 @@ planner. There is a runnable demo in `examples/houndmind_mapping_demo.py`.
 
 ## 13. On-device validation
 
-`docs/PI3_VALIDATION.md` is the checklist. The short version, in order:
+The checklist in `docs/INSTALL.md` is the full version. The short version, in order:
 
 1. Sensors stable at rest — no ultrasonic spikes, IMU not drifting.
 2. Scans: three-way returns three valid readings, sweep returns to centre.
@@ -558,12 +558,13 @@ when an optional import fails.
 
 ## 15. Pi4 profile and deferred work
 
-`profile: "pi4"` raises the loop to 10 Hz and permits the heavy modules; it does not enable them. Each
-one is still `enabled: false` in the shipped config, and each needs its own install step
+`profile: "pi5"` (or `pi4`) permits the heavy modules; it does not enable them. Each one is still
+`enabled: false` in the shipped config, and each needs its own install step
 (`docs/FEATURES_GUIDE.md` §19–23, and `scripts/install_rtabmap_pi4.md` for RTAB-Map).
 
-On a Pi 3 keep all of them off. The one-line version: if it needs `numpy` and a camera, it is not a
-Pi 3 feature.
+The one-line version: if it needs `numpy` and a camera, it is not something to switch on before the
+board has been measured. Nothing in this list has been measured on a Pi 5 yet, which is why `pi5`
+ships the same cadence as `pi4` rather than a faster one.
 
 ---
 

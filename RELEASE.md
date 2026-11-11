@@ -2,7 +2,7 @@
 
 Version: v2026.01.18 • Author: 7Lynx
 
-This checklist provides a minimal, repeatable release process for Pi3 and Pi4 presets.
+This checklist provides a minimal, repeatable release process for the two editions (Pi 4, Pi 5).
 
 ## Pre-release
 - [ ] Update version in pyproject.toml
@@ -19,7 +19,7 @@ This checklist provides a minimal, repeatable release process for Pi3 and Pi4 pr
 ## Packaging
 - [ ] Build a source distribution and wheel (python -m build)
 - [ ] Validate install from wheel on a clean venv
-- [ ] Verify requirements-lite.txt on Pi3
+- [ ] Verify requirements-lite.txt on a Pi 4 and a Pi 5
 
 ## Tagging
 - [ ] Create a git tag (e.g., v0.1.0)
@@ -27,5 +27,5 @@ This checklist provides a minimal, repeatable release process for Pi3 and Pi4 pr
 
 ## Release Notes
 - [ ] Summarize changes since last release
-- [ ] Include known limitations (Pi3 vs Pi4)
+- [ ] Include known limitations (Pi 4 vs Pi 5, and the Robot HAT V4/V5 power difference)
 - [ ] Note any breaking config changes

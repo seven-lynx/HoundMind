@@ -93,7 +93,13 @@ def python_version_tuple(python: Path) -> tuple[int, int] | None:
 
 
 def is_supported_python(version: tuple[int, int]) -> bool:
-    return (version[0] == 3 and version[1] in (10, 11))
+    """The range `pyproject.toml` declares: 3.11 is Bookworm, 3.13 is Trixie.
+
+    This used to accept 3.10 and refuse 3.12+, which was wrong in both directions: pip would
+    refuse to install the package on 3.10, and the installer would refuse the interpreter the
+    package declares support for.
+    """
+    return version[0] == 3 and 11 <= version[1] < 14
 
 
 def ensure_system_deps_linux() -> int:
@@ -325,7 +331,7 @@ def main() -> int:
     parser.add_argument(
         "--build-rtabmap",
         action="store_true",
-        help="Build and install RTAB-Map (rtabmap) from source (Pi4 only)",
+        help="Build and install RTAB-Map (rtabmap) from source (Pi 4/5 only)",
     )
     parser.add_argument(
         "--no-rtabmap",
@@ -348,11 +354,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if sys.version_info < (3, 10) or sys.version_info >= (3, 12):
+    if sys.version_info < (3, 11) or sys.version_info >= (3, 14):
         print(
             "Unsupported Python version: "
             f"{sys.version_info.major}.{sys.version_info.minor}. "
-            "Use Python 3.10 or 3.11 (set PYTHON=python3.10 or PYTHON=python3.11)."
+            "Use Python 3.11-3.13 (Bookworm ships 3.11; set PYTHON=python3.11)."
         )
         return 2
 

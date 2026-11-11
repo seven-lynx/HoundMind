@@ -1,4 +1,4 @@
-"""Simple installer verification for the Pi3 lightweight preset.
+"""Simple installer verification for the lite preset.
 
 Run this on the target device to validate basic Python and dependency expectations.
 """

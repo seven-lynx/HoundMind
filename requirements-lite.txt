@@ -1,4 +1,4 @@
-# Add only small, well-supported packages here for Pi3 installs.
+# Add only small, well-supported packages here for lite installs.
 
 # Hardware bindings (platform-specific)
 # Note: `pidog` is not published to PyPI. It must be installed from the

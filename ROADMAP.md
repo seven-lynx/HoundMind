@@ -12,7 +12,13 @@
  - [ ] Improve and consolidate docs in `docs/` (API reference, programming guide, CONTRIBUTING.md, architecture overview)
 - [x] Packaging & release automation: complete `pyproject.toml` metadata, automate builds, changelog generation, and release pipelines
 
-Purpose: Track completion for each module needed for the PiDog hardware-only build (Pi 3 target). Check items as they’re implemented and verified on hardware.
+Purpose: Track completion for each module needed for the PiDog hardware-only build (Pi 4 and Pi 5 editions). Check items as they're implemented and verified on hardware.
+
+> **Historical sections.** The roadmap below was written when a Pi 3 was the target. Pi 3 support was
+> dropped in the 2026.11 refactor (it is why the loop used to run at 5 Hz and vision shipped off), and
+> `v2026.01.18` is the last release that ran on one. The "Pi 3 — …" sections are kept as history and
+> are not work that is still open; the live plan is the Phase list in the project's plan documents and
+> `CHANGELOG.md`.
 
 ## Core Runtime
 - [x] Runtime loop + module lifecycle hardened (`core/runtime.py`)
@@ -25,7 +31,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Sensor integration (ultrasonic, IMU, touch, sound dir) (`hal/sensors.py`)
 - [x] Emergency stop procedure (hardware-only)
 - [x] Calibration workflow hook (servo zero / offsets)
- - [ ] Refactor HAL into clearer interfaces/adapters to allow Pi3/Pi4/simulator swaps and unit-testable adapters
+ - [x] Refactor HAL into clearer interfaces/adapters to allow Pi4/Pi5 swaps and unit-testable adapters (`hal/iface.py`, `hal/fake.py`)
 
 ## Sensor Stream
 - [x] Sensor polling service loop (single thread + fixed cadence)
@@ -161,7 +167,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Core runtime tests (non-hardware)
 - [x] Automated on-device smoke test script
 - [x] Gentle recovery test (navigation/obstacle avoidance)
- - [ ] Add localization unit and replay tests (EKF convergence, ZUPT, range-corrections) to validate pose accuracy on Pi3.
+ - [ ] Add localization unit and replay tests (EKF convergence, ZUPT, range-corrections) to validate pose accuracy on a Pi 4 or 5.
  - [ ] Increase unit and integration test coverage across HAL, navigation, mapping, and behavior; add hardware mocks for CI
 
 ## Bug Fixes / Hardening
@@ -225,7 +231,7 @@ The following fixes are planned and prioritized. Each item should be implemented
 - [x] Event logger (ring buffer + JSONL)
 - [x] Session summary report
 
-### Pi 3 — Priority (lightweight, Pi3-friendly)
+### Pi 3 — Priority (lightweight, Pi3-friendly) — **superseded, see the note at the top**
 - [x] Lightweight local planner: use `mapping.safe_paths` and `mapping.best_path` as short-range planning hints for navigation (no global A*). 
 - [x] Minimal sensor-fusion localization: anchor-based pose hints using IMU + distance samples (keep CPU/lightweight).
 - [x] Tilt/pose warning: simple dynamic that logs IMU tilt and sets `safety_action` when thresholds exceeded (no continuous correction).
@@ -236,7 +242,7 @@ The following fixes are planned and prioritized. Each item should be implemented
 - [x] Persist calibration outputs to config or a JSON file (servo offsets + calibration results).
 - [x] Add `config/actions.jsonc` sanity validation for missing action sets.
 - [x] Add a Pi3 “safe mode” preset (reduced scan rates + conservative movement).
- - [ ] Improve `examples/` with runnable demos, device setup scripts, and example configs for Pi3/Pi4
+ - [ ] Improve `examples/` with runnable demos, device setup scripts, and example configs for Pi 4/Pi 5
  - [ ] Implement a lightweight `localization` module (EKF) that fuses IMU (accel/gyro) predictions with ultrasonic range corrections and publishes `pose_estimate` (position, heading + covariance) into `RuntimeContext`.
  - [ ] Add ZUPT (zero-velocity update) detection and accelerometer-bias estimation to reduce dead-reckoning drift during stationary periods.
  - [ ] Integrate map-based measurement models (point landmark & wall distance) into the EKF measurement updates for stronger corrections.
