@@ -157,11 +157,17 @@ class StrSpec(Spec):
 @dataclass(frozen=True)
 class ListOf(Spec):
     item: Spec = field(default_factory=AnyValue)
+    # Fixed-length lists exist: `mapping.grid_size` is indexed as `[0]` and `[1]`.
+    length: int | None = None
 
     def validate(self, value: Any, path: str) -> tuple[Any, list[Problem]]:
         if not isinstance(value, list):
             return value, [Problem(path, f"expected a list, got {value!r}")]
         problems: list[Problem] = []
+        if self.length is not None and len(value) != self.length:
+            return value, [
+                Problem(path, f"expected {self.length} entries, got {len(value)}")
+            ]
         out: list[Any] = []
         for index, entry in enumerate(value):
             normalised, found = self.item.validate(entry, f"{path}[{index}]")
@@ -470,15 +476,314 @@ _ATTENTION = Section(
     }
 )
 
+# `navigation/scanning.py`, `navigation/obstacle_avoidance.py`, `navigation/local_planner.py`.
+# The largest section, and the one where a typo costs the most: the scan and avoidance knobs
+# are the difference between "walks past the sofa" and "walks into it". Choices are the names
+# `obstacle_avoidance.py` branches on (`scan_mode`, `avoidance_strategies`,
+# `retreat_turn_direction`); the rest are numbers whose consumer clamps or coerces them.
+_NAVIGATION = Section(
+    fields={
+        "min_distance_cm": _NON_NEGATIVE,
+        "emergency_stop_cm": _NON_NEGATIVE,
+        "safe_distance_cm": _NON_NEGATIVE,
+        "avoid_action": StrSpec(),
+        "safe_action": StrSpec(),
+        "scan_interval_s": _POSITIVE,
+        "scan_interval_min_s": _NON_NEGATIVE,
+        "scan_interval_max_s": _POSITIVE,
+        "scan_mode": StrSpec(choices=("sweep", "three_way")),
+        "scan_continuous": Bool(),
+        "scan_history_size": IntSpec(minimum=1),
+        "scan_samples": IntSpec(minimum=1),
+        "scan_stale_s": _POSITIVE,
+        "scan_yaw_max_deg": FloatSpec(minimum=0.0, maximum=180.0),
+        "scan_step_deg": FloatSpec(minimum=1.0, maximum=180.0),
+        "scan_settle_s": _NON_NEGATIVE,
+        "scan_between_reads_s": _NON_NEGATIVE,
+        "scan_min_valid_points": IntSpec(minimum=1),
+        "scan_min_valid_ratio": _ALPHA,
+        "baseline_ema": _FRACTION,
+        "min_gap_width_deg": FloatSpec(minimum=0.0, maximum=360.0),
+        "min_score_cm": _NON_NEGATIVE,
+        "confirm_window": IntSpec(minimum=1),
+        "confirm_threshold": IntSpec(minimum=1),
+        "turn_confidence_min": _ALPHA,
+        "low_confidence_cooldown_s": _NON_NEGATIVE,
+        "scan_retry_limit": IntSpec(minimum=0),
+        "no_go_enabled": Bool(),
+        "no_go_window_s": _POSITIVE,
+        "no_go_repeat_threshold": IntSpec(minimum=1),
+        "head_scan_speed": _SERVO_SPEED,
+        "approach_delta_cm": _NON_NEGATIVE,
+        "approach_delta_pct": _FRACTION,
+        "approach_confirm_window": IntSpec(minimum=1),
+        "approach_confirm_threshold": IntSpec(minimum=1),
+        "approach_cooldown_s": _NON_NEGATIVE,
+        "backup_steps": IntSpec(minimum=0, maximum=20),
+        "turn_degrees_on_gap": FloatSpec(minimum=0.0, maximum=180.0),
+        "retreat_turn_direction": StrSpec(choices=("auto", "left", "right")),
+        "turn_cooldown_s": _NON_NEGATIVE,
+        "clear_path_streak_min": IntSpec(minimum=0),
+        "clear_path_skip_scans": Bool(),
+        "use_mapping_bias": Bool(),
+        "mapping_bias_weight": _FRACTION,
+        "mapping_bias_min_confidence": _ALPHA,
+        "mapping_bias_cooldown_s": _NON_NEGATIVE,
+        "use_grid_map": Bool(),
+        "grid_cell_size_cm": _POSITIVE,
+        "grid_influence_depth_cm": _POSITIVE,
+        "grid_bias_weight": _FRACTION,
+        "slam_nav_enabled": Bool(),
+        "slam_nav_override": Bool(),
+        "slam_nav_min_confidence": _ALPHA,
+        "log_decision_enabled": Bool(),
+        "log_decision_raw_angles": Bool(),
+        "planner_enabled": Bool(),
+        "planner_min_confidence": _ALPHA,
+        "planner_max_age_s": _POSITIVE,
+        "stuck_time_window_s": _POSITIVE,
+        "stuck_movement_threshold": _POSITIVE,
+        "stuck_min_samples": IntSpec(minimum=1),
+        "stuck_cooldown_s": _NON_NEGATIVE,
+        "stuck_strategy_repeat_window_s": _NON_NEGATIVE,
+        "stuck_strategy_repeat_threshold": IntSpec(minimum=1),
+        "avoidance_strategies": ListOf(
+            StrSpec(choices=("smart_turn", "backup_turn", "zigzag", "reverse_escape"))
+        ),
+        # Read by the module but shipped nowhere until now: the gentle-recovery counters were
+        # the example in B-07 of documentation describing a knob nothing loaded.
+        "gentle_recovery_stuck_count": IntSpec(minimum=1),
+        "gentle_recovery_cooldown_s": _NON_NEGATIVE,
+        "led_enabled": Bool(),
+        "led_priority": _PRIORITY,
+        "led_patrol_color": StrSpec(),
+        "led_turn_color": StrSpec(),
+        "led_obstacle_color": StrSpec(),
+        "led_retreat_color": StrSpec(),
+    }
+)
+
+# `mapping/mapper.py` — openings, the occupancy grid and safe-path scoring.
+_MAPPING = Section(
+    fields={
+        "enabled": Bool(),
+        "path_planning_enabled": Bool(),
+        "sample_history_max": IntSpec(minimum=1),
+        "sample_max_age_s": _NON_NEGATIVE,
+        "home_map_enabled": Bool(),
+        "home_map_max_samples": IntSpec(minimum=0),
+        "home_map_max_age_s": _NON_NEGATIVE,
+        "home_map_save_interval_s": _NON_NEGATIVE,
+        "home_map_path": StrSpec(),
+        "cell_size_cm": _POSITIVE,
+        "grid_enabled": Bool(),
+        # Indexed as [0] and [1]; a third entry or a scalar is a broken map, not a big one.
+        "grid_size": ListOf(IntSpec(minimum=1), length=2),
+        "opening_min_width_cm": _NON_NEGATIVE,
+        "opening_max_width_cm": _NON_NEGATIVE,
+        "opening_cell_conf_min": _FRACTION,
+        "safe_path_min_width_cm": _NON_NEGATIVE,
+        "safe_path_max_width_cm": _NON_NEGATIVE,
+        "safe_path_cell_conf_min": _FRACTION,
+        "safe_path_score_weight_width": _FRACTION,
+        "safe_path_score_weight_distance": _FRACTION,
+    }
+)
+
+# `hal/motors.py` + `core/config.py`. `speed_normal` never reaches a servo: it is the walking
+# reference the turn speeds are compared against, which is why it stays a plain number.
+_MOVEMENT = Section(
+    fields={
+        "turn_degrees_per_step": FloatSpec(minimum=0.0, maximum=180.0),
+        "speed_normal": _SERVO_SPEED,
+        "speed_turn_slow": _SERVO_SPEED,
+        "speed_turn_normal": _SERVO_SPEED,
+        "speed_turn_fast": _SERVO_SPEED,
+    }
+)
+
+# `navigation/orientation.py` + `hal/motors.py`. `gyro_scale` and `bias_z` are signed on
+# purpose: a negative scale is how an inverted IMU mount gets corrected.
+_ORIENTATION = Section(
+    fields={
+        "gyro_scale": FloatSpec(),
+        "bias_z": FloatSpec(),
+        "calibration_enabled": Bool(),
+        "calibration_settle_s": _NON_NEGATIVE,
+        "calibration_duration_s": _POSITIVE,
+        "calibration_samples": IntSpec(minimum=1),
+        "calibration_max_bias_abs": _NON_NEGATIVE,
+        "initial_heading_deg": FloatSpec(minimum=0.0, maximum=360.0),
+        "turn_tolerance_deg": FloatSpec(minimum=0.0, maximum=180.0),
+        "turn_timeout_s": _POSITIVE,
+    }
+)
+
+# `calibration/workflow.py` + `hal/motors.py`. `servo_zero_offsets` is user data written by
+# the calibration workflow: signed degrees, never defaulted here. `request` is compared against
+# the four workflow names, so a typo used to produce a silent "unknown" status.
+_CALIBRATION = Section(
+    fields={
+        "servo_zero_offsets": MapOf(FloatSpec()),
+        "auto_apply_servo_offsets": Bool(),
+        "persist_enabled": Bool(),
+        "persist_path": StrSpec(),
+        "request": StrSpec(
+            choices=("servo_zero", "wall_follow", "corner_seek", "landmark_align"),
+            allow_none=True,
+        ),
+        "wall_follow_target_distance_cm": _POSITIVE,
+        "corner_seek_turn_deg": FloatSpec(minimum=0.0, maximum=180.0),
+        "landmark_alignment_confidence_min": _ALPHA,
+        "localization_confidence_bump": _FRACTION,
+    }
+)
+
+# `perception/fusion.py`.
+_PERCEPTION = Section(
+    fields={
+        "obstacle_cm": _NON_NEGATIVE,
+        "fusion": Section(
+            fields={
+                "fusion_anchor_distance_cm": _POSITIVE,
+                "fusion_min_confidence": _ALPHA,
+            }
+        ),
+    }
+)
+
+# `behavior/habituation.py` — the stimulus names index the `perception` dict, so they are
+# free-form by design rather than an enum.
+_HABITUATION = Section(
+    fields={
+        "enabled": Bool(),
+        "stimuli": _NAMES,
+        "window_s": _POSITIVE,
+        "threshold": IntSpec(minimum=1),
+        "recovery_s": _NON_NEGATIVE,
+    }
+)
+
+# `behavior/fsm.py` — the autonomy bias multipliers, each a 0-1 trait.
+_PERSONALITY = Section(
+    fields={
+        "curiosity": _FRACTION,
+        "sociability": _FRACTION,
+        "activity": _FRACTION,
+        "apply_to_autonomy": Bool(),
+    }
+)
+
+# `behavior/fsm.py` + `optional/energy_emotion.py`.
+_ENERGY = Section(
+    fields={
+        "enabled": Bool(),
+        "initial": _FRACTION,
+        "min": _FRACTION,
+        "max": _FRACTION,
+        "decay_per_tick": _NON_NEGATIVE,
+        "boost_touch": _NON_NEGATIVE,
+        "boost_sound": _NON_NEGATIVE,
+        "boost_obstacle": _NON_NEGATIVE,
+        "speed_slow_threshold": _FRACTION,
+        "speed_fast_threshold": _FRACTION,
+    }
+)
+
+# `optional/energy_emotion.py` + `logging/led_manager.py`.
+_EMOTION = Section(
+    fields={
+        "led_enabled": Bool(),
+        "led_priority": _PRIORITY,
+        "led_cooldown_s": _NON_NEGATIVE,
+        "led_colors": MapOf(StrSpec()),
+    }
+)
+
+# `logging/led_manager.py`. Colours and effect names are the vendor's vocabulary, which lives
+# behind the HAL, so they stay free-form strings here; only the priority order is ours.
+_LED = Section(
+    fields={
+        "enabled": Bool(),
+        "priority": ListOf(
+            StrSpec(choices=("safety", "navigation", "attention", "emotion"))
+        ),
+        "cooldown_s": _NON_NEGATIVE,
+        "brightness": _FRACTION,
+        "default_color": StrSpec(),
+        "safety_color": StrSpec(),
+        "safety_mode": StrSpec(),
+        "attention_color": StrSpec(),
+        "attention_mode": StrSpec(),
+        "nav_mode": StrSpec(),
+        "nav_turn_mode": StrSpec(),
+        "nav_obstacle_mode": StrSpec(),
+        "nav_retreat_mode": StrSpec(),
+        "emotion_mode": StrSpec(),
+        "emotion_color": StrSpec(),
+    }
+)
+
+# `behavior/fsm.py` — the state machine's whole repertoire. `catalog` is replaced at load from
+# `config/actions.jsonc` (see `core/config.py`), so it validates as a map of action lists.
+_BEHAVIOR = Section(
+    fields={
+        "idle_action": StrSpec(),
+        "touch_action": StrSpec(),
+        "sound_action": StrSpec(),
+        "avoid_action": StrSpec(),
+        "explore_action": StrSpec(),
+        "interact_action": StrSpec(),
+        "patrol_action": StrSpec(),
+        "actions_file": StrSpec(),
+        "action_sets": MapOf(StrSpec()),
+        "random_idle_chance": _FRACTION,
+        "action_cooldown_s": _NON_NEGATIVE,
+        "micro_idle_enabled": Bool(),
+        "micro_idle_actions": _NAMES,
+        "micro_idle_interval_s": _POSITIVE,
+        "micro_idle_chance": _FRACTION,
+        "habituation_enabled": Bool(),
+        "habituation_threshold": IntSpec(minimum=1),
+        "habituation_recovery_s": _NON_NEGATIVE,
+        "transition_guard_enabled": Bool(),
+        "transition_min_dwell_s": _NON_NEGATIVE,
+        "transition_confirm_ticks": IntSpec(minimum=1),
+        "transition_immediate_states": _NAMES,
+        "autonomy_enabled": Bool(),
+        "autonomy_interval_s": _POSITIVE,
+        "autonomy_modes": _NAMES,
+        "autonomy_weights": MapOf(_FRACTION),
+        "autonomy_rest_energy_max": _FRACTION,
+        "autonomy_play_energy_min": _FRACTION,
+        "idle_choices": _NAMES,
+        "behavior_selection_mode": StrSpec(choices=("weighted", "sequential")),
+        "behavior_weights": MapOf(_FRACTION),
+        "catalog": MapOf(ListOf(StrSpec())),
+    }
+)
+
 # Sections audited against their consumers so far. A section absent from this table is
 # accepted unvalidated, so the migration stays reviewable one group at a time.
 _SETTINGS_SECTIONS: dict[str, Spec] = {
     "attention": _ATTENTION,
     "balance": _BALANCE,
     "battery": _BATTERY,
+    "behavior": _BEHAVIOR,
+    "calibration": _CALIBRATION,
+    "emotion": _EMOTION,
+    "energy": _ENERGY,
+    "habituation": _HABITUATION,
+    "led": _LED,
     "logging": _LOGGING,
+    "mapping": _MAPPING,
     "motors": _MOTORS,
+    "movement": _MOVEMENT,
+    "navigation": _NAVIGATION,
+    "orientation": _ORIENTATION,
+    "perception": _PERCEPTION,
     "performance": _PERFORMANCE,
+    "personality": _PERSONALITY,
     "quiet_mode": _QUIET_MODE,
     "safety": _SAFETY,
     "sensor_health": _SENSOR_HEALTH,

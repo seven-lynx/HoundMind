@@ -75,6 +75,14 @@ def test_list_reports_the_offending_index() -> None:
     assert paths(problems) == ["vals[1]"]
 
 
+def test_list_can_require_a_fixed_length() -> None:
+    """`mapping.grid_size` is indexed as [0]/[1], so a third entry is a broken map."""
+    spec = ListOf(IntSpec(minimum=1), length=2)
+    assert spec.validate([100, 100], "g")[1] == []
+    assert spec.validate([100], "g")[1][0].path == "g"
+    assert spec.validate([100, 100, 100], "g")[1]
+
+
 def test_map_requires_a_table() -> None:
     assert MapOf().validate([], "m")[1]
 
@@ -157,7 +165,7 @@ def test_settings_must_be_a_table() -> None:
 
 def test_settings_sections_not_yet_audited_stay_permissive() -> None:
     """Sections arrive in groups; an unaudited one keeps loading untouched."""
-    tree = {"settings": {"navigation": {"anything_at_all": 1}}}
+    tree = {"settings": {"voice_assistant": {"anything_at_all": 1}}}
     assert validate_config_tree(tree) == []
 
 
@@ -180,6 +188,18 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("battery", "low_voltage_v", "empty"),
     ("quiet_mode", "start_hour", 24),
     ("attention", "head_yaw_max_deg", 91.0),
+    ("navigation", "scan_mode", "sweepy"),
+    ("mapping", "grid_size", [100]),
+    ("movement", "speed_turn_normal", 300),
+    ("orientation", "turn_timeout_s", 0.0),
+    ("calibration", "request", "servo_zer0"),
+    ("perception", "fusion", []),
+    ("habituation", "threshold", 0),
+    ("personality", "curiosity", 1.5),
+    ("energy", "initial", "full"),
+    ("emotion", "led_colors", ["blue"]),
+    ("led", "brightness", 1.4),
+    ("behavior", "behavior_selection_mode", "random"),
 ]
 
 

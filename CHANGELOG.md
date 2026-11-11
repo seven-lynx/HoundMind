@@ -20,11 +20,13 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `motion_command` / `motion_verdict` / `tilt_latched`.
 - `kernel/config_schema.py`: config validation is enforced, not advisory. Unknown keys are an
   error with a did-you-mean suggestion.
-- `kernel/config_schema.py`: `settings` is validated section by section. The twelve sections
-  audited so far — `sensors`, `motors`, `sensor_health`, `service_watchdog`, `watchdog`,
-  `balance`, `safety`, `logging`, `performance`, `battery`, `quiet_mode`, `attention` — now
-  reject an unknown key (with a suggestion) and a value of the wrong type, and profile
-  overrides are validated the same way. Sections not yet audited still load untouched.
+- `kernel/config_schema.py`: `settings` is validated section by section. Every section the
+  repo ships — `attention`, `balance`, `battery`, `behavior`, `calibration`, `emotion`,
+  `energy`, `habituation`, `led`, `logging`, `mapping`, `motors`, `movement`, `navigation`,
+  `orientation`, `perception`, `performance`, `personality`, `quiet_mode`, `safety`,
+  `sensor_health`, `sensors`, `service_watchdog`, `watchdog` — rejects an unknown key (with a
+  suggestion) and a value of the wrong type, and profile overrides are validated the same way.
+  Enum-valued keys carry the choices the code branches on, and nullable keys say so.
 - `settings.performance.runtime_ema_alpha` is a documented key (default `0.2`): the runtime
   read it with a hard-coded fallback but the shipped file never mentioned it.
 - `settings.logging.console_level` is an accepted key, so the console can be quieter than the
@@ -49,6 +51,16 @@ Current Release: v2026.01.18 • Author: 7Lynx
 ### Removed
 - `optional/wifi_localization.py` and `modules.wifi_localization`. It shelled out to `netsh wlan
   show networks`, which does not exist on Raspberry Pi OS, had no test, and was never registered.
+- Eighteen `settings` keys that nothing in `src/`, `tests/` or `src/tools/` read:
+  `navigation.enable_dynamic_scan`, `navigation.dynamic_scan_yaw_max_deg`,
+  `navigation.scan_debounce_s`, `navigation.scan_smoothing_alpha`,
+  `navigation.planner_influence_weight`, `mapping.safe_path_min_length_cells`, and the whole
+  `movement` step/speed table except `turn_degrees_per_step`, `speed_normal` and
+  `speed_turn_slow|normal|fast` (`gentle_recovery_speed`, `turn_steps_*`, `walk_steps_*`,
+  `backup_steps`, `speed_slow`, `speed_fast`, `speed_emergency`, `step_pause_s`). They were
+  documented as tuning knobs and changed nothing; the gentle-recovery threshold that does work
+  (`navigation.gentle_recovery_stuck_count`, `navigation.gentle_recovery_cooldown_s`) was read
+  by the module but missing from the file, and is now shipped.
 
 ### Fixed
 - `python -m houndmind_ai` no longer dies with `ModuleNotFoundError: cv2` on an install without
