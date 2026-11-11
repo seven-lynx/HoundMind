@@ -43,6 +43,11 @@ Current Release: v2026.01.18 • Author: 7Lynx
   legacy servers, so it had silently done nothing. It resolves `src/tools/` now.
 
 ### Docs
+- `docs/BASELINE.md` gains a second addendum: the re-measured counts (416 passed across 56 test files,
+  84 source files under `mypy`), and the three items the Pi 5 edition closed — H-06, the installer's
+  board mapping, and the installer's Python gate. Its "known gap" paragraph said the installer's
+  3.10/3.11 restriction was out of scope; that restriction is what this change removes, so the
+  paragraph would have described a tree that no longer exists.
 - `docs/PI3_VALIDATION.md` deleted and its still-true rows moved into `docs/INSTALL.md` § "Bench
   checklist". A checklist for a board we no longer support is a second source of truth; the
   replacements are the rows that apply to a Pi 4/5 (scan, stop, watchdog, tilt, logging) plus the
