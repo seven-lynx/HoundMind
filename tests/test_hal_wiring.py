@@ -19,6 +19,7 @@ from houndmind_ai.hal.iface import DogHAL, SensorSnapshot
 from houndmind_ai.hal.module import HalModule
 from houndmind_ai.hal.motors import MotorModule
 from houndmind_ai.hal.sensors import SensorModule, SensorReading, SensorService
+from houndmind_ai.kernel.commands import Source
 from houndmind_ai.navigation.scanning import ScanningService
 
 
@@ -130,9 +131,11 @@ def test_a_forward_command_reaches_the_hal() -> None:
 
     motors = MotorModule("hal_motors")
     motors.start(ctx)
-    ctx.set("navigation_action", "forward")
+    gateway = MotionGatewayModule("motion_gateway")
+    ctx.set("intent_board", gateway.board)
+    gateway.board.publish("forward", Source.NAVIGATION)
 
-    MotionGatewayModule("motion_gateway").tick(ctx)
+    gateway.tick(ctx)
     motors.tick(ctx)
 
     assert ("forward", {}) in hal.calls, hal.calls
@@ -148,9 +151,11 @@ def test_a_vetoed_command_never_reaches_the_hal() -> None:
 
     motors = MotorModule("hal_motors")
     motors.start(ctx)
-    ctx.set("navigation_action", "forward")
+    gateway = MotionGatewayModule("motion_gateway")
+    ctx.set("intent_board", gateway.board)
+    gateway.board.publish("forward", Source.NAVIGATION)
 
-    MotionGatewayModule("motion_gateway").tick(ctx)
+    gateway.tick(ctx)
     motors.tick(ctx)
 
     assert ("forward", {}) not in hal.calls, hal.calls

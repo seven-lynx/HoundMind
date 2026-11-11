@@ -75,6 +75,22 @@ Current Release: v2026.01.18 • Author: 7Lynx
   file without editing code.
 
 ### Changed
+- **Internal producers publish typed intents; the four action keys are gone.** `safety_action`,
+  `watchdog_action`, `navigation_action` and `behavior_action` are no longer written or read.
+  `kernel/intents.py` keeps one slot per `Source`, and an entry expires unless it is refreshed
+  within the board's hold window. A producer that wedges or blocks stops the dog instead of
+  leaving it walking: the deadman used to protect clients only, because the gateway re-stamped
+  whatever it found in those keys on every tick. `motion_cancel` reports every intent a
+  higher-priority one displaced, so "the dog ignored me" has an answer in the event stream.
+- **A mode now gates every source, not just clients.** `rest` used to veto client motion while
+  the behaviour FSM and the navigator kept driving; `GET /state` reported a resting dog that was
+  walking. `manual` is now a hand on the wheel (client in, autonomy out) and `rest` allows only
+  the watchdog and the system. `stop` passes the mode gate and the interlock: an escape hatch a
+  mode can refuse is not an escape hatch.
+- Command dedupe compares action, source **and** parameters, so a producer that keeps asking for
+  `forward` at a new speed is heard instead of being dropped as the same intent.
+- `canonical_action` / `legacy_action` moved to `kernel/commands.py` next to the action
+  vocabulary they translate; `act/gateway.py` re-exports them.
 - `optional/vision_pi4.py` publishes `vision_frame_jpeg` next to `vision_frame`, and
   `services/camera.py` reads the encoded key. The raw array is still what face recognition, the
   semantic labeler and SLAM consume; encoding once per frame replaces the old encode loop that ran

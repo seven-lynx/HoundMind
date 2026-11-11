@@ -19,6 +19,7 @@ from houndmind_ai.core.config import load_config
 from houndmind_ai.core.module import Module
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.fake import FakeDogHAL
+from houndmind_ai.kernel.commands import Source
 from houndmind_ai.main import build_modules
 
 # Camera, microphone, network listeners and optional wheels: the fake HAL says nothing about
@@ -80,6 +81,26 @@ def test_the_gateway_is_reached_by_the_loop(runtime) -> None:
     assert "motion_verdict" in instance.context
     assert "motion_command" in instance.context
     assert "tilt_latched" in instance.context
+
+
+def test_the_loop_turns_an_intent_into_a_hal_call(headless) -> None:
+    """Board → gateway → interlock → motors → `hal.action`, with no legacy keys anywhere.
+
+    This is the end-to-end proof for the Phase 3 port: a producer publishes an intent and the
+    fake dog is asked to walk. A fresh runtime, because the motor cooldown would otherwise
+    mask the very first action behind whatever the fixture already executed.
+    """
+    config, hal = headless
+    instance = HoundMindRuntime(config, build_modules(config, hal=hal))
+    instance.start()
+    try:
+        board = instance.context.get("intent_board")
+        assert board is not None, "the gateway must publish the board when it starts"
+        board.publish("forward", Source.NAVIGATION)
+        instance.tick()
+        assert ("forward", {}) in hal.calls, hal.calls
+    finally:
+        instance.stop()
 
 
 def test_the_fake_dog_publishes_sensor_readings(headless) -> None:

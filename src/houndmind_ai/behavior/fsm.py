@@ -8,6 +8,7 @@ from enum import StrEnum
 from houndmind_ai.behavior.library import BehaviorLibrary, BehaviorLibraryConfig
 from houndmind_ai.behavior.registry import BehaviorRegistry
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.commands import Source
 
 logger = logging.getLogger(__name__)
 
@@ -407,11 +408,24 @@ class BehaviorModule(Module):
                     quiet_cooldown = 0.0
                 cooldown = max(cooldown, quiet_cooldown)
             if cooldown > 0 and (now - self._last_action_ts) < cooldown:
-                return
-            context.set("behavior_action", action)
-            self.last_action = action
-            self._last_action_ts = now
-            logger.info("Behavior -> %s (%s)", action, self.state)
+                # Keep asking for the action that is already in force. Returning here used to
+                # be harmless because the legacy key kept its last value; an intent expires
+                # unless it is refreshed, so silence would stop the dog for the cooldown.
+                action = self.last_action or action
+            else:
+                self.last_action = action
+                self._last_action_ts = now
+                logger.info("Behavior -> %s (%s)", action, self.state)
+
+        self._publish(context, action)
+
+    def _publish(self, context, action: str) -> None:
+        """Offer `action` to the gateway as the behaviour source."""
+        board = context.get("intent_board")
+        if board is None:
+            logger.debug("No intent board; behaviour intent %s not published", action)
+            return
+        board.publish(str(action), Source.BEHAVIOUR)
 
     def _resolve_override(self, override: object) -> str:
         if self.registry is None:

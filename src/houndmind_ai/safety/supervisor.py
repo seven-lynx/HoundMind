@@ -4,8 +4,18 @@ import logging
 import time
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.commands import Source
 
 logger = logging.getLogger(__name__)
+
+
+def _publish(context, action: str) -> None:
+    """Ask for `action` as the system, or do nothing when no gateway is publishing a board."""
+    board = context.get("intent_board")
+    if board is None:
+        logger.debug("No intent board; dropping safety intent %s", action)
+        return
+    board.publish(action, Source.SYSTEM)
 
 
 class SafetyModule(Module):
@@ -81,7 +91,7 @@ class SafetyModule(Module):
                     context.set(
                         "tilt_warning", {"timestamp": now, "pitch": pitch, "roll": roll}
                     )
-                    context.set("safety_action", tilt_action)
+                    _publish(context, str(tilt_action))
                     context.set("safety_active", True)
                     context.set("emergency_stop_active", False)
                     context.set(
@@ -112,7 +122,7 @@ class SafetyModule(Module):
             if now - self._last_emergency_ts < emergency_cooldown_s:
                 return
             self._last_emergency_ts = now
-            context.set("safety_action", emergency_action)
+            _publish(context, str(emergency_action))
             context.set("safety_active", True)
             context.set("emergency_stop_active", True)
             context.set(
@@ -131,18 +141,24 @@ class SafetyModule(Module):
 
         # Apply safety overrides when within the critical distance threshold.
         if isinstance(distance, (int, float)) and 0 < distance <= self.too_close_cm:
-            context.set("safety_action", "backward")
+            _publish(context, "backward")
             context.set("safety_active", True)
             context.set("emergency_stop_active", False)
             self._apply_override_priority(context)
             logger.warning("Safety override: obstacle too close (%scm)", distance)
         else:
-            context.set("safety_action", None)
+            self._retract(context)
             context.set("safety_active", False)
             context.set("emergency_stop_active", False)
             context.set("led_request:safety", None)
             # Clear the cached state when safety is no longer active.
             self._last_override_active = False
+
+    def _retract(self, context) -> None:
+        """Withdraw the system intent immediately instead of waiting for it to expire."""
+        board = context.get("intent_board")
+        if board is not None:
+            board.retract(Source.SYSTEM)
 
     def _apply_override_priority(self, context) -> None:
         # Pull safety settings for override behavior.
@@ -160,22 +176,27 @@ class SafetyModule(Module):
             return
         self._last_override_active = True
 
-        # Optionally clear lower-priority actions to avoid conflicting intent.
+        # Optionally clear lower-priority intents to avoid conflicting intent.
         clear_lower = bool(settings.get("override_clear_lower", True))
         if not clear_lower:
             return
 
-        # Map logical priorities to context keys for action overrides.
-        priority_map = {
-            "safety": "safety_action",
-            "watchdog": "watchdog_action",
-            "navigation": "navigation_action",
-            "behavior": "behavior_action",
+        # Map the configured priority names onto the sources that now own those intents. The
+        # old map wrote `None` into four keys and relied on the producer never writing again;
+        # a retraction is explicit, and a producer that still means it will simply re-publish.
+        source_map = {
+            "safety": Source.SYSTEM,
+            "watchdog": Source.WATCHDOG,
+            "navigation": Source.NAVIGATION,
+            "behavior": Source.BEHAVIOUR,
         }
         if "safety" not in priority:
             return
+        board = context.get("intent_board")
+        if board is None:
+            return
         safety_index = priority.index("safety")
         for name in priority[safety_index + 1 :]:
-            key = priority_map.get(str(name))
-            if key:
-                context.set(key, None)
+            source = source_map.get(str(name))
+            if source is not None:
+                board.retract(source)
