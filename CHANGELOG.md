@@ -16,6 +16,9 @@ Current Release: v2026.01.18 • Author: 7Lynx
   runtime to restart, and which it has given up on. `docs/CONTROL_API.md` §4 documents both.
 
 ### Docs
+- `README.md`: the primary-features table now lists `Sensor Health`. The module is registered by
+  the runtime and ships disabled, but the authoritative default table skipped it, so a reader
+  could not tell it existed.
 - `docs/README.md`: the documentation index — every file, its status, and who it binds. A file with
   no row in that table is unreachable, so the row is part of the change.
 - One schema for all ten remaining docs: a `Status:` line (`contract`, `design`, `reference`,

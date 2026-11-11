@@ -205,6 +205,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Safety                         | Disabled    | Opt-in for emergency stop/tilt        |
 | Health Monitor                 | Disabled    | Opt-in for CPU/mem/temp/throttling    |
 | Balance                        | Disabled    | Opt-in for IMU posture                |
+| Sensor Health                  | Disabled    | Opt-in; staleness badge + LED colour   |
 | Vision (Pi3 legacy)            | Disabled    | Opt-in, legacy camera                 |
 | Voice (Pi3 legacy)             | Disabled    | Opt-in, legacy voice                  |
 | Voice Assistant (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
