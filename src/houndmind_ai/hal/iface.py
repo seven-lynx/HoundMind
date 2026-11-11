@@ -35,6 +35,8 @@ DOG_ACTIONS: frozenset[str] = frozenset(
         "head",
         "rgb",
         "rpy",
+        "sound",
+        "speak",
     }
 )
 
@@ -137,7 +139,7 @@ class DogHAL(Protocol):
         ...
 
     def actions(self) -> frozenset[str]:
-        """Action names this HAL can execute."""
+        """Action names this HAL can execute (its own, plus whatever the vendor reports)."""
         ...
 
     def action(self, name: str, params: dict[str, Any]) -> None:
@@ -150,8 +152,27 @@ class DogHAL(Protocol):
           action is queued and returns immediately; with any of them it is executed directly
           and `wait` means "block until the servos are done".
         - ``head``: ``{"yaw": float, "pitch": float, "speed": int, "wait": bool}``
-        - ``rgb``: ``{"style": str, "color": str, "brightness": float}``
+        - ``rgb``: ``{"style": str, "color": str, "brightness": float, "bps": float}`` —
+          ``bps`` is the effect's animation rate; dropping it means every effect runs at the
+          vendor's default rate, which is a bug this parameter exists to prevent
         - ``rpy``: ``{"roll": float, "pitch": float, "yaw": float}``
+        - ``sound`` / ``speak``: ``{"name"|"text": str, "volume": int}``
+        """
+        ...
+
+    def sound(self, name: str, volume: int = 70) -> None:
+        """Play one of the dog's built-in sound effects, volume 0-100.
+
+        The effect names are the vendor's (`docs/PIDOG_PROGRAMMING_GUIDE.md` §4.1), so they stay
+        free-form strings here and are not validated: a build with fewer of them must still work.
+        """
+        ...
+
+    def speak(self, text: str, volume: int = 70) -> None:
+        """Say `text` through the vendor's speech path, volume 0-100.
+
+        Deliberately separate from :meth:`sound` so a routine can talk without the optional
+        `voice` module being enabled.
         """
         ...
 

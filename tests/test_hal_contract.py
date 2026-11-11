@@ -7,7 +7,7 @@ import dataclasses
 import pytest
 
 from houndmind_ai.hal.fake import FakeDogHAL
-from houndmind_ai.hal.iface import DogHAL, SensorSnapshot, as_float, as_int
+from houndmind_ai.hal.iface import DOG_ACTIONS, DogHAL, SensorSnapshot, as_float, as_int
 
 
 def test_fake_satisfies_the_protocol() -> None:
@@ -89,3 +89,27 @@ def test_as_float_treats_nan_and_junk_as_missing(value: object, expected: float)
 )
 def test_as_int_coerces_with_default(value: object, expected: int) -> None:
     assert as_int(value, 7) == expected
+
+
+def test_audio_is_recorded_not_played() -> None:
+    """A test asserts the *choice* of effect, never wall-clock timing."""
+    dog = FakeDogHAL()
+    dog.sound("confused_2", 80)
+    dog.speak("good morning", 70)
+    assert dog.sounds == [("confused_2", 80)]
+    assert dog.speeches == [("good morning", 70)]
+
+
+def test_the_hal_advertises_the_audio_actions() -> None:
+    """`/repertoire` is built from `actions()`, so a new primitive has to appear there."""
+    expected = {"sound", "speak"}
+    assert expected <= DOG_ACTIONS
+    assert expected <= FakeDogHAL().actions()
+
+
+def test_rgb_keeps_the_animation_rate() -> None:
+    """RP-3: `bps` used to be dropped, so no caller could set an effect's rate."""
+    dog = FakeDogHAL()
+    params = {"style": "breath", "color": "green", "brightness": 0.8, "bps": 2.0}
+    dog.action("rgb", params)
+    assert dog.calls[-1] == ("rgb", params)

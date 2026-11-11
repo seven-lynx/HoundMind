@@ -10,6 +10,7 @@ import pytest
 
 from houndmind_ai.act.interlock import Interlock, InterlockLimits
 from houndmind_ai.hal.fake import FakeDogHAL
+from houndmind_ai.kernel.actions import build_repertoire
 from houndmind_ai.kernel.commands import Command, Source
 
 
@@ -21,10 +22,13 @@ class Clock:
         return self.t
 
 
-def make(limits: InterlockLimits | None = None) -> tuple[Interlock, Clock, FakeDogHAL]:
+def make(
+    limits: InterlockLimits | None = None, repertoire: dict | None = None
+) -> tuple[Interlock, Clock, FakeDogHAL]:
     clock = Clock()
     dog = FakeDogHAL(now=clock)
-    return Interlock(limits or InterlockLimits(), now=clock), clock, dog
+    loaded = build_repertoire(repertoire) if repertoire is not None else None
+    return Interlock(limits or InterlockLimits(), now=clock, repertoire=loaded), clock, dog
 
 
 def test_stop_is_never_vetoed() -> None:
@@ -116,7 +120,13 @@ def test_invalid_imu_neither_latches_nor_clears() -> None:
     assert interlock.tilt_latched is False
 
 
-def test_low_voltage_blocks_motion_but_not_posture() -> None:
+def test_low_voltage_blocks_motion_and_posture_but_not_non_motion() -> None:
+    """The battery floor outranks everything that moves the dog, a sit included.
+
+    A pack that cannot hold a gait should not be asked to hold a posture either. What it must still
+    do is let the dog say so: `rgb`, `sound`, `speak` and `head` are `non_motion`, so a flat battery
+    cannot stop it whining about the flat battery.
+    """
     interlock, clock, dog = make()
     dog.set_distance(100.0)
     dog.set_battery(5.9)
@@ -124,8 +134,13 @@ def test_low_voltage_blocks_motion_but_not_posture() -> None:
     assert refused.accepted is False
     assert refused.veto == "low_voltage"
 
-    allowed = interlock.evaluate(Command("lie", issued_at=clock()), dog.read())
-    assert allowed.accepted is True
+    posture = interlock.evaluate(Command("lie", issued_at=clock()), dog.read())
+    assert posture.accepted is False
+    assert posture.veto == "low_voltage"
+
+    for action in ("rgb", "sound", "speak", "head", "stop"):
+        verdict = interlock.evaluate(Command(action, issued_at=clock()), dog.read())
+        assert verdict.accepted is True, action
 
 
 def test_speed_is_clamped_to_the_board_limit() -> None:
@@ -174,10 +189,10 @@ def test_junk_speed_falls_back_to_the_limit() -> None:
 
 
 @pytest.mark.parametrize("action", ["lie", "sit", "stand", "stretch", "wag_tail"])
-def test_postures_are_not_gated_by_distance_or_voltage(action: str) -> None:
+def test_postures_are_not_gated_by_distance(action: str) -> None:
+    """A sit with a wall 2 cm away is still a sit. Only the forward family answers to the sonar."""
     interlock, clock, dog = make()
     dog.set_distance(2.0)
-    dog.set_battery(5.0)
     verdict = interlock.evaluate(Command(action, issued_at=clock()), dog.read())
     assert verdict.accepted is True
 
@@ -189,5 +204,90 @@ def test_veto_beats_source_priority() -> None:
     verdict = interlock.evaluate(
         Command("forward", source=Source.SYSTEM, issued_at=clock()), dog.read()
     )
+    assert verdict.accepted is False
+    assert verdict.veto == "obstacle"
+
+
+# ------------------------------------------------------------------ the classes
+# One case per class. The class, not the name, decides which limits apply
+# (`kernel/actions.py`); these are the four answers it can give.
+
+
+def test_a_classified_catalog_action_is_admitted() -> None:
+    """A catalog gesture stops being `unknown_action` once the classification says what it is."""
+    interlock, clock, dog = make(repertoire={"high five": {"class": "posture"}})
+    verdict = interlock.evaluate(Command("high five", issued_at=clock()), dog.read())
+    assert verdict.accepted is True
+
+
+def test_an_unclassified_name_is_refused_with_a_reason() -> None:
+    """The catalog is the vocabulary: a spelling nothing classifies must not reach a servo."""
+    interlock, clock, dog = make(repertoire={"high five": {"class": "posture"}})
+    verdict = interlock.evaluate(Command("moonwalk", issued_at=clock()), dog.read())
+    assert verdict.accepted is False
+    assert verdict.veto == "unknown_action"
+
+
+def test_expression_is_not_gated_by_sonar_but_is_by_battery_and_tilt() -> None:
+    """A bark needing clear sonar in front of it would not be a bark."""
+    interlock, clock, dog = make()
+    dog.set_distance(2.0)
+    assert interlock.evaluate(Command("bark", issued_at=clock()), dog.read()).accepted is True
+
+    dog.set_battery(5.0)
+    battery = interlock.evaluate(Command("bark", issued_at=clock()), dog.read())
+    assert battery.accepted is False
+    assert battery.veto == "low_voltage"
+
+    dog.set_battery(7.4)
+    dog.set_imu(70.0, 0.0)
+    tilted = interlock.evaluate(Command("bark", issued_at=clock()), dog.read())
+    assert tilted.accepted is False
+    assert tilted.veto == "tilt"
+
+
+def test_tilt_latches_from_a_posture_command_too() -> None:
+    """The latch is a property of the dog, not of the action that happened to notice the tilt."""
+    interlock, clock, dog = make()
+    dog.set_imu(60.0, 0.0)
+    verdict = interlock.evaluate(Command("sit", issued_at=clock()), dog.read())
+    assert verdict.veto == "tilt"
+    assert interlock.tilt_latched is True
+
+
+@pytest.mark.parametrize("action", ["backward", "turn_left", "turn_right"])
+def test_retreat_and_turns_stay_available_at_the_emergency_distance(action: str) -> None:
+    """Only the forward family answers to the sonar; the way out of a corner is not blocked."""
+    interlock, clock, dog = make()
+    dog.set_distance(8.0)
+    assert interlock.evaluate(Command(action, issued_at=clock()), dog.read()).accepted is True
+
+
+def test_non_motion_still_spends_its_deadman() -> None:
+    """A stale LED request is as wrong as a stale gait."""
+    interlock, clock, dog = make()
+    command = Command("rgb", issued_at=clock(), ttl_ms=300)
+    clock.t = 1000.4
+    verdict = interlock.evaluate(command, dog.read())
+    assert verdict.accepted is False
+    assert verdict.veto == "expired"
+
+
+def test_non_motion_is_never_vetoed_by_a_sensor() -> None:
+    """Distance, tilt and voltage are all hostile here; none may block a non-motion action."""
+    interlock, clock, dog = make()
+    dog.set_distance(1.0)
+    dog.set_imu(89.0, 89.0)
+    dog.set_battery(3.0)
+    for action in ("rgb", "sound", "speak", "head", "rpy"):
+        verdict = interlock.evaluate(Command(action, issued_at=clock()), dog.read())
+        assert verdict.accepted is True, action
+
+
+def test_the_locomotion_floor_survives_a_config_that_tries_to_weaken_it() -> None:
+    """A class map is not a way to switch the obstacle stop off."""
+    interlock, clock, dog = make(repertoire={"forward": {"class": "non_motion"}})
+    dog.set_distance(5.0)
+    verdict = interlock.evaluate(Command("forward", issued_at=clock()), dog.read())
     assert verdict.accepted is False
     assert verdict.veto == "obstacle"

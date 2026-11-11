@@ -19,6 +19,11 @@ from dataclasses import dataclass, field
 from difflib import get_close_matches
 from typing import Any
 
+# The action classes are the command vocabulary's own enum, so the schema and the interlock cannot
+# disagree about the four strings. `kernel/commands.py` imports nothing but the stdlib, which is
+# what keeps this module's "dependency-free" promise intact.
+from houndmind_ai.kernel.commands import ActionClass
+
 __all__ = [
     "AnyValue",
     "Bool",
@@ -721,8 +726,9 @@ _LED = Section(
     }
 )
 
-# `behavior/fsm.py` — the state machine's whole repertoire. `catalog` is replaced at load from
-# `config/actions.jsonc` (see `core/config.py`), so it validates as a map of action lists.
+# `behavior/fsm.py` — the state machine's whole repertoire. `catalog` and `action_classes` are
+# replaced at load from `config/actions.jsonc` (see `core/config.py`), so they validate as a map of
+# action lists and a map of classifications respectively.
 _BEHAVIOR = Section(
     fields={
         "idle_action": StrSpec(),
@@ -757,6 +763,17 @@ _BEHAVIOR = Section(
         "behavior_selection_mode": StrSpec(choices=("weighted", "sequential")),
         "behavior_weights": MapOf(_FRACTION),
         "catalog": MapOf(ListOf(StrSpec())),
+        # One class per action, `{"class": "expression", "params": ["volume"]}`. The shape is
+        # checked here; membership is cross-checked against the catalog by `kernel/actions.py`,
+        # which is where a bucket name with no class becomes a load-time error with a did-you-mean.
+        "action_classes": MapOf(
+            Section(
+                fields={
+                    "class": StrSpec(choices=tuple(action_class.value for action_class in ActionClass)),
+                    "params": _NAMES,
+                }
+            )
+        ),
     }
 )
 

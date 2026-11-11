@@ -27,6 +27,7 @@ from typing import Any
 
 from aiohttp import web
 
+from houndmind_ai.kernel.actions import repertoire_from_settings
 from houndmind_ai.kernel.commands import (
     DEFAULT_MODE,
     KNOWN_ACTIONS,
@@ -35,6 +36,7 @@ from houndmind_ai.kernel.commands import (
     CommandBus,
     Source,
     Verdict,
+    canonical_action,
 )
 from houndmind_ai.services.auth import (
     AuthError,
@@ -395,13 +397,14 @@ async def _command(request: web.Request) -> web.Response:
         )
     body = await _json_body(request)
 
-    action = str(body.get("action") or "").strip().lower().replace(" ", "_")
-    if action not in KNOWN_ACTIONS:
+    action = canonical_action(str(body.get("action") or ""))
+    allowed = _allowed_actions(plane)
+    if action not in allowed:
         return web.json_response(
             {
                 "error": "unknown_action",
                 "detail": f"'{action}' is not in the action catalog",
-                "suggestion": _suggest_action(action),
+                "suggestion": _suggest_action(action, allowed),
             },
             status=400,
         )
@@ -493,8 +496,50 @@ async def _mode_post(request: web.Request) -> web.Response:
     return web.json_response({"mode": mode})
 
 
-def _suggest_action(action: str) -> str | None:
-    matches = get_close_matches(action, sorted(KNOWN_ACTIONS), n=1)
+async def _repertoire(request: web.Request) -> web.Response:
+    """Every action this dog can actually run, with its class and the params it reads.
+
+    Two sources, because neither is complete alone: the classification the runtime loaded
+    (`config/actions.jsonc`) and the action list the HAL reports. A name the HAL has and the
+    catalog does not is answered with `class: null` — the dog can do it, nothing has said what kind
+    of thing it is, and `null` is the honest answer (`services/state.py` makes the same rule for a
+    sensor that could not be read).
+    """
+    plane = _plane(request)
+    repertoire = repertoire_from_settings(plane.context.get("settings"))
+    hal = plane.context.get("hal")
+    hal_actions: frozenset[str] = frozenset()
+    if hal is not None:
+        try:
+            hal_actions = frozenset(canonical_action(name) for name in hal.actions())
+        except Exception:  # noqa: BLE001 - a read-only route must not fail on a broken HAL
+            logger.debug("HAL action list unavailable", exc_info=True)
+
+    actions: list[dict[str, object]] = []
+    for name in sorted(repertoire.known() | hal_actions):
+        spec = repertoire.spec(name)
+        if spec is None:
+            # The HAL can do it; nothing has classified it. `null`, never a guessed class.
+            actions.append({"name": name, "class": None, "params": []})
+        else:
+            actions.append(spec.to_dict())
+    return web.json_response({"actions": actions, "count": len(actions)})
+
+
+def _allowed_actions(plane: ControlPlane) -> frozenset[str]:
+    """Every action a client may name: the built-in vocabulary plus the loaded classification.
+
+    The classification is data in `config/actions.jsonc`, so an action a user adds there can be
+    commanded without a code change. A name nothing classifies is refused here, with a suggestion,
+    rather than queued and then vetoed by the interlock — the client gets the same explanation
+    either way, one round trip earlier.
+    """
+    repertoire = repertoire_from_settings(plane.context.get("settings"))
+    return frozenset(KNOWN_ACTIONS) | repertoire.known()
+
+
+def _suggest_action(action: str, allowed: frozenset[str]) -> str | None:
+    matches = get_close_matches(action, sorted(allowed), n=1)
     return matches[0] if matches else None
 
 
@@ -658,6 +703,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/health", None, _health),
     ("GET", "/state", "state:read", _state),
     ("GET", "/modules", "state:read", _modules),
+    ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/events", None, _events),
     ("GET", "/camera/stream", None, _camera_stream),
     ("GET", "/camera/snapshot", None, _camera_snapshot),

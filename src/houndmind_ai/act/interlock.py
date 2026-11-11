@@ -5,15 +5,21 @@ reaches a servo, and it cannot be disabled from configuration. Every refusal ret
 reason: a silent refusal is a bug, because the operator then has no way to know why the dog
 did not move.
 
-Checks, in order:
+The *class* of the action decides how much of the envelope applies. The classification is data
+(`config/actions.jsonc`, loaded by `kernel/actions.py`), not a second list in Python, and a class
+never edits a limit — it only selects which of them apply. Checks, in order:
 
 1. ``stop`` is always accepted — the escape hatch can never be vetoed.
 2. Unknown action → refused.
-3. Past its TTL → refused (deadman).
-4. Tilt beyond the latch threshold → motion refused until cleared.
-5. Low battery → motion refused.
-6. Last *valid* distance at or below the emergency distance → forward motion refused.
-7. Speed clamped to the board limit.
+3. Past its TTL → refused (deadman). Every class spends its deadman, an LED included: a stale
+   colour request is as wrong as a stale gait.
+4. ``non_motion`` → accepted here. A dog at 6.3 V must still be able to whine about it.
+5. Tilt beyond the latch threshold → refused until cleared.
+6. Low battery → refused.
+7. ``locomotion`` with a last *valid* distance at or below the emergency distance → refused — the
+   *forward family* only (`FORWARD_ACTIONS`): retreat and turn-in-place are what get the dog out of
+   that situation, so blocking them at 8 cm would freeze it against the obstacle.
+8. Speed clamped to the board limit.
 
 Obstacle and tilt checks use validity flags, so a broken sensor cannot veto motion forever
 and a stale good value cannot authorise it.
@@ -26,13 +32,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from houndmind_ai.hal.iface import SensorSnapshot, as_int
-from houndmind_ai.kernel.commands import (
-    FORWARD_ACTIONS,
-    KNOWN_ACTIONS,
-    MOTION_ACTIONS,
-    Command,
-    Verdict,
-)
+from houndmind_ai.kernel.actions import Repertoire
+from houndmind_ai.kernel.commands import FORWARD_ACTIONS, ActionClass, Command, Verdict
 
 __all__ = ["Interlock", "InterlockLimits"]
 
@@ -52,9 +53,13 @@ class Interlock:
         self,
         limits: InterlockLimits | None = None,
         now: Callable[[], float] | None = None,
+        repertoire: Repertoire | None = None,
     ) -> None:
         self.limits = limits or InterlockLimits()
         self._now = now or time.monotonic
+        # With nothing loaded, the built-in classification still answers coherently: a gateway
+        # built without config (a unit test, an embedding) is not a gateway without an envelope.
+        self._repertoire = repertoire or Repertoire.builtin()
         self._tilt_latched = False
         self._clamp_reported = False
 
@@ -68,6 +73,15 @@ class Interlock:
         """A human has confirmed the dog is upright again."""
         self._tilt_latched = False
 
+    def set_repertoire(self, repertoire: Repertoire | None) -> None:
+        """Install the classification this runtime is running with.
+
+        Called once by the gateway at start, from the runtime's settings. This is the whole point
+        of the classes being config: adding an action to `config/actions.jsonc` classifies it. It
+        cannot weaken the envelope, because `build_repertoire` re-applies the locomotion floor.
+        """
+        self._repertoire = repertoire or Repertoire.builtin()
+
     # ---- evaluation --------------------------------------------------------
 
     def evaluate(self, command: Command, snapshot: SensorSnapshot) -> Verdict:
@@ -77,7 +91,8 @@ class Interlock:
         if action == "stop":
             return Verdict(accepted=True, action=action, params=params)
 
-        if action not in KNOWN_ACTIONS:
+        spec = self._repertoire.spec(action)
+        if spec is None:
             return Verdict(
                 accepted=False,
                 action=action,
@@ -96,9 +111,13 @@ class Interlock:
                 detail=f"command exceeded its {command.ttl_ms} ms deadman",
             )
 
-        is_motion = action in MOTION_ACTIONS
-        if not is_motion:
+        if spec.action_class is ActionClass.NON_MOTION:
+            # A sound, an LED or a head angle must not be gated on a flat battery or a wall in
+            # front of the dog. An expression that can be blocked is how a pet stops feeling
+            # alive — and it is how the dog cannot report that it is in trouble.
             return Verdict(accepted=True, action=action, params=params)
+
+        # Everything below this line moves the dog, however slightly.
 
         # Tilt latch. Evaluated from a valid IMU only; an invalid IMU neither latches nor
         # clears, so a flaky sensor cannot silently authorise motion.
@@ -129,6 +148,11 @@ class Interlock:
                 detail=f"{snapshot.battery_v:.2f} V below {self.limits.min_battery_v:.2f} V",
             )
 
+        # The obstacle rule is the forward family, not the whole locomotion class: `backward` and
+        # the turns are how the dog gets out of a corner, and a turn-in-place refused at 8 cm is a
+        # dog frozen facing a wall. (`trot` is a forward gait but is not in the family yet —
+        # `MOTION_ACTIONS` feeds the watchdog hold and the scan lock, so widening the forward
+        # family is its own change, not a side effect of this one.)
         if action in FORWARD_ACTIONS and snapshot.distance_valid:
             distance = snapshot.distance_cm
             if distance is not None and 0 < distance <= self.limits.emergency_stop_cm:

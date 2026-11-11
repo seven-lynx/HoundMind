@@ -33,9 +33,9 @@ from typing import Any
 from houndmind_ai.act.interlock import Interlock
 from houndmind_ai.core.module import Module
 from houndmind_ai.hal.iface import SensorSnapshot, as_float
+from houndmind_ai.kernel.actions import repertoire_from_settings
 from houndmind_ai.kernel.commands import (
     DEFAULT_MODE,
-    MOTION_ACTIONS,
     RUNTIME_MODES,
     Command,
     CommandBus,
@@ -91,6 +91,9 @@ class MotionGatewayModule(Module):
         # to grow a parameter. Publication happens at start, which is before any producer's
         # first tick because the gateway is registered ahead of them.
         context.set("intent_board", self.board)
+        # The classification the interlock judges with, read once: it is data in
+        # `config/actions.jsonc`, so it cannot be a value this module hard-codes.
+        self.interlock.set_repertoire(repertoire_from_settings(context.get("settings")))
         super().start(context)
 
     def stop(self, context) -> None:
@@ -228,11 +231,10 @@ class MotionGatewayModule(Module):
                 veto="mode",
                 detail=_MODE_DETAIL.get(mode, f"'{mode}' mode does not allow that source"),
             )
-        if command.action not in MOTION_ACTIONS:
-            # Posture and expression are not gated. The authoritative action list belongs to
-            # the HAL (`actions()`); refusing unknown names here would break the dog's
-            # repertoire for every action this module has not been taught about.
-            return Verdict(accepted=True, action=command.action, params=dict(command.params))
+        # Every class is judged here, not just the gaits: the interlock applies the envelope its
+        # class selects (`posture`/`expression` get tilt and battery, `non_motion` gets the
+        # deadman), and an action nothing classifies is refused with a reason instead of reaching
+        # a servo on the strength of a spelling.
         return self.interlock.evaluate(command, snapshot)
 
     @staticmethod

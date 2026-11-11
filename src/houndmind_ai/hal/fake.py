@@ -39,6 +39,10 @@ class FakeDogHAL:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.distance_samples: list[tuple[int, float]] = []
         self.offsets_applied: list[dict[str, float]] = []
+        # Audio is recorded rather than played: a test asserts the *choice* of effect, never
+        # wall-clock timing.
+        self.sounds: list[tuple[str, int]] = []
+        self.speeches: list[tuple[str, int]] = []
         self.stop_count = 0
         self.closed = False
 
@@ -122,6 +126,14 @@ class FakeDogHAL:
     def action(self, name: str, params: dict[str, Any]) -> None:
         with self._bus:
             self.calls.append((name, dict(params)))
+
+    def sound(self, name: str, volume: int = 70) -> None:
+        with self._bus:
+            self.sounds.append((name, volume))
+
+    def speak(self, text: str, volume: int = 70) -> None:
+        with self._bus:
+            self.speeches.append((text, volume))
 
     def sample_distance(self, samples: int, between_reads_s: float) -> float | None:
         with self._bus:

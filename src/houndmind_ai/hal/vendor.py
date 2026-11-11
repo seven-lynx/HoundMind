@@ -21,6 +21,7 @@ nothing on a workstation and a missing vendored package produces one clear failu
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -28,6 +29,11 @@ from typing import Any, cast
 
 from houndmind_ai.calibration.servo_calibration import apply_servo_offsets
 from houndmind_ai.hal.iface import DOG_ACTIONS, SensorSnapshot, as_float, as_int
+
+# A pure spelling helper from the command vocabulary: `ActionFlow` names come back spaced
+# ("turn left") and everything above the HAL compares canonical names. `kernel/commands.py`
+# imports nothing but the stdlib, so this does not drag the runtime into the HAL.
+from houndmind_ai.kernel.commands import canonical_action
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +77,14 @@ class PidogHAL:
         self._dog_owned = dog is None
         self._clock = clock or time.time
         self._action_flow: Any | None = None
+        # Audio runs on its own worker: one pending utterance, latest wins — the same shape as
+        # `vision_inference_scheduler`. Created lazily, so a runtime that never plays a sound
+        # never starts a thread.
+        self._audio: queue.Queue[tuple[str, int] | None] = queue.Queue(maxsize=1)
+        self._audio_lock = threading.Lock()
+        self._audio_thread: threading.Thread | None = None
+        # The vendor's action list, read once (see `_read_vendor_actions`).
+        self._vendor_action_names: frozenset[str] | None = None
         self._closed = False
         # One I2C bus, and now more than one caller: the loop executes gaits, the scan worker moves
         # the head and samples distance, the attention module turns the head toward a sound, and
@@ -312,10 +326,50 @@ class PidogHAL:
     # ---------------------------------------------------------------- actions
 
     def actions(self) -> frozenset[str]:
-        return DOG_ACTIONS
+        """Everything this HAL can run: its own actions plus the vendor's, read once and cached."""
+        return DOG_ACTIONS | self._vendor_actions()
+
+    def _vendor_actions(self) -> frozenset[str]:
+        if self._vendor_action_names is None:
+            self._vendor_action_names = self._read_vendor_actions()
+        return self._vendor_action_names
+
+    def _read_vendor_actions(self) -> frozenset[str]:
+        """Best-effort read of the installed `ActionFlow`'s operation names.
+
+        `ActionFlow` is a vendor internal, not a documented API, and the attribute holding its
+        operations has moved between builds — so this probes the plausible names and reports what
+        it finds. An empty result is honest: `GET /api/v1/repertoire` then falls back to the
+        actions the runtime classifies, and a device run is what confirms the rest (A4). Nothing
+        here may raise: a workstation has no `pidog` at all.
+        """
+        try:
+            flow = self._ensure_action_flow()
+        except Exception:  # noqa: BLE001 - no vendor package, or a vendor that failed to start
+            logger.debug("Vendor action list unavailable", exc_info=True)
+            return frozenset()
+        names: set[str] = set()
+        for attribute in ("actions", "action_dict", "action_map", "operations", "operation_map"):
+            table = getattr(flow, attribute, None)
+            if isinstance(table, Mapping):
+                names.update(str(key) for key in table)
+            elif isinstance(table, (set, frozenset, list, tuple)):
+                names.update(str(item) for item in table)
+        if not names:
+            logger.debug("ActionFlow exposes no readable action list; the repertoire stays partial")
+        return frozenset(canonical_action(name) for name in names if name)
 
     def action(self, name: str, params: dict[str, Any]) -> None:
         key = name.strip().lower()
+        # Audio is dispatched before the servo lock is taken. The vendor plays on its own thread,
+        # but that is not a promise (`_say`), and a blocking `speak()` holding the one bus a gait
+        # needs would stall the tick.
+        if key == "sound":
+            self.sound(str(params.get("name", "")), as_int(params.get("volume"), 70))
+            return
+        if key == "speak":
+            self.speak(str(params.get("text", "")), as_int(params.get("volume"), 70))
+            return
         # The bus is not re-entrant and it is not free: `do_action(wait=True)` can hold it for the
         # length of a step. Every caller that is not the decision loop already runs on its own
         # worker, so waiting here costs that worker a turn, never the tick.
@@ -364,11 +418,18 @@ class PidogHAL:
         strip = getattr(self._ensure_dog(), "rgb_strip", None)
         if strip is None or not hasattr(strip, "set_mode"):
             return
-        strip.set_mode(
-            str(params.get("style", "breath")),
-            str(params.get("color", "blue")),
-            brightness=as_float(params.get("brightness"), 0.7),
-        )
+        style = str(params.get("style", "breath"))
+        color = str(params.get("color", "blue"))
+        brightness = as_float(params.get("brightness"), 0.7)
+        # `bps` is the effect's rate. It used to be dropped here, so every effect ran at the
+        # vendor's default and no caller could make an LED breathe faster.
+        bps = as_float(params.get("bps"), 1.0)
+        try:
+            strip.set_mode(style, color, bps=bps, brightness=brightness)
+        except TypeError:
+            # A vendor build whose `set_mode` predates `bps`: keep the effect, lose the rate.
+            logger.debug("set_mode rejected bps; using the vendor default rate")
+            strip.set_mode(style, color, brightness=brightness)
 
     def _rpy(self, params: Mapping[str, Any]) -> None:
         dog = self._ensure_dog()
@@ -380,6 +441,83 @@ class PidogHAL:
             yaw=as_float(params.get("yaw"), 0.0),
             pid=True,
         )
+
+    # -------------------------------------------------------------------- audio
+
+    def sound(self, name: str, volume: int = 70) -> None:
+        """Queue one of the dog's built-in effects (`docs/PIDOG_PROGRAMMING_GUIDE.md` §4.1)."""
+        self._say(str(name), volume)
+
+    def speak(self, text: str, volume: int = 70) -> None:
+        """Queue `text` for the vendor's speech path."""
+        self._say(str(text), volume)
+
+    def _say(self, text: str, volume: int) -> None:
+        """Hand one utterance to the audio worker.
+
+        Nothing here touches the servo bus, and nothing here waits: whether the vendor's call
+        blocks is unverified (A5), so the tick is never allowed to find out. One utterance is
+        pending at a time and a newer one replaces it — a pet that queues six barks is a pet that
+        barks six times, late.
+        """
+        if not text or self._closed:
+            return
+        self._ensure_audio_thread()
+        payload = (text, max(0, min(_safe_int(volume, 70), 100)))
+        try:
+            self._audio.put_nowait(payload)
+        except queue.Full:
+            try:
+                self._audio.get_nowait()
+            except queue.Empty:  # pragma: no cover - another thread drained it
+                pass
+            try:
+                self._audio.put_nowait(payload)
+            except queue.Full:  # pragma: no cover - another thread refilled it
+                logger.debug("Audio queue busy; dropped %r", text)
+
+    def _ensure_audio_thread(self) -> None:
+        with self._audio_lock:
+            if self._audio_thread is not None and self._audio_thread.is_alive():
+                return
+            thread = threading.Thread(
+                target=self._audio_worker, name="houndmind-audio", daemon=True
+            )
+            self._audio_thread = thread
+            thread.start()
+
+    def _audio_worker(self) -> None:
+        while True:
+            item = self._audio.get()
+            if item is None:
+                return
+            self._play(*item)
+
+    def _play(self, text: str, volume: int) -> None:
+        """One blocking vendor call, on the audio thread, with every failure contained."""
+        try:
+            speaker = getattr(self._ensure_dog(), "speak", None)
+            if not callable(speaker):
+                logger.debug("Vendor exposes no speak(); %r dropped", text)
+                return
+            try:
+                speaker(text, volume=volume)
+            except TypeError:
+                # Older vendor builds take the text only.
+                speaker(text)
+        except Exception:  # noqa: BLE001 - audio is cosmetic and must not kill the worker
+            logger.warning("Audio output failed", exc_info=True)
+
+    def _stop_audio(self) -> None:
+        """Wake the worker so it can exit; it is a daemon, so it never blocks shutdown."""
+        try:
+            self._audio.get_nowait()
+        except queue.Empty:
+            pass
+        try:
+            self._audio.put_nowait(None)
+        except queue.Full:  # pragma: no cover - the drain above made room
+            pass
 
     def apply_offsets(self, offsets: Mapping[str, float]) -> None:
         apply_servo_offsets(self._ensure_dog(), dict(offsets or {}))
@@ -412,6 +550,7 @@ class PidogHAL:
         if self._closed:
             return
         self._closed = True
+        self._stop_audio()
         flow = self._action_flow
         if flow is not None and hasattr(flow, "stop"):
             try:
