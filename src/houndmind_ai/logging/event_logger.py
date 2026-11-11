@@ -13,6 +13,17 @@ logger = logging.getLogger(__name__)
 SCHEMA_VERSION = 1
 
 
+def _safe_float(value: Any, default: float) -> float:
+    """Coerce a config value, treating None/""/junk/NaN as missing."""
+    try:
+        if value is None or value == "":
+            return default
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return default if number != number else number
+
+
 class EventLoggerModule(Module):
     """Lightweight event logger with in-memory ring buffer and optional JSONL file."""
 
@@ -92,10 +103,34 @@ class EventLoggerModule(Module):
             if not path.is_absolute():
                 path = Path(__file__).resolve().parents[3] / path
             path.parent.mkdir(parents=True, exist_ok=True)
+            self._rotate_if_needed(path, settings)
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(event) + "\n")
         except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to write event log: %s", exc)
+
+    @staticmethod
+    def _rotate_if_needed(path: Path, settings: dict[str, Any]) -> None:
+        """Keep one previous generation so the JSONL cannot grow without bound.
+
+        The in-memory ring buffer was already capped by `event_log_max_entries`, but the file
+        was opened in append mode forever: a dog left running filled the SD card (H-04). One
+        rotated generation is deliberate — a second copy is enough to answer "what happened
+        just before this", and it bounds the disk cost to twice the limit.
+        """
+        max_bytes = int(_safe_float(settings.get("event_log_max_mb"), 5.0) * 1024 * 1024)
+        if max_bytes <= 0 or not path.exists():
+            return
+        try:
+            if path.stat().st_size < max_bytes:
+                return
+            rotated = path.with_suffix(path.suffix + ".1")
+            rotated.unlink(missing_ok=True)
+            path.rename(rotated)
+            logger.info("Event log rotated at %d bytes: %s", max_bytes, rotated)
+        except OSError as exc:
+            # A full or read-only filesystem must not take the runtime down with it.
+            logger.warning("Event log rotation failed: %s", exc)
 
     def _generate_report(self) -> dict[str, Any]:
         total = len(self._events)

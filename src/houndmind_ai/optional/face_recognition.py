@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +16,12 @@ class FaceRecognitionModule(Module):
 
     Lite backend: OpenCV Haar detector with optional LBPH recognition.
     Heavy backend: face_recognition (dlib-based) with embeddings.
+
+    Enrollment is driven from the runtime, not from an HTTP endpoint: publish
+    `{"action": "enroll", "name": "Alice"}` under `face_recognition_command` and the next
+    tick runs it against the newest `vision_frame`. The legacy port-8088 server (`/status`,
+    `/faces`, `/enroll`) is gone; `/status` is now `GET /api/v1/modules` and `/faces` is
+    `GET /api/v1/state`.
     """
 
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
@@ -35,11 +38,6 @@ class FaceRecognitionModule(Module):
         self._embeddings_path: Path | None = None
         self._known_embeddings: list[list[float]] = []
         self._known_names: list[str] = []
-
-        self._http_server: ThreadingHTTPServer | None = None
-        self._http_thread: threading.Thread | None = None
-        self._pending_commands: list[dict[str, Any]] = []
-        self._latest_faces: list[dict[str, Any]] = []
 
     def start(self, context) -> None:
         if not self.status.enabled:
@@ -72,7 +70,7 @@ class FaceRecognitionModule(Module):
                     pass
                 # best-effort default path when cv2 provides haarcascades
                 if data_obj is not None and getattr(data_obj, "haarcascades", None) is not None:
-                    haar_path = str(Path(getattr(data_obj, "haarcascades")) / "haarcascade_frontalface_default.xml")
+                    haar_path = str(Path(data_obj.haarcascades) / "haarcascade_frontalface_default.xml")
                 else:
                     haar_path = ""
             haar_path = self._resolve_path(haar_path)
@@ -112,7 +110,6 @@ class FaceRecognitionModule(Module):
             context.set(
                 "face_recognition_status", {"status": "ready", "backend": backend}
             )
-            self._maybe_start_http(settings)
             return
 
         if backend == "face_recognition":
@@ -130,7 +127,6 @@ class FaceRecognitionModule(Module):
             context.set(
                 "face_recognition_status", {"status": "ready", "backend": backend}
             )
-            self._maybe_start_http(settings)
             return
 
         self.disable(f"Unknown face recognition backend: {backend}")
@@ -147,11 +143,6 @@ class FaceRecognitionModule(Module):
         if isinstance(command, dict):
             self._handle_command(command, context, settings)
             context.set("face_recognition_command", None)
-
-        if self._pending_commands:
-            for pending in list(self._pending_commands):
-                self._handle_command(pending, context, settings)
-                self._pending_commands.remove(pending)
 
         detections: list[dict[str, Any]] = []
         raw = context.get("vision_faces_raw")
@@ -174,7 +165,6 @@ class FaceRecognitionModule(Module):
             detections = []
 
         context.set("faces", self._wrap_faces(context, detections))
-        self._latest_faces = detections
 
     def _wrap_faces(self, context, detections: list[dict[str, Any]]) -> dict[str, Any]:
         return {
@@ -182,74 +172,6 @@ class FaceRecognitionModule(Module):
             "backend": self.backend,
             "detected": detections,
         }
-
-    def _maybe_start_http(self, settings: dict) -> None:
-        http_settings = settings.get("http", {})
-        if not http_settings.get("enabled", False):
-            return
-        host = http_settings.get("host", "0.0.0.0")
-        port = int(http_settings.get("port", 8088))
-
-        module = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def _send_json(self, payload, status=200):
-                data = json.dumps(payload).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-
-            def do_GET(self):
-                parsed = urlparse(self.path)
-                if parsed.path == "/status":
-                    self._send_json({"status": "ok", "backend": module.backend})
-                    return
-                if parsed.path == "/faces":
-                    self._send_json({"faces": module._latest_faces})
-                    return
-                if parsed.path == "/enroll":
-                    qs = parse_qs(parsed.query)
-                    name = (qs.get("name") or [None])[0]
-                    if not name:
-                        self._send_json({"error": "Missing name"}, status=400)
-                        return
-                    module._pending_commands.append({"action": "enroll", "name": name})
-                    self._send_json({"status": "queued", "name": name})
-                    return
-                self._send_json({"error": "Not found"}, status=404)
-
-            def do_POST(self):
-                parsed = urlparse(self.path)
-                length = int(self.headers.get("Content-Length", "0"))
-                body = self.rfile.read(length).decode("utf-8") if length > 0 else ""
-                if parsed.path == "/enroll":
-                    try:
-                        payload = json.loads(body) if body else {}
-                    except Exception:
-                        payload = {}
-                    name = payload.get("name")
-                    if not name:
-                        self._send_json({"error": "Missing name"}, status=400)
-                        return
-                    module._pending_commands.append({"action": "enroll", "name": name})
-                    self._send_json({"status": "queued", "name": name})
-                    return
-                self._send_json({"error": "Not found"}, status=404)
-
-            def log_message(self, format, *args):
-                return
-
-        try:
-            server = ThreadingHTTPServer((host, port), Handler)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to start face recognition HTTP server: %s", exc)
-            return
-        self._http_server = server
-        self._http_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        self._http_thread.start()
-        logger.info("Face recognition HTTP server listening on %s:%s", host, port)
 
     def _detect_opencv(self, frame, settings: dict) -> list[dict[str, Any]]:
         if self._cv2 is None or self._cascade is None:
@@ -298,7 +220,7 @@ class FaceRecognitionModule(Module):
         threshold = float(settings.get("match_threshold", 0.6))
         results: list[dict[str, Any]] = []
 
-        for (top, right, bottom, left), encoding in zip(locations, encodings):
+        for (top, right, bottom, left), encoding in zip(locations, encodings, strict=False):
             label = "unknown"
             confidence = None
             if self._known_embeddings:
@@ -454,11 +376,3 @@ class FaceRecognitionModule(Module):
         if not path.is_absolute():
             path = self.repo_root / path
         return path
-
-    def stop(self, context) -> None:
-        if self._http_server is not None:
-            try:
-                self._http_server.shutdown()
-                self._http_server.server_close()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Failed to stop face recognition HTTP server: %s", exc)

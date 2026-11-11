@@ -1,12 +1,5 @@
+from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.safety.balance import BalanceModule
-
-
-class DummyDog:
-    def __init__(self):
-        self.calls = []
-
-    def set_rpy(self, roll=0, pitch=0, yaw=0, pid=True):
-        self.calls.append((roll, pitch, yaw, pid))
 
 
 class DummyContext:
@@ -22,7 +15,8 @@ class DummyContext:
 
 def test_balance_module_sets_rpy():
     ctx = DummyContext()
-    ctx.set("pidog", DummyDog())
+    hal = FakeDogHAL()
+    ctx.set("hal", hal)
     ctx.set(
         "settings",
         {"balance": {"enabled": True, "update_hz": 100.0, "active_when_moving": False}},
@@ -32,5 +26,5 @@ def test_balance_module_sets_rpy():
     module = BalanceModule("balance")
     module.tick(ctx)
 
-    dog = ctx.get("pidog")
-    assert dog.calls, "set_rpy should be called when enabled"
+    rpy_calls = [params for name, params in hal.calls if name == "rpy"]
+    assert rpy_calls, "set_rpy should be reached when balance is enabled"

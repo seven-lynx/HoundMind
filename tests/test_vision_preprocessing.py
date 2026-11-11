@@ -1,6 +1,15 @@
-import numpy as np
-import cv2
-from houndmind_ai.optional.vision_preprocessing import VisionPreprocessor
+"""Vision preprocessing needs numpy and OpenCV, which the default install does not pull in.
+
+`importorskip` keeps the suite runnable on a minimal developer install while CI, which
+installs both explicitly, still exercises every test here.
+"""
+
+import pytest
+
+np = pytest.importorskip("numpy")
+cv2 = pytest.importorskip("cv2")
+
+from houndmind_ai.optional.vision_preprocessing import VisionPreprocessor  # noqa: E402
 
 def test_resize():
     frame = np.ones((480, 640, 3), dtype=np.uint8) * 127

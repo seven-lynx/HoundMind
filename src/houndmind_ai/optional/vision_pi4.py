@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Optional, Any
+from typing import Any
 
 from houndmind_ai.core.module import Module
-from houndmind_ai.optional.vision_preprocessing import VisionPreprocessor
 from houndmind_ai.optional.vision_inference_scheduler import VisionInferenceScheduler
+from houndmind_ai.optional.vision_preprocessing import VisionPreprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +14,14 @@ logger = logging.getLogger(__name__)
 class VisionPi4Module(Module):
     """Pi4-focused vision feed.
 
-    Publishes `vision_frame` into context. Supports Picamera2 if available,
-    otherwise falls back to OpenCV VideoCapture.
+    Publishes two context keys per frame: `vision_frame` (the raw array, which
+    `face_recognition`, `semantic_labeler` and `slam_pi4` read) and `vision_frame_jpeg`
+    (the encoded bytes the control plane's `/api/v1/camera/*` routes serve). Supports
+    Picamera2 if available, otherwise falls back to OpenCV VideoCapture.
+
+    There is no HTTP server here. The legacy per-client MJPEG loop on port 8090 is gone;
+    frames go to `services/camera.py`, which fans one producer out to N clients behind the
+    API token.
     """
 
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
@@ -27,13 +31,9 @@ class VisionPi4Module(Module):
         self._cv2: Any | None = None
         self._capture: Any | None = None
         self._last_frame_ts = 0.0
-        self._last_frame = None
 
-        self._http_server: ThreadingHTTPServer | None = None
-        self._http_thread: threading.Thread | None = None
-
-        self._preprocessor: Optional[VisionPreprocessor] = None
-        self._inference_scheduler: Optional[VisionInferenceScheduler] = None
+        self._preprocessor: VisionPreprocessor | None = None
+        self._inference_scheduler: VisionInferenceScheduler | None = None
         self._last_inference_result = None
 
     def start(self, context) -> None:
@@ -41,6 +41,15 @@ class VisionPi4Module(Module):
             return
         settings = (context.get("settings") or {}).get("vision_pi4", {})
         backend = settings.get("backend", "picamera2")
+
+        # `cv2` is needed by the OpenCV backend and, for *every* backend, by the JPEG encode
+        # that feeds `/api/v1/camera/*`. A missing wheel costs the still image, not the frames.
+        try:
+            import cv2  # type: ignore
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("OpenCV unavailable; camera frames will not be served: %s", exc)
+        else:
+            self._cv2 = cv2
 
         # Setup preprocessor and inference scheduler if enabled
         self._preprocessor = VisionPreprocessor(settings.get("preprocessing", {}))
@@ -74,15 +83,13 @@ class VisionPi4Module(Module):
                     context.set(
                         "vision_status", {"status": "ready", "backend": backend}
                     )
-                    self._maybe_start_http(settings)
                     return
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Picamera2 init failed: %s", exc)
 
-        try:
-            import cv2  # type: ignore
-        except Exception as exc:  # noqa: BLE001
-            self.disable(f"Vision backend unavailable: {exc}")
+        cv2 = self._cv2
+        if cv2 is None:
+            self.disable("Vision backend unavailable: OpenCV is not installed")
             return
 
         device_index = int(settings.get("device_index", 0))
@@ -91,11 +98,9 @@ class VisionPi4Module(Module):
             self.disable("Failed to open camera device")
             return
 
-        self._cv2 = cv2
         self._capture = capture
         self.available = True
         context.set("vision_status", {"status": "ready", "backend": "opencv"})
-        self._maybe_start_http(settings)
 
     def tick(self, context) -> None:
         if not self.available or not self.status.enabled:
@@ -129,7 +134,7 @@ class VisionPi4Module(Module):
             context.set("vision_frame", frame)
             context.set("vision_frame_ts", now)
             self._last_frame_ts = now
-            self._last_frame = frame
+            self._publish_jpeg(frame, context)
             # Preprocess and schedule inference if enabled
             if self._preprocessor and self._inference_scheduler:
                 try:
@@ -137,6 +142,25 @@ class VisionPi4Module(Module):
                     self._inference_scheduler.submit_frame(processed)
                 except Exception as exc:
                     logger.warning("Vision preprocessing/inference failed: %s", exc)
+
+    def _publish_jpeg(self, frame, context) -> None:
+        """Encode the frame once and publish it for `services/camera.py`.
+
+        `vision_frame` stays the raw array: `face_recognition`, `semantic_labeler` and
+        `slam_pi4` all read it, and making them decode a JPEG would cost more than this
+        encode does. The retired port-8090 handler encoded once per *client*; this encodes
+        once per frame, which is cheaper for one viewer and bounded for many.
+        """
+        cv2 = self._cv2
+        if cv2 is None:
+            return
+        try:
+            ok, buffer = cv2.imencode(".jpg", frame)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("JPEG encode failed: %s", exc)
+            return
+        if ok:
+            context.set("vision_frame_jpeg", buffer.tobytes())
 
     def stop(self, context) -> None:
         if self._camera is not None:
@@ -149,70 +173,6 @@ class VisionPi4Module(Module):
                 self._capture.release()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("VideoCapture release failed: %s", exc)
-        if self._http_server is not None:
-            try:
-                self._http_server.shutdown()
-                self._http_server.server_close()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Vision HTTP server shutdown failed: %s", exc)
         if self._inference_scheduler:
             self._inference_scheduler.stop()
             self._inference_scheduler = None
-
-    def _maybe_start_http(self, settings: dict) -> None:
-        http_settings = settings.get("http", {})
-        if not http_settings.get("enabled", False):
-            return
-        host = http_settings.get("host", "0.0.0.0")
-        port = int(http_settings.get("port", 8090))
-
-        module = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                if self.path != "/stream":
-                    self.send_response(404)
-                    self.end_headers()
-                    return
-
-                self.send_response(200)
-                self.send_header(
-                    "Content-Type", "multipart/x-mixed-replace; boundary=frame"
-                )
-                self.end_headers()
-
-                try:
-                    while True:
-                        frame = module._last_frame
-                        if frame is None or module._cv2 is None:
-                            time.sleep(0.05)
-                            continue
-
-                        ok, buf = module._cv2.imencode(".jpg", frame)
-                        if not ok:
-                            time.sleep(0.05)
-                            continue
-                        payload = buf.tobytes()
-                        self.wfile.write(b"--frame\r\n")
-                        self.wfile.write(b"Content-Type: image/jpeg\r\n")
-                        self.wfile.write(
-                            f"Content-Length: {len(payload)}\r\n\r\n".encode()
-                        )
-                        self.wfile.write(payload)
-                        self.wfile.write(b"\r\n")
-                        time.sleep(0.1)
-                except Exception:
-                    return
-
-            def log_message(self, format, *args):
-                return
-
-        try:
-            server = ThreadingHTTPServer((host, port), Handler)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to start vision HTTP server: %s", exc)
-            return
-        self._http_server = server
-        self._http_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        self._http_thread.start()
-        logger.info("Vision HTTP stream on http://%s:%s/stream", host, port)

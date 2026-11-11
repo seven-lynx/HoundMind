@@ -63,14 +63,20 @@ class AttentionModule(Module):
         yaw = _direction_to_yaw(
             sound_direction, _safe_float(settings.get("head_yaw_max_deg", 60.0), 60.0)
         )
-        dog = context.get("pidog")
-        if dog is None:
+        hal = context.get("hal")
+        if hal is None:
             return
 
         try:
-            dog.head_move([[yaw, 0, 0]], speed=int(settings.get("head_turn_speed", 70)))
-            if hasattr(dog, "wait_head_done"):
-                dog.wait_head_done()
+            hal.action(
+                "head",
+                {
+                    "yaw": yaw,
+                    "pitch": 0,
+                    "speed": int(settings.get("head_turn_speed", 70)),
+                    "wait": True,
+                },
+            )
         except Exception as exc:  # noqa: BLE001
             logger.debug("Attention head move failed: %s", exc)
             return

@@ -21,8 +21,8 @@ class LedManagerModule(Module):
         if not settings.get("enabled", True):
             return
 
-        dog = context.get("pidog")
-        if dog is None or not hasattr(dog, "rgb_strip"):
+        hal = context.get("hal")
+        if hal is None:
             return
 
         priority = settings.get(
@@ -61,8 +61,8 @@ class LedManagerModule(Module):
         nav = (context.get("settings") or {}).get("navigation", {})
         emotion = (context.get("settings") or {}).get("emotion", {})
 
-        dog = context.get("pidog")
-        if dog is None or not hasattr(dog, "rgb_strip"):
+        hal = context.get("hal")
+        if hal is None:
             return
 
         color = settings.get("default_color", "blue")
@@ -95,10 +95,13 @@ class LedManagerModule(Module):
                 mode_name = settings.get("nav_mode", "breath")
 
         try:
-            dog.rgb_strip.set_mode(
-                str(mode_name),
-                str(color),
-                brightness=float(settings.get("brightness", 0.7)),
+            hal.action(
+                "rgb",
+                {
+                    "style": str(mode_name),
+                    "color": str(color),
+                    "brightness": float(settings.get("brightness", 0.7)),
+                },
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("LED update failed: %s", exc)

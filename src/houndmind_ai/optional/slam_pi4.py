@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import time
 from collections import deque
 from typing import Any
-import importlib
+
 from houndmind_ai.core.module import Module
 
 
@@ -247,7 +248,13 @@ class SlamPi4Module(Module):
                                     try:
                                         with open(map_export_path, "w", encoding="utf-8") as fh:
                                             pts = list(md)
-                                            fh.write("ply\nformat ascii 1.0\nelement vertex %d\nproperty float x\nproperty float y\nproperty float z\nend_header\n" % len(pts))
+                                            header = (
+                                                "ply\nformat ascii 1.0\n"
+                                                f"element vertex {len(pts)}\n"
+                                                "property float x\nproperty float y\n"
+                                                "property float z\nend_header\n"
+                                            )
+                                            fh.write(header)
                                             for p in pts:
                                                 fh.write(f"{p[0]} {p[1]} {p[2]}\n")
                                     except Exception:

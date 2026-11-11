@@ -70,13 +70,11 @@ class BalanceModule(Module):
             pitch = self._pitch_lpf
             roll = self._roll_lpf
 
-        dog = context.get("pidog")
-        if dog is None:
-            return
-        if not hasattr(dog, "set_rpy"):
+        hal = context.get("hal")
+        if hal is None:
             return
 
         try:
-            dog.set_rpy(roll=roll, pitch=pitch, yaw=0, pid=True)
+            hal.action("rpy", {"roll": roll, "pitch": pitch, "yaw": 0})
         except Exception as exc:  # noqa: BLE001
             logger.debug("Balance set_rpy failed: %s", exc)

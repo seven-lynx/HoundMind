@@ -27,13 +27,25 @@ Or run directly with the venv Python: `.venv/bin/python -m houndmind_ai`.
 ---
 
 ## 2) HAL — Sensors & Motors
-### Sensors (HAL)
-**What it does:** Reads ultrasonic, touch, sound direction, and IMU data.
+### HAL (`modules.hal`)
+**What it does:** Opens the dog and publishes it as the runtime context key `hal`. It is the only
+place that imports `pidog`; every other module asks for `hal` and disables itself with a reason
+if it is absent. On a workstation or in CI a `FakeDogHAL` is injected instead, so the sensor,
+scan, LED, head and posture paths run without hardware.
+
+**Disable:** `modules.hal.enabled = false` — with it off nothing can move and no sensor is read.
+
+### Sensors (`modules.hal_sensors`)
+**What it does:** Polls the HAL at `sensors.poll_hz` and publishes `sensor_reading`, `sensors`,
+`sensor_history` and `sensor_health`. The multi-sample distance, debounce, EMA and IMU low-pass
+live in the HAL, next to the reads they belong to.
 
 **Disable:** `modules.hal_sensors.enabled = false`
 
-### Motors (HAL)
-**What it does:** Controls servos and executes actions.
+### Motors (`modules.hal_motors`)
+**What it does:** Executes the one `motion_command` per tick that `motion_gateway` produced after
+the interlock, plus the action cooldown, quiet mode, retreat/turn followups and the closed-loop
+turn that reads the heading between steps. It performs no vendor call of its own.
 
 **Disable:** `modules.hal_motors.enabled = false`
 
@@ -239,16 +251,11 @@ Notes:
 - `modules.voice.enabled = true`
 - `settings.voice_assistant.enabled = true`
 
-**HTTP endpoints (optional):**
-- `settings.voice_assistant.http.enabled = true`
-- `GET /say?text=sit`
-- `GET /command?action=forward`
-
-**CLI helper:**
-```bash
-python -m tools.voice_cli say --text "sit"  # recommended after `pip install -e .` or with `PYTHONPATH=src`
-python -m tools.voice_cli command --action "forward"
-```
+**Driving it:** there is no `/say` or `/command` HTTP endpoint. The legacy port-8091 server was an
+unauthenticated path to `behavior_override`, so it is gone; a client sends
+`POST /api/v1/command` (§26), which goes through the interlock and is audited. Speech
+recognition (`settings.voice_assistant.stt.enabled`) is the input that replaces it. The
+`python -m tools.voice_cli` helper was deleted with the port.
 
 **Disable:**
 - `modules.voice.enabled = false` or `settings.voice_assistant.enabled = false`
@@ -262,25 +269,38 @@ python -m tools.voice_cli command --action "forward"
 - `modules.face_recognition.enabled = true`
 - `settings.face_recognition.backend = "opencv"` or `"face_recognition"`
 
-**HTTP endpoints (optional):**
-- `settings.face_recognition.http.enabled = true`
-- `GET /enroll?name=Alice`
-- `POST /enroll {"name":"Alice"}`
+**Enrolling a face:** there is no `/enroll` endpoint. Enrollment is a runtime command —
+
+```python
+context.set("face_recognition_command", {"action": "enroll", "name": "Alice"})
+```
+
+The next tick enrolls against the newest `vision_frame` (requires exactly one face in frame).
+The legacy port-8088 server is gone: `/status` is now `GET /api/v1/modules`, `/faces` is
+`GET /api/v1/state`, and enrollment has no v1 route yet. `python -m tools.face_recognition_cli`
+was deleted with the port.
 
 **Disable:** `modules.face_recognition.enabled = false`
 
 ---
 
 ## 21) Pi4 Vision Feed (Pi4)
-**What it does:** Captures frames and publishes `vision_frame` for other modules. Optional MJPEG stream.
+**What it does:** Captures frames and publishes `vision_frame` (the raw array, read by face
+recognition, the semantic labeler and SLAM) and `vision_frame_jpeg` (encoded bytes, served by the
+control plane's camera routes) for other modules.
 
 **Enable:**
 - `modules.vision_pi4.enabled = true`
 - `settings.vision_pi4.backend = "picamera2"` (or `"opencv"` fallback)
 
-**HTTP stream (optional):**
-- `settings.vision_pi4.http.enabled = true`
-- Stream URL: `http://<pi-ip>:8090/stream`
+**Camera stream:** there is no dedicated stream port. With this module enabled, the control plane
+serves the frames it publishes:
+
+- `GET /api/v1/camera/stream` — MJPEG, requires the API token
+- `GET /api/v1/camera/snapshot` — single JPEG
+
+See §26 for the auth story. The old `settings.vision_pi4.http` block and its port 8090 server were
+removed; a config that still contains it fails to load with a suggestion to delete it.
 
 **Camera check tool:**
 ```bash
@@ -368,113 +388,97 @@ This populates `models/` with:
 - RTAB-Map requires camera and IMU data; see the install guide for dependencies and troubleshooting.
 - If RTAB-Map is not installed or fails, the module falls back to stub mode for safe operation.
 
-## 24) Telemetry Dashboard (Pi4)
-**What it does:** Serves a responsive web dashboard and JSON snapshot of the runtime context, including `performance_telemetry` (FPS, latency, CPU/GPU/RAM). The dashboard can optionally embed an MJPEG/HLS camera stream via a configurable `camera_path`.
+## 24) Telemetry Dashboard — removed
+`modules.telemetry_dashboard` and `optional/telemetry_dashboard.py` are gone, together with the
+port-8092 `ThreadingHTTPServer` they wrapped. It was a second, unauthenticated dashboard that
+re-served data the control plane already publishes over one authenticated port.
 
-**Enable:**
-- `modules.telemetry_dashboard.enabled = true`
-- `settings.telemetry_dashboard.enabled = true`
-- `settings.telemetry_dashboard.http.enabled = true`
+What replaces each part of it:
 
-**Security (recommended):**
-- The dashboard binds to `127.0.0.1` by default to be LAN-safe. To expose it to the LAN,
-    set `settings.telemetry_dashboard.http.host` to `0.0.0.0` **and** configure an
-    `auth_token` to protect sensitive endpoints.
+| Dashboard endpoint | Now |
+|---|---|
+| `GET /` (HTML dashboard) | The web app at `GET /` on port 8420 (§26) |
+| `GET /snapshot` | `GET /api/v1/state`, or the WebSocket at `GET /api/v1/events` |
+| `/camera`, `camera_path` | `GET /api/v1/camera/stream`, `/camera/snapshot` |
+| `/download_support_bundle` | `GET /api/v1/support-bundle` (`admin` scope) |
+| `/download_slam_map`, `/download_slam_trajectory` | **Not exposed in v1.** `slam_map_data` and `slam_trajectory` are still published on the runtime context by `slam_pi4`; a route that serves them is planned with the SLAM work. |
+| `trace_id` filter on `/snapshot` | `trace_id` is a field of `GET /api/v1/state`, and the support bundle carries the same snapshots |
 
-**Open:**
-- Dashboard (default, local only): `http://127.0.0.1:8092/`
-- Snapshot JSON: `http://127.0.0.1:8092/snapshot`
+A config that still contains `modules.telemetry_dashboard` or `settings.telemetry_dashboard` now
+fails to load with a did-you-mean: delete the block, and the web app replaces both.
 
-**Auth token example:**
-Add the following to your `config/settings.jsonc` under `settings.telemetry_dashboard.http`:
+## 25) WiFi Localization — removed
+`modules.wifi_localization` and `optional/wifi_localization.py` are gone. The module scanned for
+access points by shelling out to `netsh wlan show networks`, a Windows command: on Raspberry Pi
+OS every scan returned `{"error": ...}`, so the feature it documented could never have worked on
+the only hardware it targeted. It also had no test and was never registered in the module list.
 
-```jsonc
-"http": {
-    "enabled": true,
-    "host": "127.0.0.1",
-    "port": 8092,
-    // Optional token to require on protected endpoints. Keep this secret.
-    "auth_token": "change-this-to-a-secret"
-}
-```
+Indoor positioning, when it comes back, belongs in `mapping/` as a source feeding the pose
+estimate — not as a module that only ever worked on a developer's laptop.
 
-When `auth_token` is set, requests must include it in an `X-Auth-Token` header
-or as `?auth_token=<token>` in the query string. Protected endpoints include
-`/snapshot`, `/download_slam_map`, and `/download_support_bundle`.
+## 26) Control Plane — REST, WebSocket, camera, web app
 
-**Camera preview / `camera_path`**
-- Purpose: If you run a separate camera stream (MJPEG, HLS, or a web preview) you can point the dashboard to it so a live preview appears on the dashboard.
-- Config key: `settings.telemetry_dashboard.camera_path`
-- Example values:
-    - Local MJPEG stream path on same host: `/stream` (dashboard will embed `http://<pi-ip>:<stream-port>/stream`)
-    - Full URL to another host: `http://camera-host:8090/stream`
+**What it does:** Serves the dog to a browser or a phone. One process, one port (8420), one API,
+as specified in `docs/CONTROL_API.md`:
 
-Example `config/settings.jsonc` snippet:
-```jsonc
-"modules": {
-    "telemetry_dashboard": { "enabled": true }
-},
-"settings": {
-    "telemetry_dashboard": {
-        "enabled": true,
-        "http": { "enabled": true, "port": 8092 },
-        "camera_path": "http://<pi-ip>:8090/stream"
-    }
-}
-```
+| Surface | Path | Scope |
+|---|---|---|
+| Liveness | `GET /api/v1/health` | none |
+| Identity | `GET /api/v1/meta` | none |
+| State snapshot | `GET /api/v1/state` | `state:read` |
+| Module list | `GET /api/v1/modules` | `state:read` |
+| Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame |
+| Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?token=`) |
+| Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
+| Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration` | `config` |
+| History | `GET /api/v1/history` | `state:read` |
+| Diagnostics | `GET /api/v1/logs`, `/support-bundle` | `admin` |
+| Web app | `GET /` and `/static/*` | same origin, token in the browser |
 
-**Embedding notes & security**
-- The dashboard embeds the provided `camera_path` in an `<iframe>` or `<img>` depending on stream type. Ensure the camera stream allows same-origin embedding or configure a reverse proxy if needed.
-- The telemetry dashboard has no built-in authentication. Recommended deployment patterns:
-    - Run it bound to a LAN-only interface (or `127.0.0.1` behind an SSH tunnel) when used on untrusted networks.
-    - Place a reverse proxy (nginx/Caddy) in front and enable TLS + HTTP auth if exposing to wider networks.
-    - Use firewall rules to restrict access to known hosts.
-
-**Disable:** `modules.telemetry_dashboard.enabled = false`
-
-
-### Generating an auth token
-
-Use the included helper script to generate a secure token and optionally print a config snippet or write the token to a file with restricted permissions.
-
-Examples:
+**The token.** Generated on first start by `services/auth.py::TokenStore` and written to
+`~/.houndmind/api_token` with mode 0600. It is never in `config/settings.jsonc`, never in a log
+line and never in this repository. There is no token-generator script to run: the process creates
+the file if it is missing, and the installer pre-creates it with the right ownership (Phase 6). To
+read it on the device: `cat ~/.houndmind/api_token`. To pair a phone or a second browser, open a
+pairing window and enter the 6-digit code it prints — the code is single-use and expires after
+five minutes.
 
 ```bash
-python tools/generate_auth_token.py
-python tools/generate_auth_token.py --length 48 --print-config
-python tools/generate_auth_token.py --output ~/.houndmind/auth_token.txt
+# Show a pairing code (valid 5 minutes, single use)
+curl -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
+     -X POST http://127.0.0.1:8420/api/v1/pair/open
 ```
 
-The `--print-config` flag prints a small JSON snippet you can paste into `config/settings.jsonc` under `settings.telemetry_dashboard.http`:
+Every motion command is judged by the interlock exactly as an internal producer is. A refusal
+answers `409` with `veto` and `detail`, and the client is expected to display the reason. `rest`
+mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed.
 
-```json
-{
-    "telemetry": {
-        "auth_token": "<generated-token-here>"
-    }
-}
-```
+**Config** (`settings.api`, and `modules.api` for the on/off switch):
 
+| Key | Default | Meaning |
+|---|---|---|
+| `host` | `0.0.0.0` | Bind address. The token is the security boundary, not the bind. |
+| `port` | `8420` | One port for REST, WebSocket, MJPEG and the web app. |
+| `token_path` | `~/.houndmind/api_token` | Where the install-issued token lives. |
+| `state_hz` | `10.0` | Telemetry push rate. |
+| `pairing_enabled` | `true` | Allow pairing codes. |
+| `pairing_attempts_per_minute` | `5` | Rate limit per peer. |
+| `command_queue` | `64` | Bounded inbox; a full queue is `429`, never added latency. |
+| `command_ack_timeout_s` | `0.5` | How long a `POST /command` waits for the interlock before `503`. |
+| `link_loss_s` | `6.0` | A client that stops pinging loses its command. |
+| `max_clients` | `8` | Sessions kept; the least recently seen idle one is evicted. |
+| `log_tail` | `200` | Default and maximum `?tail=` for `/logs`. |
 
-## 25) WiFi Localization (Pi4/5)
-**What it does:** Scans for nearby WiFi access points, records signal strengths (RSSI), and provides fingerprint-based localization for indoor positioning. Useful for context-aware behaviors and navigation.
+**Disable:** `modules.api.enabled = false` removes the network surface entirely — the dog still
+runs, and nothing listens. That is the right setting for a dog that should never be reachable.
 
-**Enable:**
-- `modules.wifi_localization.enabled = true`
-- (Optional) Adjust scan interval, ignore list, and fingerprint file in `settings.wifi_localization`:
-	- `scan_interval`: Scan period in seconds (default: 10.0)
-	- `ignore_ssids`: List of SSIDs to ignore
-	- `fingerprint_file`: Path for persistent storage (default: `wifi_fingerprints.json`)
-	- `max_fingerprint_file_size`: Max file size in bytes (default: 262144)
+**Not in v1:** TLS (documented gap, Phase 6), remote access beyond the LAN, accounts,
+`POST /api/v1/calibration/run` (it moves the dog, so it needs a physical confirmation on the
+device first).
 
-**Disable:** `modules.wifi_localization.enabled = false`
+---
 
-**Notes:**
-- Disabled by default. Safe to enable on Pi4/5 with WiFi hardware.
-- Fingerprints are updated when `current_location` is set in context.
-- File size limit prevents SD card bloat; oldest entries are pruned automatically.
-
-## 25) How to Disable Any Feature
+## 27) How to Disable Any Feature
 1) Open `config/settings.jsonc`
 2) Find the module under `modules`.
 3) Set `enabled` to `false`.

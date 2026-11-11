@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoundMind</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>HoundMind</h1>
+  <span id="link" class="badge">connecting</span>
+  <span id="mode-badge" class="badge">mode: —</span>
+</header>
+
+<!-- Shown until a token is present. The device token can be pasted once, or obtained by
+     pairing with the code shown on the dog. -->
+<section id="auth" class="card hidden">
+  <h2>Connect</h2>
+  <label>Device token <input id="token-input" type="password" autocomplete="off" placeholder="paste the token"></label>
+  <button id="token-save">Use token</button>
+  <hr>
+  <label>Pairing code <input id="code-input" inputmode="numeric" maxlength="6" placeholder="6 digits"></label>
+  <label>Client name <input id="name-input" value="web" maxlength="32"></label>
+  <button id="pair">Pair</button>
+  <p id="auth-error" class="error"></p>
+</section>
+
+<main id="app" class="hidden">
+  <section class="card">
+    <h2>Drive</h2>
+    <!-- Hold-to-move: the button repeats a short-TTL command while it is held, so releasing
+         the button releases the dog. Nothing latches. -->
+    <div class="dpad">
+      <button class="pad up" data-action="forward">▲</button>
+      <button class="pad left" data-action="turn_left">◀</button>
+      <button class="pad stop" data-action="stop">STOP</button>
+      <button class="pad right" data-action="turn_right">▶</button>
+      <button class="pad down" data-action="backward">▼</button>
+    </div>
+    <p class="hint">Hold a direction to walk. Release, or lose the connection, and it stops.</p>
+    <div class="row">
+      <label>Mode
+        <select id="mode">
+          <option value="idle">idle</option>
+          <option value="manual">manual</option>
+          <option value="patrol">patrol</option>
+          <option value="rest">rest</option>
+        </select>
+      </label>
+    </div>
+    <p id="veto" class="error"></p>
+  </section>
+
+  <section class="card">
+    <h2>Pair a phone</h2>
+    <!-- A headless Pi has no screen, so this browser is where a pairing code is shown.
+         `POST /pair/open` requires the admin scope, which the device token has. -->
+    <button id="pair-open">Show a pairing code</button>
+    <p id="pair-code" class="hint">Codes are valid for 5 minutes and work once.</p>
+  </section>
+
+  <section class="card">
+    <h2>Telemetry</h2>
+    <dl>
+      <dt>Distance</dt><dd id="t-distance">—</dd>
+      <dt>Touch</dt><dd id="t-touch">—</dd>
+      <dt>Tilt</dt><dd id="t-tilt">—</dd>
+      <dt>Battery</dt><dd id="t-battery">—</dd>
+      <dt>Temperature</dt><dd id="t-temp">—</dd>
+      <dt>Command</dt><dd id="t-command">—</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2>Camera</h2>
+    <!-- MJPEG through an <img> tag: the token goes in the query string because an image
+         request cannot carry a header. -->
+    <img id="camera" alt="camera" class="hidden">
+    <p id="camera-note" class="hint">Camera frames appear here when a vision module is enabled.</p>
+  </section>
+
+  <section class="card">
+    <h2>Events</h2>
+    <ul id="events" class="feed"></ul>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import random
-from typing import Callable
+from collections.abc import Callable
+from dataclasses import dataclass
 
 
 @dataclass
@@ -37,7 +37,7 @@ class BehaviorRegistry:
             return random.choice(eligible)
         roll = random.random() * total
         acc = 0.0
-        for name, weight in zip(eligible, weight_list):
+        for name, weight in zip(eligible, weight_list, strict=False):
             acc += weight
             if roll <= acc:
                 return name

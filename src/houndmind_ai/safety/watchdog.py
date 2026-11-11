@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Iterable, Any
+from collections.abc import Iterable
+from typing import Any
 
 from houndmind_ai.core.module import Module
 

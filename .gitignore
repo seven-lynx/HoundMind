@@ -21,3 +21,15 @@ scripts/
 # OS
 .DS_Store
 Thumbs.db
+
+# Build artifacts and generated output (Phase 0: untracked, not history)
+dist/
+build/
+*.egg-info/
+
+# Runtime output
+logs/
+*.log
+
+# Generated/pinned mirror files
+requirements-filtered.txt
