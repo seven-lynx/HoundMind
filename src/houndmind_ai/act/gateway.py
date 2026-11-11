@@ -182,9 +182,10 @@ class MotionGatewayModule(Module):
         if not candidates:
             return None, None, []
 
-        # Stable under sort: an equal rank keeps production order, so two intents from the same
-        # source never swap places between ticks.
-        candidates.sort(key=lambda item: item[0])
+        # A `stop` outranks every other intent, whatever its source. It is the one action that
+        # exists to end motion, so a supervisor's stop must not lose a tick to a safety retreat
+        # merely because safety has a higher `Source`. Ties keep production order.
+        candidates.sort(key=lambda item: (item[1].action == "stop", item[0]))
         _, best = candidates[-1]
         # Anything a different action displaced this tick. Reported rather than silently
         # dropped: "the dog ignored me" is the question this answers.

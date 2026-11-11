@@ -66,6 +66,10 @@ class ScanningService:
         self._latest: ScanReading | None = None
         self._history: list[ScanReading] = []
         self._interval_override: float | None = None
+        # How long the last scan actually took. The watchdog derives its staleness window from
+        # this, because a sweep takes seconds and a fixed sub-second timeout called a healthy
+        # scan stale forever (P3-4).
+        self.last_duration_s = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -98,6 +102,7 @@ class ScanningService:
         self._interval_override = max(0.0, _safe_float(interval_s, 0.0))
 
     def scan_three_way(self) -> ScanReading:
+        started = time.time()
         left_deg = _safe_float(self._settings.get("scan_yaw_max_deg", 60), 60.0)
         right_deg = _safe_float(self._settings.get("scan_yaw_max_deg", 60), 60.0)
         settle_s = _safe_float(self._settings.get("scan_settle_s", 0.12), 0.12)
@@ -126,9 +131,11 @@ class ScanningService:
             except Exception:  # noqa: BLE001
                 pass
 
+        self.last_duration_s = time.time() - started
         return ScanReading(mode="three_way", data=result, timestamp=time.time())
 
     def sweep_scan(self, angles: list[int]) -> ScanReading:
+        started = time.time()
         settle_s = _safe_float(self._settings.get("scan_settle_s", 0.12), 0.12)
         samples = _safe_int(self._settings.get("scan_samples", 3), 3)
         between_reads_s = _safe_float(
@@ -148,6 +155,7 @@ class ScanningService:
             except Exception:  # noqa: BLE001
                 pass
 
+        self.last_duration_s = time.time() - started
         return ScanReading(mode="sweep", data=result, timestamp=time.time())
 
     def _loop(self) -> None:
@@ -289,8 +297,9 @@ class ScanningModule(Module):
                 reading = self.service.sweep_scan(self.service.build_angles())
             context.set("scan_reading", reading)
             context.set("scan_latest", reading.to_dict())
+            context.set("scan_duration_s", self.service.last_duration_s)
         except Exception:  # noqa: BLE001
-            pass
+            logger.warning("One-shot scan failed", exc_info=True)
 
     def stop(self, context) -> None:
         if self.service:
@@ -302,6 +311,8 @@ class ScanningModule(Module):
             return
         self._context.set("scan_reading", reading)
         self._context.set("scan_latest", reading.to_dict())
+        if self.service is not None:
+            self._context.set("scan_duration_s", self.service.last_duration_s)
         history = self.service.history() if self.service else []
         self._context.set("scan_history", [entry.to_dict() for entry in history])
         # Emit scan quality summary for tuning.

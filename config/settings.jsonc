@@ -128,13 +128,9 @@
         "enabled": false,
         "required": false
       },
-      "service_watchdog": {
-        // Background service watchdog (restart failed modules).
-        "enabled": true,
-        "required": false
-      },
       "watchdog": {
-        // Watchdog that triggers recovery when sensor/scan data is stale.
+        // Holds motion when sensor/scan data is stale, and restarts modules that stopped
+        // ticking. Recovery is always "stop and report" — it never poses the dog.
         "enabled": true,
         "required": false
       },
@@ -821,49 +817,34 @@
       "override_clear_lower": true
     },
     // =====================================================================
-    // WATCHDOG (future wiring)
+    // WATCHDOG (hold motion, restart what stopped)
     // =====================================================================
-    "service_watchdog": {
-      // Enable background service watchdog.
-      "enabled": true,
-      // Per-module heartbeat timeout (seconds).
-      "module_timeout_s": 6.0,
-      // Cooldown between restart attempts.
-      "restart_cooldown_s": 5.0,
-      // Max restart attempts per module.
-      "max_restarts": 3,
-      // Modules to monitor for heartbeats (empty = all modules).
-      "monitor_modules": [],
-      // Modules to ignore (avoid self-restart loops).
-      "ignore_modules": ["service_watchdog"],
-      // Restart on error or stale heartbeat.
-      "restart_on_error": true,
-      "restart_on_stale": true,
-      // Status snapshot cadence (seconds).
-      "status_interval_s": 1.0
-    },
     "watchdog": {
-      // Enable watchdog recovery.
+      // Enable the watchdog. Recovery is "stop and report": a stale reading holds motion, it
+      // never poses the dog, and a module that keeps failing is eventually left failed.
       "enabled": true,
-      // Treat sensor/scan data as stale after these windows (seconds).
+      // Treat sensor data as stale after this window (seconds).
       "sensor_timeout_s": 2.0,
+      // Minimum staleness window for scans (seconds). The effective window is the larger of
+      // this and 1.5x the measured scan duration, because a sweep takes ~2.6 s at the shipped
+      // settings and a scan cannot be staler than it takes to run one.
       "scan_timeout_s": 2.0,
       // Per-module heartbeat timeout (seconds).
       "module_timeout_s": 4.0,
-      // Modules to monitor for heartbeats (empty = all modules).
+      // Modules to monitor (empty = every enabled, started module).
       "monitor_modules": [],
-      // Cooldown between watchdog recovery attempts.
-      "restart_cooldown_s": 5.0,
-      // Per-module restart cooldown (seconds).
-      "restart_module_cooldown_s": 10.0,
-      // Recovery mode: "behavior" or "action".
-      "recovery_mode": "behavior",
-      "recovery_behavior": null,
-      "recovery_action": null,
-      // Optional module restarts to attempt recovery.
-      "restart_modules": [],
-      // Max restart attempts per module.
-      "max_restarts": 0
+      // Modules never to restart. The watchdog adds itself, so it cannot restart itself.
+      "ignore_modules": ["api"],
+      // Base delay before another restart of the same module (seconds).
+      "restart_cooldown_s": 1.0,
+      // Each consecutive failure waits this much longer: 1x, 2x, 4x ... capped below.
+      "restart_backoff_factor": 2.0,
+      // Upper bound on the backoff delay (seconds).
+      "restart_max_delay_s": 60.0,
+      // Restart attempts before the module is reported failed and left alone.
+      "max_restarts": 3,
+      // A restarted module must stay healthy this long before it earns a fresh budget.
+      "healthy_after_s": 30.0
     },
     // =====================================================================
     // BALANCE (IMU-based posture compensation)

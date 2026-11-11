@@ -109,7 +109,11 @@ class MotorModule(Module):
 
         try:
             now = time.time()
-            if now - self.last_action_ts < min_interval:
+            # The rate limiter protects the action queue from a producer that changes its mind
+            # every tick. It must never delay a `stop`: at the shipped 200 ms interval, a
+            # watchdog hold could sit behind a gait for a fifth of a second, and "stop" a fifth
+            # of a second late is a different dog.
+            if action != "stop" and now - self.last_action_ts < min_interval:
                 return
             navigation_turn = context.get("navigation_turn")
             if isinstance(navigation_turn, dict):

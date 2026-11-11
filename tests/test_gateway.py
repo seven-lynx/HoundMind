@@ -106,16 +106,28 @@ def test_safety_overrides_navigation() -> None:
     assert command["source"] == "system"
 
 
-def test_watchdog_overrides_navigation_but_not_safety() -> None:
+def test_watchdog_overrides_navigation() -> None:
     gateway, context = build()
     ask(context, "forward")
     ask(context, "stop", Source.WATCHDOG)
     gateway.tick(context)
     assert context.get("motion_command")["source"] == "watchdog"
 
+
+def test_a_stop_outranks_even_a_higher_source() -> None:
+    """A supervisor's stop must not lose a tick to a safety retreat.
+
+    `stop` is the one action that exists to end motion, so it is ranked above every other
+    intent whatever its source. Without this, a watchdog hold would be overwritten by the
+    higher-priority safety module within the same tick.
+    """
+    gateway, context = build()
+    ask(context, "stop", Source.WATCHDOG)
     ask(context, "backward", Source.SYSTEM)
     gateway.tick(context)
-    assert context.get("motion_command")["source"] == "system"
+    command = context.get("motion_command")
+    assert command["action"] == "stop"
+    assert command["source"] == "watchdog"
 
 
 def test_behaviour_is_lowest_priority() -> None:
