@@ -1,6 +1,12 @@
 import unittest
 
-from houndmind_ai.core.config import Config, LoopConfig, load_config, validate_config
+from houndmind_ai.core.config import (
+    Config,
+    LoopConfig,
+    check_catalog_spellings,
+    load_config,
+    validate_config,
+)
 
 
 def make_config(settings: dict) -> Config:
@@ -92,6 +98,36 @@ class ConfigValidationTests(unittest.TestCase):
     def test_the_shipped_config_earns_no_warnings(self) -> None:
         """A repo that ships a config its own validator complains about is a broken signal."""
         self.assertEqual(validate_config(load_config()), [])
+
+
+
+class CatalogSpellingTests(unittest.TestCase):
+    """`config/actions.jsonc` lists each vendor action under one spelling (#40)."""
+
+    def test_the_shipped_catalog_has_one_spelling_per_action(self) -> None:
+        catalog = load_config().settings["behavior"]["catalog"]
+        self.assertEqual(check_catalog_spellings(catalog), [])
+        self.assertIn("nod lethargy", catalog["rest"])
+        self.assertEqual([b for b, acts in catalog.items() if "nod lethargy" in acts], ["rest"])
+
+    def test_the_same_spelling_in_two_buckets_is_allowed(self) -> None:
+        catalog = {"idle": ["shake head"], "alert": ["shake head"]}
+        self.assertEqual(check_catalog_spellings(catalog), [])
+
+    def test_a_second_spelling_of_an_action_is_rejected_naming_both(self) -> None:
+        source = '{
+  "idle": ["nod_lethargy"],
+  "rest": ["nod lethargy"]
+}
+'
+        problems = check_catalog_spellings(
+            {"idle": ["nod_lethargy"], "rest": ["nod lethargy"]}, source
+        )
+        self.assertEqual(len(problems), 1)
+        message = str(problems[0])
+        self.assertIn("'nod lethargy' in 'rest' (line 3)", message)
+        self.assertIn("'nod_lethargy' in 'idle' (line 2)", message)
+        self.assertIn("'nod_lethargy'", message)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,8 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- `config/actions.jsonc` lists `nod lethargy` once, in `rest`; the `nod_lethargy` copy in `idle` is
+  gone. Loading the catalog now fails when two spellings name the same action, naming both (#40).
 - `state.actuators.source` and `state.actuators.displaced`: the producer that won the tick, and how
   many intents a higher-priority one overrode. A client that pressed forward can now tell "someone
   else is driving" from "the dog ignored me".

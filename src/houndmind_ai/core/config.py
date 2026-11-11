@@ -8,7 +8,8 @@ from typing import Any
 
 import json5
 
-from houndmind_ai.kernel.config_schema import ConfigError, validate_config_tree
+from houndmind_ai.kernel.commands import canonical_action
+from houndmind_ai.kernel.config_schema import ConfigError, Problem, validate_config_tree
 
 logger = logging.getLogger(__name__)
 
@@ -109,11 +110,50 @@ def load_config(path: Path | None = None) -> Config:
             actions_path = config_path.parent / actions_file
         if actions_path.exists():
             actions_raw = _load_jsonc(actions_path)
-            behavior_settings["catalog"] = actions_raw.get("catalog", {})
+            catalog = actions_raw.get("catalog", {})
+            problems = check_catalog_spellings(catalog, actions_path.read_text(encoding="utf-8"))
+            if problems:
+                raise ConfigError(problems)
+            behavior_settings["catalog"] = catalog
             config.settings["behavior"] = behavior_settings
             _ensure_action_sets(behavior_settings)
 
     return config
+
+
+def check_catalog_spellings(catalog: dict, source: str = "") -> list[Problem]:
+    """Two spellings of one action ("nod lethargy", "nod_lethargy") are one vendor action listed
+    twice. The same spelling in several buckets is fine; a second spelling of it is not.
+
+    `source` is the catalog file's text, used only to name the line of each spelling.
+    """
+
+    def where(bucket: str, spelling: str) -> str:
+        quoted = f'"{spelling}"'
+        for number, line in enumerate(source.splitlines(), start=1):
+            if quoted in line:
+                return f"'{spelling}' in '{bucket}' (line {number})"
+        return f"'{spelling}' in '{bucket}'"
+
+    first: dict[str, tuple[str, str]] = {}
+    problems: list[Problem] = []
+    for bucket, actions in catalog.items():
+        if not isinstance(actions, list):
+            continue
+        for spelling in actions:
+            if not isinstance(spelling, str):
+                continue
+            canonical = canonical_action(spelling)
+            seen = first.setdefault(canonical, (bucket, spelling))
+            if seen[1] != spelling:
+                problems.append(
+                    Problem(
+                        f"catalog.{bucket}",
+                        f"{where(bucket, spelling)} and {where(*seen)} are the same action "
+                        f"'{canonical}'; keep one spelling",
+                    )
+                )
+    return problems
 
 
 def _apply_profile_overrides(raw: dict) -> dict:
