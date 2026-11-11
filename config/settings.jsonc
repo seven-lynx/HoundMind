@@ -33,7 +33,10 @@
     // Main loop frequency in Hz.
     "tick_hz": 5,
     // Max cycles to run; set null for continuous operation.
-    "max_cycles": 10
+    // A finite value here stops the runtime, which is useful for tests and useless for a
+    // robot: the shipped default used to be 10, so a fresh install ran for two seconds and
+    // quit. Continuous is the only sane default for a service.
+    "max_cycles": null
   },
   "modules": {
     "hal_sensors": {
