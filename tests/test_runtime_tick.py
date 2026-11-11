@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from houndmind_ai.core.config import load_config
+from houndmind_ai.core.module import Module
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.main import build_modules
@@ -124,6 +125,37 @@ def test_a_module_with_no_hal_is_disabled_not_fatal() -> None:
         assert reason.get("hal") is not None
     finally:
         instance.stop()
+
+
+def test_a_module_that_disables_itself_in_start_is_not_ticked() -> None:
+    """`disable(reason)` inside `start` must leave the module out of the loop, not half in it."""
+
+    class GivesUp(Module):
+        def __init__(self) -> None:
+            super().__init__("gives_up")
+            self.ticks = 0
+
+        def start(self, context) -> None:
+            self.disable("no hardware")
+
+        def tick(self, context) -> None:
+            self.ticks += 1
+
+    config = load_config()
+    module = GivesUp()
+    instance = HoundMindRuntime(config, [module])
+    instance.start()
+    try:
+        instance.tick()
+    finally:
+        instance.stop()
+
+    assert module.status.disabled_reason == "no hardware"
+    assert module.status.started is False
+    assert module.ticks == 0
+    statuses = instance.context.get("module_statuses")
+    assert statuses["gives_up"]["enabled"] is False
+    assert statuses["gives_up"]["started"] is False
 
 
 def test_the_shipped_config_still_has_the_safety_modules_off() -> None:
