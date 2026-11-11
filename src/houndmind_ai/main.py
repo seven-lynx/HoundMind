@@ -32,7 +32,6 @@ from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
 from houndmind_ai.optional.face_recognition import FaceRecognitionModule
 from houndmind_ai.optional.semantic_labeler import SemanticLabelerModule
 from houndmind_ai.optional.slam_pi4 import SlamPi4Module
-from houndmind_ai.optional.telemetry_dashboard import TelemetryDashboardModule
 from houndmind_ai.optional.vision import VisionModule
 from houndmind_ai.optional.vision_pi4 import VisionPi4Module
 from houndmind_ai.optional.voice import VoiceModule
@@ -102,10 +101,6 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(FaceRecognitionModule("face_recognition", **cfg("face_recognition")), [Capability.VISION])
     registry.register(SemanticLabelerModule("semantic_labeler", **cfg("semantic_labeler")), [Capability.VISION])
     registry.register(SlamPi4Module("slam_pi4", **cfg("slam_pi4")), [Capability.MAPPING])
-    registry.register(
-        TelemetryDashboardModule("telemetry_dashboard", **cfg("telemetry_dashboard")),
-        [Capability.TELEMETRY],
-    )
     # Last, so `/modules` reports the control plane after the things it reports on. Disabling
     # `modules.api` leaves the dog fully operational with no network surface at all.
     registry.register(ControlPlaneModule("api", **cfg("api"), bus=bus), [Capability.CONTROL])

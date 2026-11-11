@@ -388,93 +388,24 @@ This populates `models/` with:
 - RTAB-Map requires camera and IMU data; see the install guide for dependencies and troubleshooting.
 - If RTAB-Map is not installed or fails, the module falls back to stub mode for safe operation.
 
-## 24) Telemetry Dashboard (Pi4)
-**What it does:** Serves a responsive web dashboard and JSON snapshot of the runtime context, including `performance_telemetry` (FPS, latency, CPU/GPU/RAM). The dashboard can optionally embed an MJPEG/HLS camera stream via a configurable `camera_path`.
+## 24) Telemetry Dashboard — removed
+`modules.telemetry_dashboard` and `optional/telemetry_dashboard.py` are gone, together with the
+port-8092 `ThreadingHTTPServer` they wrapped. It was a second, unauthenticated dashboard that
+re-served data the control plane already publishes over one authenticated port.
 
-**Enable:**
-- `modules.telemetry_dashboard.enabled = true`
-- `settings.telemetry_dashboard.enabled = true`
-- `settings.telemetry_dashboard.http.enabled = true`
+What replaces each part of it:
 
-**Security (recommended):**
-- The dashboard binds to `127.0.0.1` by default to be LAN-safe. To expose it to the LAN,
-    set `settings.telemetry_dashboard.http.host` to `0.0.0.0` **and** configure an
-    `auth_token` to protect sensitive endpoints.
+| Dashboard endpoint | Now |
+|---|---|
+| `GET /` (HTML dashboard) | The web app at `GET /` on port 8420 (§26) |
+| `GET /snapshot` | `GET /api/v1/state`, or the WebSocket at `GET /api/v1/events` |
+| `/camera`, `camera_path` | `GET /api/v1/camera/stream`, `/camera/snapshot` |
+| `/download_support_bundle` | `GET /api/v1/support-bundle` (`admin` scope) |
+| `/download_slam_map`, `/download_slam_trajectory` | **Not exposed in v1.** `slam_map_data` and `slam_trajectory` are still published on the runtime context by `slam_pi4`; a route that serves them is planned with the SLAM work. |
+| `trace_id` filter on `/snapshot` | `trace_id` is a field of `GET /api/v1/state`, and the support bundle carries the same snapshots |
 
-**Open:**
-- Dashboard (default, local only): `http://127.0.0.1:8092/`
-- Snapshot JSON: `http://127.0.0.1:8092/snapshot`
-
-**Auth token example:**
-Add the following to your `config/settings.jsonc` under `settings.telemetry_dashboard.http`:
-
-```jsonc
-"http": {
-    "enabled": true,
-    "host": "127.0.0.1",
-    "port": 8092,
-    // Optional token to require on protected endpoints. Keep this secret.
-    "auth_token": "change-this-to-a-secret"
-}
-```
-
-When `auth_token` is set, requests must include it in an `X-Auth-Token` header
-or as `?auth_token=<token>` in the query string. Protected endpoints include
-`/snapshot`, `/download_slam_map`, and `/download_support_bundle`.
-
-**Camera preview / `camera_path`**
-- Purpose: If you run a separate camera stream (MJPEG, HLS, or a web preview) you can point the dashboard to it so a live preview appears on the dashboard.
-- Config key: `settings.telemetry_dashboard.camera_path`
-- Example values:
-    - Local MJPEG stream path on same host: `/stream` (dashboard will embed `http://<pi-ip>:<stream-port>/stream`)
-    - Full URL to another host: `http://camera-host:8090/stream`
-
-Example `config/settings.jsonc` snippet:
-```jsonc
-"modules": {
-    "telemetry_dashboard": { "enabled": true }
-},
-"settings": {
-    "telemetry_dashboard": {
-        "enabled": true,
-        "http": { "enabled": true, "port": 8092 },
-        "camera_path": "http://<pi-ip>:8090/stream"
-    }
-}
-```
-
-**Embedding notes & security**
-- The dashboard embeds the provided `camera_path` in an `<iframe>` or `<img>` depending on stream type. Ensure the camera stream allows same-origin embedding or configure a reverse proxy if needed.
-- The telemetry dashboard has no built-in authentication. Recommended deployment patterns:
-    - Run it bound to a LAN-only interface (or `127.0.0.1` behind an SSH tunnel) when used on untrusted networks.
-    - Place a reverse proxy (nginx/Caddy) in front and enable TLS + HTTP auth if exposing to wider networks.
-    - Use firewall rules to restrict access to known hosts.
-
-**Disable:** `modules.telemetry_dashboard.enabled = false`
-
-
-### Generating an auth token
-
-Use the included helper script to generate a secure token and optionally print a config snippet or write the token to a file with restricted permissions.
-
-Examples:
-
-```bash
-python tools/generate_auth_token.py
-python tools/generate_auth_token.py --length 48 --print-config
-python tools/generate_auth_token.py --output ~/.houndmind/auth_token.txt
-```
-
-The `--print-config` flag prints a small JSON snippet you can paste into `config/settings.jsonc` under `settings.telemetry_dashboard.http`:
-
-```json
-{
-    "telemetry": {
-        "auth_token": "<generated-token-here>"
-    }
-}
-```
-
+A config that still contains `modules.telemetry_dashboard` or `settings.telemetry_dashboard` now
+fails to load with a did-you-mean: delete the block, and the web app replaces both.
 
 ## 25) WiFi Localization — removed
 `modules.wifi_localization` and `optional/wifi_localization.py` are gone. The module scanned for

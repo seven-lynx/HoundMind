@@ -14,8 +14,7 @@
         "vision_pi4": {"enabled": true},
         "face_recognition": {"enabled": false},
         "semantic_labeler": {"enabled": false},
-        "slam_pi4": {"enabled": false},
-        "telemetry_dashboard": {"enabled": false}
+        "slam_pi4": {"enabled": false}
       },
       "settings": {
         "navigation": {
@@ -176,11 +175,6 @@
     },
     "slam_pi4": {
       // Pi4 SLAM module (disabled by default).
-      "enabled": false,
-      "required": false
-    },
-    "telemetry_dashboard": {
-      // Pi4 telemetry dashboard (disabled by default).
       "enabled": false,
       "required": false
     },
@@ -379,37 +373,6 @@
         "nav_target_heading_deg": null,
         "nav_deadband_deg": 10.0
       },
-    // =====================================================================
-    // TELEMETRY DASHBOARD (Pi4 optional)
-    // =====================================================================
-    "telemetry_dashboard": {
-      "enabled": false,
-      "snapshot_interval_s": 0.5,
-      "context_keys": [
-        "sensor_reading",
-        "scan_latest",
-        "mapping_openings",
-        "navigation_action",
-        "behavior_action",
-        "safety_action",
-        "performance_telemetry",
-        "slam_pose",
-        "faces",
-        "semantic_labels"
-      ],
-      "http": {
-        // Bind to localhost by default for LAN-safe behavior. Set to "0.0.0.0"
-        // only when you intentionally want the dashboard reachable on the LAN
-        // and have secured access (see `auth_token` below).
-        "enabled": false,
-        "host": "127.0.0.1",
-        "port": 8092,
-        // Optional simple token required on protected endpoints. When set,
-        // requests must include `X-Auth-Token: <token>` or `?auth_token=<token>`.
-        // Example (uncomment to enable):
-        // "auth_token": "change-this-to-a-secret",
-      }
-    },
     // =====================================================================
     // NAVIGATION & SCANNING (Pi 3 friendly)
     // =====================================================================

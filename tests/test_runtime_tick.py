@@ -33,7 +33,6 @@ OPTIONAL_MODULES = frozenset(
         "face_recognition",
         "semantic_labeler",
         "slam_pi4",
-        "telemetry_dashboard",
     }
 )
 

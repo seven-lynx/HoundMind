@@ -8,7 +8,10 @@ fails here, which is cheaper than finding out from an Android app that silently 
 from __future__ import annotations
 
 import asyncio
+import io
+import json
 import re
+import zipfile
 from pathlib import Path
 
 from aiohttp.test_utils import TestClient, TestServer
@@ -185,7 +188,7 @@ def test_the_config_route_redacts_secrets(tmp_path) -> None:
             "settings",
             {
                 "wifi": {"ssid": "home", "password": "hunter2"},
-                "telemetry_dashboard": {"http": {"auth_token": "abc123", "port": 8092}},
+                "api": {"port": 8420, "token_path": "~/.houndmind/api_token"},
             },
         )
         headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
@@ -195,8 +198,9 @@ def test_the_config_route_redacts_secrets(tmp_path) -> None:
 
         assert response.status == 200
         assert body["config"]["wifi"]["password"] == "***"
-        assert body["config"]["telemetry_dashboard"]["http"]["auth_token"] == "***"
+        assert body["config"]["api"]["token_path"] == "***"
         assert body["config"]["wifi"]["ssid"] == "home"
+        assert body["config"]["api"]["port"] == 8420
 
     asyncio.run(scenario())
 
@@ -311,5 +315,37 @@ def test_logs_tails_the_configured_file(tmp_path) -> None:
         assert body["lines"] == ["line 48", "line 49"]
         assert absent.status == 503
         assert absent_body["error"] == "unavailable"
+
+    asyncio.run(scenario())
+
+
+def test_the_support_bundle_carries_state_and_no_secret(tmp_path) -> None:
+    """The bundle is the maintainer's whole view of the device; it must not carry credentials.
+
+    This used to be covered through the telemetry dashboard, which bundled via
+    `tools.collect_support_bundle`. That module is gone with the rest of the legacy servers, so
+    the assertion moves to `ControlPlane.support_bundle`, which is the one that ships.
+    """
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        plane.context.set(
+            "settings", {"api": {"port": 8420, "token_path": "~/.houndmind/api_token"}}
+        )
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/support-bundle", headers=headers)
+            body = await response.read()
+
+        assert response.status == 200
+        assert response.content_type == "application/zip"
+
+        with zipfile.ZipFile(io.BytesIO(body)) as archive:
+            names = set(archive.namelist())
+            config = json.loads(archive.read("config.json"))
+            modules = json.loads(archive.read("modules.json"))
+
+        assert {"meta.json", "state.json", "modules.json", "config.json"} <= names
+        assert config["api"]["token_path"] == "***"
+        assert "modules" in modules
 
     asyncio.run(scenario())
