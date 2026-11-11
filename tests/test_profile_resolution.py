@@ -86,6 +86,16 @@ def test_a_resolved_profile_may_have_no_overrides_but_a_named_one_may_not() -> N
         resolve_profile({"profile": "pi5"}, BoardInfo("pi5"))
 
 
+def test_a_dropped_profile_name_gets_no_misleading_suggestion() -> None:
+    """`pi3` is not a near-miss for `pi5`, and suggesting one to a Pi 3 owner is bad advice."""
+    with pytest.raises(ConfigError) as excinfo:
+        resolve_profile({"profile": "pi3", "profiles": PROFILES})
+
+    problem = excinfo.value.problems[0]
+    assert problem.hint is None
+    assert "pi4, pi5" in problem.message
+
+
 # --------------------------------------------------------------- the shipped file
 
 
