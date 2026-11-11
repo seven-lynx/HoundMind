@@ -25,4 +25,5 @@ def test_attention_turns_head_on_sound():
 
     head_moves = [params for name, params in hal.calls if name == "head"]
     assert head_moves, "the head should be asked to turn when sound is detected"
-    assert head_moves[0]["wait"] is True
+    # `wait=False`: a behaviour module must never block the decision loop on a servo move.
+    assert head_moves[0]["wait"] is False
