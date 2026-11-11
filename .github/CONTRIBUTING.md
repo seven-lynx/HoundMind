@@ -10,7 +10,8 @@ purpose: they keep the history readable and the dog out of trouble.
 Every commit, pull request, issue and comment in `seven-lynx/HoundMind`, including contributions
 opened from a fork. Everything is published under one human identity: commit as yourself, open the
 pull request from your own fork or a branch on this repository, and leave no attribution to a tool
-or a model anywhere in the text.
+or a model anywhere in the text. CI fails a commit that is authored by any other account, so the rule
+is enforced rather than merely documented.
 
 ## Branches and commits
 
@@ -45,8 +46,11 @@ $env:PYTHONPATH='src'; python -m pytest -q
 mypy src --ignore-missing-imports
 ```
 
-CI runs the same three checks on Python 3.11, then builds the sdist and the wheel. A red run is
-fixed by changing the code, never by loosening the workflow. Fill in
+CI runs the same three checks on Python 3.11, then builds the sdist and the wheel. A fourth job,
+`Identity guard`, fails when a commit reaching this repository is authored by an account other than
+the project's own — the local hooks only inspect the unpushed range, so this is the check that sees a
+commit made elsewhere. A red run is fixed by changing the code, never by loosening the workflow.
+Fill in
 `.github/PULL_REQUEST_TEMPLATE.md`, and state the motion impact — `none`, `dry-run only`, or
 `commands servos`.
 
