@@ -187,11 +187,15 @@ class ControlPlane:
         settings = self.context.get("settings") or {}
         device = settings.get("device", {}) if isinstance(settings, dict) else {}
         device = device if isinstance(device, dict) else {}
+        # The board is a fact read from the device tree at boot; the profile is the decision
+        # made from it. They can disagree — `HOUNDMIND_PROFILE` overrides the decision, not the
+        # hardware — so both are reported and neither is inferred from the other.
         return {
             "api_version": API_VERSION,
             "min_client": 1,
-            "device_id": device.get("device_id"),
-            "board": device.get("board"),
+            "device_id": self.context.get("device_id") or device.get("device_id"),
+            "board": self.context.get("board"),
+            "profile": self.context.get("profile"),
             "uptime_s": max(0.0, self._clock() - self._started_at),
             "capabilities": self._capabilities(),
         }

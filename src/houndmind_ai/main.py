@@ -9,6 +9,7 @@ from houndmind_ai.act.gateway import MotionGatewayModule
 from houndmind_ai.behavior.attention import AttentionModule
 from houndmind_ai.behavior.fsm import BehaviorModule
 from houndmind_ai.behavior.habituation import HabituationModule
+from houndmind_ai.board.detect import BoardInfo, detect
 from houndmind_ai.calibration.workflow import CalibrationModule
 from houndmind_ai.core.config import load_config
 from houndmind_ai.core.logging_setup import setup_logging
@@ -110,6 +111,19 @@ def build_modules(config, hal: DogHAL | None = None) -> list:
     return build_registry(config, hal=hal).modules()
 
 
+def publish_identity(context, config) -> BoardInfo:
+    """Publish the board (a fact) and the profile (a decision) for `/meta` and the logs.
+
+    Detected here rather than remembered from `load_config`: when an operator sets
+    `HOUNDMIND_PROFILE`, the decision stops matching the hardware and `/meta` has to show both.
+    """
+    board = detect()
+    context.set("board", board.kind)
+    context.set("board_model", board.model)
+    context.set("profile", config.profile)
+    return board
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="HoundMind PiDog runtime")
     parser.add_argument(
@@ -145,6 +159,13 @@ def main() -> None:
     # Bind the context by callable, not by dict: the filter then reads through the store's
     # lock, so a log line from a background thread cannot race the loop (H-02).
     runtime.context.set("device_id", device_id)
+    board = publish_identity(runtime.context, config)
+    logger.info(
+        "Board %s (%s), profile %s",
+        board.kind,
+        board.model or "no device tree",
+        config.profile,
+    )
     context_filter.set_context_source(runtime.context.get)
 
     # Register path planning hook for Pi4 if enabled
