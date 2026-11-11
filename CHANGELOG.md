@@ -10,6 +10,32 @@ Current Release: v2026.01.18 • Author: 7Lynx
 ## [Unreleased]
 
 ### Added
+- `services/`: the control plane — one process, one port (8420), one authenticated API (D7).
+  REST, WebSocket telemetry, MJPEG and the web app are routes on the same aiohttp application,
+  and it runs on its own thread so the decision loop never blocks on a socket. This is what
+  B-05 was: there was no way to command the dog from anything but the dog.
+- `services/auth.py`: the device token is generated on first start into `~/.houndmind/api_token`
+  (0600, never logged, never in the repo), with `state:read` / `move` / `config` / `admin`
+  scopes, a single-use 6-digit pairing code for phones, a pairing rate limit, and a bounded
+  motion audit recording the reason for every veto (D8, M-13).
+- `kernel/commands.py`: `CommandBus`, the bounded, acknowledged hand-off between the control
+  plane and the actuator gateway. A full queue answers `429` instead of adding latency to the
+  servo bus, and every submitted command gets exactly one verdict back.
+- `services/state.py`: the `docs/CONTROL_API.md` §4 snapshot, including the validity flags a
+  client must honour — an invalid reading stays `null`, it never becomes a plausible zero.
+- `services/stream.py`: WebSocket fan-out at 10 Hz where `state` is a latest value (a slow
+  client skips frames) and `event`/`command_ack` are never dropped (a client that cannot keep up
+  is disconnected, because losing a veto reason is worse than losing a socket).
+- `services/camera.py`: one MJPEG producer, many viewers, per-client frame cap (M-04).
+- `services/sessions.py`: client sessions keyed by a token *fingerprint*, so "what did I ask and
+  what happened" is answerable without storing a credential.
+- `services/module.py`: `ControlPlaneModule` owns the thread, the socket and the shutdown. A
+  port already in use disables the module with the reason instead of taking the runtime down.
+- `main.build_registry` creates one `CommandBus`, hands it to the gateway and to the API module.
+- `docs/CONTROL_API.md` gained `GET /api/v1/history`, and the route table is now asserted against
+  the code by `tests/test_api_routes.py`.
+- `settings.api`: typed section for host, port, token path, telemetry rate, pairing, queue size,
+  ack timeout, link-loss window, client cap and log tail.
 - `kernel/state.py`: a lock-protected state store behind `RuntimeContext`. Sensor and scan
   services publish from daemon threads while the loop reads, so the shared mapping now has a
   lock and snapshot reads instead of relying on `dict` operations being individually atomic.
@@ -49,6 +75,13 @@ Current Release: v2026.01.18 • Author: 7Lynx
   file without editing code.
 
 ### Changed
+- The gateway accepts `Command` objects from the bus in addition to the legacy context keys. A
+  client command can be vetoed by the interlock like any other producer, and each client is told
+  the fate of its own command even when a higher-priority producer wins the tick.
+- `aiohttp` is a base dependency. It is the only new dependency in this phase; its resident cost
+  on a Pi 4 has not been measured yet, which is a Phase 3 device task.
+- `mode` is a typed value (`idle`, `patrol`, `manual`, `rest`) published as `runtime_mode`.
+  `rest` vetoes client motion with a reason; nothing else does, and `POST /stop` is never vetoed.
 - `hal_motors` executes `motion_command` only; it no longer merges four context keys by `or` and
   deduplicates on the action string, which had made a `forward` from navigation and one from
   behaviour indistinguishable.
@@ -81,6 +114,10 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `main`-only trigger meant phase PRs were reviewed with no `ruff`/`pytest`/`mypy` result at
   all. Jobs, order and interpreter are unchanged: this widens the trigger, it does not relax the
   gate.
+
+### Fixed
+- A client command that sat in a tunnel can no longer execute on arrival: the deadman starts
+  when the device receives it, and an expired command is refused by the interlock.
 
 ### Removed
 - `optional/wifi_localization.py` and `modules.wifi_localization`. It shelled out to `netsh wlan

@@ -182,6 +182,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Watchdog                       | Enabled     | Low-impact defaults                   |
 | Service Watchdog               | Enabled     |                                       |
 | Event Logging                  | Enabled     |                                       |
+| Control Plane (REST/WS/web)    | Enabled     | Port 8420, token-gated; `modules.api`  |
 | LED Manager                    | Enabled     |                                       |
 | Calibration                    | Enabled     |                                       |
 | Safety                         | Disabled    | Opt-in for emergency stop/tilt        |

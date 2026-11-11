@@ -72,6 +72,15 @@
       "enabled": true,
       "required": false
     },
+    "api": {
+      // The control plane: REST + WebSocket + MJPEG + the web app on one port.
+      // This is the only network surface in the runtime. Turning it off leaves the dog fully
+      // operational with nothing listening, which is the right choice for a dog that should
+      // never be reachable. Authentication is not optional when it is on: every route except
+      // /api/v1/meta and /api/v1/health requires the install-issued token.
+      "enabled": true,
+      "required": false
+    },
     "sensor_health": {
       // Per-sensor staleness badge and LED colour. Off by default, like the other safety
       // modules; the raw validity flags are published regardless.
@@ -1006,6 +1015,34 @@
       "behavior_action_cooldown_s": 1.5,
       // Minimum delay between motor actions (seconds).
       "motor_min_action_interval_s": 0.6
+    },
+    // =====================================================================
+    // CONTROL PLANE (services/api.py) — one port for REST, WebSocket, MJPEG
+    // =====================================================================
+    "api": {
+      // Bind address. Reachable on the LAN on purpose: the token is the security boundary.
+      // Use "127.0.0.1" to keep it on the device, or disable `modules.api` to remove it.
+      "host": "0.0.0.0",
+      "port": 8420,
+      // The install-issued API token. Generated on first start, 0600, never pasted into this
+      // file and never written to a log.
+      "token_path": "~/.houndmind/api_token",
+      // Pre-built web app location. Null means the copy bundled with the package.
+      "static_root": null,
+      // Telemetry push rate on /api/v1/events.
+      "state_hz": 10.0,
+      // Pairing codes for the Android app and a second browser: 6 digits, 5 minutes, one use.
+      "pairing_enabled": true,
+      "pairing_attempts_per_minute": 5,
+      // Bounded command inbox. A full queue is a 429, never latency on the servo bus.
+      "command_queue": 64,
+      // How long POST /api/v1/command waits for the interlock's verdict before answering 503.
+      "command_ack_timeout_s": 0.5,
+      // A connected client that stops pinging for this long loses its command.
+      "link_loss_s": 6.0,
+      "max_clients": 8,
+      // Default and maximum `GET /api/v1/logs?tail=`.
+      "log_tail": 200
     }
   }
 }

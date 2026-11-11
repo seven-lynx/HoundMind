@@ -50,6 +50,9 @@ class Capability(StrEnum):
     TELEMETRY = "telemetry"
     DIAGNOSTICS = "diagnostics"
     CALIBRATION = "calibration"
+    # The control plane: one process, one port. Registered so `/modules` can explain a device
+    # that answers REST but not the phone (or the other way round).
+    CONTROL = "control"
 
 
 class ModuleRegistry:

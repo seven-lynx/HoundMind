@@ -54,6 +54,7 @@ and never grants `config` or `admin`.
 | `GET` | `/api/v1/camera/stream` | `state:read` | MJPEG, multipart/x-mixed-replace |
 | `GET` | `/api/v1/camera/snapshot` | `state:read` | single JPEG |
 | `POST` | `/api/v1/pair` | none | exchange a pairing code for a device token |
+| `POST` | `/api/v1/pair/open` | `admin` | open a pairing window; returns the 6-digit code once |
 | `POST` | `/api/v1/command` | `move` | issue a `Command` (§3) |
 | `POST` | `/api/v1/stop` | `move` | unconditional stop; never vetoed, never queued |
 | `GET` | `/api/v1/mode` | `state:read` | current mode |
@@ -61,6 +62,7 @@ and never grants `config` or `admin`.
 | `GET` | `/api/v1/config` | `config` | effective config (secrets redacted) |
 | `PATCH` | `/api/v1/config` | `config` | allowlisted live keys only |
 | `GET` | `/api/v1/calibration` | `config` | servo offsets, read-only |
+| `GET` | `/api/v1/history?limit=50` | `state:read` | recent commands with their verdicts, and live sessions |
 | `GET` | `/api/v1/logs?tail=200` | `admin` | recent log lines, redacted |
 | `GET` | `/api/v1/support-bundle` | `admin` | zip: logs, config, module status, events |
 

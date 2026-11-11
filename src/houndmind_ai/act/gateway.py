@@ -17,8 +17,10 @@ publishes the outcome under `motion_command` / `motion_verdict`. Motors executes
 gateway decided; it no longer decides.
 
 Transitional note: producers still write their legacy context keys, so this module adapts them
-here — one place, not four. When the control API lands, clients submit a ``Command`` directly
-and the adapter is deleted.
+here — one place, not four. The control plane is the exception: it submits a ``Command`` on the
+:class:`~houndmind_ai.kernel.commands.CommandBus` and expects a ``Verdict`` back, so a client is
+told the truth about its own request instead of a guess. The legacy adapter is deleted in Phase 3,
+when behaviour, navigation and safety are ported onto typed commands.
 """
 
 from __future__ import annotations
@@ -31,7 +33,15 @@ from typing import Any
 from houndmind_ai.act.interlock import Interlock
 from houndmind_ai.core.module import Module
 from houndmind_ai.hal.iface import SensorSnapshot, as_float
-from houndmind_ai.kernel.commands import MOTION_ACTIONS, Command, Source, Verdict
+from houndmind_ai.kernel.commands import (
+    DEFAULT_MODE,
+    MOTION_ACTIONS,
+    RUNTIME_MODES,
+    Command,
+    CommandBus,
+    Source,
+    Verdict,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,19 +85,23 @@ class MotionGatewayModule(Module):
         required: bool = False,
         interlock: Interlock | None = None,
         clock: Callable[[], float] | None = None,
+        bus: CommandBus | None = None,
     ) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self._clock = clock or time.monotonic
         self.interlock = interlock or Interlock(now=self._clock)
+        # The control plane's inbox. None means "no client can drive this dog", which is the
+        # state of every test that drives the gateway through the legacy keys alone.
+        self.bus = bus
         self._last_key: tuple[str, Source] | None = None
         self._last_verdict: Verdict | None = None
 
     def tick(self, context) -> None:
         now = self._clock()
         snapshot = self._snapshot(context)
-        winner = self._resolve(context, now)
+        winner, verdict = self._resolve(context, now, snapshot)
 
-        if winner is None:
+        if winner is None or verdict is None:
             # Nobody is asking for anything. Publishing None rather than leaving a stale
             # command in place is what makes the deadman real: a producer that dies stops the
             # dog on the next tick instead of leaving it walking.
@@ -96,8 +110,6 @@ class MotionGatewayModule(Module):
             self._publish(context, None, None)
             context.set("tilt_latched", self.interlock.tilt_latched)
             return
-
-        verdict = self._vet(winner, snapshot)
 
         if not verdict.accepted:
             self._last_key = None
@@ -130,8 +142,20 @@ class MotionGatewayModule(Module):
             context.set("motion_command", payload)
         context.set("motion_verdict", verdict.to_dict() if verdict is not None else None)
 
-    def _resolve(self, context, now: float) -> Command | None:
+    def _resolve(
+        self, context, now: float, snapshot: SensorSnapshot
+    ) -> tuple[Command | None, Verdict | None]:
+        """Pick one winner and return it with its verdict.
+
+        Two sources feed this: the legacy context keys (re-stamped every tick) and the
+        :class:`CommandBus` (stamped once, with a real deadman). A bus command is judged and
+        acknowledged individually, so every client learns the fate of its *own* request even
+        when a higher-priority producer wins the tick.
+        """
         best: Command | None = None
+        best_rank: tuple[int, int] | None = None
+        verdicts: dict[str, Verdict] = {}
+
         for key, source in _LEGACY_SOURCES:
             raw = context.get(key)
             if not raw:
@@ -144,11 +168,43 @@ class MotionGatewayModule(Module):
                 # value stands; the deadman governs submitted commands (API, clients).
                 issued_at=now,
             )
-            if best is None or command.source > best.source:
-                best = command
-        return best
+            rank = (int(source), 0)
+            if best_rank is None or rank > best_rank:
+                best, best_rank = command, rank
 
-    def _vet(self, command: Command, snapshot: SensorSnapshot) -> Verdict:
+        for command in self._drain_bus():
+            verdict = self._vet(command, snapshot, context)
+            verdicts[command.id] = verdict
+            # Ack before deciding the winner: a refusal is information the client asked for.
+            if self.bus is not None:
+                self.bus.acknowledge(command, verdict)
+            if not verdict.accepted:
+                continue
+            rank = (int(command.source), 1)
+            if best_rank is None or rank > best_rank:
+                best, best_rank = command, rank
+
+        if best is None:
+            return None, None
+        return best, verdicts.get(best.id) or self._vet(best, snapshot, context)
+
+    def _drain_bus(self) -> list[Command]:
+        if self.bus is None:
+            return []
+        return self.bus.drain()
+
+    def _vet(self, command: Command, snapshot: SensorSnapshot, context) -> Verdict:
+        # A client cannot drive a dog that has been put to rest. The interlock has no notion of
+        # mode (it is a safety envelope, not a policy), so the refusal lives here, next to the
+        # other precedence rules, and it is reported like any other veto.
+        if command.source is Source.CLIENT and _mode_name(context) == "rest":
+            return Verdict(
+                accepted=False,
+                action=command.action,
+                params=dict(command.params),
+                veto="mode",
+                detail="the dog is in rest mode; switch to manual to drive it",
+            )
         if command.action not in MOTION_ACTIONS:
             # Posture and expression are not gated. The authoritative action list belongs to
             # the HAL (`actions()`); refusing unknown names here would break the dog's
@@ -183,6 +239,12 @@ class MotionGatewayModule(Module):
             battery_v=battery_v,
             battery_valid=battery_v is not None,
         )
+
+
+def _mode_name(context) -> str:
+    """The mode a client selected, or the default when nothing sane is set."""
+    mode = context.get("runtime_mode")
+    return mode if isinstance(mode, str) and mode in RUNTIME_MODES else DEFAULT_MODE
 
 
 def _opt_float(value: Any) -> float | None:

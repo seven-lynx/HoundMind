@@ -13,7 +13,11 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 # json5 is not optional: config/settings.jsonc is JSONC with comments, and the loader needs
 # a real parser rather than a hand-rolled comment stripper. See finding B-02.
-dependencies = ["json5"]
+#
+# aiohttp is the control plane (D7): one package for HTTP, WebSocket and streaming. Its resident
+# cost on the Pi 4 has **not** been measured yet — that is a Phase 3 device task, recorded in the
+# plan. `fastapi`+`uvicorn`+`pydantic` was rejected as three packages for one route table.
+dependencies = ["json5", "aiohttp>=3.9,<4"]
 
 [project.optional-dependencies]
 # `lite` is retained as an empty preset so `pip install -e .[lite]` in existing docs, the
@@ -32,6 +36,12 @@ where = ["src"]
 # Explicit, because `tools` lives beside the main package and a silent omission here means
 # `python -m tools.houndmind_doctor` fails on an installed copy (finding B-08).
 include = ["houndmind_ai*", "tools*"]
+
+[tool.setuptools.package-data]
+# The web app is served by the package, so it has to be *in* the package: a `web/` directory at
+# the repository root is not present after `pip install`, which is exactly the class of bug the
+# packaging check in Phase 1 was added for.
+"houndmind_ai.services" = ["web/*.html", "web/*.js", "web/*.css"]
 
 [tool.ruff]
 target-version = "py311"

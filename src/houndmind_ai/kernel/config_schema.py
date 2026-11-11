@@ -915,9 +915,34 @@ _TELEMETRY_DASHBOARD = Section(
     }
 )
 
+# `services/api.py` — the control plane (D7). Every key here is read by
+# `services/settings.py::ApiSettings.from_settings`; a key that is not read is not listed, which
+# is the whole point of the strict schema.
+_API = Section(
+    fields={
+        # Reachable on the LAN by design: the token is the security boundary, not the bind
+        # address. `127.0.0.1` is a legitimate choice, and disabling `modules.api` removes the
+        # surface entirely.
+        "host": StrSpec(),
+        "port": IntSpec(minimum=1, maximum=65535),
+        # The install-issued token. Referenced by path, never pasted (D8).
+        "token_path": StrSpec(),
+        "static_root": _NULLABLE_STR,
+        "state_hz": FloatSpec(minimum=1.0, maximum=50.0),
+        "pairing_enabled": Bool(),
+        "pairing_attempts_per_minute": IntSpec(minimum=1, maximum=60),
+        "command_queue": IntSpec(minimum=1, maximum=1024),
+        "command_ack_timeout_s": FloatSpec(minimum=0.05, maximum=5.0),
+        "link_loss_s": FloatSpec(minimum=1.0, maximum=60.0),
+        "max_clients": IntSpec(minimum=1, maximum=64),
+        "log_tail": IntSpec(minimum=1, maximum=5000),
+    }
+)
+
 # Sections audited against their consumers so far. A section absent from this table is
 # accepted unvalidated, so the migration stays reviewable one group at a time.
 _SETTINGS_SECTIONS: dict[str, Spec] = {
+    "api": _API,
     "attention": _ATTENTION,
     "balance": _BALANCE,
     "battery": _BATTERY,
