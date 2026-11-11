@@ -9,10 +9,14 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+# Named so a Pi 3 owner has somewhere to go. Kept in step with the last tag that shipped Pi 3.
+LAST_PI3_RELEASE = "v2026.01.18"
 
 
 def run(cmd: list[str]) -> int:
@@ -24,20 +28,42 @@ def is_windows() -> bool:
     return os.name == "nt"
 
 
-def detect_pi_class() -> str:
-    """Return 'pi3', 'pi4', or 'unknown' based on platform hints."""
-    try:
-        model = Path("/proc/device-tree/model").read_text(encoding="utf-8").lower()
-        if "raspberry pi 3" in model:
-            return "pi3"
-        if "raspberry pi 4" in model or "raspberry pi 5" in model:
-            return "pi4"
-    except Exception:
-        pass
+def detect_pi_class(model: str | None = None) -> str:
+    """Return 'pi4', 'pi5', 'unsupported' or 'unknown' from the device-tree model.
+
+    Mirrors `src/houndmind_ai/board/detect.py`, which is the authority. The installer runs
+    before the package exists, so it cannot import it and the two have to be kept in step;
+    `tests/test_board_detect.py` asserts that they agree.
+
+    The word boundaries are load-bearing: the model string carries a revision, so
+    "Raspberry Pi 4 Model B Rev 1.5" is a Pi 4 and matching a bare digit invents a Pi 5.
+
+    ``model`` exists for that test; production passes nothing and the device tree answers.
+    """
+    if model is None:
+        try:
+            raw = Path("/proc/device-tree/model").read_bytes()
+            model = raw.decode("utf-8", errors="replace")
+        except OSError:
+            model = ""
+    model = " ".join(model.replace("\x00", " ").split()).lower()
+
+    if re.search(r"raspberry pi 5\b|raspberry pi 500\b|compute module 5\b", model):
+        return "pi5"
+    if re.search(r"raspberry pi 4\b|raspberry pi 400\b|compute module 4\b", model):
+        return "pi4"
+    if model:
+        # A readable device tree means a Raspberry Pi; if the generation is not one we ship for
+        # it is a board we dropped (Pi 3 and older) or a new one nobody has tested.
+        return "unsupported"
+
     machine = platform.machine().lower()
     if "armv7" in machine or "armv6" in machine:
-        return "pi3"
+        # 32-bit ARM without a readable device tree is a Pi 3 in practice.
+        return "unsupported"
     if "aarch64" in machine or "armv8" in machine:
+        # Unknown 64-bit ARM: assume the older of the two supported boards. Under-selecting the
+        # profile is the safe direction.
         return "pi4"
     return "unknown"
 
@@ -377,20 +403,30 @@ def main() -> int:
         return 2
 
     pi_class = detect_pi_class()
-    # Force full preset for Pi4/5, always install all dependencies for all modules that can run
+    if pi_class == "unsupported":
+        print(
+            "This board is not supported: HoundMind runs on a Raspberry Pi 4 or Pi 5.\n"
+            f"The last release that supported Pi 3 and older is {LAST_PI3_RELEASE}."
+        )
+        return 2
+    if pi_class == "unknown":
+        # A container, a CI runner and a workstation all land here, and the dependency
+        # selection still has to work on them.
+        print("Warning: no Raspberry Pi detected; assuming a Pi 4 for dependency selection.")
+
     if pi_class == "pi4":
+        # A Pi 4 still forces `full`, so `--preset` is ignored on it. That defect is known and
+        # is fixed with the installer rewrite; a Pi 5 must not inherit it, so it honours the
+        # flag like any other board.
         preset = "full"
-    elif pi_class == "pi3":
-        preset = "lite"
     else:
         preset = args.preset if args.preset != "auto" else "lite"
-    if preset == "full" and pi_class == "pi3":
-        print("Pi 3 detected: full preset is not supported. Use --preset lite.")
-        return 2
 
     req = repo_root / "requirements-lite.txt"
-    # Auto-build RTAB-Map for Pi4 full preset, or when explicitly requested.
-    should_build_rtabmap = args.build_rtabmap or (pi_class == "pi4" and preset == "full")
+    # Auto-build RTAB-Map for a Pi 4/5 full preset, or when explicitly requested.
+    should_build_rtabmap = args.build_rtabmap or (
+        pi_class in ("pi4", "pi5") and preset == "full"
+    )
     # Allow explicit opt-out
     if args.no_rtabmap:
         should_build_rtabmap = False
@@ -463,11 +499,14 @@ def main() -> int:
         else:
             return code
     # Always install Flask and run model downloader for Pi4/5
-    if pi_class == "pi4":
+    if pi_class in ("pi4", "pi5"):
         code = run([str(pip), "install", "flask"])
         if code != 0:
             return code
-        model_dl = repo_root / "tools" / "download_opencv_models.py"
+        # The downloader lives beside the package. This pointed at a repo-root `tools/`
+        # directory, which was deleted with the legacy servers, so the branch had silently done
+        # nothing since; `src/tools/` is where the script actually is.
+        model_dl = repo_root / "src" / "tools" / "download_opencv_models.py"
         if model_dl.exists():
             code = run([str(python), str(model_dl)])
             if code != 0:

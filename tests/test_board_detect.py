@@ -6,6 +6,8 @@ reachable on a workstation: `classify_model` is pure and `detect` takes the path
 
 from __future__ import annotations
 
+import importlib.util
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -75,3 +77,37 @@ def test_the_default_path_answers_without_raising() -> None:
 )
 def test_only_the_shipped_editions_are_supported(kind: str, supported: bool) -> None:
     assert BoardInfo(kind=kind).supported is supported
+
+
+@lru_cache(maxsize=1)
+def _installer_detect():
+    """The installer's copy of this rule, loaded by path.
+
+    `scripts/` is not importable as a package and the installer must run before HoundMind is
+    installed, so it cannot share the code. It can share the answers.
+    """
+    path = Path(__file__).resolve().parents[1] / "scripts" / "installer_core.py"
+    spec = importlib.util.spec_from_file_location("_installer_core", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.detect_pi_class
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "Raspberry Pi 5 Model B Rev 1.0",
+        "Raspberry Pi 500 Rev 1.0",
+        "Raspberry Pi Compute Module 5 Rev 1.0",
+        "Raspberry Pi 4 Model B Rev 1.5",
+        "Raspberry Pi 400 Rev 1.0",
+        "Raspberry Pi Compute Module 4 Rev 1.0",
+        "Raspberry Pi 3 Model B Plus Rev 1.3",
+        "Raspberry Pi Zero 2 W Rev 1.0",
+        "",
+    ],
+)
+def test_the_installer_and_the_runtime_agree(model: str) -> None:
+    """The installer reported a Pi 5 as a Pi 4 for as long as the two were written separately."""
+    assert _installer_detect()(model) == classify_model(model)
