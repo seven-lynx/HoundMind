@@ -2,9 +2,12 @@
 // This is the only user-facing config file. It is plain text with comments.
 // All options are live-tuned by editing this file and restarting the runtime.
 {
-  "profile": "pi3",
+  // Which board is this? "auto" reads the device tree, which is the only default that can be
+  // true on more than one machine; `HOUNDMIND_PROFILE` overrides it at launch. The answer is
+  // `pi4`, `pi5`, `unsupported` (Pi 3 and older, refused with a message) or `unknown` (no
+  // device tree: CI, a workstation, a container — those run `pi4`).
+  "profile": "auto",
   "profiles": {
-    "pi3": {},
     "pi4": {
       "loop": {
         "tick_hz": 10,
@@ -24,6 +27,38 @@
         },
         "vision_pi4": {
           "frame_interval_s": 0.1
+        }
+      }
+    },
+    "pi5": {
+      // Deliberately the same cadence and the same enablement as `pi4`. A faster loop is a
+      // claim that needs a measurement, and nothing has been measured on a Pi 5 yet.
+      "loop": {
+        "tick_hz": 10,
+        "max_cycles": null
+      },
+      "modules": {
+        "vision_pi4": {"enabled": true},
+        "face_recognition": {"enabled": false},
+        "semantic_labeler": {"enabled": false},
+        "slam_pi4": {"enabled": false}
+      },
+      "settings": {
+        "navigation": {
+          "scan_interval_s": 0.3,
+          "scan_interval_min_s": 0.2,
+          "scan_interval_max_s": 1.5
+        },
+        "vision_pi4": {
+          "frame_interval_s": 0.1
+        },
+        "performance": {
+          // A Pi 5 idles near 65 C with no cooler and begins to throttle at 80 C, so the
+          // generic 70 C warning marks a healthy board as degraded — and degradation pulls the
+          // `throttle_scans` lever, halving the scan rate for no reason. These are the board
+          // figures with a little headroom, not a tuning preference.
+          "health_temp_warn_c": 78.0,
+          "health_gpu_temp_warn_c": 80.0
         }
       }
     }
@@ -187,10 +222,18 @@
   },
   "settings": {
     // =====================================================================
+    // DEVICE IDENTITY
+    // =====================================================================
+    "device": {
+      // Stamped on every log record and reported as `device_id` by GET /api/v1/meta.
+      // Empty means "use the hostname".
+      "device_id": ""
+    },
+    // =====================================================================
     // SENSORS (reactive sensor service)
     // =====================================================================
     "sensors": {
-      // Sensor polling cadence (Hz). Keep light for Pi 3.
+      // Sensor polling cadence (Hz). The loop cannot sample faster than it ticks.
       "poll_hz": 10,
       // Max sensor snapshots to keep in history.
       "history_size": 10,

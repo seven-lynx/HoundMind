@@ -626,6 +626,16 @@ _CALIBRATION = Section(
     }
 )
 
+# `main.py` — the identity stamped on every log record and reported by `GET /api/v1/meta`.
+# The runtime read this key and the file shipped nothing, so an operator had no way to set it
+# and the schema would have rejected it the moment the file did ship one.
+_DEVICE = Section(
+    fields={
+        # Empty means "use the hostname", which is the fallback the runtime already applied.
+        "device_id": StrSpec(),
+    }
+)
+
 # `perception/fusion.py`.
 _PERCEPTION = Section(
     fields={
@@ -914,6 +924,7 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "battery": _BATTERY,
     "behavior": _BEHAVIOR,
     "calibration": _CALIBRATION,
+    "device": _DEVICE,
     "emotion": _EMOTION,
     "energy": _ENERGY,
     "face_recognition": _FACE_RECOGNITION,
