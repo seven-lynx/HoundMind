@@ -14,8 +14,53 @@ Current Release: v2026.01.18 • Author: 7Lynx
   else is driving" from "the dog ignored me".
 - `state.supervisor`: whether the watchdog is holding motion and why, which modules it asked the
   runtime to restart, and which it has given up on. `docs/CONTROL_API.md` §4 documents both.
+- **Board detection** (`src/houndmind_ai/board/detect.py`): the device-tree model is read once at boot
+  and classified as `pi4`, `pi5`, `unsupported` or `unknown`. `GET /api/v1/meta` now reports `board`,
+  a field the contract has promised since the control plane shipped while nothing ever set it, and
+  `profile`, which can differ from the board when `HOUNDMIND_PROFILE` is set.
+- `settings.device.device_id` is a real key with a schema entry; it was read by `main.py` and shipped
+  nowhere, so `device_id` in `/meta` and in every log record was always the hostname fallback.
+- `profiles.pi5`: the same cadence and enablement as `pi4`, with thermal warning thresholds that suit a
+  board which idles near 65 °C and throttles at 80 °C. **Unmeasured on hardware** — the values are the
+  board's published figures, not a bench result.
+
+### Changed
+- `profile` in `config/settings.jsonc` ships as `auto`: the profile now comes from the board instead of
+  being hard-coded. `HOUNDMIND_PROFILE` still wins over the file.
+- An unknown profile name is a load-time error with a did-you-mean; it used to be a warning, so a typo
+  ran the shipped cadence and looked exactly like success. A profile *resolved* from the board may have
+  no overrides — a config with no `profiles` table is legal.
+- The installer accepts Python 3.11–3.13, matching `requires-python`, instead of 3.10–3.11. It was
+  wrong in both directions: 3.10 is outside the range `pip install` accepts, and 3.12/3.13 were refused
+  even though the package declares support for them.
+
+### Fixed
+- The installer reported a Pi 5 as a Pi 4, and detected a Pi 3 it then tried to install on. It now
+  refuses an unsupported board before touching anything and names `v2026.01.18` as the last release
+  that ran on one. `tests/test_board_detect.py` holds the installer's copy of the rule and the
+  runtime's to the same answers.
+- The installer's OpenCV model downloader pointed at a repo-root `tools/` directory deleted with the
+  legacy servers, so it had silently done nothing. It resolves `src/tools/` now.
 
 ### Docs
+- `docs/BASELINE.md` gains a second addendum: the re-measured counts (416 passed across 56 test files,
+  84 source files under `mypy`), and the three items the Pi 5 edition closed — H-06, the installer's
+  board mapping, and the installer's Python gate. Its "known gap" paragraph said the installer's
+  3.10/3.11 restriction was out of scope; that restriction is what this change removes, so the
+  paragraph would have described a tree that no longer exists.
+- `docs/PI3_VALIDATION.md` deleted and its still-true rows moved into `docs/INSTALL.md` § "Bench
+  checklist". A checklist for a board we no longer support is a second source of truth; the
+  replacements are the rows that apply to a Pi 4/5 (scan, stop, watchdog, tilt, logging) plus the
+  motion-flag warning on `tools.smoke_test`.
+- `docs/INSTALL.md` rewritten around the hardware that actually exists: Pi 4/5 only, Python 3.11–3.13,
+  and the Robot HAT **V5** requirement for a Pi 5 (a V4 supplies 5V/3A against the Pi 5's 5V/5A, so the
+  board can shut down mid-run). The Python 3.10/pyenv instructions are gone, because 3.10 is outside
+  `requires-python` and the docs were telling operators to build an environment `pip install` refuses.
+- `docs/ARCHITECTURE.md` §2 and §6 corrected again: `board/` exists now, `pi3` is not the default and
+  is not a profile at all, and the resolution rules are written down in the order they apply.
+- `README.md`: the primary-features table now lists `Sensor Health`. The module is registered by
+  the runtime and ships disabled, but the authoritative default table skipped it, so a reader
+  could not tell it existed.
 - `docs/README.md`: the documentation index — every file, its status, and who it binds. A file with
   no row in that table is unreachable, so the row is part of the change.
 - One schema for all ten remaining docs: a `Status:` line (`contract`, `design`, `reference`,

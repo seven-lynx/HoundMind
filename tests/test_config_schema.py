@@ -201,6 +201,7 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("movement", "speed_turn_normal", 300),
     ("orientation", "turn_timeout_s", 0.0),
     ("calibration", "request", "servo_zer0"),
+    ("device", "device_id", 7),
     ("perception", "fusion", []),
     ("habituation", "threshold", 0),
     ("personality", "curiosity", 1.5),

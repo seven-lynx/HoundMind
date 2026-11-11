@@ -3,12 +3,18 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
 
 import json5
 
-from houndmind_ai.kernel.config_schema import ConfigError, validate_config_tree
+from houndmind_ai.board.detect import SUPPORTED_KINDS, BoardInfo, detect
+from houndmind_ai.kernel.config_schema import (
+    ConfigError,
+    Problem,
+    validate_config_tree,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +36,12 @@ class Config:
     loop: LoopConfig
     modules: dict[str, ModuleConfig]
     settings: dict[str, dict] = field(default_factory=dict)
+    # The profile that was actually applied, after board detection. Empty for a `Config` built
+    # by hand, so a caller that never went through `load_config` cannot claim one.
+    profile: str = ""
 
     @staticmethod
-    def from_dict(raw: dict) -> Config:
+    def from_dict(raw: dict, profile: str = "") -> Config:
         loop_raw = raw.get("loop", {})
         # Coerce loop numeric settings to the expected types. Ensure max_cycles
         # is either an int or None to avoid runtime type errors when compared
@@ -61,12 +70,26 @@ class Config:
             )
         settings = raw.get("settings", {})
 
-        return Config(loop=loop, modules=modules, settings=settings)
+        return Config(loop=loop, modules=modules, settings=settings, profile=profile)
 
 
 def default_config_path() -> Path:
     repo_root = Path(__file__).resolve().parents[3]
     return repo_root / "config" / "settings.jsonc"
+
+
+# `auto` means "ask the board", and it is what the file ships: a config does not know which Pi
+# it was copied onto, so a hard-coded default can only be right on one of them.
+AUTO_PROFILE = "auto"
+
+# What a host with no device tree resolves to. CI, a workstation and a container are all
+# `unknown`, and the runtime has to start on every one of them; the slower of the two shipped
+# editions is the honest guess.
+FALLBACK_PROFILE = "pi4"
+
+# Named in the refusal a Pi 3 gets, so its owner has somewhere to go. Kept in step with the
+# last tag that shipped Pi 3 support.
+LAST_PI3_RELEASE = "v2026.01.18"
 
 
 def _load_jsonc(path: Path) -> dict:
@@ -84,6 +107,69 @@ def _load_jsonc(path: Path) -> dict:
         raise ValueError(f"{path}: {exc}") from exc
 
 
+def resolve_profile(raw: dict, board: BoardInfo | None = None) -> str:
+    """Decide which profile applies, or refuse loudly.
+
+    Precedence: ``HOUNDMIND_PROFILE`` (an operator override at launch), then ``profile`` in the
+    file, then ``auto``.
+
+    An explicitly requested profile must exist. It used to be a warning, so a typo ran the
+    shipped cadence and looked exactly like success. A name resolved from the board may be
+    absent from the file: a config with no ``profiles`` table is legal and simply has nothing
+    to override.
+
+    ``board`` exists for tests; production passes nothing and the device tree answers.
+    """
+    requested = os.getenv("HOUNDMIND_PROFILE") or raw.get("profile") or AUTO_PROFILE
+    requested = str(requested)
+
+    profiles = raw.get("profiles")
+    if not isinstance(profiles, dict):
+        profiles = {}
+
+    if requested != AUTO_PROFILE:
+        if requested not in profiles:
+            raise ConfigError([_unknown_profile(requested, profiles)])
+        return requested
+
+    info = board if board is not None else detect()
+
+    if info.kind not in SUPPORTED_KINDS:
+        if info.kind == "unsupported":
+            raise ConfigError(
+                [
+                    Problem(
+                        "config.profile",
+                        f"board not supported: {info.model or 'an unnamed model'} is a board "
+                        f"this release does not run on; Pi 3 and older were dropped, and "
+                        f"{LAST_PI3_RELEASE} is the last release that supported them",
+                    )
+                ]
+            )
+        logger.warning(
+            "No Raspberry Pi board detected; using the '%s' profile. Set HOUNDMIND_PROFILE "
+            "to choose one explicitly.",
+            FALLBACK_PROFILE,
+        )
+        return FALLBACK_PROFILE
+
+    return info.kind
+
+
+def _unknown_profile(name: str, profiles: dict) -> Problem:
+    available = sorted(profiles)
+    # A suggestion has to be a near-miss, not merely a shared prefix. At the default cutoff
+    # `pi3` earns "did you mean pi5?", which is advice a Pi 3 owner should not be given: they
+    # need the dropped-board message, not a different edition's name.
+    suggestion = get_close_matches(name, available, n=1, cutoff=0.8)
+    listed = ", ".join(available) if available else "none"
+    return Problem(
+        "config.profile",
+        f"unknown profile {name!r}; this file defines: {listed}",
+        suggestion[0] if suggestion else None,
+    )
+
+
 def load_config(path: Path | None = None) -> Config:
     config_path = path or default_config_path()
     raw = _load_jsonc(config_path)
@@ -94,8 +180,9 @@ def load_config(path: Path | None = None) -> Config:
     if problems:
         raise ConfigError(problems)
 
-    raw = _apply_profile_overrides(raw)
-    config = Config.from_dict(raw)
+    profile = resolve_profile(raw)
+    raw = _apply_profile_overrides(raw, profile)
+    config = Config.from_dict(raw, profile=profile)
 
     for warning in validate_config(config):
         logger.warning("Config warning: %s", warning)
@@ -116,18 +203,15 @@ def load_config(path: Path | None = None) -> Config:
     return config
 
 
-def _apply_profile_overrides(raw: dict) -> dict:
+def _apply_profile_overrides(raw: dict, profile: str) -> dict:
     profiles = raw.get("profiles", {})
     if not isinstance(profiles, dict):
         return raw
 
-    profile = os.getenv("HOUNDMIND_PROFILE") or raw.get("profile")
-    if not profile:
-        return raw
-    profile = str(profile)
     overrides = profiles.get(profile)
     if not isinstance(overrides, dict):
-        logger.warning("Profile '%s' not found; skipping overrides", profile)
+        # A profile with no overrides is a legal config, not a failure: `resolve_profile` has
+        # already refused the names that cannot be honoured.
         return raw
 
     merged = dict(raw)

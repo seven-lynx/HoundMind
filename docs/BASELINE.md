@@ -144,10 +144,42 @@ the declared `>=3.11,<3.14`, so these are **tooling evidence, not compatibility 
 here was run on 3.11 or on a Pi. The one gate that is safe to trust is `mypy`, exactly as the
 baseline said.
 
-### Known gap, not fixed here
+### Known gap, formerly not fixed here
 
-`scripts/installer_core.py:70,325` accepts **Python 3.10 and 3.11 only** and refuses 3.12+, while
-`pyproject.toml:13` declares `>=3.11,<3.14`. The installer is the stricter of the two, so a 3.12 or
-3.13 install is refused by the script even though the package metadata would allow it.
-`docs/INSTALL.md` documents the installer's behaviour and is therefore correct; the metadata and the
-installer need to be reconciled in a change that touches dependencies, which is not this one.
+`scripts/installer_core.py` accepted **Python 3.10 and 3.11 only** and refused 3.12+, while
+`pyproject.toml:13` declares `>=3.11,<3.14`. The installer was stricter than the metadata in one
+direction and looser in the other: it would create an environment on 3.10 that `pip install` then
+refused, and it refused 3.12/3.13 even though the package declares support for them. `docs/INSTALL.md`
+documented the installer's behaviour, so the documentation inherited the error and told operators to
+build a 3.10 venv.
+
+Reconciled in the Pi 5 edition change: `is_supported_python` and the top-level version gate now accept
+**3.11–3.13**, which is the declared range, and `docs/INSTALL.md` documents that range. The baseline
+above is kept as written — it is what the tree measured before that change, not a description of it.
+
+---
+
+## Addendum — 2026-11-11, after the Pi 5 edition
+
+Appended for the same reason as the addendum above: the earlier sections stay true of the tree they
+measured.
+
+### Re-measured on the same workstation
+
+| Item | Value |
+|---|---|
+| Interpreter | **Python 3.14.5** (`requires-python` is `>=3.11,<3.14`, so this is tooling evidence only) |
+| `pytest` | `416 passed, 2 skipped` across **56** test files |
+| `ruff check src` | `All checks passed` |
+| `mypy src --ignore-missing-imports` | `Success: no issues found in 84 source files` |
+
+### What changed about the baseline's own subject matter
+
+| Baseline item | Now | Evidence |
+|---|---|---|
+| No board detection anywhere in `src/` (**H-06**) | `board/detect.py` reads the device-tree model and resolves the profile | `src/houndmind_ai/board/detect.py`, `tests/test_board_detect.py` |
+| Installer mapped a Pi 5 to `pi4` (**H-06**) | `detect_pi_class` answers `pi4`/`pi5`/`unsupported`/`unknown` and agrees with the runtime | `scripts/installer_core.py`, `tests/test_board_detect.py` |
+| Installer accepted 3.10/3.11 and refused 3.12+ | accepts 3.11–3.13, matching `requires-python` | `scripts/installer_core.py`, `docs/INSTALL.md` |
+
+The interpreter caveat is unchanged and still the sharpest thing in this document: every number above
+comes from 3.14, which the package excludes, and none of it was run on a Pi.

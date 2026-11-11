@@ -1,4 +1,4 @@
-"""Sound attention demo (Pi3 hardware-only).
+"""Sound attention demo (hardware-only).
 
 Turns the head toward detected sound and uses LED attention signal.
 Run with:
