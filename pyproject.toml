@@ -5,21 +5,59 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "houndmind"
 version = "2026.01.18"
-description = "HoundMind: modular AI framework for SunFounder PiDog (Pi 3 target, vision/voice disabled by default)."
+description = "HoundMind: modular AI framework for SunFounder PiDog (Pi 4 and Pi 5)."
 readme = "README.md"
-requires-python = ">=3.10,<3.12"
-dependencies = []
+# Pi 3 support was dropped in the 2026.11 refactor: it forced a 5 Hz loop, vision off by
+# default, and a dependency dance that could not be maintained. 3.11 is Bookworm, 3.13 is
+# Trixie. 3.10 is end-of-life and no longer represents a board we support.
+requires-python = ">=3.11,<3.14"
+# json5 is not optional: config/settings.jsonc is JSONC with comments, and the loader needs
+# a real parser rather than a hand-rolled comment stripper. See finding B-02.
+dependencies = ["json5"]
 
 [project.optional-dependencies]
-# `lite` contains minimal, small dependencies suitable for Pi3 or development without heavy
-# vision/ML/audio packages. `full` is the heavy preset for Pi4 that enables vision/audio/SLAM
-# and may require system-level build tools and additional libraries on the target device.
-lite = ["json5"]
+# `lite` is retained as an empty preset so `pip install -e .[lite]` in existing docs, the
+# installer and CI keeps working while the heavy stack moves out of the default install.
+lite = []
 full = ["numpy", "scipy", "opencv-contrib-python", "face_recognition", "SpeechRecognition", "pyaudio", "sounddevice", "rtabmap-py", "flask", "pyttsx3", "vosk"]
-dev = ["ruff", "pytest", "mypy", "pytest-cov"]
+# ruff is pinned exactly: the lint result must not depend on which version PyPI served
+# that morning. Bump it deliberately, in its own commit, and expect new findings.
+dev = ["ruff==0.17.4", "pytest>=8", "mypy>=1.11", "pytest-cov"]
 
 [project.scripts]
 houndmind = "houndmind_ai.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+# Explicit, because `tools` lives beside the main package and a silent omission here means
+# `python -m tools.houndmind_doctor` fails on an installed copy (finding B-08).
+include = ["houndmind_ai*", "tools*"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+# Deliberate, documented exceptions rather than a blanket ignore.
+ignore = [
+    # `raise ... from exc` is meaningless where we re-raise a normalised error.
+    "B904",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The vendor probe exists to call hardware that may raise anything, one call at a time.
+"src/tools/validate_rtabmap_adapter.py" = ["B905"]
+
+[tool.pytest.ini_options]
+# `testpaths` + `python_files` keep device CLIs such as src/tools/smoke_test.py out of
+# collection. It matches the default `*_test.py` pattern and imports cv2/pidog, so without
+# this the suite cannot collect at all (finding H-12).
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+files = ["src"]
