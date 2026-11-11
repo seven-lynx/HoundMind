@@ -2,14 +2,14 @@ import json
 import logging
 import logging.handlers
 import os
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -36,11 +36,11 @@ class ContextFilter(logging.Filter):
     Provide a dict-like `context` with optional keys: `device_id`, `runtime_tick`, `trace_id`, `mission_id`.
     """
 
-    def __init__(self, context: Optional[Dict[str, Any]] = None):
+    def __init__(self, context: dict[str, Any] | None = None):
         super().__init__()
         self.context = context or {}
 
-    def set_context(self, context: Dict[str, Any]) -> None:
+    def set_context(self, context: dict[str, Any]) -> None:
         self.context = context or {}
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -49,7 +49,19 @@ class ContextFilter(logging.Filter):
         return True
 
 
-def setup_logging(config: Optional[Dict[str, Any]] = None) -> ContextFilter:
+class _ManagedFileHandler(logging.handlers.RotatingFileHandler):
+    """Marker subclass so repeated `setup_logging` calls cannot duplicate handlers."""
+
+    _houndmind_managed = True
+
+
+class _ManagedConsoleHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    """Marker subclass, as above, for the console."""
+
+    _houndmind_console = True
+
+
+def setup_logging(config: dict[str, Any] | None = None) -> ContextFilter:
     """Centralized logging setup.
 
     Args:
@@ -74,23 +86,22 @@ def setup_logging(config: Optional[Dict[str, Any]] = None) -> ContextFilter:
     context_filter = ContextFilter(cfg.get("context", {}))
 
     # Avoid adding duplicate handlers on repeated setup calls
-    if not any(isinstance(h, logging.handlers.RotatingFileHandler) and getattr(h, "_houndmind_managed", False) for h in root.handlers):
-        file_handler = logging.handlers.RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=backup_count)
+    if not any(isinstance(h, _ManagedFileHandler) for h in root.handlers):
+        file_handler = _ManagedFileHandler(
+            log_file, maxBytes=10 * 1024 * 1024, backupCount=backup_count
+        )
         file_handler.setLevel(getattr(logging, level_name, logging.INFO))
         file_handler.setFormatter(JsonFormatter())
         # attach context filter directly to handler so formatted records include runtime context
         file_handler.addFilter(context_filter)
-        # mark handler so repeated setup_logging calls won't duplicate
-        setattr(file_handler, "_houndmind_managed", True)
         root.addHandler(file_handler)
 
-    if not any(isinstance(h, logging.StreamHandler) and getattr(h, "_houndmind_console", False) for h in root.handlers):
-        console = logging.StreamHandler()
+    if not any(isinstance(h, _ManagedConsoleHandler) for h in root.handlers):
+        console = _ManagedConsoleHandler()
         console.setLevel(getattr(logging, console_level_name, logging.INFO))
         console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
         # attach context filter to console as well for consistency
         console.addFilter(context_filter)
-        setattr(console, "_houndmind_console", True)
         root.addHandler(console)
 
     # keep the filter on the root logger too for any other consumers
