@@ -1,8 +1,11 @@
 # HoundMind Install Guide (PiDog, Pi 3/4/5)
 
+Status: **guide** — install, verify, and recover. Written for a fresh Raspberry Pi OS Bookworm image.
 Version: v2026.01.18 • Author: 7Lynx
+Pairs with: `README.md` (the one-liner), `docs/PI3_VALIDATION.md` (what to check afterwards)
 
-This guide installs HoundMind, the unified AI system for SunFounder PiDog. Simulation mode is no longer supported. PackMind and CanineCore are now a single system.
+This guide installs HoundMind, the unified AI system for SunFounder PiDog. Simulation mode is no
+longer supported. PackMind and CanineCore are now a single system.
 
 **Preferred OS (recommended):** Raspberry Pi OS Bookworm (64-bit).
 
@@ -10,6 +13,12 @@ Python compatibility notes:
 - The installer supports **Python 3.10–3.11 only**. For best compatibility with heavier native packages (OpenCV, `dlib`/`face_recognition`, `pyaudio`, `rtabmap-py`) we recommend creating the virtualenv with a Python 3.10 interpreter when performing a `full` install on Pi4.
 - If Python 3.10 is not available, the installer will try `python3.11`. If neither is found, the installer will stop with an actionable error. To force a specific interpreter, set the `PYTHON` environment variable when running the top-level script, e.g. `PYTHON=python3.10 bash scripts/install_houndmind.sh`.
 - Python 3.12+ is not supported yet; use Bookworm with Python 3.11 or install Python 3.10.
+
+> **Known inconsistency, documented rather than hidden.** `pyproject.toml` declares
+> `requires-python = ">=3.11,<3.14"`, which reads as "3.12 and 3.13 are fine", while
+> `scripts/installer_core.py` accepts only 3.10 and 3.11 and refuses anything newer. The installer is
+> the stricter of the two, so this guide follows the installer: **use 3.10 or 3.11**. Reconciling the
+> two is a dependency change, tracked in `docs/BASELINE.md`.
 - If an existing `.venv` was created with an unsupported or different Python minor version, the installer will automatically recreate it to keep the environment consistent.
 - If you encounter build failures on newer OS releases (Trixie or later), consider switching to Bookworm or use the `--preset lite` option.
 
@@ -259,7 +268,7 @@ python -m houndmind_ai
 ```
 
 ## Feature Guide
-See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for what each feature does, how to use it, and how to disable it.
+See [FEATURES_GUIDE.md](FEATURES_GUIDE.md) for what each feature does, how to use it, and how to disable it.
 
 ## Fallback: Run the Official PiDog Software
 

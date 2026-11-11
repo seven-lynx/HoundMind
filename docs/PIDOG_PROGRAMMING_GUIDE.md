@@ -1,7 +1,13 @@
 
 # Complete PiDog Programming Guide
 
+Status: **guide** — the SunFounder `pidog` library itself, with no HoundMind in the loop. Every
+method below is vendor API; nothing here is HoundMind's.
 Version: v2026.01.18 • Author: 7Lynx
+Pairs with: `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` (writing modules instead of scripts),
+`docs/FEATURES_GUIDE.md` (turning HoundMind features on and off)
+
+> **The definitive beginner-friendly guide to programming the SunFounder PiDog robotic dog with Python**
 
 
 > **The definitive beginner-friendly guide to programming the SunFounder PiDog robotic dog with Python**
@@ -31,6 +37,7 @@ Version: v2026.01.18 • Author: 7Lynx
 ## 📋 Table of Contents
 
 - [Quick Start Resources](#quick-start-resources)
+- [PiDog Method Reference](#pidog-method-reference)
 - [1. PiDog Class: Core Architecture](#1-pidog-class-core-architecture)
 - [2. Motion Control: Complete Movement API](#2-motion-control-complete-movement-api)
 - [3. Sensor Integration](#3-sensor-integration)
@@ -52,8 +59,75 @@ Version: v2026.01.18 • Author: 7Lynx
 
 - **[`pidog_programming_examples.py`](../examples/pidog_programming_examples.py)** - Runnable examples for every feature with menu system
 - **[`houndmind_mapping_demo.py`](../examples/houndmind_mapping_demo.py)** - HoundMind-only mapping snapshot example (no hardware required)
-- **[`api_reference.md`](./api_reference.md)** - Complete method documentation with all parameters
-- **[`FEATURES_GUIDE.md`](./FEATURES_GUIDE.md)** - What each feature does and how to disable it
+- **[`FEATURES_GUIDE.md`](./FEATURES_GUIDE.md)** - What each HoundMind feature does and how to disable it
+- **[`HOUNDMIND_PROGRAMMING_GUIDE.md`](./HOUNDMIND_PROGRAMMING_GUIDE.md)** - The HoundMind runtime: modules, context keys, config sections
+
+---
+
+## PiDog Method Reference
+
+The vendor surface this whole guide uses, in one place. Parameters are the vendor defaults.
+
+### Lifecycle and actions
+
+| Method | Does | Parameters |
+|---|---|---|
+| `do_action(action_name, step_count=1, speed=50)` | Run a preset ActionFlow action | `action_name`, `step_count`, `speed` |
+| `wait_all_done()` | Block until every queued motion finishes | — |
+| `stop_and_lie()` | Safe stop, then lie down | — |
+| `body_stop()` | Immediate stop, no pose | — |
+| `close()` | Release the servos and the bus | — |
+
+### Head, tail, legs
+
+| Method | Does |
+|---|---|
+| `head_move(target_angles, roll_comp=0, pitch_comp=0, immediately=True, speed=50)` | Head `[yaw, roll, pitch]` in degrees |
+| `tail_move(target_angles, immediately=True, speed=50)` | Tail angle(s) |
+| `legs_move(target_angles, immediately=True, speed=50)` | Eight leg servos, advanced |
+| `wait_head_done()` / `wait_tail_done()` / `wait_legs_done()` | Block on one body part instead of all |
+
+### Sensors
+
+| Property / method | Returns |
+|---|---|
+| `ultrasonic.read_distance()` | Distance in cm |
+| `ears.isdetected()`, `ears.read()` | Sound detected, and its direction |
+| `dual_touch.read()` | Touch state (`"N"` when untouched) |
+| `accData`, `gyroData` | Raw IMU |
+
+### RGB LEDs
+
+| Method | Does |
+|---|---|
+| `rgb_strip.set_mode(style, color, bps=1.0, brightness=1.0)` | Set an LED effect |
+| `rgb_strip.close()` | Turn the LEDs off |
+
+### The safe pattern
+
+Every script in this guide has the same shape: open the dog, `try`, act, and `finally: close()`. If
+you only copy one thing, copy this — a script that dies between `Pidog()` and `close()` leaves the
+servos energised.
+
+```python
+from pidog import Pidog
+
+dog = Pidog()
+try:
+    dog.do_action("stand", speed=50)
+    dog.wait_all_done()
+finally:
+    dog.close()
+```
+
+### What this guide does not cover
+
+HoundMind's own runtime — `IntentBoard`, `motion_gateway`, the interlock, context keys, config
+validation — is in [`HOUNDMIND_PROGRAMMING_GUIDE.md`](./HOUNDMIND_PROGRAMMING_GUIDE.md). Reading this
+guide teaches you the dog; reading that one teaches you the framework that drives it. Do not mix the
+two in one process: a script that calls `dog.do_action()` directly competes with the runtime for the
+servo bus.
+
 ---
 
 ## Install Order (Recommended)
@@ -1041,7 +1115,8 @@ See the runnable example in `examples/houndmind_mapping_demo.py`.
 
 
 ### Reference Documentation
-- **[`api_reference.md`](./api_reference.md)** - Complete API reference with all methods and parameters, including mapping/navigation
+- **[`HOUNDMIND_PROGRAMMING_GUIDE.md`](./HOUNDMIND_PROGRAMMING_GUIDE.md)** - HoundMind runtime: modules, context keys, config sections, mapping and navigation
+- **[`CONTROL_API.md`](./CONTROL_API.md)** - The REST/WebSocket contract, if you want a client instead of a script
 
 
 ### Official Resources
