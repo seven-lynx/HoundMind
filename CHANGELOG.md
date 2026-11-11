@@ -15,6 +15,45 @@ Current Release: v2026.01.18 • Author: 7Lynx
 - `state.supervisor`: whether the watchdog is holding motion and why, which modules it asked the
   runtime to restart, and which it has given up on. `docs/CONTROL_API.md` §4 documents both.
 
+### Docs
+- `docs/README.md`: the documentation index — every file, its status, and who it binds. A file with
+  no row in that table is unreachable, so the row is part of the change.
+- One schema for all ten remaining docs: a `Status:` line (`contract`, `design`, `reference`,
+  `guide`, `runbook`, `index`, `historical`), the existing `Version:` line, and a `Pairs with:` line
+  naming the code it describes.
+- `docs/ARCHITECTURE.md` corrected against the tree it claims to describe: the package layout
+  (`board/`, `android/`, `nav/`, `act/calibration.py` did not exist), the adapter names
+  (`PidogHAL`/`FakeDogHAL`, not per-board classes), board profiles as JSON5 `pi3`/`pi4` rather than
+  TOML, `/health` versus `/modules`, the nonexistent `--unsafe` flag and `houndmind doctor`, and the
+  false claim that safety cannot be disabled in configuration — the interlock cannot, the module
+  ships off.
+- `docs/CONTROL_API.md` corrected against `services/api.py`: no mDNS address, no
+  `POST /calibration/run`, no `command_ack` frame, no `device` object in the snapshot, no
+  `capabilities.actions` list, and the event names reduced to the five that are actually published.
+  The endpoint table is still parsed by `tests/test_api_routes.py`, so it stays in lockstep with
+  `ROUTES`.
+- `docs/BASELINE.md` gains an addendum rather than an edit: `requires-python` moved to
+  `>=3.11,<3.14`, ruff is pinned and configured, H-12 is fixed by `testpaths`, and the current
+  numbers are recorded with the interpreter that produced them.
+- `docs/FEATURES_GUIDE.md` renumbered to close the gap at §11 and remove the duplicate §22 and §25;
+  voice setup folded into §17; profiles, path planning, disabling and troubleshooting ordered last.
+  Every `§` cross-reference in `README.md` and `ROADMAP.md` was checked against the new numbers.
+- `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` rewritten around the code: `loop.tick_hz` (not `core.tick_hz`),
+  `IntentBoard` instead of the removed `navigation_action`/`behavior_action`, request-driven
+  calibration instead of a `--calibrate` flag that does not exist, the commands CI actually runs, and
+  the stray closing chat block removed.
+- `docs/PIDOG_PROGRAMMING_GUIDE.md` gains a vendor method reference and points at the HoundMind guide
+  instead of the deleted `api_reference.md`.
+- `docs/LOGGING.md` documents both support bundles — the CLI one carries logs, the HTTP one does not.
+- `docs/INSTALL.md` states the installer's Python 3.10–3.11 gate and the `pyproject.toml` range it
+  disagrees with, instead of leaving the contradiction silent.
+
+### Removed
+- `docs/api_reference.md`, `docs/QUICK_START_PROGRAMMING.md` and `docs/voice_setup_instructions.md`.
+  Their content moved into `HOUNDMIND_PROGRAMMING_GUIDE.md` (§4–§6, §1, §14), `FEATURES_GUIDE.md`
+  (§17) and `PIDOG_PROGRAMMING_GUIDE.md` (vendor method reference). Four documents described the same
+  context keys; two of them were wrong.
+
 ### Added
 - `services/`: the control plane — one process, one port (8420), one authenticated API (D7).
   REST, WebSocket telemetry, MJPEG and the web app are routes on the same aiohttp application,
