@@ -143,7 +143,9 @@ def test_the_camera_says_why_there_is_no_picture(tmp_path) -> None:
                 assert (await response.json())["error"] == "unavailable"
 
             # A frame in the context is enough to serve one: the producer is a vision module.
-            plane.context.set("vision_frame", b"\xff\xd8jpegdata")
+            # The producer publishes encoded bytes under its own key, because the raw array
+            # `vision_frame` is what the detection modules read.
+            plane.context.set("vision_frame_jpeg", b"\xff\xd8jpegdata")
             snapshot = await client.get(
                 f"{API_PREFIX}/camera/snapshot",
                 headers={"Authorization": f"Bearer {token}"},

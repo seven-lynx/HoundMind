@@ -284,15 +284,22 @@ python -m tools.voice_cli command --action "forward"
 ---
 
 ## 21) Pi4 Vision Feed (Pi4)
-**What it does:** Captures frames and publishes `vision_frame` for other modules. Optional MJPEG stream.
+**What it does:** Captures frames and publishes `vision_frame` (the raw array, read by face
+recognition, the semantic labeler and SLAM) and `vision_frame_jpeg` (encoded bytes, served by the
+control plane's camera routes) for other modules.
 
 **Enable:**
 - `modules.vision_pi4.enabled = true`
 - `settings.vision_pi4.backend = "picamera2"` (or `"opencv"` fallback)
 
-**HTTP stream (optional):**
-- `settings.vision_pi4.http.enabled = true`
-- Stream URL: `http://<pi-ip>:8090/stream`
+**Camera stream:** there is no dedicated stream port. With this module enabled, the control plane
+serves the frames it publishes:
+
+- `GET /api/v1/camera/stream` — MJPEG, requires the API token
+- `GET /api/v1/camera/snapshot` — single JPEG
+
+See §26 for the auth story. The old `settings.vision_pi4.http` block and its port 8090 server were
+removed; a config that still contains it fails to load with a suggestion to delete it.
 
 **Camera check tool:**
 ```bash

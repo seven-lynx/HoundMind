@@ -223,20 +223,20 @@ runtime.run()
 
 ---
 
-## Pi4 Vision Stream (HTTP)
-If `vision_pi4.http.enabled` is true, the module serves a live MJPEG stream:
+## Vision and face recognition — no dedicated ports
 
-- `GET /stream` → MJPEG video stream
+There are no per-feature HTTP servers any more. The legacy ports 8088 (face recognition),
+8090 (vision stream), 8091 (voice) and 8092 (telemetry dashboard) were removed in favour of the
+single control plane (`docs/CONTROL_API.md`, port 8420):
 
-Example (browser):
-http://<pi-ip>:8090/stream
+| What | Now |
+|---|---|
+| Camera frames | `GET /api/v1/camera/stream`, `GET /api/v1/camera/snapshot` (`state:read`) |
+| Module status (`/status` on every legacy server) | `GET /api/v1/modules` (`state:read`) |
+| Runtime snapshot (telemetry `/snapshot`) | `GET /api/v1/state` (`state:read`) |
+| Logs and support bundle | `GET /api/v1/logs`, `GET /api/v1/support-bundle` (`admin`) |
+| Face enrollment | In-process: set `face_recognition_command` in the runtime context (§`optional/face_recognition.py`). No v1 route yet. |
+| SLAM map/trajectory download | Not exposed in v1; `slam_map_data` and `slam_trajectory` remain on the context. |
 
----
-
-## Face Recognition HTTP Endpoints
-If `face_recognition.http.enabled` is true:
-
-- `GET /status` → backend status
-- `GET /faces` → last detections
-- `GET /enroll?name=Alice` → enqueue enrollment
-- `POST /enroll` with `{ "name": "Alice" }`
+A config that still contains `settings.<module>.http` fails to load with a did-you-mean pointing
+at the offending block — delete it.

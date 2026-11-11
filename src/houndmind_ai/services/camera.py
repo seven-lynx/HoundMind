@@ -24,7 +24,11 @@ __all__ = ["CameraService", "FRAME_KEY", "FRAME_TS_KEY"]
 
 # Where a vision module publishes. Names are part of the contract between `optional/` and the
 # control plane, so they live here rather than being spelled out twice.
-FRAME_KEY = "vision_frame"
+#
+# The producer encodes: it publishes the JPEG bytes, not the raw array, because the raw array
+# is also what `face_recognition`, `semantic_labeler` and `slam_pi4` read and re-encoding it
+# for every viewer would be the legacy port-8090 mistake in reverse.
+FRAME_KEY = "vision_frame_jpeg"
 FRAME_TS_KEY = "vision_frame_ts"
 
 _BOUNDARY = "houndmindframe"

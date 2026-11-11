@@ -803,7 +803,6 @@ _VISION_PI4 = Section(
                 "std": ListOf(FloatSpec(), length=3),
             }
         ),
-        "http": _HTTP,
     }
 )
 
