@@ -63,3 +63,36 @@ def test_no_optional_module_is_marked_required(required: bool) -> None:
     for module in build_modules(load_config()):
         if module.status.required:
             assert module.name in hal, f"{module.name} is required but is not HAL"
+
+
+def test_exactly_one_module_owns_the_servo_bus() -> None:
+    from houndmind_ai.kernel.registry import Capability
+    from houndmind_ai.main import build_registry
+
+    registry = build_registry(load_config())
+    assert registry.provider(Capability.MOTION) is not None
+    assert registry.provider(Capability.SENSORS) is not None
+
+
+def test_the_gateway_runs_before_the_motors() -> None:
+    """A decision made this tick has to be the one executed this tick."""
+    from houndmind_ai.main import build_registry
+
+    names = build_registry(load_config()).names()
+    assert names.index("motion_gateway") < names.index("hal_motors")
+
+
+def test_every_registered_module_is_ticked() -> None:
+    """A module in the registry but not in the tick list would be silently dead."""
+    from houndmind_ai.main import build_modules, build_registry
+
+    config = load_config()
+    assert [m.name for m in build_registry(config)] == [m.name for m in build_modules(config)]
+
+
+def test_the_sensor_health_module_is_now_wired() -> None:
+    """It existed as a `Module` subclass for the life of the project without ever running."""
+    from houndmind_ai.main import build_modules
+
+    names = [m.name for m in build_modules(load_config())]
+    assert "sensor_health" in names

@@ -5,6 +5,7 @@ import logging
 import socket
 from pathlib import Path
 
+from houndmind_ai.act.gateway import MotionGatewayModule
 from houndmind_ai.behavior.attention import AttentionModule
 from houndmind_ai.behavior.fsm import BehaviorModule
 from houndmind_ai.behavior.habituation import HabituationModule
@@ -15,6 +16,7 @@ from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.motors import MotorModule
 from houndmind_ai.hal.sensors import SensorModule
 from houndmind_ai.kernel.config_schema import ConfigError
+from houndmind_ai.kernel.registry import Capability, ModuleRegistry
 from houndmind_ai.logging.event_logger import EventLoggerModule
 from houndmind_ai.logging.led_manager import LedManagerModule
 from houndmind_ai.mapping import default_path_planning_hook
@@ -34,6 +36,7 @@ from houndmind_ai.optional.voice import VoiceModule
 from houndmind_ai.perception.fusion import PerceptionModule
 from houndmind_ai.safety.balance import BalanceModule
 from houndmind_ai.safety.health_monitor import HealthMonitorModule
+from houndmind_ai.safety.sensor_health import SensorHealthModule
 from houndmind_ai.safety.service_watchdog import ServiceWatchdogModule
 from houndmind_ai.safety.supervisor import SafetyModule
 from houndmind_ai.safety.watchdog import WatchdogModule
@@ -41,42 +44,61 @@ from houndmind_ai.safety.watchdog import WatchdogModule
 logger = logging.getLogger(__name__)
 
 
-def build_modules(config) -> list:
+def build_registry(config) -> ModuleRegistry:
+    """Construct the module list and register capabilities.
+
+    Registration order is tick order. The gateway sits immediately before the motors so a
+    decision made this tick is the one executed this tick; producers that run later (safety,
+    watchdog, behaviour) publish intent for the *next* tick, exactly as before.
+    """
     module_configs = config.modules or {}
+
     # module_configs may be a dict (from JSON) or an object; normalize to dicts
     def cfg(name: str) -> dict:
         val = module_configs.get(name, {})
         return val if isinstance(val, dict) else getattr(val, "__dict__", {})
 
-    return [
-        SensorModule("hal_sensors", **cfg("hal_sensors")),
-        MotorModule("hal_motors", **cfg("hal_motors")),
-        PerceptionModule("perception", **cfg("perception")),
-        ScanningModule("scanning", **cfg("scanning")),
-        OrientationModule("orientation", **cfg("orientation")),
-        CalibrationModule("calibration", **cfg("calibration")),
-        MappingModule("mapping", **cfg("mapping")),
-        LocalPlannerModule("local_planner", **cfg("navigation")),
-        ObstacleAvoidanceModule("navigation", **cfg("navigation")),
-        BehaviorModule("behavior", **cfg("behavior")),
-        HabituationModule("habituation", **cfg("habituation")),
-        AttentionModule("attention", **cfg("attention")),
-        EventLoggerModule("event_log", **cfg("event_log")),
-        LedManagerModule("led_manager", **cfg("led_manager")),
-        HealthMonitorModule("health", **cfg("health")),
-        ServiceWatchdogModule("service_watchdog", **cfg("service_watchdog")),
-        WatchdogModule("watchdog", **cfg("watchdog")),
-        BalanceModule("balance", **cfg("balance")),
-        SafetyModule("safety", **cfg("safety")),
-        EnergyEmotionModule("energy_emotion", **cfg("energy_emotion")),
-        VisionModule("vision", **cfg("vision")),
-        VisionPi4Module("vision_pi4", **cfg("vision_pi4")),
-        VoiceModule("voice", **cfg("voice")),
-        FaceRecognitionModule("face_recognition", **cfg("face_recognition")),
-        SemanticLabelerModule("semantic_labeler", **cfg("semantic_labeler")),
-        SlamPi4Module("slam_pi4", **cfg("slam_pi4")),
+    registry = ModuleRegistry()
+    registry.register(SensorModule("hal_sensors", **cfg("hal_sensors")), [Capability.SENSORS])
+    registry.register(
+        MotionGatewayModule("motion_gateway", **cfg("motion_gateway")), [Capability.SAFETY]
+    )
+    registry.register(MotorModule("hal_motors", **cfg("hal_motors")), [Capability.MOTION])
+    registry.register(PerceptionModule("perception", **cfg("perception")), [Capability.PERCEPTION])
+    registry.register(ScanningModule("scanning", **cfg("scanning")), [Capability.NAVIGATION])
+    registry.register(OrientationModule("orientation", **cfg("orientation")), [Capability.NAVIGATION])
+    registry.register(CalibrationModule("calibration", **cfg("calibration")), [Capability.CALIBRATION])
+    registry.register(MappingModule("mapping", **cfg("mapping")), [Capability.MAPPING])
+    registry.register(LocalPlannerModule("local_planner", **cfg("navigation")), [Capability.NAVIGATION])
+    registry.register(ObstacleAvoidanceModule("navigation", **cfg("navigation")), [Capability.NAVIGATION])
+    registry.register(BehaviorModule("behavior", **cfg("behavior")), [Capability.BEHAVIOUR])
+    registry.register(HabituationModule("habituation", **cfg("habituation")), [Capability.BEHAVIOUR])
+    registry.register(AttentionModule("attention", **cfg("attention")), [Capability.BEHAVIOUR])
+    registry.register(EventLoggerModule("event_log", **cfg("event_log")), [Capability.TELEMETRY])
+    registry.register(LedManagerModule("led_manager", **cfg("led_manager")), [Capability.TELEMETRY])
+    registry.register(HealthMonitorModule("health", **cfg("health")), [Capability.DIAGNOSTICS])
+    registry.register(SensorHealthModule("sensor_health", **cfg("sensor_health")), [Capability.DIAGNOSTICS])
+    registry.register(ServiceWatchdogModule("service_watchdog", **cfg("service_watchdog")), [Capability.SAFETY])
+    registry.register(WatchdogModule("watchdog", **cfg("watchdog")), [Capability.SAFETY])
+    registry.register(BalanceModule("balance", **cfg("balance")), [Capability.SAFETY])
+    registry.register(SafetyModule("safety", **cfg("safety")), [Capability.SAFETY])
+    registry.register(EnergyEmotionModule("energy_emotion", **cfg("energy_emotion")), [Capability.BEHAVIOUR])
+    registry.register(VisionModule("vision", **cfg("vision")), [Capability.VISION])
+    registry.register(VisionPi4Module("vision_pi4", **cfg("vision_pi4")), [Capability.VISION])
+    registry.register(VoiceModule("voice", **cfg("voice")), [Capability.AUDIO])
+    registry.register(FaceRecognitionModule("face_recognition", **cfg("face_recognition")), [Capability.VISION])
+    registry.register(SemanticLabelerModule("semantic_labeler", **cfg("semantic_labeler")), [Capability.VISION])
+    registry.register(SlamPi4Module("slam_pi4", **cfg("slam_pi4")), [Capability.MAPPING])
+    registry.register(
         TelemetryDashboardModule("telemetry_dashboard", **cfg("telemetry_dashboard")),
-    ]
+        [Capability.TELEMETRY],
+    )
+    return registry
+
+
+def build_modules(config) -> list:
+    """The tick list. Kept as a list for the runtime; the registry holds the capabilities."""
+    return build_registry(config).modules()
 
 
 def main() -> None:
@@ -111,9 +133,10 @@ def main() -> None:
         logger.exception("Failed to determine device id; using hostname fallback")
         device_id = socket.gethostname()
 
-    # Attach the runtime's mutable dict so updates are reflected in logs.
+    # Bind the context by callable, not by dict: the filter then reads through the store's
+    # lock, so a log line from a background thread cannot race the loop (H-02).
     runtime.context.set("device_id", device_id)
-    context_filter.set_context(runtime.context.data)
+    context_filter.set_context_source(runtime.context.get)
 
     # Register path planning hook for Pi4 if enabled
     mapping_settings = (config.settings or {}).get("mapping", {})
