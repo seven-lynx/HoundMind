@@ -59,7 +59,12 @@ turn that reads the heading between steps. It performs no vendor call of its own
 ---
 
 ## 4) Scanning
-**What it does:** Moves head and performs scans for navigation.
+**What it does:** Moves head and performs scans for navigation. The scan runs on an owned
+background worker (`kernel/scheduler.py`), so a sweep never blocks the decision loop; while one
+is in flight `scan_in_flight` is true and a second request is dropped rather than queued.
+`scan_continuous: true` scans on a timer; `false` scans only while a motion is being executed.
+The measured sweep duration is published as `scan_duration_s`, which the watchdog uses to decide
+what "stale" means for this board.
 
 **Disable:** `modules.scanning.enabled = false`
 
