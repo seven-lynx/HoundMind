@@ -9,6 +9,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- `state.actuators.source` and `state.actuators.displaced`: the producer that won the tick, and how
+  many intents a higher-priority one overrode. A client that pressed forward can now tell "someone
+  else is driving" from "the dog ignored me".
+- `state.supervisor`: whether the watchdog is holding motion and why, which modules it asked the
+  runtime to restart, and which it has given up on. `docs/CONTROL_API.md` §4 documents both.
+
 ### Added
 - `services/`: the control plane — one process, one port (8420), one authenticated API (D7).
   REST, WebSocket telemetry, MJPEG and the web app are routes on the same aiohttp application,
