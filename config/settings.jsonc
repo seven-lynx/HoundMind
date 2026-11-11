@@ -39,8 +39,14 @@
     "max_cycles": null
   },
   "modules": {
+    "hal": {
+      // Owns the dog. Every hardware-facing module asks the context for `hal`, so this must
+      // stay enabled: with it off nothing can move and no sensor is read.
+      "enabled": true,
+      "required": false
+    },
     "hal_sensors": {
-      // Enable sensor HAL (ultrasonic, touch, sound direction, IMU).
+      // Sensor polling on top of the HAL (ultrasonic, touch, sound direction, IMU).
       "enabled": true,
       // Required modules will stop the runtime if they fail to start.
       "required": true
@@ -466,20 +472,12 @@
       "scan_stale_s": 0.8,
       // Head scan sweep range (degrees).
       "scan_yaw_max_deg": 60,
-      // Use a smaller sweep when the forward path is consistently clear.
-      "enable_dynamic_scan": true,
-      // Narrow sweep limit when dynamic scanning is enabled.
-      "dynamic_scan_yaw_max_deg": 30,
       // Head scan step size (degrees).
       "scan_step_deg": 15,
       // Time to settle after a head move (seconds).
       "scan_settle_s": 0.12,
       // Delay between reads in a sweep (seconds).
       "scan_between_reads_s": 0.04,
-      // Scan debouncing (ignore overly-frequent reads).
-      "scan_debounce_s": 0.05,
-      // Distance EMA smoothing during scans (0 = off, 1 = no smoothing).
-      "scan_smoothing_alpha": 0.4,
       // Minimum valid scan points before acting on turn decisions.
       "scan_min_valid_points": 3,
       // Minimum fraction of valid points (0-1) required.
@@ -552,7 +550,6 @@
       // Lightweight local planner (uses mapping.best_path as a short-range hint)
       "planner_enabled": true,
       "planner_min_confidence": 0.6,
-      "planner_influence_weight": 0.0,
       "planner_max_age_s": 2.0,
       // Stuck detection (movement magnitude) and avoidance strategy.
       "stuck_time_window_s": 5.0,
@@ -562,6 +559,9 @@
       "stuck_strategy_repeat_window_s": 10.0,
       "stuck_strategy_repeat_threshold": 3,
       "avoidance_strategies": ["smart_turn", "backup_turn", "zigzag", "reverse_escape"],
+      // Gentle recovery: repeated stuck events reduce the walking speed for a while.
+      "gentle_recovery_stuck_count": 3,
+      "gentle_recovery_cooldown_s": 8.0,
       // LED feedback for navigation states.
       "led_enabled": true,
       "led_priority": 50,
@@ -571,32 +571,18 @@
       "led_retreat_color": "red"
     },
     // =====================================================================
-    // MOVEMENT & ACTION TUNING (future wiring)
+    // MOVEMENT & ACTION TUNING
     // =====================================================================
     "movement": {
-      // Speed to use during gentle recovery (0-255)
-      "gentle_recovery_speed": 80,
-      // Step counts for turns/walks.
-      "turn_steps_small": 1,
-      "turn_steps_normal": 2,
-      "turn_steps_large": 4,
-      "walk_steps_short": 1,
-      "walk_steps_normal": 2,
-      "walk_steps_long": 3,
-      "backup_steps": 3,
       // Approximate degrees per single turn step (fallback when orientation is off).
       "turn_degrees_per_step": 15.0,
-      // Movement speeds (0-255).
-      "speed_slow": 80,
+      // Servo speeds (0-255). `speed_normal` is the reference walking speed the turn
+      // speeds are validated against; the turn speeds are what actually reach a servo.
       "speed_normal": 120,
-      "speed_fast": 200,
-      "speed_emergency": 100,
       // Turn speeds (should be faster than walk speeds).
       "speed_turn_slow": 100,
       "speed_turn_normal": 200,
-      "speed_turn_fast": 220,
-      // Micro pause between queued steps.
-      "step_pause_s": 0.02
+      "speed_turn_fast": 220
     },
     // =====================================================================
     // ORIENTATION (IMU heading integration)
@@ -650,7 +636,6 @@
       // Safe path thresholds.
       "safe_path_min_width_cm": 40,
       "safe_path_max_width_cm": 200,
-      "safe_path_min_length_cells": 6,
       "safe_path_cell_conf_min": 0.5,
       // Safe path scoring weights.
       "safe_path_score_weight_width": 0.6,
@@ -972,9 +957,9 @@
       // Scan interval bounds used by validation warnings.
       "scan_interval_min_s": 0.2,
       "scan_interval_max_s": 2.0,
-      // Upper bound for sensor polling on Pi 3.
+      // Upper bound for sensor polling, enforced against sensors.poll_hz at load.
       "sensor_poll_hz_max": 20,
-      // Health thresholds (future wiring).
+      // Health thresholds used by the health monitor to decide when to degrade.
       "health_load_per_core_warn_multiplier": 1.5,
       "health_temp_warn_c": 70.0,
       "health_gpu_temp_warn_c": 75.0,
@@ -984,13 +969,16 @@
       "health_scan_interval_abs_delta": 1.0,
       "health_vision_frame_interval_multiplier": 2.0,
       "health_vision_frame_interval_abs_delta": 0.2,
+      // Degradation levers the health monitor may pull: throttle_scans, throttle_vision.
       "health_actions": [],
-      // Safe mode: reduces scan cadence and turn speed on Pi3.
+      // Safe mode: reduces scan cadence and turn speed on a loaded board.
       "safe_mode_enabled": false,
       "safe_mode_scan_interval_s": 1.2,
       "safe_mode_turn_speed": 140,
       // Warn when a runtime tick exceeds this duration (seconds).
-      "runtime_tick_warn_s": 0.4
+      "runtime_tick_warn_s": 0.4,
+      // Smoothing factor for the reported tick-duration average (0-1].
+      "runtime_ema_alpha": 0.2
     },
     // =====================================================================
     // BATTERY / VOLTAGE (optional)

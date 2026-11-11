@@ -75,6 +75,14 @@ def test_list_reports_the_offending_index() -> None:
     assert paths(problems) == ["vals[1]"]
 
 
+def test_list_can_require_a_fixed_length() -> None:
+    """`mapping.grid_size` is indexed as [0]/[1], so a third entry is a broken map."""
+    spec = ListOf(IntSpec(minimum=1), length=2)
+    assert spec.validate([100, 100], "g")[1] == []
+    assert spec.validate([100], "g")[1][0].path == "g"
+    assert spec.validate([100, 100, 100], "g")[1]
+
+
 def test_map_requires_a_table() -> None:
     assert MapOf().validate([], "m")[1]
 
@@ -155,10 +163,115 @@ def test_settings_must_be_a_table() -> None:
     assert validate_config_tree({"settings": []})
 
 
-def test_settings_contents_are_not_yet_strict() -> None:
-    """Section-by-section validation of `settings` lands incrementally."""
-    tree = {"settings": {"navigation": {"anything_at_all": 1}}}
+def test_an_unknown_settings_section_is_an_error_with_a_suggestion() -> None:
+    """Every shipped section is now audited, so a misspelled section cannot hide."""
+    problems = validate_config_tree({"settings": {"voice_assistantt": {}}})
+    assert paths(problems) == ["config.settings.voice_assistantt"]
+    assert problems[0].hint == "voice_assistant"
+
+
+def test_every_shipped_section_is_covered_by_the_schema() -> None:
+    """The section audit is finished: nothing in the file is unchecked any more."""
+    raw = json5.loads(default_config_path().read_text(encoding="utf-8"))
+    assert set(raw["settings"]) == set(_settings_section().fields)
+
+
+# ----------------------------------------------------- audited settings sections
+#
+# One row per covered section: a value of the wrong type must be rejected at load. The point
+# is coverage breadth — a section that is added to `_SETTINGS_SECTIONS` without a row here is
+# a section nobody proved was reachable.
+
+BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
+    ("sensors", "poll_hz", "often"),
+    ("motors", "min_action_interval_s", "soon"),
+    ("sensor_health", "enabled", "yes"),
+    ("service_watchdog", "max_restarts", "many"),
+    ("watchdog", "module_timeout_s", None),
+    ("balance", "lpf_alpha", 1.5),
+    ("safety", "tilt_threshold_deg", "steep"),
+    ("logging", "log_level", "LOUD"),
+    ("performance", "runtime_ema_alpha", 0.0),
+    ("battery", "low_voltage_v", "empty"),
+    ("quiet_mode", "start_hour", 24),
+    ("attention", "head_yaw_max_deg", 91.0),
+    ("navigation", "scan_mode", "sweepy"),
+    ("mapping", "grid_size", [100]),
+    ("movement", "speed_turn_normal", 300),
+    ("orientation", "turn_timeout_s", 0.0),
+    ("calibration", "request", "servo_zer0"),
+    ("perception", "fusion", []),
+    ("habituation", "threshold", 0),
+    ("personality", "curiosity", 1.5),
+    ("energy", "initial", "full"),
+    ("emotion", "led_colors", ["blue"]),
+    ("led", "brightness", 1.4),
+    ("behavior", "behavior_selection_mode", "random"),
+    ("vision_pi4", "backend", "webcam"),
+    ("voice_assistant", "stt", []),
+    ("face_recognition", "backend", "magic"),
+    ("semantic_labeler", "input_width", 0),
+    ("slam_pi4", "rtabmap", "on"),
+    ("telemetry_dashboard", "http", []),
+]
+
+
+@pytest.mark.parametrize(("section", "key", "bad_value"), BAD_SETTINGS_VALUES)
+def test_a_covered_section_rejects_a_bad_value(section, key, bad_value) -> None:
+    problems = validate_config_tree({"settings": {section: {key: bad_value}}})
+    assert paths(problems) == [f"config.settings.{section}.{key}"], problems
+
+
+def test_the_schema_and_this_table_agree() -> None:
+    """A section added to the schema without a rejection case here is untested."""
+    assert set(_settings_section().fields) == {
+        section for section, _, _ in BAD_SETTINGS_VALUES
+    }
+
+
+def test_every_covered_section_exists_in_the_shipped_file() -> None:
+    covered = {section for section, _, _ in BAD_SETTINGS_VALUES}
+    shipped = set(json5.loads(default_config_path().read_text(encoding="utf-8"))["settings"])
+    assert covered <= shipped, covered - shipped
+
+
+def test_an_unknown_key_inside_a_covered_section_is_an_error() -> None:
+    problems = validate_config_tree({"settings": {"logging": {"log_levels": "DEBUG"}}})
+    assert paths(problems) == ["config.settings.logging.log_levels"]
+    assert problems[0].hint == "log_level"
+
+
+def test_a_misspelled_enum_value_suggests_the_real_one() -> None:
+    problems = validate_config_tree({"settings": {"watchdog": {"recovery_mode": "behaviour"}}})
+    assert problems[0].hint == "behavior"
+
+
+def test_a_nullable_setting_accepts_null_but_not_a_number() -> None:
+    tree = {"settings": {"watchdog": {"recovery_action": None}}}
     assert validate_config_tree(tree) == []
+    assert validate_config_tree({"settings": {"watchdog": {"recovery_action": 3}}})
+
+
+def test_profile_settings_overrides_are_validated() -> None:
+    tree = {"profiles": {"pi5": {"settings": {"logging": {"log_level": "LOUD"}}}}}
+    assert paths(validate_config_tree(tree)) == [
+        "config.profiles.pi5.settings.logging.log_level"
+    ]
+
+
+def test_shipped_settings_values_all_validate() -> None:
+    """Every value the repo ships must satisfy the section spec that covers it."""
+    raw = json5.loads(default_config_path().read_text(encoding="utf-8"))
+    sections = _settings_section().fields
+    for section in sorted(raw["settings"]):
+        _, problems = sections[section].validate(raw["settings"][section], section)
+        assert not problems, problems
+
+
+def _settings_section():
+    from houndmind_ai.kernel import config_schema
+
+    return config_schema._SETTINGS
 
 
 # ------------------------------------------------------------------ the real file

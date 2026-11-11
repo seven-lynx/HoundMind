@@ -20,11 +20,44 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `motion_command` / `motion_verdict` / `tilt_latched`.
 - `kernel/config_schema.py`: config validation is enforced, not advisory. Unknown keys are an
   error with a did-you-mean suggestion.
+- `hal/vendor.py`: `PidogHAL`, the vendor-backed `DogHAL`, plus `hal/module.py`: `HalModule` owns
+  the dog and publishes it as the context key `hal`. Before this, `hal/sensors.py`,
+  `hal/motors.py` and `navigation/scanning.py` each opened their own `Pidog()` and raced over
+  one servo bus; the last one to start also won the `pidog_owner` key that decided who closed it.
+- `hal/sensors.py`: `SensorService` polls a `DogHAL` instead of a vendor object, and the sensor
+  signal conditioning (multi-sample median, outlier rejection, debounce, EMA, IMU low-pass)
+  lives in `PidogHAL` next to the reads it belongs to.
+- `DogHAL` gained `sample_distance()` (a head scan needs the distance *after* the head moved) and
+  `apply_offsets()` (calibration offsets are user data, applied by the owner of the servos).
+  `SensorSnapshot` carries `acc`, `gyro` and `sound_detected`, which consumers already read.
+- `main.build_registry(config, hal=...)` injects a `DogHAL`; `FakeDogHAL` is now enough to run
+  the sensor, scan, LED, head and posture paths, and `tests/test_runtime_tick.py` no longer
+  carries a `HARDWARE_MODULES` exclusion list.
+- `kernel/config_schema.py`: `settings` is validated section by section. Every section the
+  repo ships — `attention`, `balance`, `battery`, `behavior`, `calibration`, `emotion`,
+  `energy`, `face_recognition`, `habituation`, `led`, `logging`, `mapping`, `motors`,
+  `movement`, `navigation`, `orientation`, `perception`, `performance`, `personality`,
+  `quiet_mode`, `safety`, `semantic_labeler`, `sensor_health`, `sensors`, `service_watchdog`,
+  `slam_pi4`, `telemetry_dashboard`, `vision_pi4`, `voice_assistant`, `watchdog` — rejects an
+  unknown key (with a suggestion) and a value of the wrong type, and profile overrides are
+  validated the same way. An unknown *section* is an error too, so `settings.voice` instead of
+  `settings.voice_assistant` no longer loads a table nothing reads. Enum-valued keys carry the
+  choices the code branches on, and nullable keys say so.
+- `settings.performance.runtime_ema_alpha` is a documented key (default `0.2`): the runtime
+  read it with a hard-coded fallback but the shipped file never mentioned it.
+- `settings.logging.console_level` is an accepted key, so the console can be quieter than the
+  file without editing code.
 
 ### Changed
 - `hal_motors` executes `motion_command` only; it no longer merges four context keys by `or` and
   deduplicates on the action string, which had made a `forward` from navigation and one from
   behaviour indistinguishable.
+- `attention`, `led_manager`, `balance` and `scanning` reach the hardware through `hal.action()`
+  instead of grabbing `context["pidog"]` and calling vendor methods themselves. `import pidog` in
+  `src/` is now confined to `hal/vendor.py` (plus the optional voice module and the device CLI).
+- `calibration/workflow.py` is the one remaining consumer of the raw vendor handle;
+  `HalModule` still publishes it as `pidog` so a calibration run behaves as before until the
+  wizard is rebuilt.
 - `SensorHealthModule` is wired into the runtime (disabled by default, as before).
 - Logging reads the keys `config/settings.jsonc` actually ships (`log_level`, `log_file_name`,
   `log_file_backups`, `log_file_max_mb`, `enable_console`, `enable_file`). Previously the
@@ -36,6 +69,13 @@ Current Release: v2026.01.18 • Author: 7Lynx
   until the SD card filled.
 - `requires-python` is `>=3.11,<3.14`; Pi 3 support is dropped. `json5` is now a real dependency.
 - Ruff is pinned (`0.17.4`) with an explicit rule set.
+- `core/config.py` parses JSON5 with `json5` and nothing else. The 60-line comment stripper
+  that duplicated it is deleted: it was only there because `json5` used to be optional, and a
+  syntax error now names the file it came from instead of a hand-rolled message.
+- `core/config.validate_config` is down to the cross-field rules a per-value schema cannot
+  express (distance ordering, an interval inside its own bounds, turn speed above walk speed,
+  `override_priority` keeping `safety`). The type and range checks it duplicated are gone with
+  the schema that enforces them.
 - CI runs on every branch and every pull request (`.github/workflows/ci.yml`), not just on
   `main`. Work now lands on one branch per phase and merges into `refactor/resurrection`, so a
   `main`-only trigger meant phase PRs were reviewed with no `ruff`/`pytest`/`mypy` result at
@@ -45,6 +85,16 @@ Current Release: v2026.01.18 • Author: 7Lynx
 ### Removed
 - `optional/wifi_localization.py` and `modules.wifi_localization`. It shelled out to `netsh wlan
   show networks`, which does not exist on Raspberry Pi OS, had no test, and was never registered.
+- Eighteen `settings` keys that nothing in `src/`, `tests/` or `src/tools/` read:
+  `navigation.enable_dynamic_scan`, `navigation.dynamic_scan_yaw_max_deg`,
+  `navigation.scan_debounce_s`, `navigation.scan_smoothing_alpha`,
+  `navigation.planner_influence_weight`, `mapping.safe_path_min_length_cells`, and the whole
+  `movement` step/speed table except `turn_degrees_per_step`, `speed_normal` and
+  `speed_turn_slow|normal|fast` (`gentle_recovery_speed`, `turn_steps_*`, `walk_steps_*`,
+  `backup_steps`, `speed_slow`, `speed_fast`, `speed_emergency`, `step_pause_s`). They were
+  documented as tuning knobs and changed nothing; the gentle-recovery threshold that does work
+  (`navigation.gentle_recovery_stuck_count`, `navigation.gentle_recovery_cooldown_s`) was read
+  by the module but missing from the file, and is now shipped.
 
 ### Fixed
 - `python -m houndmind_ai` no longer dies with `ModuleNotFoundError: cv2` on an install without

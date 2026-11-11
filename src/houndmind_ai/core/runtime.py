@@ -59,8 +59,13 @@ class HoundMindRuntime:
                 continue
             try:
                 module.start(self.context)
-                module.status.started = True
-                logger.info("Started module: %s", module.name)
+                # A module may disable itself inside `start` — no HAL, no camera, a missing
+                # dependency. Marking it started anyway would put it in the tick loop and in
+                # `module_statuses` as "enabled=False, started=True", and log a "Started" line
+                # for something that just gave up.
+                if module.status.enabled:
+                    module.status.started = True
+                    logger.info("Started module: %s", module.name)
             except Exception as exc:  # noqa: BLE001 - capture hardware failures
                 logger.exception("Failed to start module: %s", module.name)
                 if module.status.required:

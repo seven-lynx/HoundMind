@@ -24,9 +24,20 @@ def test_load_jsonc_allows_comments_and_trailing_commas(tmp_path: Path):
 
 
 def test_load_jsonc_unterminated_block_comment_raises(tmp_path: Path):
+    """A broken file must name itself; json5 raises a plain ValueError otherwise."""
     p = tmp_path / "bad.jsonc"
     text = '{ /* unterminated block comment...\n "loop": { "tick_hz": 5 } }'
     p.write_text(text, encoding="utf-8")
     with pytest.raises(ValueError) as excinfo:
         cfg._load_jsonc(p)
-    assert "Unterminated block comment" in str(excinfo.value)
+    assert "bad.jsonc" in str(excinfo.value)
+
+
+def test_load_jsonc_rejects_a_trailing_comma_free_typo(tmp_path: Path):
+    """The stripper is gone: a syntax error is reported, never silently repaired."""
+    p = tmp_path / "typo.jsonc"
+    p.write_text('{ "loop": { "tick_hz": 5, } }', encoding="utf-8")
+    assert cfg._load_jsonc(p)["loop"]["tick_hz"] == 5
+    p.write_text('{ "loop": { "tick_hz" 5 } }', encoding="utf-8")
+    with pytest.raises(ValueError):
+        cfg._load_jsonc(p)
