@@ -5,8 +5,8 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from houndmind_ai.core.module import Module
 
@@ -331,8 +331,8 @@ class VoiceModule(Module):
         # Fallback to VOSK if configured or available
         if backend in ("auto", "vosk"):
             try:
-                from vosk import Model, KaldiRecognizer  # type: ignore
                 import pyaudio  # type: ignore
+                from vosk import KaldiRecognizer, Model  # type: ignore
 
                 model_path = stt_cfg.get("vosk_model_path")
                 if model_path:

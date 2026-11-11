@@ -14,9 +14,10 @@ If OpenCV is not available, the script will generate a synthetic frame.
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 import time
-import importlib
+
 
 def main():
     parser = argparse.ArgumentParser(description="Validate RTAB-Map adapter")

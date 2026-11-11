@@ -5,6 +5,7 @@ Configurable and hardware-friendly for Pi4 vision tasks.
 import cv2
 import numpy as np
 
+
 class VisionPreprocessor:
     def __init__(self, config=None):
         self.config = config or {}

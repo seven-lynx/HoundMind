@@ -3,6 +3,7 @@ A* path planning for grid/graph maps (for Pi4).
 """
 import heapq
 
+
 def astar(grid, start, goal, passable=lambda v: v == 0):
     """
     grid: 2D list/array, 0=free, 1=obstacle

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
 
 from houndmind_ai.core.module import Module
 
@@ -12,8 +11,8 @@ class SensorHealthModule(Module):
     """Monitors sensor health and updates LED/logs based on config thresholds."""
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
-        self._last_status: Optional[str] = None
-        self._last_led: Optional[str] = None
+        self._last_status: str | None = None
+        self._last_led: str | None = None
         self._last_log_ts = 0.0
 
     def tick(self, context) -> None:

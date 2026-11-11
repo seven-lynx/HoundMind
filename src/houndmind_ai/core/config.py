@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
-from pathlib import Path
 import json
 import logging
 import os
 import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class Config:
     settings: dict[str, dict] = field(default_factory=dict)
 
     @staticmethod
-    def from_dict(raw: dict) -> "Config":
+    def from_dict(raw: dict) -> Config:
         loop_raw = raw.get("loop", {})
         # Coerce loop numeric settings to the expected types. Ensure max_cycles
         # is either an int or None to avoid runtime type errors when compared

@@ -5,7 +5,7 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from houndmind_ai.core.module import Module
 
@@ -55,6 +55,7 @@ class TelemetryDashboardModule(Module):
         try:
             import tempfile
             from pathlib import Path
+
             # Import the collect function from tools
             from tools.collect_support_bundle import collect
 

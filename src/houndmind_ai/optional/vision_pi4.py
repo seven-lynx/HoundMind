@@ -4,11 +4,11 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Optional, Any
+from typing import Any
 
 from houndmind_ai.core.module import Module
-from houndmind_ai.optional.vision_preprocessing import VisionPreprocessor
 from houndmind_ai.optional.vision_inference_scheduler import VisionInferenceScheduler
+from houndmind_ai.optional.vision_preprocessing import VisionPreprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,8 @@ class VisionPi4Module(Module):
         self._http_server: ThreadingHTTPServer | None = None
         self._http_thread: threading.Thread | None = None
 
-        self._preprocessor: Optional[VisionPreprocessor] = None
-        self._inference_scheduler: Optional[VisionInferenceScheduler] = None
+        self._preprocessor: VisionPreprocessor | None = None
+        self._inference_scheduler: VisionInferenceScheduler | None = None
         self._last_inference_result = None
 
     def start(self, context) -> None:

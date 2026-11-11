@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-import uuid
 import logging
 import time
+import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from .config import Config

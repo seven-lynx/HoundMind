@@ -3,14 +3,15 @@ WiFi-based localization module for PiDog.
 Scans for nearby WiFi APs, records RSSI for each SSID, and provides fingerprint-based localization.
 Disabled by default in config.
 """
-import threading
-import time
-import subprocess
-import re
-from houndmind_ai.core.module import Module
-
 import json
 import os
+import re
+import subprocess
+import threading
+import time
+
+from houndmind_ai.core.module import Module
+
 
 class WifiLocalizationModule(Module):
     def __init__(self, name: str, enabled: bool = False, required: bool = False, scan_interval: float = 10.0, ignore_ssids=None, fingerprint_file: str = "wifi_fingerprints.json", max_fingerprint_file_size: int = 262144):
@@ -76,7 +77,7 @@ class WifiLocalizationModule(Module):
     def _load_fingerprints(self):
         if os.path.exists(self.fingerprint_file):
             try:
-                with open(self.fingerprint_file, "r") as f:
+                with open(self.fingerprint_file) as f:
                     return json.load(f)
             except Exception:
                 return {}

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
 import threading
 import time
-from typing import Callable, Any
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 from houndmind_ai.core.module import Module
 

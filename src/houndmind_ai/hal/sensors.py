@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
 import logging
 import threading
 import time
-from typing import Callable, Deque, Any, Tuple, cast
+from collections import deque
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, cast
 
 from houndmind_ai.core.module import Module
 
@@ -70,7 +71,7 @@ class SensorService:
         self._callbacks: list[Callable[[SensorReading], None]] = []
 
         self._latest: SensorReading | None = None
-        self._history: Deque[SensorReading] = deque(maxlen=self._history_size())
+        self._history: deque[SensorReading] = deque(maxlen=self._history_size())
 
         self._last_touch = "N"
         self._last_touch_ts = 0.0
@@ -265,12 +266,12 @@ class SensorService:
         try:
             acc_raw = self._dog.accData
             gyro_raw = self._dog.gyroData
-            acc = cast(Tuple[float, float, float], (
+            acc = cast(tuple[float, float, float], (
                 _safe_float(acc_raw[0], 0.0),
                 _safe_float(acc_raw[1], 0.0),
                 _safe_float(acc_raw[2], 0.0),
             ))
-            gyro = cast(Tuple[float, float, float], (
+            gyro = cast(tuple[float, float, float], (
                 _safe_float(gyro_raw[0], 0.0),
                 _safe_float(gyro_raw[1], 0.0),
                 _safe_float(gyro_raw[2], 0.0),
@@ -281,18 +282,18 @@ class SensorService:
         alpha = _safe_float(self._settings.get("imu_lpf_alpha", 0.0), 0.0)
         if 0.0 < alpha <= 1.0:
             if self._acc_lpf is None:
-                self._acc_lpf = cast(Tuple[float, float, float], acc)
+                self._acc_lpf = cast(tuple[float, float, float], acc)
             else:
                 self._acc_lpf = cast(
-                    Tuple[float, float, float],
-                    tuple((1 - alpha) * prev + alpha * cur for prev, cur in zip(self._acc_lpf, acc)),
+                    tuple[float, float, float],
+                    tuple((1 - alpha) * prev + alpha * cur for prev, cur in zip(self._acc_lpf, acc, strict=False)),
                 )
             if self._gyro_lpf is None:
-                self._gyro_lpf = cast(Tuple[float, float, float], gyro)
+                self._gyro_lpf = cast(tuple[float, float, float], gyro)
             else:
                 self._gyro_lpf = cast(
-                    Tuple[float, float, float],
-                    tuple((1 - alpha) * prev + alpha * cur for prev, cur in zip(self._gyro_lpf, gyro)),
+                    tuple[float, float, float],
+                    tuple((1 - alpha) * prev + alpha * cur for prev, cur in zip(self._gyro_lpf, gyro, strict=False)),
                 )
             acc = self._acc_lpf
             gyro = self._gyro_lpf

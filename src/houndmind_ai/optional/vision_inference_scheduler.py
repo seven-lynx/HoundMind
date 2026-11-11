@@ -7,17 +7,19 @@ Handles frame input, inference scheduling, and result output.
 Configurable via config/settings.jsonc (Pi4 only).
 """
 
-import threading
 import queue
+import threading
 import time
-from typing import Callable, Any, Optional
+from collections.abc import Callable
+from typing import Any
+
 
 class VisionInferenceScheduler:
     """
     Schedules vision inference jobs in a background thread or process.
     Accepts frames, runs inference, and returns results via callback or queue.
     """
-    def __init__(self, inference_fn: Callable[[Any], Any], result_callback: Optional[Callable[[Any], None]] = None, max_queue_size: int = 4):
+    def __init__(self, inference_fn: Callable[[Any], Any], result_callback: Callable[[Any], None] | None = None, max_queue_size: int = 4):
         self.inference_fn = inference_fn
         self.result_callback = result_callback
         self.frame_queue: queue.Queue[Any] = queue.Queue(maxsize=max_queue_size)
@@ -42,7 +44,7 @@ class VisionInferenceScheduler:
             # Drop frame if queue is full (backpressure)
             pass
 
-    def get_result(self, timeout: float = 0.1) -> Optional[Any]:
+    def get_result(self, timeout: float = 0.1) -> Any | None:
         try:
             return self.result_queue.get(timeout=timeout)
         except queue.Empty:

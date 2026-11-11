@@ -5,9 +5,9 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from houndmind_ai.core.module import Module
 
@@ -72,7 +72,7 @@ class FaceRecognitionModule(Module):
                     pass
                 # best-effort default path when cv2 provides haarcascades
                 if data_obj is not None and getattr(data_obj, "haarcascades", None) is not None:
-                    haar_path = str(Path(getattr(data_obj, "haarcascades")) / "haarcascade_frontalface_default.xml")
+                    haar_path = str(Path(data_obj.haarcascades) / "haarcascade_frontalface_default.xml")
                 else:
                     haar_path = ""
             haar_path = self._resolve_path(haar_path)
@@ -298,7 +298,7 @@ class FaceRecognitionModule(Module):
         threshold = float(settings.get("match_threshold", 0.6))
         results: list[dict[str, Any]] = []
 
-        for (top, right, bottom, left), encoding in zip(locations, encodings):
+        for (top, right, bottom, left), encoding in zip(locations, encodings, strict=False):
             label = "unknown"
             confidence = None
             if self._known_embeddings:

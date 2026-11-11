@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import time
 import logging
+import time
 
 from houndmind_ai.core.module import Module
 

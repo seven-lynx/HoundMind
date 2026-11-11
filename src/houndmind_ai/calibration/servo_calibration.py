@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 
 
-def apply_servo_offsets(dog, offsets: Dict[str, float]) -> None:
+def apply_servo_offsets(dog, offsets: dict[str, float]) -> None:
     """Apply stored servo offsets to a PiDog `dog` instance.
 
     Offsets is a mapping of servo name -> degrees offset. The function will
@@ -21,20 +20,20 @@ def apply_servo_offsets(dog, offsets: Dict[str, float]) -> None:
             if hasattr(dog, "set_servo_zero"):
                 dog.set_servo_zero(servo, float(offset))
                 logger.info("Applied servo zero for %s: %s", servo, offset)
-            elif hasattr(dog, "servos") and servo in getattr(dog, "servos"):
+            elif hasattr(dog, "servos") and servo in dog.servos:
                 # Some hardware APIs allow direct property set.
-                getattr(dog, "servos")[servo].zero_offset = float(offset)
+                dog.servos[servo].zero_offset = float(offset)
                 logger.info("Set servo property zero for %s: %s", servo, offset)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to apply offset for %s: %s", servo, exc)
 
 
-def collect_servo_defaults(dog) -> Dict[str, float]:
+def collect_servo_defaults(dog) -> dict[str, float]:
     """Read current servo zero offsets from the hardware API (if available).
 
     Returns a dict of servo->offset for persisting into config.
     """
-    result: Dict[str, float] = {}
+    result: dict[str, float] = {}
     if dog is None:
         return result
     try:
@@ -45,7 +44,7 @@ def collect_servo_defaults(dog) -> Dict[str, float]:
                 except Exception:
                     continue
         elif hasattr(dog, "servos"):
-            for name, s in getattr(dog, "servos").items():
+            for name, s in dog.servos.items():
                 try:
                     result[name] = float(getattr(s, "zero_offset", 0.0))
                 except Exception:

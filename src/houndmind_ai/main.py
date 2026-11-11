@@ -1,41 +1,41 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import logging
+import socket
+from pathlib import Path
 
+from houndmind_ai.behavior.attention import AttentionModule
+from houndmind_ai.behavior.fsm import BehaviorModule
+from houndmind_ai.behavior.habituation import HabituationModule
+from houndmind_ai.calibration.workflow import CalibrationModule
 from houndmind_ai.core.config import load_config
 from houndmind_ai.core.logging_setup import setup_logging
-import socket
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.motors import MotorModule
 from houndmind_ai.hal.sensors import SensorModule
-from houndmind_ai.behavior.fsm import BehaviorModule
-from houndmind_ai.behavior.attention import AttentionModule
-from houndmind_ai.behavior.habituation import HabituationModule
-from houndmind_ai.calibration.workflow import CalibrationModule
-from houndmind_ai.mapping.mapper import MappingModule
-from houndmind_ai.navigation.local_planner import LocalPlannerModule
-from houndmind_ai.navigation.scanning import ScanningModule
-from houndmind_ai.navigation.orientation import OrientationModule
-from houndmind_ai.navigation.obstacle_avoidance import ObstacleAvoidanceModule
-from houndmind_ai.perception.fusion import PerceptionModule
 from houndmind_ai.logging.event_logger import EventLoggerModule
 from houndmind_ai.logging.led_manager import LedManagerModule
-from houndmind_ai.safety.health_monitor import HealthMonitorModule
-from houndmind_ai.safety.service_watchdog import ServiceWatchdogModule
-from houndmind_ai.safety.watchdog import WatchdogModule
-from houndmind_ai.safety.supervisor import SafetyModule
-from houndmind_ai.safety.balance import BalanceModule
-from houndmind_ai.optional.voice import VoiceModule
+from houndmind_ai.mapping import default_path_planning_hook
+from houndmind_ai.mapping.mapper import MappingModule
+from houndmind_ai.navigation.local_planner import LocalPlannerModule
+from houndmind_ai.navigation.obstacle_avoidance import ObstacleAvoidanceModule
+from houndmind_ai.navigation.orientation import OrientationModule
+from houndmind_ai.navigation.scanning import ScanningModule
+from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
 from houndmind_ai.optional.face_recognition import FaceRecognitionModule
 from houndmind_ai.optional.semantic_labeler import SemanticLabelerModule
 from houndmind_ai.optional.slam_pi4 import SlamPi4Module
 from houndmind_ai.optional.telemetry_dashboard import TelemetryDashboardModule
 from houndmind_ai.optional.vision import VisionModule
 from houndmind_ai.optional.vision_pi4 import VisionPi4Module
-from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
-from houndmind_ai.mapping import default_path_planning_hook
+from houndmind_ai.optional.voice import VoiceModule
+from houndmind_ai.perception.fusion import PerceptionModule
+from houndmind_ai.safety.balance import BalanceModule
+from houndmind_ai.safety.health_monitor import HealthMonitorModule
+from houndmind_ai.safety.service_watchdog import ServiceWatchdogModule
+from houndmind_ai.safety.supervisor import SafetyModule
+from houndmind_ai.safety.watchdog import WatchdogModule
 
 logger = logging.getLogger(__name__)
 

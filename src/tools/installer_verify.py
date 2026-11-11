@@ -67,9 +67,9 @@ def main():
     # Warn if running on newer Python where wheels may be missing (Trixie, etc.)
     if sys.version_info >= (3, 12):
         print(
-            "Warning: Detected Python %d.%d — heavy packages may lack prebuilt wheels on this runtime. "
+            f"Warning: Detected Python {sys.version_info.major}.{sys.version_info.minor} — "
+            "heavy packages may lack prebuilt wheels on this runtime. "
             "If installation fails, prefer Raspberry Pi OS Bookworm (Python 3.11) or use --preset lite."
-            % (sys.version_info.major, sys.version_info.minor)
         )
     req_ok = check_requirements(req)
     pidog_ok = check_import("pidog")

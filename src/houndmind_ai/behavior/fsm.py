@@ -3,16 +3,16 @@ from __future__ import annotations
 import logging
 import random
 import time
-from enum import Enum
+from enum import StrEnum
 
-from houndmind_ai.core.module import Module
 from houndmind_ai.behavior.library import BehaviorLibrary, BehaviorLibraryConfig
 from houndmind_ai.behavior.registry import BehaviorRegistry
+from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
 
 
-class BehaviorState(str, Enum):
+class BehaviorState(StrEnum):
     IDLE = "idle"
     ALERT = "alert"
     AVOIDING = "avoiding"

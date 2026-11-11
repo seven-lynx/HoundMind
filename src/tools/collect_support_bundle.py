@@ -8,14 +8,14 @@ If no output path is provided the script will create `logs/support_bundle_{times
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from zipfile import ZipFile, ZIP_DEFLATED
-import logging
+from zipfile import ZIP_DEFLATED, ZipFile
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def collect(bundle_path: Path) -> None:
         trace_id = _find_trace_in_logs(logs)
 
     metadata = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "git_commit": gather_git_commit(root),
         "trace_id": trace_id,
     }
@@ -121,9 +121,9 @@ def main(argv: list[str] | None = None) -> int:
     if argv:
         out = Path(argv[0])
         if out.is_dir():
-            out = out / f"support_bundle_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.zip"
+            out = out / f"support_bundle_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.zip"
     else:
-        out = default_dir / f"support_bundle_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.zip"
+        out = default_dir / f"support_bundle_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.zip"
 
     try:
         collect(out)

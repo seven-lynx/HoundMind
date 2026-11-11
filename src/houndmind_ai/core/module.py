@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -51,13 +51,13 @@ class Module:
         self.name = name
         self.status = ModuleStatus(enabled=enabled, required=required)
 
-    def start(self, context: "RuntimeContext") -> None:
+    def start(self, context: RuntimeContext) -> None:
         self.status.started = True
 
-    def stop(self, context: "RuntimeContext") -> None:
+    def stop(self, context: RuntimeContext) -> None:
         self.status.started = False
 
-    def tick(self, context: "RuntimeContext") -> None:
+    def tick(self, context: RuntimeContext) -> None:
         return None
 
     def disable(self, reason: str) -> None:

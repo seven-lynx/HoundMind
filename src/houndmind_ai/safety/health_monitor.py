@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Dict, Optional
 
 from houndmind_ai.core.module import Module
 
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 def _read_cpu_temp_c() -> float | None:
     try:
         with open(
-            "/sys/class/thermal/thermal_zone0/temp", "r", encoding="utf-8"
+            "/sys/class/thermal/thermal_zone0/temp", encoding="utf-8"
         ) as handle:
             milli = int(handle.read().strip())
             return milli / 1000.0
@@ -27,7 +26,7 @@ def _read_gpu_temp_c() -> float | None:
         "/sys/class/thermal/thermal_zone2/temp",
     ):
         try:
-            with open(path, "r", encoding="utf-8") as handle:
+            with open(path, encoding="utf-8") as handle:
                 milli = int(handle.read().strip())
                 return milli / 1000.0
         except Exception:
@@ -47,7 +46,7 @@ def _read_load_1m() -> float | None:
 
 def _read_mem_used_pct() -> float | None:
     try:
-        with open("/proc/meminfo", "r", encoding="utf-8") as handle:
+        with open("/proc/meminfo", encoding="utf-8") as handle:
             data = handle.read().splitlines()
         mem_total = None
         mem_available = None
@@ -74,7 +73,7 @@ class HealthMonitorModule(Module):
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self._last_sample_ts = 0.0
-        self._high_water: Dict[str, Optional[float]] = {
+        self._high_water: dict[str, float | None] = {
             "load_1m": None,
             "temp_c": None,
             "gpu_temp_c": None,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 from houndmind_ai.calibration.servo_calibration import apply_servo_offsets
 from houndmind_ai.core.module import Module
@@ -31,9 +31,9 @@ def _safe_int(val: Any, default: int) -> int:
 class MotorModule(Module):
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
-        self.dog: Optional[Any] = None
+        self.dog: Any | None = None
         self.last_action: str | None = None
-        self.action_flow: Optional[Any] = None
+        self.action_flow: Any | None = None
         self.last_action_ts = 0.0
 
     def start(self, context) -> None:
@@ -348,8 +348,8 @@ class MotorModule(Module):
             self._apply_head_center(context)
 
     def _apply_persisted_offsets(self, calibration: dict) -> None:
-        from pathlib import Path
         import json
+        from pathlib import Path
 
         path = Path(str(calibration.get("persist_path", "data/calibration.json")))
         if not path.is_absolute():
