@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime
+
+from houndmind_ai.kernel.state import StateStore
 
 from .config import Config
 from .module import Module, ModuleError
@@ -12,15 +13,31 @@ from .module import Module, ModuleError
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class RuntimeContext:
-    data: dict[str, object] = field(default_factory=dict)
+    """The shared bus every module reads and writes.
+
+    Backed by a `StateStore` rather than a bare dict: the sensor and scan services publish
+    from daemon threads while the loop reads, so the mapping needs a lock (H-02). `get`/`set`
+    keep the shape every module already uses.
+    """
+
+    __slots__ = ("store",)
+
+    def __init__(self, store: StateStore | None = None) -> None:
+        self.store = store if store is not None else StateStore()
 
     def set(self, key: str, value: object) -> None:
-        self.data[key] = value
+        self.store.set(key, value)
 
     def get(self, key: str, default: object | None = None) -> object | None:
-        return self.data.get(key, default)
+        return self.store.get(key, default)
+
+    def snapshot(self) -> dict[str, object]:
+        """A copy for logging, telemetry and anything else that iterates."""
+        return self.store.snapshot()
+
+    def __contains__(self, key: object) -> bool:
+        return key in self.store
 
 
 class HoundMindRuntime:
