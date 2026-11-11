@@ -5,6 +5,7 @@ import math
 import time
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.commands import canonical_action
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +34,20 @@ class BalanceModule(Module):
         self._last_ts = now
 
         if settings.get("active_when_moving", True):
-            action = str(context.get("navigation_action") or "")
+            # What the actuators are actually doing, not what a producer happened to put in a
+            # context key: `motion_command` is the gateway's single output.
+            command = context.get("motion_command") or {}
+            action = str(
+                command.get("canonical_action") or canonical_action(str(command.get("action") or ""))
+            )
             allowed = settings.get(
                 "active_actions",
                 ["forward", "backward", "turn left", "turn right", "trot"],
             )
-            if allowed and action not in allowed:
+            # The configured list is written the way the dog spells it ("turn left"); compare
+            # in the canonical vocabulary so both spellings mean the same action.
+            allowed_canonical = [canonical_action(str(entry)) for entry in allowed or []]
+            if allowed_canonical and action not in allowed_canonical:
                 return
 
         reading = context.get("sensor_reading")

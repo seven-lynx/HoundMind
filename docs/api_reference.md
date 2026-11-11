@@ -71,25 +71,48 @@ These modules run each tick and publish data into the runtime context.
 - **HalModule**: owns the dog and publishes `hal` (a `DogHAL`). The only module that opens
   hardware; `main.build_registry(config, hal=FakeDogHAL())` swaps in a scripted dog for tests.
 - **SensorModule**: polls `hal` at `sensors.poll_hz` and publishes `sensor_reading`, `sensors`, `sensor_history`, `sensor_health`.
-- **MotionGatewayModule**: resolves the competing motion intents (`safety_action`, `watchdog_action`, `navigation_action`, `behavior_action`) into one command, runs it through the interlock, and publishes `motion_command`, `motion_verdict`, `tilt_latched`. Runs before `hal_motors` so a decision made this tick is the one executed this tick.
+- **MotionGatewayModule**: reads one intent per `Source` from the `IntentBoard` and one batch of
+  `Command` objects from the `CommandBus`, applies the mode policy, ranks them, runs the winner
+  through the interlock, and publishes `motion_command`, `motion_verdict`, `motion_cancel`,
+  `tilt_latched`. It also publishes the board itself as `intent_board`, which is how every
+  producer finds it. Runs before `hal_motors` so a decision made this tick is the one executed
+  this tick.
 - **ScanningModule**: publishes `scan_reading`, `scan_latest`, `scan_history`, `scan_quality`.
 - **OrientationModule**: updates `current_heading`.
 - **MappingModule**: publishes `mapping_openings`, `mapping_state`; optional home-map snapshots.
 - **LocalPlannerModule**: publishes `local_plan`, `mapping_recommendation`.
-- **ObstacleAvoidanceModule**: sets `navigation_action`, `navigation_turn`, `navigation_followup`, `navigation_decision`.
-- **BehaviorModule**: sets `behavior_action` and handles overrides.
+- **ObstacleAvoidanceModule**: publishes a `navigation` intent to the board, plus `navigation_turn`, `navigation_followup`, `navigation_decision`.
+- **BehaviorModule**: publishes a `behaviour` intent to the board and handles overrides.
 - **AttentionModule**: uses sound direction to orient head; emits `led_request:attention`.
-- **SafetyModule**: sets `safety_action`, `safety_active`, `emergency_stop_active`, `tilt_warning`.
-- **WatchdogModule**: sets `watchdog_action`, `behavior_override`, `restart_modules`.
+- **SafetyModule**: publishes a `system` intent to the board, plus `safety_active`, `emergency_stop_active`, `tilt_warning`.
+- **WatchdogModule**: publishes a `watchdog` intent to the board, plus `behavior_override`, `restart_modules`.
 - **HealthMonitorModule**: sets `health_status`, `health_degraded`, `scan_interval_override_s`.
 - **SensorHealthModule**: paints the sensor staleness badge via `led_request:health`. Ships disabled.
 - **BalanceModule**: IMU-based balance compensation, applied through `hal.action("rpy", ...)`.
 - **EventLoggerModule**: writes event logs and summary; the JSONL file rotates at `logging.event_log_max_mb`.
 - **LedManagerModule**: centralizes RGB LEDs using `led_request:*` signals.
 
-`hal_motors` no longer reads the four producer keys: it executes `motion_command` only. The
-gateway is the single place where precedence is decided, and `act/interlock.py` is the single
-place where a command can be refused.
+Producers no longer write `safety_action` / `watchdog_action` / `navigation_action` /
+`behavior_action`: those keys are gone. A producer publishes to the `IntentBoard`
+(`kernel/intents.py`), one slot per `Source`, and the entry expires unless it is refreshed
+within the board's hold window (`INTERNAL_HOLD_MS`, 1 s). A producer that stops refreshing —
+because it crashed, blocked or simply changed its mind — stops being heard; nothing has to be
+un-set.
+
+`hal_motors` reads `motion_command` only. The gateway is the single place where precedence and
+the mode policy are decided, and `act/interlock.py` is the single place where a command can be
+refused. `stop` passes both: it is never vetoed and never refused by a mode.
+
+### Modes
+
+`POST /api/v1/mode` publishes `runtime_mode`, and the gateway applies it to every source
+(`MODE_ALLOWED_SOURCES` in `kernel/commands.py`):
+
+| Mode | Sources allowed to command motion |
+|---|---|
+| `idle`, `patrol` | all |
+| `manual` | `client`, `watchdog`, `system` — autonomy is off |
+| `rest` | `watchdog`, `system` |
 
 ### Module registry
 
@@ -109,12 +132,13 @@ instead of a mystery.
 - `scan_reading` (ScanReading), `scan_latest` (dict), `scan_quality` (dict)
 - `current_heading` (float)
 - `mapping_openings` (dict), `mapping_state` (dict)
-- `navigation_action` (str), `navigation_turn` (dict), `navigation_decision` (dict)
-- `behavior_action` (str)
+- `navigation_turn` (dict), `navigation_followup` (dict), `navigation_decision` (dict)
 - `led_request:safety` | `led_request:navigation` | `led_request:attention` | `led_request:emotion`
-- `safety_action` (str), `safety_active` (bool)
-- `watchdog_action` (str)
-- `motion_command` (dict | None), `motion_verdict` (dict | None), `tilt_latched` (bool)
+- `safety_active` (bool), `emergency_stop_active` (bool), `tilt_warning` (dict)
+- `behavior_override` (str | None)
+- `motion_command` (dict | None), `motion_verdict` (dict | None), `motion_cancel` (list), `tilt_latched` (bool)
+- `intent_board` (IntentBoard) — what each source is asking for right now
+- `runtime_mode` (str: `idle` | `patrol` | `manual` | `rest`)
 - `health_status` (dict), `health_degraded` (bool)
 
 ---

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.commands import MOTION_ACTIONS, canonical_action
 
 logger = logging.getLogger(__name__)
 
@@ -330,18 +331,13 @@ def settings_continuous(context) -> bool:
     if bool(settings.get("scan_continuous", True)):
         return True
 
-    # If movement/navigation actions are currently active, enforce continuous
-    # scanning to keep obstacle data fresh while walking/turning.
-    for key in ("safety_action", "watchdog_action", "navigation_action", "behavior_action"):
-        action = context.get(key)
-        if not action:
-            continue
-        try:
-            a = str(action).lower()
-        except Exception:
-            continue
-        # Treat basic locomotion or turn actions as movement.
-        if any(tok in a for tok in ("forward", "backward", "left", "right", "turn", "walk", "step")):
+    # Keep obstacle data fresh while the dog is actually walking. This used to sniff four
+    # producer keys for movement words; the gateway's own output is the one place that knows a
+    # motion is being executed, and it says so unambiguously.
+    command = context.get("motion_command")
+    if isinstance(command, dict):
+        raw = command.get("canonical_action") or command.get("action")
+        if raw and canonical_action(str(raw)) in MOTION_ACTIONS:
             return True
 
     return False

@@ -13,6 +13,8 @@ from houndmind_ai.act.gateway import MotionGatewayModule, canonical_action, lega
 from houndmind_ai.act.interlock import Interlock, InterlockLimits
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.hal.sensors import SensorReading
+from houndmind_ai.kernel.commands import Source
+from houndmind_ai.kernel.intents import IntentBoard
 
 
 class Clock:
@@ -27,18 +29,38 @@ class Clock:
 
 
 def build(
-    reading: SensorReading | None = None, **limits: Any
+    reading: SensorReading | None = None,
+    clock: Clock | None = None,
+    **limits: Any,
 ) -> tuple[MotionGatewayModule, RuntimeContext]:
-    clock = Clock()
+    clock = clock or Clock()
     interlock = Interlock(
         limits=InterlockLimits(**limits) if limits else None,
         now=clock,
     )
-    gateway = MotionGatewayModule("motion_gateway", interlock=interlock, clock=clock)
+    gateway = MotionGatewayModule(
+        "motion_gateway",
+        interlock=interlock,
+        clock=clock,
+        # The board shares the fake clock, or an intent would be stamped with wall-clock time
+        # and look decades old to the gateway.
+        board=IntentBoard(clock=clock),
+    )
     context = RuntimeContext()
+    # `start` publishes `intent_board`, which is how a real producer finds it.
+    gateway.start(context)
     if reading is not None:
         context.set("sensor_reading", reading)
     return gateway, context
+
+
+def ask(context, action: str, source: Source = Source.NAVIGATION) -> None:
+    """Stand in for a producer: publish an intent for this tick."""
+    context.get("intent_board").publish(action, source)
+
+
+def drop(context, source: Source = Source.NAVIGATION) -> None:
+    context.get("intent_board").retract(source)
 
 
 def reading(distance_cm: float | None, valid: bool = True) -> SensorReading:
@@ -69,15 +91,15 @@ def test_no_producer_publishes_nothing() -> None:
 
 def test_navigation_alone_wins() -> None:
     gateway, context = build()
-    context.set("navigation_action", "forward")
+    ask(context, "forward")
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "forward"
 
 
 def test_safety_overrides_navigation() -> None:
     gateway, context = build()
-    context.set("navigation_action", "forward")
-    context.set("safety_action", "backward")
+    ask(context, "forward")
+    ask(context, "backward", Source.SYSTEM)
     gateway.tick(context)
     command = context.get("motion_command")
     assert command["action"] == "backward"
@@ -86,20 +108,20 @@ def test_safety_overrides_navigation() -> None:
 
 def test_watchdog_overrides_navigation_but_not_safety() -> None:
     gateway, context = build()
-    context.set("navigation_action", "forward")
-    context.set("watchdog_action", "stop")
+    ask(context, "forward")
+    ask(context, "stop", Source.WATCHDOG)
     gateway.tick(context)
     assert context.get("motion_command")["source"] == "watchdog"
 
-    context.set("safety_action", "backward")
+    ask(context, "backward", Source.SYSTEM)
     gateway.tick(context)
     assert context.get("motion_command")["source"] == "system"
 
 
 def test_behaviour_is_lowest_priority() -> None:
     gateway, context = build()
-    context.set("behavior_action", "sit")
-    context.set("navigation_action", "forward")
+    ask(context, "sit", Source.BEHAVIOUR)
+    ask(context, "forward")
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "forward"
 
@@ -107,7 +129,7 @@ def test_behaviour_is_lowest_priority() -> None:
 def test_same_upstream_intent_is_not_reissued_every_tick() -> None:
     """Re-issuing would bypass the motor cooldown and flood the action queue."""
     gateway, context = build()
-    context.set("navigation_action", "forward")
+    ask(context, "forward")
     gateway.tick(context)
     first = context.get("motion_command")
     gateway.tick(context)
@@ -117,10 +139,10 @@ def test_same_upstream_intent_is_not_reissued_every_tick() -> None:
 
 def test_a_new_intent_is_issued() -> None:
     gateway, context = build()
-    context.set("navigation_action", "forward")
+    ask(context, "forward")
     gateway.tick(context)
     first_id = context.get("motion_command")["id"]
-    context.set("navigation_action", "turn left")
+    ask(context, "turn left")
     gateway.tick(context)
     command = context.get("motion_command")
     assert command["id"] != first_id
@@ -129,14 +151,109 @@ def test_a_new_intent_is_issued() -> None:
     assert command["canonical_action"] == "turn_left"
 
 
-def test_a_cleared_producer_publishes_none() -> None:
-    """A producer that stops asking must stop the dog on the next tick."""
+def test_a_retracted_producer_stops_the_dog() -> None:
+    """A producer that withdraws its intent must stop the dog on the next tick."""
     gateway, context = build()
-    context.set("navigation_action", "forward")
+    ask(context, "forward")
     gateway.tick(context)
-    context.set("navigation_action", None)
+    drop(context)
     gateway.tick(context)
     assert context.get("motion_command") is None
+
+
+def test_an_intent_that_is_not_refreshed_expires() -> None:
+    """The deadman used to protect clients only.
+
+    An internal intent was re-stamped by the gateway on every tick, so a producer that wedged
+    mid-action kept the dog walking forever (P3-1). Now silence is expiry.
+    """
+    clock = Clock()
+    gateway, context = build(clock=clock)
+    ask(context, "forward")
+    gateway.tick(context)
+    assert context.get("motion_command")["action"] == "forward"
+
+    clock.advance(5.0)
+    gateway.tick(context)
+    assert context.get("motion_command") is None
+
+
+def test_a_refreshed_intent_keeps_running() -> None:
+    """Expiry must not stop a producer that is doing its job."""
+    clock = Clock()
+    gateway, context = build(clock=clock)
+    for _ in range(5):
+        ask(context, "forward")
+        gateway.tick(context)
+        clock.advance(0.2)
+    assert context.get("motion_command")["action"] == "forward"
+
+
+def test_a_displaced_intent_is_reported() -> None:
+    """"The dog ignored me" is the question; a cancellation list is the answer."""
+    gateway, context = build()
+    ask(context, "forward")
+    ask(context, "backward", Source.SYSTEM)
+    gateway.tick(context)
+    assert context.get("motion_command")["source"] == "system"
+    cancelled = context.get("motion_cancel")
+    assert [entry["action"] for entry in cancelled] == ["forward"]
+
+
+def test_a_new_speed_is_a_new_command() -> None:
+    """Dedupe on `(action, source)` alone dropped a genuine change of parameters."""
+    gateway, context = build()
+    board = context.get("intent_board")
+    board.publish("forward", Source.NAVIGATION, params={"speed": 100})
+    gateway.tick(context)
+    first = context.get("motion_command")["id"]
+
+    board.publish("forward", Source.NAVIGATION, params={"speed": 150})
+    gateway.tick(context)
+    assert context.get("motion_command")["id"] != first
+
+
+# ------------------------------------------------------------------ the mode policy
+
+
+def test_rest_mode_stops_autonomy() -> None:
+    """`rest` used to veto clients only, while the navigator kept walking the dog (P3-3)."""
+    gateway, context = build()
+    context.set("runtime_mode", "rest")
+    ask(context, "forward")
+    gateway.tick(context)
+    assert context.get("motion_command") is None
+
+
+def test_rest_mode_still_lets_the_system_move_the_dog() -> None:
+    """Parking the dog must not disarm the thing that parks it."""
+    gateway, context = build()
+    context.set("runtime_mode", "rest")
+    ask(context, "lie", Source.SYSTEM)
+    gateway.tick(context)
+    assert context.get("motion_command")["action"] == "lie"
+
+
+def test_manual_mode_leaves_autonomy_out() -> None:
+    """A hand on the wheel: a client may drive, the FSM may not."""
+    gateway, context = build()
+    context.set("runtime_mode", "manual")
+    ask(context, "forward", Source.NAVIGATION)
+    gateway.tick(context)
+    assert context.get("motion_command") is None
+
+    ask(context, "forward", Source.CLIENT)
+    gateway.tick(context)
+    assert context.get("motion_command")["source"] == "client"
+
+
+def test_stop_is_never_refused_by_a_mode() -> None:
+    """An escape hatch a mode can refuse is not an escape hatch."""
+    gateway, context = build()
+    context.set("runtime_mode", "rest")
+    ask(context, "stop", Source.CLIENT)
+    gateway.tick(context)
+    assert context.get("motion_command")["action"] == "stop"
 
 
 # ------------------------------------------------------------------ the interlock
@@ -144,7 +261,7 @@ def test_a_cleared_producer_publishes_none() -> None:
 
 def test_obstacle_vetoes_forward_and_says_why() -> None:
     gateway, context = build(reading(8.0), emergency_stop_cm=12.0)
-    context.set("navigation_action", "forward")
+    ask(context, "forward")
     gateway.tick(context)
     assert context.get("motion_command") is None
     verdict = context.get("motion_verdict")
@@ -155,7 +272,7 @@ def test_obstacle_vetoes_forward_and_says_why() -> None:
 
 def test_obstacle_blocks_forward_but_not_backward() -> None:
     gateway, context = build(reading(8.0), emergency_stop_cm=12.0)
-    context.set("navigation_action", "backward")
+    ask(context, "backward")
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "backward"
 
@@ -163,7 +280,7 @@ def test_obstacle_blocks_forward_but_not_backward() -> None:
 def test_an_invalid_reading_does_not_veto() -> None:
     """A dead sensor must not pin the dog in place forever."""
     gateway, context = build(reading(3.0, valid=False), emergency_stop_cm=12.0)
-    context.set("navigation_action", "forward")
+    ask(context, "forward")
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "forward"
 
@@ -171,7 +288,7 @@ def test_an_invalid_reading_does_not_veto() -> None:
 def test_a_high_priority_command_is_still_vetoed_by_the_interlock() -> None:
     """Precedence decides who is heard; the interlock decides whether anyone moves."""
     gateway, context = build(reading(5.0), emergency_stop_cm=12.0)
-    context.set("safety_action", "forward")
+    ask(context, "forward", Source.SYSTEM)
     gateway.tick(context)
     assert context.get("motion_command") is None
     assert context.get("motion_verdict")["veto"] == "obstacle"
@@ -179,7 +296,7 @@ def test_a_high_priority_command_is_still_vetoed_by_the_interlock() -> None:
 
 def test_stop_is_never_vetoed() -> None:
     gateway, context = build(reading(5.0), emergency_stop_cm=12.0)
-    context.set("safety_action", "stop")
+    ask(context, "stop", Source.SYSTEM)
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "stop"
 
@@ -187,7 +304,7 @@ def test_stop_is_never_vetoed() -> None:
 def test_tilt_latches_motion_until_cleared() -> None:
     gateway, context = build()
     context.set("tilt_warning", {"pitch": 60.0, "roll": 0.0})
-    context.set("navigation_action", "forward")
+    ask(context, "forward")
     gateway.tick(context)
     assert context.get("motion_command") is None
     assert context.get("tilt_latched") is True
@@ -205,7 +322,7 @@ def test_tilt_latches_motion_until_cleared() -> None:
 def test_tilt_does_not_block_posture() -> None:
     gateway, context = build()
     context.set("tilt_warning", {"pitch": 60.0, "roll": 0.0})
-    context.set("behavior_action", "sit")
+    ask(context, "sit", Source.BEHAVIOUR)
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "sit"
 
@@ -213,13 +330,13 @@ def test_tilt_does_not_block_posture() -> None:
 def test_low_voltage_blocks_motion_but_not_posture() -> None:
     gateway, context = build(min_battery_v=6.4)
     context.set("battery_voltage", 5.9)
-    context.set("navigation_action", "forward")
+    ask(context, "forward")
     gateway.tick(context)
     assert context.get("motion_command") is None
     assert context.get("motion_verdict")["veto"] == "low_voltage"
 
-    context.set("navigation_action", None)
-    context.set("behavior_action", "sit")
+    drop(context)
+    ask(context, "sit", Source.BEHAVIOUR)
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "sit"
 
@@ -228,7 +345,7 @@ def test_unknown_posture_actions_are_not_refused() -> None:
     """The dog's repertoire is the HAL's business, not this module's.
     Refusing here would silently delete behaviours nobody listed in KNOWN_ACTIONS."""
     gateway, context = build()
-    context.set("behavior_action", "high five")
+    ask(context, "high five", Source.BEHAVIOUR)
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "high five"
 

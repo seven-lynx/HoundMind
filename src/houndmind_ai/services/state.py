@@ -71,8 +71,15 @@ def _actuators(context, now: float) -> dict[str, object]:
 
 def _nav(context) -> dict[str, object]:
     decision = _table(context.get("navigation_decision"))
+    command = _table(context.get("motion_command"))
+    # The navigator's own decision, and — when the navigator is the source that won the tick —
+    # the command that is actually being executed. No fallback to a producer's private key: a
+    # client must not read one module's opinion as the dog's current action.
+    decision_name = decision.get("decision")
+    if decision_name is None and command.get("source") == "navigation":
+        decision_name = command.get("canonical_action")
     return {
-        "decision": decision.get("decision") or context.get("navigation_action"),
+        "decision": decision_name,
         "confidence": _number(decision.get("confidence")),
     }
 

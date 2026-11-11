@@ -6,8 +6,13 @@ from collections.abc import Iterable
 from typing import Any
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.commands import Source
 
 logger = logging.getLogger(__name__)
+
+
+def _board(context):
+    return context.get("intent_board")
 
 
 def _safe_float(val: Any, default: float) -> float:
@@ -77,7 +82,9 @@ class WatchdogModule(Module):
                 stale_modules.append(str(name))
 
         if not sensor_stale and not scan_stale and not stale_modules:
-            context.set("watchdog_action", None)
+            board = _board(context)
+            if board is not None:
+                board.retract(Source.WATCHDOG)
             context.set("behavior_override", None)
             return
 
@@ -89,11 +96,14 @@ class WatchdogModule(Module):
         recovery_action = settings.get("recovery_action") or "lie"
         recovery_behavior = settings.get("recovery_behavior") or "rest_behavior"
 
+        board = _board(context)
         if recovery_mode == "behavior":
             context.set("behavior_override", recovery_behavior)
-            context.set("watchdog_action", None)
+            if board is not None:
+                board.retract(Source.WATCHDOG)
         else:
-            context.set("watchdog_action", recovery_action)
+            if board is not None:
+                board.publish(str(recovery_action), Source.WATCHDOG)
             context.set("behavior_override", None)
 
         restart_modules = settings.get("restart_modules", [])
