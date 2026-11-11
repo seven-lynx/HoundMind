@@ -157,14 +157,13 @@ class PidogHAL:
         for _ in range(max(1, samples)):
             try:
                 if hasattr(dog, "read_distance"):
-                    raw = dog.read_distance()
+                    value = float(dog.read_distance())
                 else:
-                    raw = dog.ultrasonic.read_distance()
-                value = float(raw)
+                    value = float(dog.ultrasonic.read_distance())
             except Exception:  # noqa: BLE001 - one bad sample is not a broken sensor
                 logger.debug("Distance sample failed", exc_info=True)
-                value = 0.0
-            if min_cm <= value <= max_cm:
+                value = None
+            if value is not None and min_cm <= value <= max_cm:
                 values.append(value)
             if delay:
                 time.sleep(delay)
