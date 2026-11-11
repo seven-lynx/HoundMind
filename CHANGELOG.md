@@ -141,7 +141,7 @@ Current Release: v2026.01.18 • Author: 7Lynx
 - `aiohttp` is a base dependency. It is the only new dependency in this phase; its resident cost
   on a Pi 4 has not been measured yet, which is a Phase 3 device task.
 - `mode` is a typed value (`idle`, `patrol`, `manual`, `rest`) published as `runtime_mode`.
-  `rest` vetoes client motion with a reason; nothing else does, and `POST /stop` is never vetoed.
+  `rest` and `manual` gate every source, not just clients, and `POST /stop` is never refused.
 - `hal_motors` executes `motion_command` only; it no longer merges four context keys by `or` and
   deduplicates on the action string, which had made a `forward` from navigation and one from
   behaviour indistinguishable.
@@ -178,6 +178,16 @@ Current Release: v2026.01.18 • Author: 7Lynx
 ### Fixed
 - A client command that sat in a tunnel can no longer execute on arrival: the deadman starts
   when the device receives it, and an expired command is refused by the interlock.
+- **The placeholder vision inference thread is gone.** `vision_pi4` started a background thread on
+  any install that enabled the camera; its whole job was `sleep(0.05)` and `{"result": "ok"}`, and
+  it was on by default (M-03, #9). `inference_scheduler_enabled` now ships `false`, starts nothing
+  without an `inference_fn`, and reports `vision_inference_status: unconfigured` when it is turned
+  on with no model rather than pretending to infer. The scheduler and the preprocessor are kept and
+  are what a real model plugs into; the scheduler starts only after a camera opens, so a failed
+  camera cannot leave an orphan thread behind.
+- Removed the `__main__` demo in `optional/vision_inference_scheduler.py` — the only `print()` in
+  `src/houndmind_ai/` (L-03). The remaining prints are `src/tools/` device CLIs, where stdout is
+  the interface.
 
 ### Removed
 - `safety/service_watchdog.py`, `modules.service_watchdog` and `settings.service_watchdog`. The

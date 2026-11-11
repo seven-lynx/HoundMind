@@ -276,7 +276,20 @@
       "enabled": false,
       "backend": "picamera2",
       "device_index": 0,
-      "frame_interval_s": 0.2
+      // Seconds between captured frames.
+      "frame_interval_s": 0.2,
+      // Run a vision model on each frame in a background worker. Off by default and inert
+      // without a model: enabling it with nothing wired reports "unconfigured" rather than
+      // starting the placeholder thread that used to live here.
+      "inference_scheduler_enabled": false,
+      // Frame preparation before inference. Applied only when the scheduler is running.
+      "preprocessing": {
+        "resize": [224, 224],
+        "normalize": false,
+        "roi": null,
+        "mean": [0.0, 0.0, 0.0],
+        "std": [1.0, 1.0, 1.0]
+      }
     },
     // =====================================================================
     // VOICE ASSISTANT (Pi4 optional)
