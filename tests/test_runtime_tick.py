@@ -22,9 +22,11 @@ from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.main import build_modules
 
 # Camera, microphone, network listeners and optional wheels: the fake HAL says nothing about
-# these, so they stay off in CI. Everything else runs on the fake dog.
+# these, so they stay off in CI. `api` is here because it *binds a socket*: binding 0.0.0.0 in a
+# test would put a listening port on a CI runner. It has its own tests, on loopback only.
 OPTIONAL_MODULES = frozenset(
     {
+        "api",
         "vision",
         "vision_pi4",
         "voice",
@@ -115,6 +117,8 @@ def test_no_enabled_module_records_an_error(runtime) -> None:
 def test_a_module_with_no_hal_is_disabled_not_fatal() -> None:
     """`required=True` belongs to the pieces that cannot work at all, so nothing here may abort."""
     config = load_config()
+    # The control plane would bind a port; this test is about the missing dog.
+    config.modules["api"].enabled = False
     instance = HoundMindRuntime(config, build_modules(config, hal=None))
     try:
         instance.start()

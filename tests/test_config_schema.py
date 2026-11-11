@@ -183,6 +183,7 @@ def test_every_shipped_section_is_covered_by_the_schema() -> None:
 # a section nobody proved was reachable.
 
 BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
+    ("api", "port", 0),
     ("sensors", "poll_hz", "often"),
     ("motors", "min_action_interval_s", "soon"),
     ("sensor_health", "enabled", "yes"),

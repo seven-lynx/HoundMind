@@ -17,6 +17,7 @@ from houndmind_ai.hal.iface import DogHAL
 from houndmind_ai.hal.module import HalModule
 from houndmind_ai.hal.motors import MotorModule
 from houndmind_ai.hal.sensors import SensorModule
+from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.kernel.config_schema import ConfigError
 from houndmind_ai.kernel.registry import Capability, ModuleRegistry
 from houndmind_ai.logging.event_logger import EventLoggerModule
@@ -42,6 +43,7 @@ from houndmind_ai.safety.sensor_health import SensorHealthModule
 from houndmind_ai.safety.service_watchdog import ServiceWatchdogModule
 from houndmind_ai.safety.supervisor import SafetyModule
 from houndmind_ai.safety.watchdog import WatchdogModule
+from houndmind_ai.services.module import ControlPlaneModule
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +66,15 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
         return val if isinstance(val, dict) else getattr(val, "__dict__", {})
 
     registry = ModuleRegistry()
+    # One inbox, two ends: the control plane submits, the gateway drains. Created here so a
+    # device with `modules.api.enabled: false` still has a gateway, and a test can inject its
+    # own bus without touching either module's configuration.
+    bus = CommandBus()
     registry.register(HalModule("hal", **cfg("hal"), hal=hal), [Capability.SAFETY])
     registry.register(SensorModule("hal_sensors", **cfg("hal_sensors")), [Capability.SENSORS])
     registry.register(
-        MotionGatewayModule("motion_gateway", **cfg("motion_gateway")), [Capability.SAFETY]
+        MotionGatewayModule("motion_gateway", **cfg("motion_gateway"), bus=bus),
+        [Capability.SAFETY],
     )
     registry.register(MotorModule("hal_motors", **cfg("hal_motors")), [Capability.MOTION])
     registry.register(PerceptionModule("perception", **cfg("perception")), [Capability.PERCEPTION])
@@ -99,6 +106,9 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
         TelemetryDashboardModule("telemetry_dashboard", **cfg("telemetry_dashboard")),
         [Capability.TELEMETRY],
     )
+    # Last, so `/modules` reports the control plane after the things it reports on. Disabling
+    # `modules.api` leaves the dog fully operational with no network surface at all.
+    registry.register(ControlPlaneModule("api", **cfg("api"), bus=bus), [Capability.CONTROL])
     return registry
 
 

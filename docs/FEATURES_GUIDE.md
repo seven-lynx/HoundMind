@@ -477,7 +477,67 @@ the only hardware it targeted. It also had no test and was never registered in t
 Indoor positioning, when it comes back, belongs in `mapping/` as a source feeding the pose
 estimate — not as a module that only ever worked on a developer's laptop.
 
-## 26) How to Disable Any Feature
+## 26) Control Plane — REST, WebSocket, camera, web app
+
+**What it does:** Serves the dog to a browser or a phone. One process, one port (8420), one API,
+as specified in `docs/CONTROL_API.md`:
+
+| Surface | Path | Scope |
+|---|---|---|
+| Liveness | `GET /api/v1/health` | none |
+| Identity | `GET /api/v1/meta` | none |
+| State snapshot | `GET /api/v1/state` | `state:read` |
+| Module list | `GET /api/v1/modules` | `state:read` |
+| Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame |
+| Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?token=`) |
+| Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
+| Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration` | `config` |
+| History | `GET /api/v1/history` | `state:read` |
+| Diagnostics | `GET /api/v1/logs`, `/support-bundle` | `admin` |
+| Web app | `GET /` and `/static/*` | same origin, token in the browser |
+
+**The token.** Generated on first start and written to `~/.houndmind/api_token` with mode 0600.
+It is never in `config/settings.jsonc`, never in a log line and never in this repository. To read
+it on the device: `cat ~/.houndmind/api_token`. To pair a phone or a second browser, open a
+pairing window and enter the 6-digit code it prints — the code is single-use and expires after
+five minutes.
+
+```bash
+# Show a pairing code (valid 5 minutes, single use)
+curl -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
+     -X POST http://127.0.0.1:8420/api/v1/pair/open
+```
+
+Every motion command is judged by the interlock exactly as an internal producer is. A refusal
+answers `409` with `veto` and `detail`, and the client is expected to display the reason. `rest`
+mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed.
+
+**Config** (`settings.api`, and `modules.api` for the on/off switch):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `host` | `0.0.0.0` | Bind address. The token is the security boundary, not the bind. |
+| `port` | `8420` | One port for REST, WebSocket, MJPEG and the web app. |
+| `token_path` | `~/.houndmind/api_token` | Where the install-issued token lives. |
+| `state_hz` | `10.0` | Telemetry push rate. |
+| `pairing_enabled` | `true` | Allow pairing codes. |
+| `pairing_attempts_per_minute` | `5` | Rate limit per peer. |
+| `command_queue` | `64` | Bounded inbox; a full queue is `429`, never added latency. |
+| `command_ack_timeout_s` | `0.5` | How long a `POST /command` waits for the interlock before `503`. |
+| `link_loss_s` | `6.0` | A client that stops pinging loses its command. |
+| `max_clients` | `8` | Sessions kept; the least recently seen idle one is evicted. |
+| `log_tail` | `200` | Default and maximum `?tail=` for `/logs`. |
+
+**Disable:** `modules.api.enabled = false` removes the network surface entirely — the dog still
+runs, and nothing listens. That is the right setting for a dog that should never be reachable.
+
+**Not in v1:** TLS (documented gap, Phase 6), remote access beyond the LAN, accounts,
+`POST /api/v1/calibration/run` (it moves the dog, so it needs a physical confirmation on the
+device first).
+
+---
+
+## 27) How to Disable Any Feature
 1) Open `config/settings.jsonc`
 2) Find the module under `modules`.
 3) Set `enabled` to `false`.
