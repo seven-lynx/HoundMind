@@ -435,9 +435,11 @@ as specified in `docs/CONTROL_API.md`:
 | Diagnostics | `GET /api/v1/logs`, `/support-bundle` | `admin` |
 | Web app | `GET /` and `/static/*` | same origin, token in the browser |
 
-**The token.** Generated on first start and written to `~/.houndmind/api_token` with mode 0600.
-It is never in `config/settings.jsonc`, never in a log line and never in this repository. To read
-it on the device: `cat ~/.houndmind/api_token`. To pair a phone or a second browser, open a
+**The token.** Generated on first start by `services/auth.py::TokenStore` and written to
+`~/.houndmind/api_token` with mode 0600. It is never in `config/settings.jsonc`, never in a log
+line and never in this repository. There is no token-generator script to run: the process creates
+the file if it is missing, and the installer pre-creates it with the right ownership (Phase 6). To
+read it on the device: `cat ~/.houndmind/api_token`. To pair a phone or a second browser, open a
 pairing window and enter the 6-digit code it prints — the code is single-use and expires after
 five minutes.
 

@@ -101,7 +101,7 @@ Set the profile in [config/settings.jsonc](config/settings.jsonc) or via `HOUNDM
 - `pi3` (default, for Pi 3 hardware)
 - `pi4` (enables Pi 4/5 feature flags)
 
-Pi4/5 modules (vision, face recognition, semantic labeling, SLAM, telemetry) remain opt-in.
+Pi4/5 modules (vision, face recognition, semantic labeling, SLAM) remain opt-in.
 
 
 ## SLAM (RTAB-Map for Pi4/5)
@@ -110,36 +110,36 @@ For robust mapping and localization on Pi4/5, HoundMind supports RTAB-Map as the
 ## Feature Guide
 See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for what each feature does, how to use it, and how to disable it.
 
-## Telemetry Dashboard (Pi4 Optional)
-Enable the optional telemetry dashboard module and open the dashboard in a browser:
+## Control plane and web app
 
-- `http://<pi-ip>:8092/` — mobile-friendly dashboard (camera preview + snapshot view)
-- `http://<pi-ip>:8092/snapshot` — JSON snapshot of selected runtime context keys
+One process, one port. Enable it with `modules.api.enabled = true` (default in the shipped
+config) and open:
+
+- `http://<pi-ip>:8420/` — web app: telemetry, camera, hold-to-move d-pad, event feed
+- `http://<pi-ip>:8420/api/v1/state` — JSON snapshot (token required)
+- `http://<pi-ip>:8420/api/v1/camera/stream` — MJPEG (token required)
+
+Everything under `/api/v1` needs the token from `~/.houndmind/api_token`; `/health` and `/meta`
+do not. The full contract is [docs/CONTROL_API.md](docs/CONTROL_API.md), and the token and pairing
+story is §26 of [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md).
+
+The old per-feature servers are gone — there is no separate telemetry dashboard on 8092, vision
+stream on 8090, voice control on 8091 or face enrollment on 8088. Each was an unauthenticated
+listener; the control plane replaces all four behind one token. A `settings.*.http` block left over
+from an older config is a load-time error with a suggestion to delete it.
 
 Configuration (example `config/settings.jsonc` snippet):
 
 ```jsonc
-"telemetry_dashboard": {
-  "enabled": true,
-  "http": {
-    "enabled": true,
-    "host": "0.0.0.0",
-    "port": 8092,
-    // URL path to embed the camera stream or single-frame image.
-    // For MJPEG streams use "/stream.mjpg" or similar; for single-frame endpoints
-    // point to an image URL (the dashboard will auto-refresh with a cache-busting ts param).
-    "camera_path": "/camera"
-  },
-  "snapshot_interval_s": 0.5
+"api": {
+  // Reachable on the LAN by design: the token is the security boundary.
+  "host": "0.0.0.0",
+  "port": 8420,
+  "token_path": "~/.houndmind/api_token"
 }
 ```
 
-Notes:
-- `camera_path` can be any HTTP-accessible path served by your device (MJPEG stream or single-frame image).
-- For single-frame camera endpoints the dashboard reloads the image periodically (cache-busted). For MJPEG streams, set `camera_path` to the stream endpoint and the browser will display it directly.
-- The dashboard polls `/snapshot` to display telemetry (tick latency, vision FPS, CPU/memory) — disable or restrict access as needed for security.
-
-See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for detailed enable/disable steps and security recommendations.
+See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for every key and its default.
 
 ## Project layout (key paths)
 - `src/houndmind_ai/` — core runtime and modules
@@ -156,7 +156,8 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for detailed enable/disable
 - **`ModuleNotFoundError: pidog`** → Install the official PiDog repo first, then HoundMind in the same environment.
 - **Camera not opening** → Enable camera in OS settings; try a different device index.
 - **Audio not working** → Ensure PortAudio headers are installed; rerun audio setup.
-- **Port in use** → Change HTTP ports in `config/settings.jsonc` for vision/telemetry/voice.
+- **Port in use** → `settings.api.port` is the only listener (8420). Change it there, or set
+  `modules.api.enabled = false` to remove the network surface.
 
 - **Build errors for heavy packages (face_recognition, dlib, pyaudio, rtabmap-py)** → These commonly occur on newer Raspberry Pi OS releases (for example, Trixie with Python 3.13) because prebuilt wheels are not yet available. Preferred OS: **Raspberry Pi OS Bookworm (64-bit, Python 3.11)**. If you see many `wheel`/`gcc`/`dlib` build failures during the full install, either switch to Bookworm or run the installer with `--preset lite`.
 
@@ -195,7 +196,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Pi4 Vision Feed (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
 | Semantic Labeler (Pi4)         | Disabled    | Opt-in, requires Pi4                  |
 | SLAM (Pi4)                     | Disabled    | Opt-in, requires Pi4                  |
-| Telemetry Dashboard (Pi4)      | Disabled    | Opt-in, requires Pi4                  |
+| Telemetry Dashboard            | Removed     | Use the control plane / web app        |
 
 See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for details and enable/disable instructions for each module.
 
