@@ -36,6 +36,11 @@ Current Release: v2026.01.18 • Author: 7Lynx
   until the SD card filled.
 - `requires-python` is `>=3.11,<3.14`; Pi 3 support is dropped. `json5` is now a real dependency.
 - Ruff is pinned (`0.17.4`) with an explicit rule set.
+- CI runs on every branch and every pull request (`.github/workflows/ci.yml`), not just on
+  `main`. Work now lands on one branch per phase and merges into `refactor/resurrection`, so a
+  `main`-only trigger meant phase PRs were reviewed with no `ruff`/`pytest`/`mypy` result at
+  all. Jobs, order and interpreter are unchanged: this widens the trigger, it does not relax the
+  gate.
 
 ### Removed
 - `optional/wifi_localization.py` and `modules.wifi_localization`. It shelled out to `netsh wlan
