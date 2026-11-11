@@ -150,9 +150,7 @@ class Interlock:
 
         # The obstacle rule is the forward family, not the whole locomotion class: `backward` and
         # the turns are how the dog gets out of a corner, and a turn-in-place refused at 8 cm is a
-        # dog frozen facing a wall. (`trot` is a forward gait but is not in the family yet —
-        # `MOTION_ACTIONS` feeds the watchdog hold and the scan lock, so widening the forward
-        # family is its own change, not a side effect of this one.)
+        # dog frozen facing a wall. `trot` carries the dog forward, so it is in the family.
         if action in FORWARD_ACTIONS and snapshot.distance_valid:
             distance = snapshot.distance_cm
             if distance is not None and 0 < distance <= self.limits.emergency_stop_cm:

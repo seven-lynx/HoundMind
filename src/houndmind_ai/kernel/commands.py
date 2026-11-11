@@ -48,10 +48,12 @@ class Source(IntEnum):
     SYSTEM = 50
 
 
-MOTION_ACTIONS = frozenset({"forward", "backward", "turn_left", "turn_right"})
-# The forward family, for readers: the obstacle rule is now driven by the `locomotion` class
-# (`kernel/actions.py`), which covers `trot` and the turns as well.
-FORWARD_ACTIONS = frozenset({"forward"})
+# Everything that changes where the dog is. `MOTION_ACTIONS` feeds the locomotion floor
+# (`kernel/actions.py`), the watchdog hold and the scan lock.
+MOTION_ACTIONS = frozenset({"forward", "backward", "turn_left", "turn_right", "trot"})
+# The forward family: the gaits that carry the dog *into* an obstacle, so the sonar may veto them.
+# Retreat and the turns stay out: they are how the dog leaves a corner.
+FORWARD_ACTIONS = frozenset({"forward", "trot"})
 KNOWN_ACTIONS = MOTION_ACTIONS | frozenset(
     {
         "stop",

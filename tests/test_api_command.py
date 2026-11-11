@@ -246,6 +246,35 @@ def test_a_classified_catalog_action_reaches_the_hal(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_a_sound_command_carries_its_params_to_the_hal(tmp_path) -> None:
+    """A `202` that plays nothing is worse than a refusal: the params are the whole command."""
+
+    async def scenario() -> None:
+        world = World(tmp_path, context_settings=_CLASSES)
+        async with TestClient(TestServer(create_app(world.plane))) as client:
+            request = asyncio.create_task(
+                client.post(
+                    f"{API_PREFIX}/command",
+                    headers=world.auth(),
+                    json={
+                        "id": "c6",
+                        "action": "sound",
+                        "params": {"name": "angry", "volume": 80},
+                        "ttl_ms": 300,
+                    },
+                )
+            )
+            await world.tick_until(request.done)
+            response = await request
+            body = await response.json()
+
+        assert response.status == 202, body
+        assert body["accepted"] is True
+        assert ("sound", {"name": "angry", "volume": 80}) in world.hal.calls, world.hal.calls
+
+    asyncio.run(scenario())
+
+
 def test_the_repertoire_reports_every_action_the_device_can_run(tmp_path) -> None:
     """The menu is the device's, not the app's: class from the config, names from the HAL."""
 
