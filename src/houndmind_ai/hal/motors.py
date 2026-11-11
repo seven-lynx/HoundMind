@@ -1,11 +1,28 @@
+"""The actuator side of the loop: decide *when* to move, never *how*.
+
+`MotorModule` keeps the policy — the action cooldown, quiet mode, the retreat/turn followups and
+the closed-loop turn that reads the heading between steps. The vendor calls moved to
+`hal/vendor.py`:
+
+- the `pidog` import and the `ActionFlow` queue, which this module used to own,
+- `do_action` / `wait_all_done` for a single supervised step,
+- `head_move` for head-follow, `set_rpy` for balance,
+- `apply_servo_offsets` for calibration,
+- closing the dog, which every module used to attempt for itself.
+
+The module reads exactly one command key, `motion_command`, which `act/gateway.py` produced
+after resolving precedence and applying the interlock (H-10). A vetoed command cannot be
+resurrected by a lower-priority producer, because nobody else is writing that key.
+"""
+
 from __future__ import annotations
 
 import logging
 import time
 from typing import Any
 
-from houndmind_ai.calibration.servo_calibration import apply_servo_offsets
 from houndmind_ai.core.module import Module
+from houndmind_ai.hal.iface import DogHAL
 
 logger = logging.getLogger(__name__)
 
@@ -28,60 +45,51 @@ def _safe_int(val: Any, default: int) -> int:
         return default
 
 
+def _canonical(action: str) -> str:
+    """`turn left` and `turn_left` are the same command; the HAL speaks the underscore form."""
+    return action.strip().lower().replace(" ", "_")
+
+
 class MotorModule(Module):
+    """Executes the gateway's command through the HAL."""
+
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
-        self.dog: Any | None = None
+        self.hal: DogHAL | None = None
         self.last_action: str | None = None
-        self.action_flow: Any | None = None
         self.last_action_ts = 0.0
 
     def start(self, context) -> None:
         if not self.status.enabled:
             return
-        try:
-            from pidog import Pidog  # type: ignore
-            from pidog.action_flow import ActionFlow  # type: ignore
-        except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(f"Pidog library required on hardware: {exc}") from exc
+        hal = context.get("hal")
+        if hal is None:
+            self.disable("no HAL available")
+            return
+        self.hal = hal
 
-        dog = context.get("pidog")
-        if dog is None:
-            dog = Pidog()
-            context.set("pidog", dog)
-        # Motors should own the hardware lifecycle for clean shutdown.
-        context.set("pidog_owner", self.name)
-        self.dog = dog
-        self.action_flow = ActionFlow(dog)
-        self.action_flow.start()
-
-        # Apply calibration offsets if configured.
+        # Servo offsets are user data written by the calibration workflow: apply them if the
+        # file asks for it, otherwise leave the servos where the hardware put them.
         calibration = (context.get("settings") or {}).get("calibration", {})
         if calibration.get("auto_apply_servo_offsets", False):
             offsets = calibration.get("servo_zero_offsets", {})
             if isinstance(offsets, dict) and offsets:
-                apply_servo_offsets(self.dog, offsets)
+                self.hal.apply_offsets(offsets)
             else:
                 self._apply_persisted_offsets(calibration)
 
     def tick(self, context) -> None:
         self._release_head_follow_if_due(context)
-        # Motors no longer chooses between producers. `act/gateway.py` resolved precedence,
-        # applied the interlock and published the one command that may run this tick (H-10).
-        # Reading a single key means a `forward` from navigation and a `forward` from
-        # behaviour can no longer be confused for each other, and a vetoed command cannot be
-        # resurrected by a lower-priority producer.
         command = context.get("motion_command")
         if not isinstance(command, dict):
             return
-        action = command.get("action")
-        if not action:
+        raw = command.get("canonical_action") or command.get("action")
+        if not raw:
             return
-        action = str(action)
+        action = _canonical(str(raw))
         if action == self.last_action:
             return
-
-        if self.dog is None or self.action_flow is None:
+        if self.hal is None:
             return
 
         # Configurable cooldown keeps actions from spamming the action queue.
@@ -111,48 +119,56 @@ class MotorModule(Module):
                     self.last_action_ts = now
                     return
 
-            if action in ("turn left", "turn right"):
-                direction = "left" if action == "turn left" else "right"
+            if action in ("turn_left", "turn_right"):
+                direction = "left" if action == "turn_left" else "right"
                 self._schedule_head_follow(context, direction)
 
             # Execute action; optionally follow with a retreat/turn sequence.
-            self.action_flow.add_action(action)
-            followup = context.get("navigation_followup")
-            if isinstance(followup, dict):
-                if followup.get("type") == "retreat_turn":
-                    backup_steps = _safe_int(followup.get("backup_steps", 2), 2)
-                    direction = str(followup.get("direction", "auto"))
-                    if direction == "auto":
-                        direction = "left"
-                    self.action_flow.add_action("backward")
-                    if backup_steps > 1:
-                        # Re-queue backward steps for stronger retreat.
-                        for _ in range(backup_steps - 1):
-                            self.action_flow.add_action("backward")
-                    self._enqueue_turn(context, direction, steps=backup_steps)
-                elif followup.get("type") == "sequence":
-                    actions = followup.get("actions", [])
-                    for entry in actions:
-                        if isinstance(entry, str):
-                            self.action_flow.add_action(entry)
+            self.hal.action(action, {})
+            self._apply_followup(context)
             self.last_action = action
             self.last_action_ts = now
         except Exception as exc:  # noqa: BLE001
             logger.warning("Motor action failed: %s", exc)
             self.disable(str(exc))
 
+    def _apply_followup(self, context) -> None:
+        """Retreat or sequence the navigation layer asked for, queued behind the action."""
+        if self.hal is None:
+            return
+        followup = context.get("navigation_followup")
+        if not isinstance(followup, dict):
+            return
+        if followup.get("type") == "retreat_turn":
+            backup_steps = _safe_int(followup.get("backup_steps", 2), 2)
+            direction = str(followup.get("direction", "auto"))
+            if direction == "auto":
+                direction = "left"
+            self.hal.action("backward", {})
+            # Re-queue backward steps for a stronger retreat.
+            for _ in range(max(0, backup_steps - 1)):
+                self.hal.action("backward", {})
+            self._enqueue_turn(context, direction, steps=backup_steps)
+        elif followup.get("type") == "sequence":
+            for entry in followup.get("actions", []):
+                if isinstance(entry, str):
+                    self.hal.action(_canonical(entry), {})
+
     def _enqueue_turn(self, context, direction: str, steps: int = 1) -> None:
-        if self.action_flow is None:
+        if self.hal is None:
             return
         if self._turn_by_angle(context, {"direction": direction, "steps": steps}):
             return
+        turn = "turn_left" if direction == "left" else "turn_right"
         for _ in range(max(1, _safe_int(steps, 1))):
-            self.action_flow.add_action(f"turn {direction}")
+            self.hal.action(turn, {})
 
     def _turn_by_angle(self, context, payload: dict) -> bool:
+        """Closed-loop turn: one supervised step at a time until the heading is close enough."""
         heading = context.get("current_heading")
-        if heading is None:
+        if heading is None or self.hal is None:
             return False
+
         direction = str(payload.get("direction", "left"))
         degrees = payload.get("degrees")
         steps = _safe_int(payload.get("steps", 1), 1)
@@ -181,8 +197,7 @@ class MotorModule(Module):
             speed = _safe_int(movement.get("speed_turn_slow", speed), speed)
 
         def ang_diff(a: float, b: float) -> float:
-            d = (a - b + 180.0) % 360.0 - 180.0
-            return d
+            return (a - b + 180.0) % 360.0 - 180.0
 
         start = _safe_float(heading, 0.0)
         target = (start + degrees) % 360.0
@@ -196,17 +211,9 @@ class MotorModule(Module):
             if abs(remaining) <= tolerance:
                 self._apply_head_center(context)
                 return True
-            step_dir = "turn left" if remaining > 0 else "turn right"
+            step = "turn_left" if remaining > 0 else "turn_right"
             try:
-                dog = self.dog
-                if dog is None:
-                    self._apply_head_center(context)
-                    return False
-                dog.do_action(
-                    step_dir.replace("turn ", "turn_"), step_count=1, speed=speed
-                )
-                if hasattr(dog, "wait_all_done"):
-                    dog.wait_all_done()
+                self.hal.action(step, {"speed": speed, "steps": 1, "wait": True})
             except Exception:  # noqa: BLE001
                 self._apply_head_center(context)
                 return False
@@ -215,31 +222,16 @@ class MotorModule(Module):
         return False
 
     def stop(self, context) -> None:
-        dog_owner = context.get("pidog_owner")
-        if dog_owner == self.name and self.dog is not None:
-            try:
-                if self.action_flow is not None:
-                    self.action_flow.stop()
-                self.dog.close()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Failed to close Pidog: %s", exc)
+        """The HAL belongs to `HalModule`; this module only gives up its reference."""
+        self.hal = None
 
     def _hardware_stop(self) -> None:
-        if self.dog is None:
+        if self.hal is None:
             return
-        for method in ("emergency_stop", "stop", "stop_all", "halt", "standby"):
-            if hasattr(self.dog, method):
-                try:
-                    getattr(self.dog, method)()
-                    logger.warning("Motor hardware stop via %s", method)
-                    break
-                except Exception:  # noqa: BLE001
-                    continue
-        if self.action_flow is not None and hasattr(self.action_flow, "clear_actions"):
-            try:
-                self.action_flow.clear_actions()
-            except Exception:  # noqa: BLE001
-                pass
+        try:
+            self.hal.stop()
+        except Exception:  # noqa: BLE001
+            logger.warning("HAL stop failed", exc_info=True)
 
     def _head_follow_config(
         self, context
@@ -286,13 +278,17 @@ class MotorModule(Module):
         blocked = False
         if scan_block_s > 0:
             scan_reading = context.get("scan_reading")
-            scan_ts = _safe_float(getattr(scan_reading, "timestamp", 0.0) if scan_reading else 0.0, 0.0)
+            scan_ts = _safe_float(
+                getattr(scan_reading, "timestamp", 0.0) if scan_reading else 0.0, 0.0
+            )
             blocked = blocked or (time.time() - scan_ts) < max(0.0, scan_block_s)
         if attention_block_s > 0:
             attention_ts = context.get("attention_active_ts")
             try:
-                attention_ts = _safe_float(attention_ts, 0.0) if attention_ts is not None else 0.0
-            except Exception:
+                attention_ts = (
+                    _safe_float(attention_ts, 0.0) if attention_ts is not None else 0.0
+                )
+            except Exception:  # noqa: BLE001
                 attention_ts = 0.0
             blocked = blocked or (time.time() - attention_ts) < max(
                 0.0, attention_block_s
@@ -300,33 +296,25 @@ class MotorModule(Module):
         return blocked
 
     def _apply_head_follow(self, direction: str, context) -> None:
-        if self.dog is None or not hasattr(self.dog, "head_move"):
+        if self.hal is None:
             return
         enabled, degrees, speed, _, _, _, _, _ = self._head_follow_config(context)
-        if not enabled or degrees <= 0:
-            return
-        if self._head_follow_blocked(context):
+        if not enabled or degrees <= 0 or self._head_follow_blocked(context):
             return
         yaw = degrees if direction == "left" else -degrees
         try:
-            self.dog.head_move([[yaw, 0, 0]], speed=speed)
-            if hasattr(self.dog, "wait_head_done"):
-                self.dog.wait_head_done()
+            self.hal.action("head", {"yaw": yaw, "pitch": 0, "speed": speed, "wait": True})
         except Exception:  # noqa: BLE001
             return
 
     def _apply_head_center(self, context) -> None:
-        if self.dog is None or not hasattr(self.dog, "head_move"):
+        if self.hal is None:
             return
         enabled, _, speed, _, _, _, _, _ = self._head_follow_config(context)
-        if not enabled:
-            return
-        if self._head_follow_blocked(context):
+        if not enabled or self._head_follow_blocked(context):
             return
         try:
-            self.dog.head_move([[0, 0, 0]], speed=speed)
-            if hasattr(self.dog, "wait_head_done"):
-                self.dog.wait_head_done()
+            self.hal.action("head", {"yaw": 0, "pitch": 0, "speed": speed, "wait": True})
         except Exception:  # noqa: BLE001
             return
 
@@ -341,7 +329,7 @@ class MotorModule(Module):
         release_ts = context.get("head_turn_follow_release_ts")
         try:
             release_ts = float(release_ts) if release_ts is not None else None
-        except Exception:
+        except (TypeError, ValueError):
             release_ts = None
         if release_ts is None:
             return
@@ -350,6 +338,7 @@ class MotorModule(Module):
             self._apply_head_center(context)
 
     def _apply_persisted_offsets(self, calibration: dict) -> None:
+        """Fall back to the calibration file when the config carries no offsets of its own."""
         import json
         from pathlib import Path
 
@@ -361,7 +350,7 @@ class MotorModule(Module):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
             offsets = payload.get("last_result", {}).get("servo_zero_offsets", {})
-            if isinstance(offsets, dict) and offsets:
-                apply_servo_offsets(self.dog, offsets)
+            if isinstance(offsets, dict) and offsets and self.hal is not None:
+                self.hal.apply_offsets(offsets)
         except Exception:  # noqa: BLE001
             logger.debug("Failed to read persisted calibration", exc_info=True)

@@ -13,6 +13,8 @@ from houndmind_ai.calibration.workflow import CalibrationModule
 from houndmind_ai.core.config import load_config
 from houndmind_ai.core.logging_setup import setup_logging
 from houndmind_ai.core.runtime import HoundMindRuntime
+from houndmind_ai.hal.iface import DogHAL
+from houndmind_ai.hal.module import HalModule
 from houndmind_ai.hal.motors import MotorModule
 from houndmind_ai.hal.sensors import SensorModule
 from houndmind_ai.kernel.config_schema import ConfigError
@@ -44,12 +46,15 @@ from houndmind_ai.safety.watchdog import WatchdogModule
 logger = logging.getLogger(__name__)
 
 
-def build_registry(config) -> ModuleRegistry:
+def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     """Construct the module list and register capabilities.
 
-    Registration order is tick order. The gateway sits immediately before the motors so a
+    Registration order is tick order. The HAL module comes first because every hardware-facing
+    module asks the context for `hal`; the gateway sits immediately before the motors so a
     decision made this tick is the one executed this tick; producers that run later (safety,
     watchdog, behaviour) publish intent for the *next* tick, exactly as before.
+
+    `hal` is the test seam: pass `FakeDogHAL()` and the whole runtime runs on a scripted dog.
     """
     module_configs = config.modules or {}
 
@@ -59,6 +64,7 @@ def build_registry(config) -> ModuleRegistry:
         return val if isinstance(val, dict) else getattr(val, "__dict__", {})
 
     registry = ModuleRegistry()
+    registry.register(HalModule("hal", **cfg("hal"), hal=hal), [Capability.SAFETY])
     registry.register(SensorModule("hal_sensors", **cfg("hal_sensors")), [Capability.SENSORS])
     registry.register(
         MotionGatewayModule("motion_gateway", **cfg("motion_gateway")), [Capability.SAFETY]
@@ -96,9 +102,9 @@ def build_registry(config) -> ModuleRegistry:
     return registry
 
 
-def build_modules(config) -> list:
+def build_modules(config, hal: DogHAL | None = None) -> list:
     """The tick list. Kept as a list for the runtime; the registry holds the capabilities."""
-    return build_registry(config).modules()
+    return build_registry(config, hal=hal).modules()
 
 
 def main() -> None:

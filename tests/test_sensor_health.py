@@ -16,8 +16,8 @@ class DummyContext:
             }
         }
         self.led_manager = LedManagerModule("led_manager")
-        # Pass dummy dog and settings for SensorService
-        self.sensor_service = SensorService(dog=None, settings={})
+        # A HAL-less service: this test drives SensorReading values through the module directly.
+        self.sensor_service = SensorService(None, {})
         self.event_log = []
 
     def log_event(self, event):

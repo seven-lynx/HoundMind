@@ -68,7 +68,9 @@ Need feature-level explanations? See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUID
 ## HoundMind Runtime (`houndmind_ai`) Modules
 These modules run each tick and publish data into the runtime context.
 
-- **SensorModule**: publishes `sensor_reading`, `sensors`, `sensor_history`, `sensor_health`.
+- **HalModule**: owns the dog and publishes `hal` (a `DogHAL`). The only module that opens
+  hardware; `main.build_registry(config, hal=FakeDogHAL())` swaps in a scripted dog for tests.
+- **SensorModule**: polls `hal` at `sensors.poll_hz` and publishes `sensor_reading`, `sensors`, `sensor_history`, `sensor_health`.
 - **MotionGatewayModule**: resolves the competing motion intents (`safety_action`, `watchdog_action`, `navigation_action`, `behavior_action`) into one command, runs it through the interlock, and publishes `motion_command`, `motion_verdict`, `tilt_latched`. Runs before `hal_motors` so a decision made this tick is the one executed this tick.
 - **ScanningModule**: publishes `scan_reading`, `scan_latest`, `scan_history`, `scan_quality`.
 - **OrientationModule**: updates `current_heading`.
@@ -81,7 +83,7 @@ These modules run each tick and publish data into the runtime context.
 - **WatchdogModule**: sets `watchdog_action`, `behavior_override`, `restart_modules`.
 - **HealthMonitorModule**: sets `health_status`, `health_degraded`, `scan_interval_override_s`.
 - **SensorHealthModule**: paints the sensor staleness badge via `led_request:health`. Ships disabled.
-- **BalanceModule**: IMU-based balance compensation via `dog.set_rpy`.
+- **BalanceModule**: IMU-based balance compensation, applied through `hal.action("rpy", ...)`.
 - **EventLoggerModule**: writes event logs and summary; the JSONL file rotates at `logging.event_log_max_mb`.
 - **LedManagerModule**: centralizes RGB LEDs using `led_request:*` signals.
 
@@ -101,6 +103,7 @@ instead of a mystery.
 ---
 
 ## Core Context Keys
+- `hal` (DogHAL) — the only way to reach hardware; `None` when nothing opened
 - `sensor_reading` (SensorReading)
 - `sensors` (dict) and `sensor_health` (dict)
 - `scan_reading` (ScanReading), `scan_latest` (dict), `scan_quality` (dict)

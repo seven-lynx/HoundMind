@@ -10,10 +10,33 @@ no dog attached.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
-__all__ = ["DogHAL", "SensorSnapshot", "as_float", "as_int"]
+__all__ = ["DOG_ACTIONS", "DogHAL", "SensorSnapshot", "as_float", "as_int"]
+
+# The actions the HAL implements itself. Anything else in `config/actions.jsonc` is a vendor
+# `ActionFlow` name that is passed through, so this list describes the contract, not the whole
+# repertoire: the dog knows more tricks than the runtime has opinions about.
+DOG_ACTIONS: frozenset[str] = frozenset(
+    {
+        "forward",
+        "backward",
+        "turn_left",
+        "turn_right",
+        "stop",
+        "stand",
+        "sit",
+        "lie",
+        "stretch",
+        "wag_tail",
+        "bark",
+        "head",
+        "rgb",
+        "rpy",
+    }
+)
 
 
 def as_float(value: Any, default: float) -> float:
@@ -58,8 +81,13 @@ class SensorSnapshot:
     distance_valid: bool = False
     touch: str = "N"
     touch_valid: bool = False
+    sound_detected: bool = False
     sound_direction: int | None = None
     sound_valid: bool = False
+    # Raw IMU. `acc` is a 3-tuple in g, `gyro` a 3-tuple in deg/s; both None when the IMU
+    # could not be read, which is why they are not defaulted to zeros.
+    acc: tuple[float, float, float] | None = None
+    gyro: tuple[float, float, float] | None = None
     pitch_deg: float | None = None
     roll_deg: float | None = None
     imu_valid: bool = False
@@ -78,8 +106,11 @@ class SensorSnapshot:
             "distance_valid": self.distance_valid,
             "touch": self.touch,
             "touch_valid": self.touch_valid,
+            "sound_detected": self.sound_detected,
             "sound_direction": self.sound_direction,
             "sound_valid": self.sound_valid,
+            "acc": self.acc,
+            "gyro": self.gyro,
             "pitch_deg": self.pitch_deg,
             "roll_deg": self.roll_deg,
             "imu_valid": self.imu_valid,
@@ -90,11 +121,15 @@ class SensorSnapshot:
 
 @runtime_checkable
 class DogHAL(Protocol):
-    """The only interface the actuator gateway is allowed to call.
+    """The only interface the rest of the runtime is allowed to use to reach hardware.
 
-    Implementations: :class:`houndmind_ai.hal.fake.FakeDogHAL` for tests and CI, and the
-    vendor-backed adapter for real hardware. Adding a method here means adding a fake
-    implementation in the same change.
+    Implementations: :class:`houndmind_ai.hal.fake.FakeDogHAL` for tests and CI, and
+    :class:`houndmind_ai.hal.vendor.PidogHAL` on a real dog. Adding a method here means adding
+    an implementation to the fake in the same change.
+
+    The HAL owns the *hardware* and its signal conditioning (multi-sample distance, debounce,
+    EMA, IMU low-pass) because those are properties of the sensors. Modules own cadence,
+    history and fan-out. That split is what lets a fake drive the whole loop.
     """
 
     def read(self) -> SensorSnapshot:
@@ -106,7 +141,30 @@ class DogHAL(Protocol):
         ...
 
     def action(self, name: str, params: dict[str, Any]) -> None:
-        """Execute one catalog action. Raises only if the HAL itself is broken."""
+        """Execute one catalog action. Raises only if the HAL itself is broken.
+
+        `name` is the canonical spelling (`turn_left`), never the vendor one. `params` carries
+        the details the runtime uses, all optional:
+
+        - gait and posture: ``{"speed": int, "steps": int, "wait": bool}``. With no params the
+          action is queued and returns immediately; with any of them it is executed directly
+          and `wait` means "block until the servos are done".
+        - ``head``: ``{"yaw": float, "pitch": float, "speed": int, "wait": bool}``
+        - ``rgb``: ``{"style": str, "color": str, "brightness": float}``
+        - ``rpy``: ``{"roll": float, "pitch": float, "yaw": float}``
+        """
+        ...
+
+    def sample_distance(self, samples: int, between_reads_s: float) -> float | None:
+        """Take a fresh distance estimate (median of `samples`), or None if it failed.
+
+        Separate from :meth:`read` because a head scan needs the distance *after* the head
+        moved, not the last polled value.
+        """
+        ...
+
+    def apply_offsets(self, offsets: Mapping[str, float]) -> None:
+        """Apply servo zero offsets. The calibration workflow writes these; nothing invents them."""
         ...
 
     def stop(self) -> None:

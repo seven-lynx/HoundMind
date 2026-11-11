@@ -51,7 +51,7 @@ import anywhere else is a defect: it breaks `pip install` on a workstation and i
 ```
 src/houndmind_ai/
   kernel/     state.py  commands.py  events.py  registry.py  scheduler.py  supervisor.py
-  hal/        iface.py  fake.py  pidog.py  sensors.py  motors.py
+  hal/        iface.py  fake.py  vendor.py  module.py  sensors.py  motors.py
   act/        gateway.py  interlock.py  calibration.py
   nav/        mapping.py  scanning.py  avoidance.py  planner.py
   behaviour/  fsm.py  library.py  attention.py
