@@ -66,14 +66,16 @@ class MotorModule(Module):
 
     def tick(self, context) -> None:
         self._release_head_follow_if_due(context)
-        # Safety always overrides navigation/behavior.
-        action = (
-            context.get("safety_action")
-            or context.get("watchdog_action")
-            or context.get("navigation_action")
-            or context.get("behavior_action")
-        )
-        if action is None:
+        # Motors no longer chooses between producers. `act/gateway.py` resolved precedence,
+        # applied the interlock and published the one command that may run this tick (H-10).
+        # Reading a single key means a `forward` from navigation and a `forward` from
+        # behaviour can no longer be confused for each other, and a vetoed command cannot be
+        # resurrected by a lower-priority producer.
+        command = context.get("motion_command")
+        if not isinstance(command, dict):
+            return
+        action = command.get("action")
+        if not action:
             return
         action = str(action)
         if action == self.last_action:
