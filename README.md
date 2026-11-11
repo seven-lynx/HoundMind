@@ -150,7 +150,9 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for every key and its defau
 - This project now runs **only on the real PiDog hardware** (no simulation/shim mode).
 - PackMind and CanineCore are now unified; all features are part of a single runtime.
 - Hardware access is required for `houndmind_ai/hal/*` modules.
-- Watchdogs are enabled by default but do not force actions or restarts unless configured.
+- Watchdogs are enabled by default. The watchdog never poses the dog: when sensor or scan data
+  goes stale it holds motion with a `stop`, and it restarts a module only after that module has
+  actually stopped ticking.
 
 ## Troubleshooting (Quick)
 - **`ModuleNotFoundError: pidog`** → Install the official PiDog repo first, then HoundMind in the same environment.
@@ -180,8 +182,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Mapping (Pi3-safe)             | Enabled     |                                       |
 | Behavior                       | Enabled     |                                       |
 | Attention                      | Enabled     |                                       |
-| Watchdog                       | Enabled     | Low-impact defaults                   |
-| Service Watchdog               | Enabled     |                                       |
+| Watchdog                       | Enabled     | Holds motion on stale data; restarts stopped modules with backoff |
 | Event Logging                  | Enabled     |                                       |
 | Control Plane (REST/WS/web)    | Enabled     | Port 8420, token-gated; `modules.api`  |
 | LED Manager                    | Enabled     |                                       |
