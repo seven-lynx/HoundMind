@@ -764,9 +764,9 @@ _BEHAVIOR = Section(
 
 # `optional/vision_pi4.py` + `optional/vision_preprocessing.py`. `backend` is compared against
 # "picamera2" and everything else opens `cv2.VideoCapture`, so those are the two spellings.
-# `preprocessing` and `inference_scheduler_enabled` are read by the module but were missing
-# from the file; they are accepted here without being shipped, because the dummy inference
-# thread they enable is a Phase 3 decision rather than a schema one.
+# `preprocessing` and `inference_scheduler_enabled` are shipped now: they used to be read by the
+# module and absent from the file. The scheduler starts nothing unless a model is wired, because
+# the placeholder thread it used to start was a sleep loop returning `{"result": "ok"}` (M-03).
 _VISION_PI4 = Section(
     fields={
         "enabled": Bool(),
