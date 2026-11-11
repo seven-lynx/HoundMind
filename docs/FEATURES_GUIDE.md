@@ -456,25 +456,16 @@ The `--print-config` flag prints a small JSON snippet you can paste into `config
 ```
 
 
-## 25) WiFi Localization (Pi4/5)
-**What it does:** Scans for nearby WiFi access points, records signal strengths (RSSI), and provides fingerprint-based localization for indoor positioning. Useful for context-aware behaviors and navigation.
+## 25) WiFi Localization — removed
+`modules.wifi_localization` and `optional/wifi_localization.py` are gone. The module scanned for
+access points by shelling out to `netsh wlan show networks`, a Windows command: on Raspberry Pi
+OS every scan returned `{"error": ...}`, so the feature it documented could never have worked on
+the only hardware it targeted. It also had no test and was never registered in the module list.
 
-**Enable:**
-- `modules.wifi_localization.enabled = true`
-- (Optional) Adjust scan interval, ignore list, and fingerprint file in `settings.wifi_localization`:
-	- `scan_interval`: Scan period in seconds (default: 10.0)
-	- `ignore_ssids`: List of SSIDs to ignore
-	- `fingerprint_file`: Path for persistent storage (default: `wifi_fingerprints.json`)
-	- `max_fingerprint_file_size`: Max file size in bytes (default: 262144)
+Indoor positioning, when it comes back, belongs in `mapping/` as a source feeding the pose
+estimate — not as a module that only ever worked on a developer's laptop.
 
-**Disable:** `modules.wifi_localization.enabled = false`
-
-**Notes:**
-- Disabled by default. Safe to enable on Pi4/5 with WiFi hardware.
-- Fingerprints are updated when `current_location` is set in context.
-- File size limit prevents SD card bloat; oldest entries are pruned automatically.
-
-## 25) How to Disable Any Feature
+## 26) How to Disable Any Feature
 1) Open `config/settings.jsonc`
 2) Find the module under `modules`.
 3) Set `enabled` to `false`.

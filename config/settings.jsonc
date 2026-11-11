@@ -60,6 +60,18 @@
       "enabled": true,
       "required": true
     },
+    "motion_gateway": {
+      // Resolves competing motion intents and applies the interlock.
+      // Leave this on: with it off, the motors receive no command at all.
+      "enabled": true,
+      "required": false
+    },
+    "sensor_health": {
+      // Per-sensor staleness badge and LED colour. Off by default, like the other safety
+      // modules; the raw validity flags are published regardless.
+      "enabled": false,
+      "required": false
+    },
     "perception": {
       // Sensor fusion and signal extraction.
       "enabled": true,
@@ -114,12 +126,6 @@
       },
       "balance": {
         // IMU balance compensation module.
-        "enabled": false,
-        "required": false
-      },
-      "wifi_localization": {
-        // WiFi-based localization. Not wired into the runtime yet, so enabling this has no
-        // effect; it stays declared only to keep the key reserved.
         "enabled": false,
         "required": false
       },
@@ -954,7 +960,10 @@
       "event_log_interval_s": 0.5,
       "event_log_max_entries": 1000,
       "event_log_file_enabled": true,
-      "event_log_path": "logs/houndmind_events.jsonl"
+      "event_log_path": "logs/houndmind_events.jsonl",
+      // Cap on the JSONL file itself. When it reaches this size it is renamed to `.1` and a
+      // fresh file is started, so a dog left running cannot fill the SD card.
+      "event_log_max_mb": 5,
     },
     // =====================================================================
     // PERFORMANCE SAFEGUARDS (Pi 3 friendly)

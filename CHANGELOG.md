@@ -7,6 +7,51 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18 • Author: 7Lynx
 
 
+## [Unreleased]
+
+### Added
+- `kernel/state.py`: a lock-protected state store behind `RuntimeContext`. Sensor and scan
+  services publish from daemon threads while the loop reads, so the shared mapping now has a
+  lock and snapshot reads instead of relying on `dict` operations being individually atomic.
+- `kernel/registry.py`: modules are registered with a `Capability`, and asking for the sole
+  provider of an exclusive capability (the servo bus) raises instead of guessing.
+- `act/gateway.py`: one motion path. The gateway resolves `safety` > `watchdog` > `navigation` >
+  `behavior` in a single declared place, sends the winner through the interlock, and publishes
+  `motion_command` / `motion_verdict` / `tilt_latched`.
+- `kernel/config_schema.py`: config validation is enforced, not advisory. Unknown keys are an
+  error with a did-you-mean suggestion.
+
+### Changed
+- `hal_motors` executes `motion_command` only; it no longer merges four context keys by `or` and
+  deduplicates on the action string, which had made a `forward` from navigation and one from
+  behaviour indistinguishable.
+- `SensorHealthModule` is wired into the runtime (disabled by default, as before).
+- Logging reads the keys `config/settings.jsonc` actually ships (`log_level`, `log_file_name`,
+  `log_file_backups`, `log_file_max_mb`, `enable_console`, `enable_file`). Previously the
+  configured DEBUG level was ignored and rotation was hardcoded to 10 MB.
+- Log records carry four whitelisted context fields instead of every key in the runtime context,
+  so a log line no longer serialises the whole config, the sensor history and the vendor
+  hardware handle.
+- The event log JSONL rotates at `logging.event_log_max_mb` (one generation) instead of growing
+  until the SD card filled.
+- `requires-python` is `>=3.11,<3.14`; Pi 3 support is dropped. `json5` is now a real dependency.
+- Ruff is pinned (`0.17.4`) with an explicit rule set.
+
+### Removed
+- `optional/wifi_localization.py` and `modules.wifi_localization`. It shelled out to `netsh wlan
+  show networks`, which does not exist on Raspberry Pi OS, had no test, and was never registered.
+
+### Fixed
+- `python -m houndmind_ai` no longer dies with `ModuleNotFoundError: cv2` on an install without
+  OpenCV, which included the installer's own lite fallback.
+- `loop.max_cycles` defaults to `null`; a fresh install used to run for two seconds and exit.
+- `src/tools/smoke_test.py` is no longer collected as a test, so the suite can collect at all.
+- `src/houndmind_ai/core` has an `__init__.py`; it was an accidental namespace package that
+  package discovery could not see by name.
+- The built wheel contains `tools/` and `houndmind_ai/core/`, so the documented
+  `python -m tools.*` commands work after a real install.
+
+
 ## [v2026.01.18] - 2026-01-18
 
 ### Changed
