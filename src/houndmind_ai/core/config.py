@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import json5
 
 from houndmind_ai.kernel.config_schema import ConfigError, validate_config_tree
 
@@ -70,72 +70,18 @@ def default_config_path() -> Path:
 
 
 def _load_jsonc(path: Path) -> dict:
+    """Parse a JSONC file. `json5` is a hard dependency, so there is no fallback parser.
+
+    The hand-rolled comment stripper that used to live here existed only because `json5` was
+    optional and the installer ran a bare `pip install`. It was 60 lines of string/escape/
+    comment state machine whose failures were indistinguishable from a typo in the config, so
+    it is gone; a syntax error now names the file it came from (B-02).
+    """
     raw_text = path.read_text(encoding="utf-8")
-
-    # Prefer a robust third-party JSONC/JSON5 parser if available.
     try:
-        import json5  # type: ignore
-
         return json5.loads(raw_text)
-    except Exception:
-        # Fall back to the built-in sanitizer below. Provide clearer errors
-        # for common failure modes such as unterminated block comments.
-        if "/*" in raw_text and "*/" not in raw_text:
-            raise ValueError(
-                f"Unterminated block comment in config file: {path}. "
-                "Install 'json5' (pip install json5) to allow JSONC comments "
-                "or fix the comment block."
-            )
-
-        # Allow JSONC-style comments for user-friendly config files.
-        cleaned: list[str] = []
-        in_string = False
-        escape = False
-        i = 0
-        length = len(raw_text)
-        while i < length:
-            ch = raw_text[i]
-            nxt = raw_text[i + 1] if i + 1 < length else ""
-            if in_string:
-                cleaned.append(ch)
-                if escape:
-                    escape = False
-                elif ch == "\\":
-                    escape = True
-                elif ch == '"':
-                    in_string = False
-                i += 1
-                continue
-
-            if ch == '"':
-                in_string = True
-                cleaned.append(ch)
-                i += 1
-                continue
-
-            if ch == "/" and nxt == "/":
-                # Skip line comment.
-                i += 2
-                while i < length and raw_text[i] not in "\r\n":
-                    i += 1
-                continue
-            if ch == "/" and nxt == "*":
-                # Skip block comment.
-                i += 2
-                while i + 1 < length and not (
-                    raw_text[i] == "*" and raw_text[i + 1] == "/"
-                ):
-                    i += 1
-                i += 2
-                continue
-
-            cleaned.append(ch)
-            i += 1
-
-        cleaned_text = "".join(cleaned)
-        # Remove trailing commas before closing braces/brackets.
-        cleaned_text = re.sub(r",\s*([}\]])", r"\1", cleaned_text)
-        return json.loads(cleaned_text)
+    except ValueError as exc:
+        raise ValueError(f"{path}: {exc}") from exc
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -234,11 +180,15 @@ def _to_float(value: Any | None) -> float | None:
 
 
 def validate_config(config: Config) -> list[str]:
+    """Cross-field checks that a per-value schema cannot express.
+
+    Everything else lives in `kernel/config_schema.py` and is enforced before this runs: a
+    wrong type or an unknown key is a load-time error, not a warning. What is left here is the
+    handful of rules that only make sense when two values are compared — the ordering of the
+    safety distances, an interval that must sit inside its own bounds — plus two advisory
+    notes about values that are legal but a bad idea on a Pi.
+    """
     warnings: list[str] = []
-    if config.loop.tick_hz <= 0:
-        warnings.append("loop.tick_hz should be > 0")
-    if config.loop.max_cycles is not None and config.loop.max_cycles <= 0:
-        warnings.append("loop.max_cycles should be > 0 when set")
     settings = config.settings or {}
     sensors = settings.get("sensors", {})
     navigation = settings.get("navigation", {})
@@ -246,8 +196,6 @@ def validate_config(config: Config) -> list[str]:
     performance = settings.get("performance", {})
     logging_settings = settings.get("logging", {})
     safety = settings.get("safety", {})
-    attention = settings.get("attention", {})
-    balance = settings.get("balance", {})
 
     min_cm = _to_float(sensors.get("distance_min_cm"))
     max_cm = _to_float(sensors.get("distance_max_cm"))
@@ -295,45 +243,14 @@ def validate_config(config: Config) -> list[str]:
             "navigation.min_distance_cm should be less than safe_distance_cm"
         )
 
-    stuck_window = _to_float(navigation.get("stuck_time_window_s"))
-    stuck_threshold = _to_float(navigation.get("stuck_movement_threshold"))
+    # A stuck detector that fires on one or two samples is a stuck detector that fires on
+    # sensor noise, which is how the dog talks itself into a recovery spiral.
     stuck_samples = _to_float(navigation.get("stuck_min_samples"))
-    if stuck_window is not None and stuck_window <= 0:
-        warnings.append("navigation.stuck_time_window_s should be > 0")
-    if stuck_threshold is not None and stuck_threshold <= 0:
-        warnings.append("navigation.stuck_movement_threshold should be > 0")
     if stuck_samples is not None and stuck_samples < 3:
         warnings.append("navigation.stuck_min_samples should be >= 3")
 
-    min_valid_points = _to_float(navigation.get("scan_min_valid_points"))
-    min_valid_ratio = _to_float(navigation.get("scan_min_valid_ratio"))
-    if min_valid_points is not None and min_valid_points < 1:
-        warnings.append("navigation.scan_min_valid_points should be >= 1")
-    if min_valid_ratio is not None and not (0 < min_valid_ratio <= 1):
-        warnings.append("navigation.scan_min_valid_ratio should be in (0, 1]")
-
-    turn_confidence_min = _to_float(navigation.get("turn_confidence_min"))
-    if turn_confidence_min is not None and not (0 < turn_confidence_min <= 1):
-        warnings.append("navigation.turn_confidence_min should be in (0, 1]")
-
-    low_confidence_cooldown = _to_float(navigation.get("low_confidence_cooldown_s"))
-    if low_confidence_cooldown is not None and low_confidence_cooldown < 0:
-        warnings.append("navigation.low_confidence_cooldown_s should be >= 0")
-
-    retry_limit = _to_float(navigation.get("scan_retry_limit"))
-    if retry_limit is not None and retry_limit < 0:
-        warnings.append("navigation.scan_retry_limit should be >= 0")
-
     speed_normal = _to_float(movement.get("speed_normal"))
     speed_turn_normal = _to_float(movement.get("speed_turn_normal"))
-    if speed_normal is not None and speed_normal < 0:
-        warnings.append("movement.speed_normal should be >= 0")
-    if speed_normal is not None and speed_normal > 255:
-        warnings.append("movement.speed_normal exceeds servo limit (255)")
-    if speed_turn_normal is not None and speed_turn_normal < 0:
-        warnings.append("movement.speed_turn_normal should be >= 0")
-    if speed_turn_normal is not None and speed_turn_normal > 255:
-        warnings.append("movement.speed_turn_normal exceeds servo limit (255)")
     if (
         speed_normal is not None
         and speed_turn_normal is not None
@@ -343,56 +260,12 @@ def validate_config(config: Config) -> list[str]:
 
     log_max_entries = _to_float(logging_settings.get("log_max_entries"))
     if log_max_entries is not None and log_max_entries > 5000:
-        warnings.append(
-            "logging.log_max_entries is large and may use significant memory"
-        )
+        warnings.append("logging.log_max_entries is large and may use significant memory")
 
+    # The supervisor clears producers below `safety`; without it in the list, an emergency
+    # stop could be talked over by a module that never heard about it.
     override_priority = safety.get("override_priority")
-    if override_priority is not None and not isinstance(override_priority, list):
-        warnings.append("safety.override_priority should be a list")
     if isinstance(override_priority, list) and "safety" not in override_priority:
         warnings.append("safety.override_priority should include 'safety'")
-    override_clear_lower = safety.get("override_clear_lower")
-    if override_clear_lower is not None and not isinstance(override_clear_lower, bool):
-        warnings.append("safety.override_clear_lower should be a boolean")
-    # Emergency stop validation
-    emergency_enabled = safety.get("emergency_stop_enabled")
-    if emergency_enabled is not None and not isinstance(emergency_enabled, bool):
-        warnings.append("safety.emergency_stop_enabled should be a boolean")
-    emergency_cm = _to_float(safety.get("emergency_stop_cm"))
-    if emergency_cm is not None and emergency_cm <= 0:
-        warnings.append("safety.emergency_stop_cm should be > 0")
-    emergency_cool = _to_float(safety.get("emergency_stop_cooldown_s"))
-    if emergency_cool is not None and emergency_cool < 0:
-        warnings.append("safety.emergency_stop_cooldown_s should be >= 0")
-    emergency_action = safety.get("emergency_stop_action")
-    if emergency_action is not None and not isinstance(emergency_action, str):
-        warnings.append("safety.emergency_stop_action should be a string action name")
-
-    head_yaw_max = _to_float(attention.get("head_yaw_max_deg"))
-    if head_yaw_max is not None and not (0 < head_yaw_max <= 90):
-        warnings.append("attention.head_yaw_max_deg should be in (0, 90]")
-    attention_cooldown = _to_float(attention.get("sound_cooldown_s"))
-    if attention_cooldown is not None and attention_cooldown < 0:
-        warnings.append("attention.sound_cooldown_s should be >= 0")
-    scan_block = _to_float(attention.get("scan_block_s"))
-    if scan_block is not None and scan_block < 0:
-        warnings.append("attention.scan_block_s should be >= 0")
-
-    balance_update_hz = _to_float(balance.get("update_hz"))
-    if balance_update_hz is not None and balance_update_hz < 0:
-        warnings.append("balance.update_hz should be >= 0")
-    balance_scale = _to_float(balance.get("compensation_scale"))
-    if balance_scale is not None and balance_scale < 0:
-        warnings.append("balance.compensation_scale should be >= 0")
-    balance_max_pitch = _to_float(balance.get("max_pitch_deg"))
-    if balance_max_pitch is not None and balance_max_pitch <= 0:
-        warnings.append("balance.max_pitch_deg should be > 0")
-    balance_max_roll = _to_float(balance.get("max_roll_deg"))
-    if balance_max_roll is not None and balance_max_roll <= 0:
-        warnings.append("balance.max_roll_deg should be > 0")
-    balance_lpf = _to_float(balance.get("lpf_alpha"))
-    if balance_lpf is not None and not (0 < balance_lpf <= 1.0):
-        warnings.append("balance.lpf_alpha should be in (0, 1]")
 
     return warnings

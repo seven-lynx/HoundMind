@@ -163,10 +163,17 @@ def test_settings_must_be_a_table() -> None:
     assert validate_config_tree({"settings": []})
 
 
-def test_settings_sections_not_yet_audited_stay_permissive() -> None:
-    """Sections arrive in groups; an unaudited one keeps loading untouched."""
-    tree = {"settings": {"voice_assistant": {"anything_at_all": 1}}}
-    assert validate_config_tree(tree) == []
+def test_an_unknown_settings_section_is_an_error_with_a_suggestion() -> None:
+    """Every shipped section is now audited, so a misspelled section cannot hide."""
+    problems = validate_config_tree({"settings": {"voice_assistantt": {}}})
+    assert paths(problems) == ["config.settings.voice_assistantt"]
+    assert problems[0].hint == "voice_assistant"
+
+
+def test_every_shipped_section_is_covered_by_the_schema() -> None:
+    """The section audit is finished: nothing in the file is unchecked any more."""
+    raw = json5.loads(default_config_path().read_text(encoding="utf-8"))
+    assert set(raw["settings"]) == set(_settings_section().fields)
 
 
 # ----------------------------------------------------- audited settings sections
@@ -200,6 +207,12 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("emotion", "led_colors", ["blue"]),
     ("led", "brightness", 1.4),
     ("behavior", "behavior_selection_mode", "random"),
+    ("vision_pi4", "backend", "webcam"),
+    ("voice_assistant", "stt", []),
+    ("face_recognition", "backend", "magic"),
+    ("semantic_labeler", "input_width", 0),
+    ("slam_pi4", "rtabmap", "on"),
+    ("telemetry_dashboard", "http", []),
 ]
 
 
@@ -228,11 +241,6 @@ def test_an_unknown_key_inside_a_covered_section_is_an_error() -> None:
     assert problems[0].hint == "log_level"
 
 
-def test_an_unknown_settings_section_is_still_tolerated() -> None:
-    """Until a section is audited, a new section name cannot be told from a typo."""
-    assert validate_config_tree({"settings": {"voice": {}}}) == []
-
-
 def test_a_misspelled_enum_value_suggests_the_real_one() -> None:
     problems = validate_config_tree({"settings": {"watchdog": {"recovery_mode": "behaviour"}}})
     assert problems[0].hint == "behavior"
@@ -252,10 +260,11 @@ def test_profile_settings_overrides_are_validated() -> None:
 
 
 def test_shipped_settings_values_all_validate() -> None:
-    """Every value the repo ships must satisfy the section spec that now covers it."""
+    """Every value the repo ships must satisfy the section spec that covers it."""
     raw = json5.loads(default_config_path().read_text(encoding="utf-8"))
+    sections = _settings_section().fields
     for section in sorted(raw["settings"]):
-        _, problems = _settings_section().validate(raw["settings"][section], section)
+        _, problems = sections[section].validate(raw["settings"][section], section)
         assert not problems, problems
 
 

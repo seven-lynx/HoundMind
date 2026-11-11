@@ -159,8 +159,11 @@ class ListOf(Spec):
     item: Spec = field(default_factory=AnyValue)
     # Fixed-length lists exist: `mapping.grid_size` is indexed as `[0]` and `[1]`.
     length: int | None = None
+    allow_none: bool = False
 
     def validate(self, value: Any, path: str) -> tuple[Any, list[Problem]]:
+        if value is None and self.allow_none:
+            return None, []
         if not isinstance(value, list):
             return value, [Problem(path, f"expected a list, got {value!r}")]
         problems: list[Problem] = []
@@ -763,6 +766,155 @@ _BEHAVIOR = Section(
     }
 )
 
+# ===================================================================== optional modules
+#
+# These sections belong to modules that ship disabled (`optional/`). They are validated for
+# the same reason as the rest: the moment a user flips one on, the config is the only thing
+# standing between them and a module that starts with a half-understood settings table.
+
+# The HTTP surfaces of the optional modules (`-1`/`0`/`0.0.0.0` style drift is exactly what
+# a schema catches). Only the telemetry dashboard reads a token, so only it may carry one.
+_HTTP_BASE = {
+    "enabled": Bool(),
+    "host": StrSpec(),
+    "port": IntSpec(minimum=1, maximum=65535),
+}
+_HTTP = Section(fields=_HTTP_BASE)
+_HTTP_WITH_TOKEN = Section(fields={**_HTTP_BASE, "auth_token": StrSpec()})
+
+# `optional/vision_pi4.py` + `optional/vision_preprocessing.py`. `backend` is compared against
+# "picamera2" and everything else opens `cv2.VideoCapture`, so those are the two spellings.
+# `preprocessing` and `inference_scheduler_enabled` are read by the module but were missing
+# from the file; they are accepted here without being shipped, because the dummy inference
+# thread they enable is a Phase 3 decision rather than a schema one.
+_VISION_PI4 = Section(
+    fields={
+        "enabled": Bool(),
+        "backend": StrSpec(choices=("picamera2", "opencv")),
+        "device_index": IntSpec(minimum=0),
+        "frame_interval_s": _POSITIVE,
+        "inference_scheduler_enabled": Bool(),
+        "preprocessing": Section(
+            fields={
+                "resize": ListOf(IntSpec(minimum=1), length=2),
+                "normalize": Bool(),
+                "roi": ListOf(IntSpec(minimum=0), length=4, allow_none=True),
+                "mean": ListOf(FloatSpec(), length=3),
+                "std": ListOf(FloatSpec(), length=3),
+            }
+        ),
+        "http": _HTTP,
+    }
+)
+
+# `optional/voice.py`. The backend names are the ones its docstring documents and the ones the
+# recogniser selection branches on. `tts` is part of that documented contract but the module
+# picks a TTS engine at runtime instead of reading it: the key is accepted so an existing file
+# keeps loading, and wiring it is tracked with the voice work, not here.
+_VOICE = Section(
+    fields={
+        "enabled": Bool(),
+        "cooldown_s": _NON_NEGATIVE,
+        "stt": Section(
+            fields={
+                "enabled": Bool(),
+                "backend": StrSpec(choices=("auto", "vosk", "speech_recognition")),
+                "vosk_model_path": StrSpec(),
+            }
+        ),
+        "tts": Section(
+            fields={
+                "enabled": Bool(),
+                "backend": StrSpec(choices=("auto", "pyttsx3", "pidog")),
+            }
+        ),
+        "command_map": MapOf(StrSpec()),
+        "aliases": MapOf(StrSpec()),
+        "http": _HTTP,
+    }
+)
+
+# `optional/face_recognition.py` — three backends, each of which fails differently when a
+# dependency is missing, which is why the choice is explicit rather than guessed.
+_FACE_RECOGNITION = Section(
+    fields={
+        "enabled": Bool(),
+        "backend": StrSpec(choices=("stub", "opencv", "face_recognition")),
+        "scale_factor": _POSITIVE,
+        "min_neighbors": IntSpec(minimum=1),
+        "min_face_px": IntSpec(minimum=1),
+        "opencv_haar_path": StrSpec(),
+        "lbph": Section(
+            fields={
+                "enabled": Bool(),
+                "model_path": StrSpec(),
+                "dataset_dir": StrSpec(),
+                "label_map_path": StrSpec(),
+                "confidence_threshold": _NON_NEGATIVE,
+            }
+        ),
+        "embeddings_path": StrSpec(),
+        "match_threshold": _FRACTION,
+        "http": _HTTP,
+    }
+)
+
+# `optional/semantic_labeler.py` — a stub and one real backend.
+_SEMANTIC_LABELER = Section(
+    fields={
+        "enabled": Bool(),
+        "backend": StrSpec(choices=("stub", "opencv_dnn")),
+        "interval_s": _POSITIVE,
+        "model_path": StrSpec(),
+        "config_path": StrSpec(),
+        "labels_path": StrSpec(),
+        "input_width": IntSpec(minimum=1),
+        "input_height": IntSpec(minimum=1),
+        "confidence_threshold": _FRACTION,
+    }
+)
+
+# `optional/slam_pi4.py`. `rtabmap` itself is a vendor tuning surface (it takes hundreds of
+# keys), so that one sub-table allows extra keys; everything this repo reads is named.
+_SLAM_PI4 = Section(
+    fields={
+        "enabled": Bool(),
+        "backend": StrSpec(choices=("rtabmap", "stub")),
+        "interval_s": _POSITIVE,
+        "gyro_scale": FloatSpec(),
+        "stub_confidence": _FRACTION,
+        "nav_hint_enabled": Bool(),
+        "nav_target_heading_deg": FloatSpec(allow_none=True),
+        "nav_deadband_deg": FloatSpec(minimum=0.0, maximum=180.0),
+        "max_buffer_s": _NON_NEGATIVE,
+        "max_process_per_tick": IntSpec(minimum=1),
+        "map_export_interval_s": _NON_NEGATIVE,
+        "map_export_path": _NULLABLE_STR,
+        "map_export_format": StrSpec(choices=("json", "ply")),
+        "rtabmap": Section(
+            fields={
+                "database_path": StrSpec(),
+                "frame_width": IntSpec(minimum=1, allow_none=True),
+                "frame_height": IntSpec(minimum=1, allow_none=True),
+                "rgbd_enabled": Bool(),
+                "parameters": MapOf(),
+            },
+            allow_extra=True,
+        ),
+    }
+)
+
+# `optional/telemetry_dashboard.py` — the one surface with a token (D8: generated by the
+# installer to `~/.houndmind/api_token`, referenced by path, never pasted into the repo).
+_TELEMETRY_DASHBOARD = Section(
+    fields={
+        "enabled": Bool(),
+        "snapshot_interval_s": _POSITIVE,
+        "context_keys": _NAMES,
+        "http": _HTTP_WITH_TOKEN,
+    }
+)
+
 # Sections audited against their consumers so far. A section absent from this table is
 # accepted unvalidated, so the migration stays reviewable one group at a time.
 _SETTINGS_SECTIONS: dict[str, Spec] = {
@@ -773,6 +925,7 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "calibration": _CALIBRATION,
     "emotion": _EMOTION,
     "energy": _ENERGY,
+    "face_recognition": _FACE_RECOGNITION,
     "habituation": _HABITUATION,
     "led": _LED,
     "logging": _LOGGING,
@@ -786,15 +939,21 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "personality": _PERSONALITY,
     "quiet_mode": _QUIET_MODE,
     "safety": _SAFETY,
+    "semantic_labeler": _SEMANTIC_LABELER,
     "sensor_health": _SENSOR_HEALTH,
     "sensors": _SENSORS,
     "service_watchdog": _SERVICE_WATCHDOG,
+    "slam_pi4": _SLAM_PI4,
+    "telemetry_dashboard": _TELEMETRY_DASHBOARD,
+    "vision_pi4": _VISION_PI4,
+    "voice_assistant": _VOICE,
     "watchdog": _WATCHDOG,
 }
 
-# `allow_extra` stays true until every shipped section is in the table above: an unaudited
-# section keeps loading untouched, while a section that *is* covered rejects strangers now.
-_SETTINGS = Section(fields=_SETTINGS_SECTIONS, allow_extra=True)
+# Every section the repo ships is in the table above, so `settings` no longer tolerates an
+# unknown section: a typo such as `settings.voice` instead of `settings.voice_assistant` is
+# now an error with a suggestion instead of a table nothing reads.
+_SETTINGS = Section(fields=_SETTINGS_SECTIONS)
 
 _PROFILES = MapOf(
     Section(

@@ -22,11 +22,14 @@ Current Release: v2026.01.18 • Author: 7Lynx
   error with a did-you-mean suggestion.
 - `kernel/config_schema.py`: `settings` is validated section by section. Every section the
   repo ships — `attention`, `balance`, `battery`, `behavior`, `calibration`, `emotion`,
-  `energy`, `habituation`, `led`, `logging`, `mapping`, `motors`, `movement`, `navigation`,
-  `orientation`, `perception`, `performance`, `personality`, `quiet_mode`, `safety`,
-  `sensor_health`, `sensors`, `service_watchdog`, `watchdog` — rejects an unknown key (with a
-  suggestion) and a value of the wrong type, and profile overrides are validated the same way.
-  Enum-valued keys carry the choices the code branches on, and nullable keys say so.
+  `energy`, `face_recognition`, `habituation`, `led`, `logging`, `mapping`, `motors`,
+  `movement`, `navigation`, `orientation`, `perception`, `performance`, `personality`,
+  `quiet_mode`, `safety`, `semantic_labeler`, `sensor_health`, `sensors`, `service_watchdog`,
+  `slam_pi4`, `telemetry_dashboard`, `vision_pi4`, `voice_assistant`, `watchdog` — rejects an
+  unknown key (with a suggestion) and a value of the wrong type, and profile overrides are
+  validated the same way. An unknown *section* is an error too, so `settings.voice` instead of
+  `settings.voice_assistant` no longer loads a table nothing reads. Enum-valued keys carry the
+  choices the code branches on, and nullable keys say so.
 - `settings.performance.runtime_ema_alpha` is a documented key (default `0.2`): the runtime
   read it with a hard-coded fallback but the shipped file never mentioned it.
 - `settings.logging.console_level` is an accepted key, so the console can be quieter than the
@@ -47,6 +50,13 @@ Current Release: v2026.01.18 • Author: 7Lynx
   until the SD card filled.
 - `requires-python` is `>=3.11,<3.14`; Pi 3 support is dropped. `json5` is now a real dependency.
 - Ruff is pinned (`0.17.4`) with an explicit rule set.
+- `core/config.py` parses JSON5 with `json5` and nothing else. The 60-line comment stripper
+  that duplicated it is deleted: it was only there because `json5` used to be optional, and a
+  syntax error now names the file it came from instead of a hand-rolled message.
+- `core/config.validate_config` is down to the cross-field rules a per-value schema cannot
+  express (distance ordering, an interval inside its own bounds, turn speed above walk speed,
+  `override_priority` keeping `safety`). The type and range checks it duplicated are gone with
+  the schema that enforces them.
 
 ### Removed
 - `optional/wifi_localization.py` and `modules.wifi_localization`. It shelled out to `netsh wlan
