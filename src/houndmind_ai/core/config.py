@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from houndmind_ai.kernel.config_schema import ConfigError, validate_config_tree
+
 logger = logging.getLogger(__name__)
 
 
@@ -139,11 +141,17 @@ def _load_jsonc(path: Path) -> dict:
 def load_config(path: Path | None = None) -> Config:
     config_path = path or default_config_path()
     raw = _load_jsonc(config_path)
+
+    # Validate before applying profile overrides, so a problem is reported against the file
+    # the operator actually edited rather than against the merged result.
+    problems = validate_config_tree(raw)
+    if problems:
+        raise ConfigError(problems)
+
     raw = _apply_profile_overrides(raw)
     config = Config.from_dict(raw)
 
-    warnings = validate_config(config)
-    for warning in warnings:
+    for warning in validate_config(config):
         logger.warning("Config warning: %s", warning)
 
     # Optional: load action catalog from a dedicated file.

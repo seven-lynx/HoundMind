@@ -66,20 +66,16 @@
       "required": false
     },
     "navigation": {
-      // Gentle recovery: reduce speed after repeated stuck events
-      // Number of stuck events before gentle recovery triggers
-      "gentle_recovery_stuck_count": 3,
-      // Cooldown period (seconds) for gentle recovery
-      "gentle_recovery_cooldown_s": 8.0,
       // Obstacle avoidance + navigation cues.
+      // Tuning lives under settings.navigation: anything else placed here is ignored,
+      // because the runtime only reads `enabled` and `required` from this entry.
       "enabled": true,
       "required": false
     },
     "mapping": {
-      // Mapping and optional home map storage.
+      // Mapping and optional home map storage. Tuning lives under settings.mapping.
       "enabled": true,
-      "required": false,
-      "path_planning_enabled": true
+      "required": false
     },
     "behavior": {
       // High-level behavior selection.
@@ -122,10 +118,10 @@
         "required": false
       },
       "wifi_localization": {
-        // WiFi-based localization (disabled by default)
+        // WiFi-based localization. Not wired into the runtime yet, so enabling this has no
+        // effect; it stays declared only to keep the key reserved.
         "enabled": false,
-        "required": false,
-        "scan_interval": 10.0
+        "required": false
       },
     "safety": {
       // Safety overrides (emergency backing, etc.).

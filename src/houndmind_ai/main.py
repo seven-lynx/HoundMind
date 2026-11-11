@@ -14,6 +14,7 @@ from houndmind_ai.core.logging_setup import setup_logging
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.motors import MotorModule
 from houndmind_ai.hal.sensors import SensorModule
+from houndmind_ai.kernel.config_schema import ConfigError
 from houndmind_ai.logging.event_logger import EventLoggerModule
 from houndmind_ai.logging.led_manager import LedManagerModule
 from houndmind_ai.mapping import default_path_planning_hook
@@ -88,7 +89,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except ConfigError as exc:
+        # A bad config must stop the process here, before any hardware is touched. Print the
+        # problems in full: the operator cannot fix a file they cannot read the errors from.
+        logger.error("%s", exc.format())
+        raise SystemExit(2) from None
+
     context_filter = setup_logging((config.settings or {}).get("logging", {}))
     runtime = HoundMindRuntime(config, build_modules(config))
 

@@ -1,0 +1,189 @@
+"""A bad config must fail before hardware is touched, and say why.
+
+The old validator only appended warnings, so `tick_hz: "fast"` loaded and a key placed under
+`modules.<name>` was silently dropped while still being documented as working.
+"""
+
+from __future__ import annotations
+
+import json5
+import pytest
+
+from houndmind_ai.core.config import default_config_path, load_config
+from houndmind_ai.kernel.config_schema import (
+    Bool,
+    ConfigError,
+    FloatSpec,
+    IntSpec,
+    ListOf,
+    MapOf,
+    Problem,
+    Section,
+    StrSpec,
+    validate_config_tree,
+)
+
+
+def paths(problems: list[Problem]) -> list[str]:
+    return [p.path for p in problems]
+
+
+# ------------------------------------------------------------------ primitive specs
+
+
+def test_bool_accepts_only_real_booleans() -> None:
+    assert Bool().validate(True, "x")[1] == []
+    assert Bool().validate("true", "x")[1]  # a string is not a bool
+    assert Bool().validate(1, "x")[1]
+
+
+def test_int_rejects_bool() -> None:
+    """`tick_hz: true` must not silently become 1 tick per second."""
+    _, problems = IntSpec(minimum=1).validate(True, "loop.tick_hz")
+    assert problems
+
+
+def test_int_bounds_are_enforced() -> None:
+    assert IntSpec(minimum=1, maximum=100).validate(0, "x")[1]
+    assert IntSpec(minimum=1, maximum=100).validate(101, "x")[1]
+    assert IntSpec(minimum=1, maximum=100).validate(50, "x")[1] == []
+
+
+def test_int_allow_none_is_explicit() -> None:
+    assert IntSpec(minimum=1, allow_none=True).validate(None, "x")[1] == []
+    assert IntSpec(minimum=1).validate(None, "x")[1]
+
+
+def test_float_rejects_nan_and_strings() -> None:
+    assert FloatSpec().validate(float("nan"), "x")[1]
+    assert FloatSpec().validate("1.5", "x")[1]
+
+
+def test_float_exclusive_minimum() -> None:
+    spec = FloatSpec(minimum=0.0, exclusive_minimum=True)
+    assert spec.validate(0.0, "x")[1]
+    assert spec.validate(0.001, "x")[1] == []
+
+
+def test_string_choices_suggest_a_near_match() -> None:
+    _, problems = StrSpec(choices=("picamera2", "opencv")).validate("picamra2", "backend")
+    assert problems[0].hint == "picamera2"
+
+
+def test_list_reports_the_offending_index() -> None:
+    _, problems = ListOf(IntSpec(minimum=0)).validate([1, -1], "vals")
+    assert paths(problems) == ["vals[1]"]
+
+
+def test_map_requires_a_table() -> None:
+    assert MapOf().validate([], "m")[1]
+
+
+# ------------------------------------------------------------------ strict sections
+
+
+def test_unknown_key_is_an_error_with_a_suggestion() -> None:
+    spec = Section(fields={"enabled": Bool(), "required": Bool()})
+    _, problems = spec.validate({"enabled": True, "requird": False}, "modules.foo")
+    assert len(problems) == 1
+    assert "unknown key" in problems[0].message
+    assert problems[0].hint == "required"
+
+
+def test_known_keys_pass() -> None:
+    spec = Section(fields={"enabled": Bool()})
+    assert spec.validate({"enabled": False}, "m")[1] == []
+
+
+def test_allow_extra_accepts_anything() -> None:
+    spec = Section(fields={}, allow_extra=True)
+    assert spec.validate({"anything": 1}, "s")[1] == []
+
+
+def test_config_error_message_lists_every_problem() -> None:
+    error = ConfigError(
+        [Problem("config.loop.tick_hz", "expected an integer"), Problem("config.nope", "x")]
+    )
+    text = error.format()
+    assert "2 problem(s)" in text
+    assert "config.loop.tick_hz" in text
+    assert "config.nope" in text
+
+
+# ------------------------------------------------------------------ whole tree
+
+
+def test_minimal_tree_is_accepted() -> None:
+    assert validate_config_tree({"loop": {"tick_hz": 10, "max_cycles": None}}) == []
+
+
+def test_unknown_top_level_key_is_rejected() -> None:
+    problems = validate_config_tree({"loops": {}})
+    assert paths(problems) == ["config.loops"]
+    assert problems[0].hint == "loop"
+
+
+def test_bad_tick_rate_is_rejected() -> None:
+    problems = validate_config_tree({"loop": {"tick_hz": "fast"}})
+    assert "config.loop.tick_hz" in paths(problems)
+
+
+def test_zero_tick_rate_is_rejected() -> None:
+    """A 0 Hz loop would divide by zero in the runtime."""
+    assert validate_config_tree({"loop": {"tick_hz": 0}})
+
+
+def test_a_module_key_beyond_enabled_is_rejected() -> None:
+    """This is blocker B-07: the old loader accepted it and then threw it away."""
+    problems = validate_config_tree(
+        {"modules": {"navigation": {"enabled": True, "gentle_recovery_stuck_count": 3}}}
+    )
+    assert paths(problems) == ["config.modules.navigation.gentle_recovery_stuck_count"]
+
+
+def test_module_enabled_and_required_are_accepted() -> None:
+    tree = {"modules": {"safety": {"enabled": False, "required": False}}}
+    assert validate_config_tree(tree) == []
+
+
+def test_profile_overrides_are_validated() -> None:
+    tree = {"profiles": {"pi5": {"loop": {"tick_hz": 999}}}}
+    assert "config.profiles.pi5.loop.tick_hz" in paths(validate_config_tree(tree))
+
+
+def test_settings_must_be_a_table() -> None:
+    assert validate_config_tree({"settings": []})
+
+
+def test_settings_contents_are_not_yet_strict() -> None:
+    """Section-by-section validation of `settings` lands incrementally."""
+    tree = {"settings": {"navigation": {"anything_at_all": 1}}}
+    assert validate_config_tree(tree) == []
+
+
+# ------------------------------------------------------------------ the real file
+
+
+def test_shipped_config_is_valid() -> None:
+    """The config we actually ship must pass the schema we actually enforce."""
+    raw = json5.loads(default_config_path().read_text(encoding="utf-8"))
+    assert validate_config_tree(raw) == []
+
+
+def test_shipped_config_loads() -> None:
+    config = load_config()
+    assert config.loop.tick_hz >= 1
+    assert config.modules, "the shipped config should declare modules"
+
+
+def test_shipped_config_runs_continuously() -> None:
+    """B-01: a finite max_cycles made a fresh install quit after two seconds."""
+    assert load_config().loop.max_cycles is None
+
+
+def test_load_config_raises_on_a_bad_file(tmp_path) -> None:
+    bad = tmp_path / "settings.jsonc"
+    bad.write_text('{ "loop": { "tick_hz": "fast" } }', encoding="utf-8")
+    with pytest.raises(ConfigError) as excinfo:
+        load_config(bad)
+    assert "tick_hz" in str(excinfo.value)
