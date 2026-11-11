@@ -64,7 +64,7 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `energy`, `face_recognition`, `habituation`, `led`, `logging`, `mapping`, `motors`,
   `movement`, `navigation`, `orientation`, `perception`, `performance`, `personality`,
   `quiet_mode`, `safety`, `semantic_labeler`, `sensor_health`, `sensors`, `service_watchdog`,
-  `slam_pi4`, `telemetry_dashboard`, `vision_pi4`, `voice_assistant`, `watchdog` — rejects an
+  `slam_pi4`, `vision_pi4`, `voice_assistant`, `watchdog` — rejects an
   unknown key (with a suggestion) and a value of the wrong type, and profile overrides are
   validated the same way. An unknown *section* is an error too, so `settings.voice` instead of
   `settings.voice_assistant` no longer loads a table nothing reads. Enum-valued keys carry the
@@ -75,6 +75,11 @@ Current Release: v2026.01.18 • Author: 7Lynx
   file without editing code.
 
 ### Changed
+- `optional/vision_pi4.py` publishes `vision_frame_jpeg` next to `vision_frame`, and
+  `services/camera.py` reads the encoded key. The raw array is still what face recognition, the
+  semantic labeler and SLAM consume; encoding once per frame replaces the old encode loop that ran
+  once per client. OpenCV is now imported before the backend branch, because the picamera2 path
+  needed it to encode and previously skipped every frame when it was absent.
 - The gateway accepts `Command` objects from the bus in addition to the legacy context keys. A
   client command can be vetoed by the interlock like any other producer, and each client is told
   the fate of its own command even when a higher-priority producer wins the tick.
@@ -120,6 +125,24 @@ Current Release: v2026.01.18 • Author: 7Lynx
   when the device receives it, and an expired command is refused by the interlock.
 
 ### Removed
+- **The four per-feature HTTP servers.** Face recognition on 8088, the vision feed on 8090, voice
+  control on 8091 and the telemetry dashboard on 8092 are gone, with their `http` config blocks.
+  Three of them bound `0.0.0.0` and answered without any token; `GET /command?action=` on 8091 set
+  `behavior_override` and moved the dog without passing the interlock, the deadman or the audit
+  log (B-06). The control plane on 8420 replaces all four, behind one token.
+- `optional/telemetry_dashboard.py` and `modules.telemetry_dashboard`. Every endpoint it served is
+  a control-plane route: `/snapshot` is `/api/v1/state`, the HTML page is the web app, the support
+  bundle is `/api/v1/support-bundle`, the camera is `/api/v1/camera/*`. Two things have no v1
+  route yet and are documented gaps, not silent losses: the SLAM map/trajectory downloads
+  (`slam_map_data` and `slam_trajectory` are still published by `slam_pi4`) and face enrollment by
+  URL. Enrollment itself still works — `face_recognition_command` on the runtime context is the
+  path the old `/enroll` handler used internally too.
+- `tools/generate_auth_token.py` and the root `tools/` directory. The script printed a
+  `{telemetry: {auth_token}}` snippet for a section that no longer exists; the token is written by
+  `services/auth.py::TokenStore` on first start. Removing it also removes the root `tools/`, which
+  shadowed `src/tools` on `sys.path` and broke `python -m tools.*` after a real install (H-05).
+- `tools/voice_cli.py`, `tools/face_recognition_cli.py` and `tools/run_telemetry.py`: each existed
+  only to talk to one of the deleted ports.
 - `optional/wifi_localization.py` and `modules.wifi_localization`. It shelled out to `netsh wlan
   show networks`, which does not exist on Raspberry Pi OS, had no test, and was never registered.
 - Eighteen `settings` keys that nothing in `src/`, `tests/` or `src/tools/` read:
@@ -142,6 +165,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
   package discovery could not see by name.
 - The built wheel contains `tools/` and `houndmind_ai/core/`, so the documented
   `python -m tools.*` commands work after a real install.
+
+### Notes
+- **Upgrading a config.** If `config/settings.jsonc` still has a `settings.<module>.http` block or
+  a `telemetry_dashboard` section, the runtime now refuses to start and names the offending path.
+  Delete those blocks; nothing in them has an effect any more. `tests/test_no_legacy_http.py`
+  keeps the servers deleted rather than relying on review to notice a fifth one.
 
 
 ## [v2026.01.18] - 2026-01-18
