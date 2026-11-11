@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 from houndmind_ai.core.module import Module
@@ -24,9 +25,16 @@ class VisionPi4Module(Module):
     API token.
     """
 
-    def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
+    def __init__(
+        self,
+        name: str,
+        enabled: bool = True,
+        required: bool = False,
+        inference_fn: Callable[[Any], Any] | None = None,
+    ) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self.available = False
+        self._inference_fn = inference_fn
         self._camera: Any | None = None
         self._cv2: Any | None = None
         self._capture: Any | None = None
@@ -51,21 +59,29 @@ class VisionPi4Module(Module):
         else:
             self._cv2 = cv2
 
-        # Setup preprocessor and inference scheduler if enabled
+        # Preprocessing is cheap and local; the inference scheduler is only started when there is
+        # something to run. There used to be a placeholder "model" here: a thread whose entire job
+        # was `sleep(0.05)` and `{"result": "ok"}`, started by default for anybody who enabled
+        # the camera (M-03). A scheduler with no model is not a feature, so it is off by default
+        # and an install that enables it without supplying `inference_fn` is told so instead of
+        # being given a plausible-looking result.
         self._preprocessor = VisionPreprocessor(settings.get("preprocessing", {}))
-        if settings.get("inference_scheduler_enabled", True):
-            def _on_inference_result(result):
-                self._last_inference_result = result
-                context.set("vision_inference_result", result)
-            # Dummy inference function, replace with actual model
-            def _dummy_inference(frame):
-                time.sleep(0.05)
-                return {"frame_id": id(frame), "result": "ok"}
-            self._inference_scheduler = VisionInferenceScheduler(
-                _dummy_inference, result_callback=_on_inference_result
+        if not settings.get("inference_scheduler_enabled", False):
+            context.set("vision_inference_status", {"state": "disabled"})
+        elif self._inference_fn is None:
+            context.set(
+                "vision_inference_status",
+                {
+                    "state": "unconfigured",
+                    "detail": "inference_scheduler_enabled is set but no model is wired",
+                },
             )
-            assert self._inference_scheduler is not None
-            self._inference_scheduler.start()
+            logger.warning(
+                "Vision inference scheduler enabled with no model; nothing will be inferred"
+            )
+        else:
+            # "ready" is honest only once a camera exists; `_start_inference` raises it further.
+            context.set("vision_inference_status", {"state": "pending"})
 
         if backend == "picamera2":
             try:
@@ -83,24 +99,45 @@ class VisionPi4Module(Module):
                     context.set(
                         "vision_status", {"status": "ready", "backend": backend}
                     )
-                    return
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Picamera2 init failed: %s", exc)
 
-        cv2 = self._cv2
-        if cv2 is None:
-            self.disable("Vision backend unavailable: OpenCV is not installed")
-            return
+        if not self.available:
+            cv2 = self._cv2
+            if cv2 is None:
+                self.disable("Vision backend unavailable: OpenCV is not installed")
+                return
 
-        device_index = int(settings.get("device_index", 0))
-        capture = cv2.VideoCapture(device_index)
-        if not capture.isOpened():
-            self.disable("Failed to open camera device")
-            return
+            device_index = int(settings.get("device_index", 0))
+            capture = cv2.VideoCapture(device_index)
+            if not capture.isOpened():
+                self.disable("Failed to open camera device")
+                return
 
-        self._capture = capture
-        self.available = True
-        context.set("vision_status", {"status": "ready", "backend": "opencv"})
+            self._capture = capture
+            self.available = True
+        context.set("vision_status", {"status": "ready", "backend": backend})
+        self._start_inference(context)
+
+    def _start_inference(self, context) -> None:
+        """Start the model worker, now that there is a camera to feed it."""
+        if self._inference_fn is None or self._inference_scheduler is not None:
+            return
+        settings = (context.get("settings") or {}).get("vision_pi4", {})
+        if not settings.get("inference_scheduler_enabled", False):
+            return
+        self._inference_scheduler = VisionInferenceScheduler(
+            self._inference_fn, result_callback=self._on_inference_result(context)
+        )
+        self._inference_scheduler.start()
+        context.set("vision_inference_status", {"state": "ready"})
+
+    def _on_inference_result(self, context):
+        def _publish(result):
+            self._last_inference_result = result
+            context.set("vision_inference_result", result)
+
+        return _publish
 
     def tick(self, context) -> None:
         if not self.available or not self.status.enabled:

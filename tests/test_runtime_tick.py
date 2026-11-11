@@ -13,13 +13,18 @@ but never reached.
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from houndmind_ai.core.config import load_config
 from houndmind_ai.core.module import Module
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.fake import FakeDogHAL
+from houndmind_ai.hal.sensors import SensorReading
+from houndmind_ai.kernel.commands import Source
 from houndmind_ai.main import build_modules
+from houndmind_ai.navigation.scanning import ScanReading
 
 # Camera, microphone, network listeners and optional wheels: the fake HAL says nothing about
 # these, so they stay off in CI. `api` is here because it *binds a socket*: binding 0.0.0.0 in a
@@ -80,6 +85,74 @@ def test_the_gateway_is_reached_by_the_loop(runtime) -> None:
     assert "motion_verdict" in instance.context
     assert "motion_command" in instance.context
     assert "tilt_latched" in instance.context
+
+
+def test_the_loop_turns_an_intent_into_a_hal_call(headless) -> None:
+    """Board → gateway → interlock → motors → `hal.action`, with no legacy keys anywhere.
+
+    This is the end-to-end proof for the Phase 3 port: a producer publishes an intent and the
+    fake dog is asked to walk. A fresh runtime, because the motor cooldown would otherwise
+    mask the very first action behind whatever the fixture already executed.
+    """
+    config, hal = headless
+    instance = HoundMindRuntime(config, build_modules(config, hal=hal))
+    instance.start()
+    try:
+        board = instance.context.get("intent_board")
+        assert board is not None, "the gateway must publish the board when it starts"
+        board.publish("forward", Source.NAVIGATION)
+        instance.tick()
+        assert ("forward", {}) in hal.calls, hal.calls
+    finally:
+        instance.stop()
+
+
+def test_a_stale_sensor_stops_the_dog(headless) -> None:
+    """The H-03 property, end to end: bad data must end a motion, not pose the dog.
+
+    The sensor and the navigator are switched off so the test owns the readings and the only
+    intent in play. The watchdog ticks after the motors, so the hold lands on the *next* tick —
+    the same one-tick lag the old module had, and the reason the assertion allows one step.
+    """
+    config, hal = headless
+    for name in ("hal_sensors", "navigation", "behavior"):
+        config.modules[name].enabled = False
+    instance = HoundMindRuntime(config, build_modules(config, hal=hal))
+    instance.start()
+    try:
+        instance.context.set(
+            "sensor_reading",
+            SensorReading(
+                distance_cm=150.0,
+                touch="N",
+                sound_detected=False,
+                sound_direction=None,
+                acc=(0.0, 0.0, 9.8),
+                gyro=(0.0, 0.0, 0.0),
+                timestamp=time.time() - 60.0,
+                distance_valid=True,
+                touch_valid=True,
+                sound_valid=True,
+                imu_valid=True,
+            ),
+        )
+        instance.context.set(
+            "scan_reading", ScanReading(mode="sweep", data={0: 150.0}, timestamp=time.time())
+        )
+        board = instance.context.get("intent_board")
+        board.publish("forward", Source.NAVIGATION)
+
+        for _ in range(3):
+            board.publish("forward", Source.NAVIGATION)
+            instance.tick()
+
+        actions = [name for name, _ in hal.calls]
+        assert "forward" in actions, actions
+        stop_index = actions.index("stop")
+        assert "forward" not in actions[stop_index:], actions
+        assert "lie" not in actions, "a fault must never pose the dog"
+    finally:
+        instance.stop()
 
 
 def test_the_fake_dog_publishes_sensor_readings(headless) -> None:

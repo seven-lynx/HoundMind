@@ -50,7 +50,7 @@ import anywhere else is a defect: it breaks `pip install` on a workstation and i
 
 ```
 src/houndmind_ai/
-  kernel/     state.py  commands.py  events.py  registry.py  scheduler.py  supervisor.py
+  kernel/     state.py  commands.py  intents.py  registry.py  scheduler.py  supervisor.py
   hal/        iface.py  fake.py  vendor.py  module.py  sensors.py  motors.py
   act/        gateway.py  interlock.py  calibration.py
   nav/        mapping.py  scanning.py  avoidance.py  planner.py
@@ -78,10 +78,11 @@ same dict the loop was iterating.
 | Layer | Thread | Rule |
 |---|---|---|
 | Decision (kernel, nav, behaviour) | one loop thread | **Never blocks.** No `sleep`, no `wait_*`, no file I/O, no socket I/O. |
-| Actuator gateway | one worker | Serialises commands to the servo bus. Owns the only `pidog` call path for motion. |
+| Actuator gateway | one worker | Serialises commands, and the HAL holds one lock on the servo bus for every caller. Owns the only `pidog` call path for motion. |
 | Sensor service | one worker per sensor family | Publishes an immutable `SensorReading` snapshot; readers take the latest. |
 | Camera | one producer | Encodes once, fans out frames to N clients; drops on backpressure. |
 | Control plane | asyncio event loop | Never touches hardware directly; posts commands to the gateway. |
+| Scan worker | one owned worker | Latest-value: a request during a sweep is dropped, not queued (`kernel/scheduler.py`). |
 
 **Rules.**
 

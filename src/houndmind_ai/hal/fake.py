@@ -6,6 +6,7 @@ records what it was asked to do so a test can assert on behaviour instead of tim
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
@@ -31,6 +32,10 @@ class FakeDogHAL:
     ) -> None:
         self._now = now or time.monotonic
         self._actions = actions if actions is not None else _DEFAULT_ACTIONS
+        # The real adapter serialises calls on the servo bus (one I2C bus, several callers).
+        # The fake does the same, so a threaded test exercises the discipline it will meet on the
+        # device instead of the happy path that never happens there.
+        self._bus = threading.RLock()
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.distance_samples: list[tuple[int, float]] = []
         self.offsets_applied: list[dict[str, float]] = []
@@ -115,11 +120,13 @@ class FakeDogHAL:
         return self._actions
 
     def action(self, name: str, params: dict[str, Any]) -> None:
-        self.calls.append((name, dict(params)))
+        with self._bus:
+            self.calls.append((name, dict(params)))
 
     def sample_distance(self, samples: int, between_reads_s: float) -> float | None:
-        self.distance_samples.append((samples, between_reads_s))
-        return self._distance_cm
+        with self._bus:
+            self.distance_samples.append((samples, between_reads_s))
+            return self._distance_cm
 
     def apply_offsets(self, offsets: Mapping[str, float]) -> None:
         self.offsets_applied.append(dict(offsets))

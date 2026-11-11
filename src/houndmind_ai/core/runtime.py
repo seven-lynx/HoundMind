@@ -165,12 +165,29 @@ class HoundMindRuntime:
                 if module.status.started:
                     module.stop(self.context)
                     module.status.started = False
+                if not module.status.enabled:
+                    # It disabled itself while being restarted (no HAL, no camera, missing
+                    # wheel). Marking it started anyway would put a module that just gave up
+                    # back in the tick list and hide the reason it gave up.
+                    logger.warning(
+                        "Module %s did not come back: %s",
+                        name,
+                        module.status.disabled_reason or "disabled",
+                    )
+                    return
+                module.start(self.context)
                 if module.status.enabled:
-                    module.start(self.context)
                     module.status.started = True
-                logger.warning("Restarted module: %s", name)
+                    logger.warning("Restarted module: %s", name)
+                else:
+                    logger.warning(
+                        "Module %s gave up during restart: %s",
+                        name,
+                        module.status.disabled_reason or "disabled",
+                    )
             except Exception:  # noqa: BLE001
                 logger.exception("Failed to restart module %s", name)
+            return
 
     def run(self) -> None:
         self.start()

@@ -21,6 +21,7 @@ nothing on a workstation and a missing vendored package produces one clear failu
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections.abc import Callable, Mapping
 from typing import Any, cast
@@ -71,6 +72,15 @@ class PidogHAL:
         self._clock = clock or time.time
         self._action_flow: Any | None = None
         self._closed = False
+        # One I2C bus, and now more than one caller: the loop executes gaits, the scan worker moves
+        # the head and samples distance, the attention module turns the head toward a sound, and
+        # the vendor action queue is not thread-safe. Two of those interleaved is a servo command
+        # arriving mid-step. Re-entrant because `action("stop")` delegates to `stop()`.
+        #
+        # The cost is latency, and it is deliberate: a `read()` can wait for a sampling sequence
+        # (~0.1 s) and an emergency stop can wait for the servo call in progress. Both callers are
+        # workers, never the decision loop, and an interleaved I2C transaction is the worse bug.
+        self._bus = threading.RLock()
 
         # Signal-conditioning state, carried across reads like it always was.
         self._last_touch = "N"
@@ -117,12 +127,13 @@ class PidogHAL:
 
     def read(self) -> SensorSnapshot:
         now = self._clock()
-        dog = self._ensure_dog()
+        with self._bus:
+            dog = self._ensure_dog()
 
-        distance_cm, distance_valid = self._read_distance(dog, now)
-        touch, touch_valid = self._read_touch(dog, now)
-        sound_detected, sound_direction, sound_valid = self._read_sound(dog)
-        acc, gyro, imu_valid = self._read_imu(dog)
+            distance_cm, distance_valid = self._read_distance(dog, now)
+            touch, touch_valid = self._read_touch(dog, now)
+            sound_detected, sound_direction, sound_valid = self._read_sound(dog)
+            acc, gyro, imu_valid = self._read_imu(dog)
 
         return SensorSnapshot(
             ts=now,
@@ -139,9 +150,14 @@ class PidogHAL:
         )
 
     def sample_distance(self, samples: int, between_reads_s: float) -> float | None:
-        """Median of `samples` fresh reads, clamped to the configured range."""
-        dog = self._ensure_dog()
-        values = self._raw_distance_samples(dog, samples, between_reads_s)
+        """Median of `samples` fresh reads, clamped to the configured range.
+
+        The whole sequence holds the bus: a head move slipping in between two samples means the
+        median describes two different directions.
+        """
+        with self._bus:
+            dog = self._ensure_dog()
+            values = self._raw_distance_samples(dog, samples, between_reads_s)
         if not values:
             return None
         values.sort()
@@ -300,21 +316,25 @@ class PidogHAL:
 
     def action(self, name: str, params: dict[str, Any]) -> None:
         key = name.strip().lower()
-        if key == "head":
-            self._head(params)
-        elif key == "rgb":
-            self._rgb(params)
-        elif key == "rpy":
-            self._rpy(params)
-        elif key == "stop":
-            self.stop()
-        elif {"speed", "steps", "wait"} & set(params):
-            # A supervised step: the caller wants this one movement, synchronously, at a given
-            # speed (closed-loop turning reads the heading between steps).
-            self._direct(key, params)
-        else:
-            # Fire and forget: the vendor queue runs it while the loop moves on.
-            self._ensure_action_flow().add_action(key.replace("_", " "))
+        # The bus is not re-entrant and it is not free: `do_action(wait=True)` can hold it for the
+        # length of a step. Every caller that is not the decision loop already runs on its own
+        # worker, so waiting here costs that worker a turn, never the tick.
+        with self._bus:
+            if key == "head":
+                self._head(params)
+            elif key == "rgb":
+                self._rgb(params)
+            elif key == "rpy":
+                self._rpy(params)
+            elif key == "stop":
+                self._stop_locked()
+            elif {"speed", "steps", "wait"} & set(params):
+                # A supervised step: the caller wants this one movement, synchronously, at a given
+                # speed (closed-loop turning reads the heading between steps).
+                self._direct(key, params)
+            else:
+                # Fire and forget: the vendor queue runs it while the loop moves on.
+                self._ensure_action_flow().add_action(key.replace("_", " "))
 
     def _direct(self, key: str, params: Mapping[str, Any]) -> None:
         dog = self._ensure_dog()
@@ -366,6 +386,10 @@ class PidogHAL:
 
     def stop(self) -> None:
         """Stop motion now: clear the queued actions, then ask the vendor to halt."""
+        with self._bus:
+            self._stop_locked()
+
+    def _stop_locked(self) -> None:
         flow = self._action_flow
         if flow is not None and hasattr(flow, "clear_actions"):
             try:

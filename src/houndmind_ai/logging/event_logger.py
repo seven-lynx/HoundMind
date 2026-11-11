@@ -7,10 +7,25 @@ from pathlib import Path
 from typing import Any
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.commands import Source
 
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
+
+
+def _intent(context, source: Source) -> str | None:
+    """What `source` is currently asking for, or None when it has no live intent.
+
+    The snapshot used to read four context keys that the producers wrote when they felt like
+    it. Those keys are gone; the board is the one place that knows what every producer wants,
+    and it only reports intents that are still being refreshed.
+    """
+    board = context.get("intent_board")
+    if board is None:
+        return None
+    command = board.find(source)
+    return None if command is None else command.action
 
 
 def _safe_float(value: Any, default: float) -> float:
@@ -45,11 +60,12 @@ class EventLoggerModule(Module):
         self._last_log_ts = now
 
         snapshot = {
-            "behavior_action": context.get("behavior_action"),
-            "navigation_action": context.get("navigation_action"),
+            "behavior_action": _intent(context, Source.BEHAVIOUR),
+            "navigation_action": _intent(context, Source.NAVIGATION),
             "navigation_decision": context.get("navigation_decision"),
-            "safety_action": context.get("safety_action"),
-            "watchdog_action": context.get("watchdog_action"),
+            "safety_action": _intent(context, Source.SYSTEM),
+            "watchdog_action": _intent(context, Source.WATCHDOG),
+            "motion_action": (context.get("motion_command") or {}).get("canonical_action"),
             "stuck_recovery": context.get("stuck_recovery"),
             "scan_latest": context.get("scan_latest"),
             "mapping_openings": context.get("mapping_openings"),
@@ -70,6 +86,7 @@ class EventLoggerModule(Module):
             "navigation_decision": snapshot["navigation_decision"],
             "safety_action": snapshot["safety_action"],
             "watchdog_action": snapshot["watchdog_action"],
+            "motion_action": snapshot["motion_action"],
             "stuck_recovery": snapshot["stuck_recovery"],
             "scan_result": snapshot["scan_latest"],
             "mapping_hint": snapshot["mapping_hint"],

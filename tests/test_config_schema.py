@@ -187,7 +187,7 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("sensors", "poll_hz", "often"),
     ("motors", "min_action_interval_s", "soon"),
     ("sensor_health", "enabled", "yes"),
-    ("service_watchdog", "max_restarts", "many"),
+    ("watchdog", "max_restarts", "many"),
     ("watchdog", "module_timeout_s", None),
     ("balance", "lpf_alpha", 1.5),
     ("safety", "tilt_threshold_deg", "steep"),
@@ -242,14 +242,14 @@ def test_an_unknown_key_inside_a_covered_section_is_an_error() -> None:
 
 
 def test_a_misspelled_enum_value_suggests_the_real_one() -> None:
-    problems = validate_config_tree({"settings": {"watchdog": {"recovery_mode": "behaviour"}}})
-    assert problems[0].hint == "behavior"
+    problems = validate_config_tree({"settings": {"navigation": {"scan_mode": "sweeep"}}})
+    assert problems[0].hint == "sweep"
 
 
 def test_a_nullable_setting_accepts_null_but_not_a_number() -> None:
-    tree = {"settings": {"watchdog": {"recovery_action": None}}}
+    tree = {"settings": {"api": {"static_root": None}}}
     assert validate_config_tree(tree) == []
-    assert validate_config_tree({"settings": {"watchdog": {"recovery_action": 3}}})
+    assert validate_config_tree({"settings": {"api": {"static_root": 3}}})
 
 
 def test_profile_settings_overrides_are_validated() -> None:

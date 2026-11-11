@@ -59,7 +59,12 @@ turn that reads the heading between steps. It performs no vendor call of its own
 ---
 
 ## 4) Scanning
-**What it does:** Moves head and performs scans for navigation.
+**What it does:** Moves head and performs scans for navigation. The scan runs on an owned
+background worker (`kernel/scheduler.py`), so a sweep never blocks the decision loop; while one
+is in flight `scan_in_flight` is true and a second request is dropped rather than queued.
+`scan_continuous: true` scans on a timer; `false` scans only while a motion is being executed.
+The measured sweep duration is published as `scan_duration_s`, which the watchdog uses to decide
+what "stale" means for this board.
 
 **Disable:** `modules.scanning.enabled = false`
 
@@ -170,20 +175,20 @@ Notes:
 ---
 
 ## 10) Watchdog
-**What it does:** Detects stale sensors/scan data and triggers recovery.
+**What it does:** Holds motion when the sensor or scan data it depends on goes stale, and asks
+the runtime to restart modules whose heartbeat stopped. Recovery is always **stop and report**:
+a stale reading publishes a `stop` command through the same interlock as everything else, it
+never poses the dog, and only modules that are enabled *and* started are candidates. Restarts
+back off exponentially (`restart_cooldown_s` × `restart_backoff_factor`, capped by
+`restart_max_delay_s`) and stop after `max_restarts`; a module that stays up for `healthy_after_s`
+earns a fresh budget.
 
-**Default:** Enabled (low-impact defaults: no actions/restarts unless configured).
+The scan staleness window is the larger of `scan_timeout_s` and 1.5× the measured scan duration,
+because a sweep takes seconds and a fixed sub-second window called a healthy scan stale.
+
+**Default:** Enabled (it does nothing unless the dog is asked to move on stale data).
 
 **Disable:** `modules.watchdog.enabled = false`
-
----
-
-## 11) Service Watchdog
-**What it does:** Restarts failed/stale modules with backoff and caps.
-
-**Default:** Enabled.
-
-**Disable:** `modules.service_watchdog.enabled = false`
 
 ---
 

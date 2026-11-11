@@ -6,6 +6,7 @@ from collections import Counter, deque
 from typing import Any
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.commands import Source
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,18 @@ class ObstacleAvoidanceModule(Module):
         # Gentle recovery state
         self._gentle_recovery_active = False
         self._gentle_recovery_until = 0.0
+
+    def _publish(self, context, action: object) -> None:
+        """Ask the gateway, as the navigator, to do `action`.
+
+        One helper rather than thirteen copies: every decision point in this module used to
+        write `navigation_action`, and a board that is absent (a bare context in a unit test,
+        or a disabled gateway) must degrade to "no motion", not to an exception mid-decision.
+        """
+        board = context.get("intent_board")
+        if board is None:
+            return
+        board.publish(str(action), Source.NAVIGATION)
 
     def tick(self, context) -> None:
         perception = context.get("perception") or {}
@@ -247,7 +260,7 @@ class ObstacleAvoidanceModule(Module):
 
         # Set all context state at the end
         if nav_action is not None:
-            context.set("navigation_action", nav_action)
+            self._publish(context, nav_action)
         if nav_turn is not None:
             context.set("navigation_turn", nav_turn)
         if nav_led is not None:
@@ -277,7 +290,7 @@ class ObstacleAvoidanceModule(Module):
 
         # Emergency retreat if obstacle is too close.
         if isinstance(distance, (int, float)) and 0 < distance <= emergency_stop_cm:
-            context.set("navigation_action", avoid_action)
+            self._publish(context, avoid_action)
             self._record_no_go("forward", now)
             logger.info(
                 "Navigation emergency retreat: %s (distance=%s)", avoid_action, distance
@@ -291,7 +304,7 @@ class ObstacleAvoidanceModule(Module):
             and self._clear_path_streak >= clear_streak_min
         ):
             if settings.get("clear_path_skip_scans", True):
-                context.set("navigation_action", "forward")
+                self._publish(context, "forward")
                 self._set_nav_led(context, "patrol")
                 self._clear_path_streak += 1
                 self._emit_navigation_decision(context, settings, "forward", 0.0, True)
@@ -301,12 +314,12 @@ class ObstacleAvoidanceModule(Module):
         if scan_result is None:
             if now - self._last_scan_ts < scan_interval_s:
                 if obstacle:
-                    context.set("navigation_action", avoid_action)
+                    self._publish(context, avoid_action)
                 else:
-                    context.set("navigation_action", safe_action)
+                    self._publish(context, safe_action)
                 return
             self._last_scan_ts = now
-            context.set("navigation_action", safe_action)
+            self._publish(context, safe_action)
             return
 
         direction, score, confirmed = scan_result
@@ -330,14 +343,14 @@ class ObstacleAvoidanceModule(Module):
             if self._low_confidence_retries <= retry_limit:
                 return
             if obstacle:
-                context.set("navigation_action", avoid_action)
+                self._publish(context, avoid_action)
                 self._record_no_go(direction, now)
                 return
-            context.set("navigation_action", safe_action)
+            self._publish(context, safe_action)
             return
 
         if not confirmed and obstacle:
-            context.set("navigation_action", avoid_action)
+            self._publish(context, avoid_action)
             self._record_no_go(direction, now)
             return
 
@@ -362,7 +375,7 @@ class ObstacleAvoidanceModule(Module):
         )
 
         if approach_confirmed and now - self._last_approach_ts >= approach_cooldown_s:
-            context.set("navigation_action", avoid_action)
+            self._publish(context, avoid_action)
             context.set(
                 "navigation_followup",
                 {
@@ -411,7 +424,7 @@ class ObstacleAvoidanceModule(Module):
                 "navigation_turn",
                 {"direction": direction, "degrees": turn_degrees_on_gap},
             )
-            context.set("navigation_action", "turn left")
+            self._publish(context, "turn left")
             self._set_nav_led(context, "turn")
             self._record_turn(direction)
         elif direction == "right":
@@ -425,15 +438,15 @@ class ObstacleAvoidanceModule(Module):
                 "navigation_turn",
                 {"direction": direction, "degrees": turn_degrees_on_gap},
             )
-            context.set("navigation_action", "turn right")
+            self._publish(context, "turn right")
             self._set_nav_led(context, "turn")
             self._record_turn(direction)
         elif isinstance(distance, (int, float)) and distance < safe_distance_cm:
-            context.set("navigation_action", avoid_action)
+            self._publish(context, avoid_action)
             self._set_nav_led(context, "obstacle")
             self._record_no_go("forward", now)
         else:
-            context.set("navigation_action", "forward")
+            self._publish(context, "forward")
             self._set_nav_led(context, "patrol")
             self._clear_path_streak += 1
 
@@ -782,7 +795,7 @@ class ObstacleAvoidanceModule(Module):
         strategy = str(strategies[self._strategy_index])
         self._last_strategy = strategy
         if strategy == "backup_turn":
-            context.set("navigation_action", avoid_action)
+            self._publish(context, avoid_action)
             context.set(
                 "navigation_followup",
                 {
@@ -792,7 +805,7 @@ class ObstacleAvoidanceModule(Module):
                 },
             )
         elif strategy == "zigzag":
-            context.set("navigation_action", "turn left")
+            self._publish(context, "turn left")
             context.set(
                 "navigation_followup",
                 {
@@ -801,7 +814,7 @@ class ObstacleAvoidanceModule(Module):
                 },
             )
         elif strategy == "reverse_escape":
-            context.set("navigation_action", "backward")
+            self._publish(context, "backward")
             context.set(
                 "navigation_followup",
                 {
@@ -810,7 +823,7 @@ class ObstacleAvoidanceModule(Module):
                 },
             )
         else:
-            context.set("navigation_action", "turn left")
+            self._publish(context, "turn left")
 
     @staticmethod
     def _set_nav_led(context, mode: str) -> None:
