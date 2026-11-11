@@ -64,7 +64,7 @@ def _read_mem_used_pct() -> float | None:
 
 
 class HealthMonitorModule(Module):
-    """Lightweight system health monitor (Pi 3 friendly).
+    """Lightweight system health monitor.
 
     Samples CPU load/temp and memory usage at a low cadence, then
     sets a scan-interval override when the system is stressed.

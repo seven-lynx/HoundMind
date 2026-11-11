@@ -1,87 +1,52 @@
-# HoundMind Install Guide (PiDog, Pi 3/4/5)
+# HoundMind Install Guide (PiDog, Raspberry Pi 4 and 5)
 
 Status: **guide** — install, verify, and recover. Written for a fresh Raspberry Pi OS Bookworm image.
 Version: v2026.01.18 • Author: 7Lynx
-Pairs with: `README.md` (the one-liner), `docs/PI3_VALIDATION.md` (what to check afterwards)
+Pairs with: `README.md` (the one-liner), `docs/FEATURES_GUIDE.md` (what each module does)
 
 This guide installs HoundMind, the unified AI system for SunFounder PiDog. Simulation mode is no
 longer supported. PackMind and CanineCore are now a single system.
 
 **Preferred OS (recommended):** Raspberry Pi OS Bookworm (64-bit).
 
-Python compatibility notes:
-- The installer supports **Python 3.10–3.11 only**. For best compatibility with heavier native packages (OpenCV, `dlib`/`face_recognition`, `pyaudio`, `rtabmap-py`) we recommend creating the virtualenv with a Python 3.10 interpreter when performing a `full` install on Pi4.
-- If Python 3.10 is not available, the installer will try `python3.11`. If neither is found, the installer will stop with an actionable error. To force a specific interpreter, set the `PYTHON` environment variable when running the top-level script, e.g. `PYTHON=python3.10 bash scripts/install_houndmind.sh`.
-- Python 3.12+ is not supported yet; use Bookworm with Python 3.11 or install Python 3.10.
+## Supported boards
 
-> **Known inconsistency, documented rather than hidden.** `pyproject.toml` declares
-> `requires-python = ">=3.11,<3.14"`, which reads as "3.12 and 3.13 are fine", while
-> `scripts/installer_core.py` accepts only 3.10 and 3.11 and refuses anything newer. The installer is
-> the stricter of the two, so this guide follows the installer: **use 3.10 or 3.11**. Reconciling the
-> two is a dependency change, tracked in `docs/BASELINE.md`.
+**Raspberry Pi 4 and Raspberry Pi 5 only.** Pi 3 support was dropped in the 2026.11 refactor: it is
+the reason the loop used to run at 5 Hz and vision shipped off. `v2026.01.18` is the last release
+that runs on one, and the installer reads the device tree and stops with that release named rather
+than installing something half-working.
+
+### A Pi 5 edition is a board *and* a HAT
+
+SunFounder's own position: the Pi 5 is **software**-compatible with the PiDog code, but the standard
+**Robot HAT V4 supplies 5V/3A where the Pi 5 requires 5V/5A**, so a Pi 5 on a V4 can shut down
+mid-run, and some V4 owners report WiFi trouble. **Robot HAT V5 is the combination that is
+supported.** A V4 is fine for a bench test; it is not an edition this project can call working.
+
+The runtime cannot see which HAT is fitted, so this is not a configuration key. It is a power-supply
+fact, and the reason the Pi 5 edition is documented as V5-only.
+
+## Python
+
+- Supported: **3.11, 3.12, 3.13** — the range `pyproject.toml` declares. Bookworm ships 3.11 (the
+  recommended image); Trixie ships 3.13.
+- **3.10 is not supported.** It is end of life, and `pip install` refuses the package on it.
+- The installer creates the virtualenv with the interpreter it runs under. To force one:
+  `PYTHON=python3.11 bash scripts/install_houndmind.sh`.
 - If an existing `.venv` was created with an unsupported or different Python minor version, the installer will automatically recreate it to keep the environment consistent.
 - If you encounter build failures on newer OS releases (Trixie or later), consider switching to Bookworm or use the `--preset lite` option.
 
 ## Prerequisites
 - Raspberry Pi OS Lite (no desktop environment) with I2C enabled.
-- Python 3.10 or 3.11 available on the system.
+- A Raspberry Pi 4 or 5, with a Robot HAT V5 (or a V4 for a bench test) seated on the 40-pin header.
+- Python 3.11, 3.12 or 3.13 (Bookworm's `python3` is 3.11).
 - Internet access for dependency downloads.
 
-### Checking & installing a compatible Python
-
-Some HoundMind dependencies (especially when using the `full` preset on Pi4) are sensitive to the Python minor version. We recommend using a Python 3.10 interpreter for best compatibility with available Pi wheels.
-
-Check what's available on your system:
+Check the interpreter the installer will run under:
 
 ```bash
-python3.10 --version   # if installed
-python3.11 --version   # if installed
-which python3.10        # shows path if present
-which python3.11        # shows path if present
+python3 --version
 ```
-
-If `python3.10` is available, create the virtualenv with it:
-
-```bash
-python3.10 -m venv .venv
-. .venv/bin/activate
-python -V   # confirm Python 3.10.x is active
-
-If you only have Python 3.11, substitute `python3.11` for `python3.10` in the commands above.
-```
-
-If your OS package manager offers `python3.10`, you can install it (Debian/Raspberry Pi OS style):
-
-```bash
-sudo apt update
-sudo apt install -y python3.10 python3.10-venv python3.10-dev
-```
-
-If a distribution package is not available, use `pyenv` to build and install a specific Python version (recommended for reproducible environments):
-
-```bash
-# install pyenv (one-line installer)
-curl https://pyenv.run | bash
-# follow the printed instructions to add pyenv to your shell (e.g. update ~/.bashrc)
-exec $SHELL
-# list available versions and pick a 3.10.x release
-pyenv install --list
-pyenv install 3.10.16          # choose a 3.10.x version from the list
-pyenv local 3.10.16            # or `pyenv global 3.10.16` to set system-wide for the user
-python -V                       # shows the pyenv-selected interpreter
-
-# then create venv as above using the chosen interpreter
-python -m venv .venv
-. .venv/bin/activate
-```
-
-When running the top-level installer you can force a chosen interpreter by setting the `PYTHON` environment variable, for example:
-
-```bash
-PYTHON=python3.10 bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
-```
-
-This ensures the installer creates the virtual environment with the interpreter you select.
 
 ## Recommended: Guided Install (Beginner-Friendly)
 
@@ -91,9 +56,12 @@ The installer script will:
 3) Install SunFounder dependencies (`robot-hat`, `vilib`, `pidog`) **into the same environment**.
 4) Install HoundMind and verify imports.
 
-### Pi3 vs Pi4 Detection
-- **Pi 3**: installer uses the **lite** preset for best compatibility.
-- **Pi 4/5**: installer defaults to **full** if `requirements.txt` exists; otherwise uses **lite**.
+### Board detection
+- **Pi 5**: honours `--preset`; the default is **lite**, because nothing has been measured on a Pi 5
+  yet and a full install of dlib/rtabmap on an untested board is not something to do unattended.
+- **Pi 4**: still forces the **full** preset, so `--preset` is ignored on a Pi 4. That is a known
+  defect; it is fixed with the installer rewrite rather than quietly changed here.
+- **Anything older**: refused before anything is installed, with the last supporting release named.
 
 You can override with:
 - `--preset lite`
@@ -113,7 +81,7 @@ Optional flags:
 - `--preset auto|lite|full` (auto detects Pi model)
 
 Additional installer flags (new):
-- `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make` and requires system build deps and `sudo`). Useful for Pi4 full installs.
+- `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make` and requires system build deps and `sudo`). Useful for Pi 4/5 full installs.
 - `--no-rtabmap`: explicitly skip any RTAB‑Map build/install during this run (useful when you want the full preset but will install RTAB‑Map later by hand).
 - `--auto-system-deps`: automatically install system packages via `apt` (needed before building heavy native dependencies).
 
@@ -122,14 +90,14 @@ Installer behavior for i2samp:
 - You can also set `RUN_I2SAMP=1` to enable the same behavior non-interactively (useful for CI or scripts).
 - When running the top-level `scripts/install_houndmind.sh` interactively, the installer will prompt to run the PiDog audio helper by default (you can answer yes/no).
 
-Examples: build RTAB-Map during install (Pi4; long-running):
+Examples: build RTAB-Map during install (Pi 4/5; long-running):
 
 ```bash
 # Let the installer attempt to install apt system deps and build RTAB-Map
 bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
 
 # Force a specific interpreter when running the installer
-PYTHON=python3.10 bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
+PYTHON=python3.11 bash scripts/install_houndmind.sh --build-rtabmap --auto-system-deps
 ```
 
 ## Manual Install (Step-by-Step, Advanced)
@@ -137,10 +105,10 @@ PYTHON=python3.10 bash scripts/install_houndmind.sh --build-rtabmap --auto-syste
 ### 1) Create and activate a virtual environment
 
 ```bash
-python3.10 -m venv .venv
+python3.11 -m venv .venv
 . .venv/bin/activate
 
-If you only have Python 3.11, substitute `python3.11` in the command above.
+If your `python3` is already 3.11–3.13, `python3 -m venv .venv` is equivalent.
 ```
 
 ### 2) Install PiDog system dependencies (Linux, Raspberry Pi OS Lite)
@@ -150,9 +118,9 @@ sudo apt-get update
 sudo apt-get install -y git python3-pip python3-setuptools python3-smbus
 ```
 
-### Full (Pi4) system dependencies for vision/face/SLAM
+### Full system dependencies for vision/face/SLAM
 
-If you plan to use the full feature set on Pi4 (OpenCV, `face_recognition`/`dlib`, RTAB-Map), install the additional build tools and libraries before attempting `pip install` for heavy packages. These are recommended when using the `--auto-system-deps` flag with the guided installer or when preparing a Pi4 for development:
+If you plan to use the full feature set on a Pi 4 or 5 (OpenCV, `face_recognition`/`dlib`, RTAB-Map), install the additional build tools and libraries before attempting `pip install` for heavy packages. These are recommended when using the `--auto-system-deps` flag with the guided installer or when preparing a board for development:
 
 ```bash
 sudo apt-get update
@@ -167,7 +135,7 @@ sudo apt-get install -y \
 
 Notes:
 - `face_recognition` requires `dlib` which typically needs `cmake` and a C++ toolchain; installing the packages above will make building `dlib` much smoother.
-- RTAB-Map (`rtabmap-py`) is often built from source on Pi4; see `scripts/install_rtabmap_pi4.md` for detailed RTAB-Map build steps.
+- RTAB-Map (`rtabmap-py`) is often built from source on a Pi 4/5; see `scripts/install_rtabmap_pi4.md` for detailed RTAB-Map build steps.
 - On Raspberry Pi OS Trixie (Python 3.13), many packages (e.g., `face_recognition`, `pyaudio`) may not have wheels yet. If you hit build errors, use Bookworm (Python 3.11) or install the **lite** preset.
 
 ### 3) Install SunFounder PiDog libraries into the same Python environment
@@ -200,7 +168,7 @@ python -m pip install -r requirements-lite.txt
 python -m pip install -e .
 ```
 
-If you are on Pi4 and want the full feature set, replace `requirements-lite.txt` with `requirements.txt` (or use the installer `--preset full` / `--auto-system-deps` to trigger a full install):
+If you are on a Pi 4 or 5 and want the full feature set, replace `requirements-lite.txt` with `requirements.txt` (or use the installer `--preset full` / `--auto-system-deps` to trigger a full install):
 
 ```bash
 python -m pip install -r requirements.txt
@@ -211,6 +179,40 @@ python -m pip install -r requirements.txt
 ```bash
 python -m tools.installer_verify  # recommended after `pip install -e .` or with `PYTHONPATH=src`
 ```
+
+## Bench checklist (before calling a build done)
+
+Nothing here can be ticked from a workstation. Run it on the dog, on blocks, with clearance, and
+with the camera covered until the camera rows.
+
+### Sensors
+- [ ] Ultrasonic distance reads are stable (no spikes at rest).
+- [ ] Touch sensor updates are reliable (debounce acceptable).
+- [ ] Sound detection and direction work in normal room noise.
+- [ ] IMU readings are stable; heading integration does not drift excessively.
+
+### Scanning and navigation
+- [ ] Three-way scan returns valid left/right/forward values.
+- [ ] Sweep scan covers its full range and returns the head to centre.
+- [ ] The scan interval matches settings and the tick does not stutter while a sweep runs.
+- [ ] Obstacle avoidance selects sensible turns; stuck recovery triggers and completes.
+- [ ] A clear-path streak reduces scan jitter.
+
+### Safety
+- [ ] `POST /api/v1/stop` stops the dog from a client, and a dropped connection does too.
+- [ ] Emergency stop triggers at the configured distance (with `settings.safety.enabled: true`).
+- [ ] Tilt protection triggers and its cooldown behaves.
+- [ ] The watchdog holds motion on stale sensors or scans and says so in `state.supervisor`.
+- [ ] No recovery poses the dog: recovery is stop-and-report by design.
+
+### Mapping and logging
+- [ ] Openings and safe paths appear in the event log.
+- [ ] Event log JSONL files are created and rotate at `event_log_max_mb`.
+
+### Tools
+- [ ] `python -m tools.hardware_checkup --skip-motion` passes its basic checks.
+- [ ] `python -m tools.smoke_test` completes with no errors. Add `--include-motion` only with
+      clearance around the dog and a hand on the power.
 
 ## Troubleshooting & Support Bundles
 

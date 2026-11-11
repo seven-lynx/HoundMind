@@ -4,7 +4,7 @@ Status: **index** — the map of `docs/`. If a file is not listed here, it shoul
 Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `README.md` (the front door), `ROADMAP.md` (what is planned)
 
-Ten documents, each with one job. Start at the row that matches what you are doing; do not read
+Nine documents, each with one job. Start at the row that matches what you are doing; do not read
 the whole directory.
 
 ---
@@ -20,7 +20,7 @@ the whole directory.
 | Build a client against the REST/WebSocket API | [`CONTROL_API.md`](CONTROL_API.md) | **contract** |
 | Understand why the code is shaped this way | [`ARCHITECTURE.md`](ARCHITECTURE.md) | design |
 | Read the JSON logs or build a support bundle | [`LOGGING.md`](LOGGING.md) | runbook |
-| Check the dog on the bench before calling a Pi3 build done | [`PI3_VALIDATION.md`](PI3_VALIDATION.md) | guide |
+| Check the dog on the bench before calling a build done | [`INSTALL.md`](INSTALL.md) § Bench checklist | guide |
 | Know what the project looked like before the 2026.11 refactor | [`BASELINE.md`](BASELINE.md) | **historical** |
 
 ## The status field

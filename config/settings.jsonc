@@ -159,7 +159,7 @@
         "required": false
       },
       "health": {
-        // Lightweight system health monitor (Pi 3 friendly).
+        // Lightweight system health monitor.
         "enabled": false,
         "required": false
       },
@@ -426,7 +426,7 @@
         "nav_deadband_deg": 10.0
       },
     // =====================================================================
-    // NAVIGATION & SCANNING (Pi 3 friendly)
+    // NAVIGATION & SCANNING
     // =====================================================================
     // =====================================================================
     // SENSOR HEALTH SUMMARY BADGE (LED/log)
@@ -945,7 +945,7 @@
       "event_log_max_mb": 5,
     },
     // =====================================================================
-    // PERFORMANCE SAFEGUARDS (Pi 3 friendly)
+    // PERFORMANCE SAFEGUARDS
     // =====================================================================
     "performance": {
       // Scan interval bounds used by validation warnings.
