@@ -75,6 +75,14 @@ Current Release: v2026.01.18 • Author: 7Lynx
   file without editing code.
 
 ### Changed
+- **One owner for the servo bus.** `PidogHAL` now serialises `read`, `sample_distance`, `action`
+  and `stop` on one re-entrant lock. The loop's motors, the scan worker and the attention module
+  were three callers of an I2C bus and a vendor action queue that is not thread-safe; two of them
+  interleaved is a servo command arriving mid-step. The cost is latency and it is deliberate:
+  every caller is a worker, never the decision loop.
+- **Head moves no longer block the tick.** Head-following (`hal/motors.py`) and attention
+  (`behavior/attention.py`) queue the move (`wait=False`) instead of waiting for the servos to
+  finish, and a scan in flight owns the head: nothing else moves it until the sweep is published.
 - **A scan no longer blocks the decision loop.** `ScanningModule` submits the sweep to an owned
   worker (`kernel/scheduler.py`) and returns immediately, instead of running nine head moves and
   27 distance samples inside `tick` (~2.6 s against a 200 ms budget, H-01/#13). The service's
