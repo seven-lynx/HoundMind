@@ -5,7 +5,7 @@ Version: v2026.01.18 • Author: 7Lynx
 HoundMind is a unified AI control framework for the SunFounder PiDog. Simulation mode is no longer supported; all features require real PiDog hardware. PackMind and CanineCore are now a single system.
 
 ## Current scope
-- Target hardware: **Raspberry Pi 3/4/5** (recommended: Raspberry Pi OS Lite, no desktop).
+- Target hardware: **Raspberry Pi 4 and 5** (recommended: Raspberry Pi OS Lite, no desktop). Pi 3 support was dropped in the 2026.11 refactor; `v2026.01.18` is the last release that runs on one.
 - Simulation mode is not supported; all features require real hardware.
 - All features (movement, sensors, navigation, mapping, safety, logging) are unified in a single runtime.
 - Vision, voice, and Pi4/5 optional modules are **disabled by default**; basic watchdogs are enabled.
@@ -18,13 +18,14 @@ Run the automated installer on a Raspberry Pi:
 bash scripts/install_houndmind.sh
 ```
 
-This installs the SunFounder PiDog dependencies **and** HoundMind in the same environment. It auto-selects Pi3 lite or Pi4 full. For manual steps, see [docs/INSTALL.md](docs/INSTALL.md).
+This installs the SunFounder PiDog dependencies **and** HoundMind in the same environment. It reads the board from the device tree, refuses a Pi 3 or older, and picks the matching profile. For manual steps, see [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Before You Start (Pi OS Checklist)
 - Flash Raspberry Pi OS and complete first boot setup.
-- Preferred OS: **Raspberry Pi OS Bookworm (64-bit)**. For full (Pi4) installs, Python 3.10 is recommended for best wheel compatibility.
+- Preferred OS: **Raspberry Pi OS Bookworm (64-bit)**, which ships Python 3.11. HoundMind supports Python 3.11–3.13; 3.10 is end of life and is refused by `pip install`.
 
-IMPORTANT: Bookworm is recommended because many heavy packages used by the full (Pi4) preset have prebuilt wheels for Bookworm but may not yet provide wheels for newer distributions (for example, Trixie with Python 3.13). If you hit build errors, switch to Bookworm, use a Python 3.10 interpreter, or run the installer with `--preset lite`.
+IMPORTANT: Bookworm is recommended because many heavy packages used by the full preset have prebuilt wheels for Bookworm but may not yet provide wheels for newer distributions (for example, Trixie with Python 3.13). If you hit build errors, switch to Bookworm or run the installer with `--preset lite`.
+- A **Robot HAT V5** is the supported HAT for a Pi 5. The V4 supplies 5V/3A where the Pi 5 requires 5V/5A, so a Pi 5 on a V4 can shut down mid-run; see [docs/INSTALL.md](docs/INSTALL.md).
 - Update and reboot:
   - `sudo apt update && sudo apt upgrade -y`
 - Enable interfaces in `raspi-config`:
@@ -97,9 +98,11 @@ Edit [config/settings.jsonc](config/settings.jsonc) to enable/disable modules an
 Action catalogs live in [config/actions.jsonc](config/actions.jsonc) so the main config stays clean and readable.
 
 ## Profiles
-Set the profile in [config/settings.jsonc](config/settings.jsonc) or via `HOUNDMIND_PROFILE`:
-- `pi3` (default, for Pi 3 hardware)
-- `pi4` (enables Pi 4/5 feature flags)
+`profile` ships as `auto`, which reads the board from the device tree and picks its profile. Override it in [config/settings.jsonc](config/settings.jsonc) or via `HOUNDMIND_PROFILE`:
+- `pi4` — 10 Hz loop, Pi 4/5 feature flags permitted
+- `pi5` — the same cadence and enablement, plus thermal warning thresholds that suit a Pi 5
+
+A Pi 3 or older is refused at load, with the last release that supported it named (`v2026.01.18`).
 
 Pi4/5 modules (vision, face recognition, semantic labeling, SLAM) remain opt-in.
 
@@ -194,7 +197,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Perception                     | Enabled     |                                       |
 | Scanning                       | Enabled     |                                       |
 | Navigation & Obstacle Avoidance| Enabled     |                                       |
-| Mapping (Pi3-safe)             | Enabled     |                                       |
+| Mapping                        | Enabled     |                                       |
 | Behavior                       | Enabled     |                                       |
 | Attention                      | Enabled     |                                       |
 | Watchdog                       | Enabled     | Holds motion on stale data; restarts stopped modules with backoff |
@@ -205,8 +208,9 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Safety                         | Disabled    | Opt-in for emergency stop/tilt        |
 | Health Monitor                 | Disabled    | Opt-in for CPU/mem/temp/throttling    |
 | Balance                        | Disabled    | Opt-in for IMU posture                |
-| Vision (Pi3 legacy)            | Disabled    | Opt-in, legacy camera                 |
-| Voice (Pi3 legacy)             | Disabled    | Opt-in, legacy voice                  |
+| Sensor Health                  | Disabled    | Opt-in; staleness badge + LED colour   |
+| Vision (legacy vilib)          | Disabled    | Opt-in, legacy camera                 |
+| Voice (legacy input)           | Disabled    | Opt-in, legacy voice                  |
 | Voice Assistant (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
 | Face Recognition (Pi4)         | Disabled    | Opt-in, requires Pi4                  |
 | Pi4 Vision Feed (Pi4)          | Disabled    | Opt-in, requires Pi4                  |

@@ -54,6 +54,7 @@ The real tree, not the planned one:
 
 ```
 src/houndmind_ai/
+  board/      detect.py
   core/       config.py  runtime.py  module.py  logging_setup.py
   kernel/     state.py  commands.py  intents.py  registry.py  scheduler.py  supervisor.py
               config_schema.py
@@ -75,10 +76,10 @@ src/tools/    hardware_checkup.py  smoke_test.py  camera_check.py  collect_suppo
               validate_rtabmap_adapter.py
 ```
 
-There is no `board/` package and no `android/` project yet: board differences are selected by
-`profile` in `config/settings.jsonc` (`pi3`, `pi4`), and the only client that ships is the web app
-inside `services/web/`. `src/tools/` holds device CLIs run as `python -m tools.<name>`; it is not a
-second implementation of anything.
+`board/` answers one question — which Raspberry Pi this is — and holds no policy of its own. There is
+no `android/` project yet, and the only client that ships is the web app inside `services/web/`.
+`src/tools/` holds device CLIs run as `python -m tools.<name>`; it is not a second implementation of
+anything.
 
 ---
 
@@ -176,12 +177,24 @@ command is safe. `stop` passes both.
 
 ## 6. Board profiles
 
-Board differences are **configuration**, not code paths. `profile` in `config/settings.jsonc` selects
-`pi3` (the conservative default: 5 Hz loop, Pi4 modules off) or `pi4` (10 Hz loop, Pi4 modules
-permitted — still individually disabled). `HOUNDMIND_PROFILE=pi4` overrides it at launch.
+Board differences are **configuration**, not code paths. `board/detect.py` reads the device-tree model
+and classifies it as `pi4`, `pi5`, `unsupported` (Pi 3 and older) or `unknown` (no device tree: CI, a
+workstation, a container). `profile` in `config/settings.jsonc` ships as `auto`, which means "use that
+answer"; `HOUNDMIND_PROFILE=pi4` overrides it at launch.
+
+Resolution rules, in order:
+
+1. `HOUNDMIND_PROFILE` if set, then `profile` in the file, then `auto`.
+2. A name asked for explicitly must exist in `profiles` — a typo is a load-time error with a
+   did-you-mean, not a warning that runs the shipped cadence.
+3. `auto` on a supported board picks that board's profile. A profile with no overrides is fine (a
+   config may define none); the base settings are the answer.
+4. `auto` on an unsupported board is a load-time error naming the model and the last release that
+   supported it. On an unknown host it logs a warning and uses `pi4`.
 
 A profile sets cadence and enablement and nothing else: `loop.tick_hz`, `sensors.poll_hz`, the
-`navigation.scan_*` cadence, and the `enabled` flag on Pi4-only modules. The safety envelope
+`navigation.scan_*` cadence, the `enabled` flag on Pi4/5-only modules, camera backend, and the thermal
+warning thresholds where the board's own behaviour differs. The safety envelope
 (`act/interlock.py::InterlockLimits`: `max_speed`, `emergency_stop_cm`, `tilt_latch_deg`,
 `min_battery_v`) is deliberately **not** user config, so a config edit cannot widen it.
 
