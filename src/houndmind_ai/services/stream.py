@@ -220,17 +220,24 @@ class EventHub:
             code = getattr(exc, "code", "unauthorized")
             await ws.send_json({"type": "error", "error": code})
             return False
+
+        # One socket per token, as the contract says: the new connection evicts the old one and
+        # says so, because two live clients driving one dog is not a feature, it is a race.
+        for other in list(self._subs):
+            if other.token == token and other is not sub:
+                self._subs.discard(other)
+                with contextlib.suppress(Exception):
+                    await other.ws.send_json(
+                        {
+                            "type": "error",
+                            "error": "superseded",
+                            "detail": "another connection with this token took over",
+                        }
+                    )
+                    await other.ws.close()
+
         sub.token = token
-        session, evicted = self.sessions.attach(token, principal.name, principal.scopes)
-        if evicted is not None:
-            # The contract says the second socket wins and the first is told why.
-            await ws.send_json(
-                {
-                    "type": "error",
-                    "error": "superseded",
-                    "detail": "another connection with this token took over",
-                }
-            )
+        session, _evicted = self.sessions.attach(token, principal.name, principal.scopes)
         await ws.send_json(
             {
                 "type": "welcome",
