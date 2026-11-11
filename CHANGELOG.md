@@ -75,6 +75,16 @@ Current Release: v2026.01.18 • Author: 7Lynx
   file without editing code.
 
 ### Changed
+- **A scan no longer blocks the decision loop.** `ScanningModule` submits the sweep to an owned
+  worker (`kernel/scheduler.py`) and returns immediately, instead of running nine head moves and
+  27 distance samples inside `tick` (~2.6 s against a 200 ms budget, H-01/#13). The service's
+  private daemon thread is gone with it: a thread nobody owns cannot be stopped, and `daemon=True`
+  with no supervisor entry is the pattern the architecture forbids. `scan_in_flight` is published
+  while a sweep is running, and a request that arrives during one is dropped rather than queued —
+  its result would be superseded before it started.
+- `scan_continuous: false` now means "scan while a motion is being executed". The old flag
+  disabled scanning in exactly that case: the continuous thread only started when the flag was
+  true, and the tick path only ran when the dog was *not* moving.
 - **Internal producers publish typed intents; the four action keys are gone.** `safety_action`,
   `watchdog_action`, `navigation_action` and `behavior_action` are no longer written or read.
   `kernel/intents.py` keeps one slot per `Source`, and an entry expires unless it is refreshed

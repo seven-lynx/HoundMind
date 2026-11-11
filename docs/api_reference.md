@@ -77,7 +77,9 @@ These modules run each tick and publish data into the runtime context.
   `tilt_latched`. It also publishes the board itself as `intent_board`, which is how every
   producer finds it. Runs before `hal_motors` so a decision made this tick is the one executed
   this tick.
-- **ScanningModule**: publishes `scan_reading`, `scan_latest`, `scan_history`, `scan_quality`.
+- **ScanningModule**: drives head scans on an owned worker (`kernel/scheduler.py`), so a sweep
+  never blocks the loop (H-01). Publishes `scan_reading`, `scan_latest`, `scan_history`,
+  `scan_quality`, `scan_duration_s`, `scan_in_flight` and the service as `scan_service`.
 - **OrientationModule**: updates `current_heading`.
 - **MappingModule**: publishes `mapping_openings`, `mapping_state`; optional home-map snapshots.
 - **LocalPlannerModule**: publishes `local_plan`, `mapping_recommendation`.
@@ -143,6 +145,7 @@ instead of a mystery.
 - `intent_board` (IntentBoard) — what each source is asking for right now
 - `runtime_mode` (str: `idle` | `patrol` | `manual` | `rest`)
 - `watchdog_hold` (dict | None), `watchdog_status` (dict), `scan_duration_s` (float)
+- `scan_in_flight` (bool), `scan_worker` (LatestJobWorker), `scan_service` (ScanningService)
 - `health_status` (dict), `health_degraded` (bool)
 
 ---

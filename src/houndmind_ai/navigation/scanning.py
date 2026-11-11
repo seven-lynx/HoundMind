@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from houndmind_ai.core.module import Module
 from houndmind_ai.kernel.commands import MOTION_ACTIONS, canonical_action
+from houndmind_ai.kernel.scheduler import LatestJobWorker
 
 logger = logging.getLogger(__name__)
 
@@ -52,42 +51,25 @@ class ScanReading:
 class ScanningService:
     """Head sweep + distance sampling through the HAL.
 
-    `hal` is a `DogHAL`; the sweep is synchronous and blocking, which is the known H-01 defect
-    and a Phase 3 problem, not something this refactor pretends to fix. What it does fix is that
-    a scan no longer needs a vendor object: `hal/fake.py` drives this whole path in a test.
+    Blocking by nature: a sweep is nine head moves and 27 distance samples. It is therefore
+    called from `ScanningModule`'s worker, never from the decision loop (H-01). `hal/fake.py`
+    drives the whole path in a test, which is why a scan needs no vendor object.
+
+    The service keeps the *result* (latest, history, duration) and nothing else: cadence belongs
+    to the module, the thread belongs to `kernel/scheduler.py`.
     """
 
     def __init__(self, hal, settings: dict[str, object]) -> None:
         self._hal = hal
         self._settings = settings
-        self._thread: threading.Thread | None = None
-        self._stop = threading.Event()
-        self._callbacks: list[Callable[[ScanReading], None]] = []
         self._latest: ScanReading | None = None
         self._history: list[ScanReading] = []
-        self._interval_override: float | None = None
         # How long the last scan actually took. The watchdog derives its staleness window from
         # this, because a sweep takes seconds and a fixed sub-second timeout called a healthy
         # scan stale forever (P3-4).
         self.last_duration_s = 0.0
 
-    def start(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-
-    def stop(self, timeout: float = 2.0) -> None:
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=timeout)
-
-    def subscribe(self, callback: Callable[[ScanReading], None]) -> None:
-        self._callbacks.append(callback)
-
-    def unsubscribe(self, callback: Callable[[ScanReading], None]) -> None:
-        self._callbacks = [cb for cb in self._callbacks if cb is not callback]
+    # ---- results -----------------------------------------------------------
 
     def latest(self) -> ScanReading | None:
         return self._latest
@@ -95,11 +77,14 @@ class ScanningService:
     def history(self) -> list[ScanReading]:
         return list(self._history)
 
-    def set_interval_override(self, interval_s: float | None) -> None:
-        if interval_s is None:
-            self._interval_override = None
-            return
-        self._interval_override = max(0.0, _safe_float(interval_s, 0.0))
+    def record(self, reading: ScanReading) -> ScanReading:
+        """Remember a finished scan, keeping `scan_history_size` entries."""
+        self._latest = reading
+        self._history.append(reading)
+        max_len = max(1, _safe_int(self._settings.get("scan_history_size", 10), 10))
+        if len(self._history) > max_len:
+            self._history = self._history[-max_len:]
+        return reading
 
     def scan_three_way(self) -> ScanReading:
         started = time.time()
@@ -158,40 +143,6 @@ class ScanningService:
         self.last_duration_s = time.time() - started
         return ScanReading(mode="sweep", data=result, timestamp=time.time())
 
-    def _loop(self) -> None:
-        scan_mode = str(self._settings.get("scan_mode", "sweep"))
-        while not self._stop.is_set():
-            start = time.time()
-            try:
-                if scan_mode == "three_way":
-                    reading = self.scan_three_way()
-                else:
-                    angles = self.build_angles()
-                    reading = self.sweep_scan(angles)
-                self._latest = reading
-                self._history.append(reading)
-                max_len = max(1, _safe_int(self._settings.get("scan_history_size", 10), 10))
-                if len(self._history) > max_len:
-                    self._history = self._history[-max_len:]
-                for cb in list(self._callbacks):
-                    cb(reading)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Scanning loop failed: %s", exc)
-            elapsed = time.time() - start
-            interval = _safe_float(self._settings.get("scan_interval_s", 0.5), 0.5)
-            min_interval = _safe_float(self._settings.get("scan_interval_min_s", 0.2), 0.2)
-            max_interval = _safe_float(self._settings.get("scan_interval_max_s", 2.0), 2.0)
-            if self._interval_override is not None:
-                interval = self._interval_override
-            # Safe-mode override from settings.
-            if self._settings.get("safe_mode_enabled", False):
-                interval = max(
-                    interval,
-                    _safe_float(self._settings.get("safe_mode_scan_interval_s", interval), interval),
-                )
-            interval = min(max(interval, min_interval), max_interval)
-            time.sleep(max(0.0, interval - elapsed))
-
     def build_angles(self) -> list[int]:
         yaw_max = _safe_int(self._settings.get("scan_yaw_max_deg", 60), 60)
         step = max(1, _safe_int(self._settings.get("scan_step_deg", 15), 15))
@@ -217,9 +168,12 @@ class ScanningService:
 
 
 class ScanningModule(Module):
+    """Drives head scans on a worker, so the decision loop never waits for one (H-01)."""
+
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self.service: ScanningService | None = None
+        self.worker: LatestJobWorker | None = None
         self._context = None
         self._last_scan_ts = 0.0
 
@@ -239,72 +193,90 @@ class ScanningModule(Module):
             "safe_mode_scan_interval_s", merged.get("scan_interval_s", 0.5)
         )
         self.service = ScanningService(hal, merged)
-        self.service.subscribe(self._publish_reading)
         context.set("scan_service", self.service)
+        context.set("scan_in_flight", False)
 
-        if settings.get("scan_continuous", True):
-            self.service.start()
+        # One owned worker. Replacing the service's private daemon thread is the point: a thread
+        # nobody can stop or observe is how a scan ends up running during shutdown.
+        self.worker = LatestJobWorker("houndmind-scan")
+        self.worker.start()
+        context.set("scan_worker", self.worker)
 
     def tick(self, context) -> None:
-        if self.service is None:
+        worker = self.worker
+        if worker is None or self.service is None:
             return
-        if settings_continuous(context):
-            override = context.get("scan_interval_override_s")
-            quiet = (context.get("settings") or {}).get("quiet_mode", {})
-            if context.get("quiet_mode_active"):
-                quiet_interval = quiet.get("scan_interval_s")
-                try:
-                    quiet_interval = (
-                        float(quiet_interval) if quiet_interval is not None else None
-                    )
-                except Exception:
-                    quiet_interval = None
-                if quiet_interval is not None:
-                    override_val = float(override) if override is not None else 0.0
-                    override = max(override_val, quiet_interval)
-            try:
-                self.service.set_interval_override(override)
-            except Exception:  # noqa: BLE001
-                pass
+        if not self._wanted(context):
             return
-        settings = (context.get("settings") or {}).get("navigation", {})
-        interval = float(settings.get("scan_interval_s", 0.5))
-        min_interval = float(settings.get("scan_interval_min_s", 0.2))
-        max_interval = float(settings.get("scan_interval_max_s", 2.0))
-        interval = min(max(interval, min_interval), max_interval)
-        perf = (context.get("settings") or {}).get("performance", {})
-        if perf.get("safe_mode_enabled", False):
-            interval = max(
-                interval, float(perf.get("safe_mode_scan_interval_s", interval))
-            )
-        quiet = (context.get("settings") or {}).get("quiet_mode", {})
-        if context.get("quiet_mode_active"):
-            try:
-                quiet_interval = float(quiet.get("scan_interval_s", interval))
-            except Exception:
-                quiet_interval = interval
-            interval = max(interval, quiet_interval)
+        # Still scanning: the result of a second scan submitted now would be superseded by the
+        # one in flight, so there is nothing to gain by queueing it.
+        if worker.busy:
+            return
         now = time.time()
-        if now - self._last_scan_ts < interval:
+        if now - self._last_scan_ts < self._interval(context):
             return
         self._last_scan_ts = now
+        context.set("scan_in_flight", True)
+        worker.submit("scan", self._run_scan)
 
-        scan_mode = str(settings.get("scan_mode", "sweep"))
+    def _wanted(self, context) -> bool:
+        """Scan on a timer, or — with `scan_continuous: false` — only while the dog moves."""
+        settings = (context.get("settings") or {}).get("navigation", {})
+        if bool(settings.get("scan_continuous", True)):
+            return True
+        command = context.get("motion_command")
+        if isinstance(command, dict):
+            raw = command.get("canonical_action") or command.get("action")
+            if raw and canonical_action(str(raw)) in MOTION_ACTIONS:
+                return True
+        return False
+
+    def _interval(self, context) -> float:
+        """Seconds between scans, honouring safe mode, the health override and quiet mode."""
+        settings = (context.get("settings") or {}).get("navigation", {})
+        interval = _safe_float(settings.get("scan_interval_s", 0.5), 0.5)
+        min_interval = _safe_float(settings.get("scan_interval_min_s", 0.2), 0.2)
+        max_interval = _safe_float(settings.get("scan_interval_max_s", 2.0), 2.0)
+
+        override = context.get("scan_interval_override_s")
+        if override is not None:
+            interval = _safe_float(override, interval)
+
+        perf = (context.get("settings") or {}).get("performance", {})
+        if perf.get("safe_mode_enabled", False):
+            interval = max(interval, _safe_float(perf.get("safe_mode_scan_interval_s"), interval))
+
+        if context.get("quiet_mode_active"):
+            quiet = (context.get("settings") or {}).get("quiet_mode", {})
+            interval = max(interval, _safe_float(quiet.get("scan_interval_s"), interval))
+
+        return min(max(interval, min_interval), max_interval)
+
+    def _run_scan(self) -> None:
+        """The blocking part, on the worker thread. Publishes when it is done."""
+        context = self._context
+        service = self.service
+        if context is None or service is None:
+            return
         try:
-            if scan_mode == "three_way":
-                reading = self.service.scan_three_way()
+            settings = (context.get("settings") or {}).get("navigation", {})
+            if str(settings.get("scan_mode", "sweep")) == "three_way":
+                reading = service.scan_three_way()
             else:
-                reading = self.service.sweep_scan(self.service.build_angles())
-            context.set("scan_reading", reading)
-            context.set("scan_latest", reading.to_dict())
-            context.set("scan_duration_s", self.service.last_duration_s)
-        except Exception:  # noqa: BLE001
-            logger.warning("One-shot scan failed", exc_info=True)
+                reading = service.sweep_scan(service.build_angles())
+            service.record(reading)
+            self._publish_reading(reading)
+        finally:
+            context.set("scan_in_flight", False)
 
     def stop(self, context) -> None:
-        if self.service:
-            self.service.stop()
-            self.service = None
+        if self.worker is not None:
+            self.worker.stop()
+            self.worker = None
+        context.set("scan_worker", None)
+        context.set("scan_in_flight", False)
+        self.service = None
+        self._context = None
 
     def _publish_reading(self, reading: ScanReading) -> None:
         if self._context is None:
@@ -334,21 +306,3 @@ class ScanningModule(Module):
             "max_distance_cm": max(distances) if distances else None,
         }
         self._context.set("scan_quality", quality)
-
-
-def settings_continuous(context) -> bool:
-    settings = (context.get("settings") or {}).get("navigation", {})
-    # Honor configured continuous scan flag first.
-    if bool(settings.get("scan_continuous", True)):
-        return True
-
-    # Keep obstacle data fresh while the dog is actually walking. This used to sniff four
-    # producer keys for movement words; the gateway's own output is the one place that knows a
-    # motion is being executed, and it says so unambiguously.
-    command = context.get("motion_command")
-    if isinstance(command, dict):
-        raw = command.get("canonical_action") or command.get("action")
-        if raw and canonical_action(str(raw)) in MOTION_ACTIONS:
-            return True
-
-    return False
