@@ -1,0 +1,92 @@
+name: Bug report
+description: Something the dog, the runtime, or the installer did that it should not have.
+title: "bug: <short summary>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        HoundMind ships two editions: Pi 4 (Robot HAT V4) and Pi 5 (Robot HAT V5), both on
+        Raspberry Pi OS Bookworm 64-bit. A report that names the surface, the board, the OS and
+        the version can be reproduced; one that does not is a rumour.
+
+        Everything here is published under a human name: the title, this body and any reply you
+        leave say nothing about how the text was produced, and no hand-written trailer credits a
+        tool. See `CONTRIBUTING.md`.
+  - type: input
+    id: version
+    attributes:
+      label: HoundMind version
+      description: The `Version:` line in `README.md`, or `git describe --tags` if you built from source.
+      placeholder: v2026.01.18
+    validations:
+      required: true
+  - type: dropdown
+    id: board
+    attributes:
+      label: Board
+      options:
+        - Pi 5 with Robot HAT V5
+        - Pi 4 with Robot HAT V4
+        - Workstation only, no dog attached
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Raspberry Pi OS release
+      placeholder: Bookworm 64-bit
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Surface
+      description: The package the fault sits in.
+      options:
+        - core
+        - hal
+        - behavior
+        - calibration
+        - mapping
+        - navigation
+        - perception
+        - safety
+        - optional
+        - services (the control plane)
+        - tools
+        - install
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, what you expected instead, and whether the dog was powered on.
+      placeholder: |
+        Steps:
+        1.
+        Expected:
+        Actual:
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: |
+        An excerpt from `logs/houndmind.log`, or a bundle from
+        `python -m tools.collect_support_bundle`. Remove credentials and hostnames first.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Before you file
+      options:
+        - label: I removed every token, WiFi credential and device hostname from the text above.
+          required: true
+        - label: If this report came from a run with a servo command in it, the dog had clearance.
+          required: true
