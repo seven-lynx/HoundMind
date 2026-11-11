@@ -67,9 +67,14 @@ def test_the_plane_starts_serves_and_releases_the_port(tmp_path) -> None:
     finally:
         module.stop(context)
 
-    # The port must be free again: a leak here means a restart leaves the dog unreachable.
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(("127.0.0.1", port))
+    # The port must stop accepting connections: a leak here means a restart leaves the dog
+    # unreachable. A `bind` check is wrong on Linux — the socket can sit in TIME_WAIT — so the
+    # assertion is the one that matters: nothing answers any more.
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=2):
+            raise AssertionError("the control plane is still accepting connections after stop()")
+    except (ConnectionRefusedError, OSError):
+        pass
 
 
 def test_a_taken_port_disables_the_module_instead_of_raising(tmp_path) -> None:
