@@ -52,6 +52,10 @@ class AttentionModule(Module):
 
         # Optionally avoid head moves while scanning.
         if settings.get("respect_scanning", True):
+            # A sweep owns the head for its whole duration: turning it here corrupts the reading
+            # the navigator is about to act on and races the scan worker for the bus.
+            if context.get("scan_in_flight"):
+                return
             scan_reading = context.get("scan_reading")
             scan_ts = (
                 _safe_float(getattr(scan_reading, "timestamp", 0.0), 0.0) if scan_reading else 0.0
@@ -68,13 +72,14 @@ class AttentionModule(Module):
             return
 
         try:
+            # A behaviour module must never block the decision loop on a servo move (P3-2).
             hal.action(
                 "head",
                 {
                     "yaw": yaw,
                     "pitch": 0,
                     "speed": int(settings.get("head_turn_speed", 70)),
-                    "wait": True,
+                    "wait": False,
                 },
             )
         except Exception as exc:  # noqa: BLE001

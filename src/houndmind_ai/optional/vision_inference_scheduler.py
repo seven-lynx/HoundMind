@@ -1,15 +1,17 @@
 """
 Vision Inference Scheduler
 
-Runs vision model inference in a separate thread or process for Pi4 hardware.
-Handles frame input, inference scheduling, and result output.
+Runs a vision model's inference in a separate thread for Pi 4 hardware: frames in,
+results out, latest-frame-wins with a bounded queue.
 
-Configurable via config/settings.jsonc (Pi4 only).
+Nothing is started unless a module supplies an `inference_fn`. `optional/vision_pi4.py` used to
+ship a placeholder here — a thread whose whole job was `sleep(0.05)` returning
+`{"result": "ok"}` — which made an idle camera look like it was inferring something (M-03).
+Configurable via `settings.vision_pi4` (Pi 4 only).
 """
 
 import queue
 import threading
-import time
 from collections.abc import Callable
 from typing import Any
 
@@ -61,21 +63,3 @@ class VisionInferenceScheduler:
                 self.result_callback(result)
             else:
                 self.result_queue.put(result)
-
-# Example usage (to be replaced with actual vision model):
-def dummy_inference(frame):
-    time.sleep(0.05)  # Simulate inference latency
-    return {'frame_id': id(frame), 'result': 'ok'}
-
-if __name__ == "__main__":
-    scheduler = VisionInferenceScheduler(dummy_inference)
-    scheduler.start()
-    for i in range(5):
-        scheduler.submit_frame(f"frame_{i}")
-    time.sleep(0.5)
-    while True:
-        result = scheduler.get_result()
-        if result is None:
-            break
-        print(result)
-    scheduler.stop()

@@ -12,7 +12,7 @@ from typing import Any
 
 from houndmind_ai.kernel.commands import DEFAULT_MODE, RUNTIME_MODES
 
-__all__ = ["build_health", "build_modules", "build_state", "redact_config"]
+__all__ = ["build_health", "build_modules", "build_state", "build_supervisor", "redact_config"]
 
 
 def _table(value: Any) -> dict[str, Any]:
@@ -62,17 +62,40 @@ def _actuators(context, now: float) -> dict[str, object]:
     issued_at = _number(command.get("issued_at"))
     return {
         "last_command": command.get("canonical_action") or command.get("action"),
+        # Who won the tick. A client that pressed forward and sees `source: watchdog` with
+        # `vetoed: false` can tell "someone else is driving" from "the dog ignored me".
+        "source": command.get("source"),
         "since_s": None if issued_at is None else max(0.0, now - issued_at),
         "vetoed": bool(verdict) and verdict.get("accepted") is False,
         "veto": verdict.get("veto"),
         "tilt_latched": bool(context.get("tilt_latched", False)),
+        "displaced": len(context.get("motion_cancel") or []),
+    }
+
+
+def build_supervisor(context) -> dict[str, object]:
+    """What the watchdog is doing: holding motion, and what it has restarted or given up on."""
+    hold = _table(context.get("watchdog_hold"))
+    status = _table(context.get("watchdog_status"))
+    return {
+        "holding": bool(hold),
+        "reason": hold.get("reason"),
+        "restarts": list(status.get("restart") or []),
+        "failed": list(status.get("failed") or []),
     }
 
 
 def _nav(context) -> dict[str, object]:
     decision = _table(context.get("navigation_decision"))
+    command = _table(context.get("motion_command"))
+    # The navigator's own decision, and — when the navigator is the source that won the tick —
+    # the command that is actually being executed. No fallback to a producer's private key: a
+    # client must not read one module's opinion as the dog's current action.
+    decision_name = decision.get("decision")
+    if decision_name is None and command.get("source") == "navigation":
+        decision_name = command.get("canonical_action")
     return {
-        "decision": decision.get("decision") or context.get("navigation_action"),
+        "decision": decision_name,
         "confidence": _number(decision.get("confidence")),
     }
 
@@ -146,6 +169,7 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "actuators": _actuators(context, clock),
         "nav": _nav(context),
         "health": build_health(context),
+        "supervisor": build_supervisor(context),
         "modules": counts,
     }
 

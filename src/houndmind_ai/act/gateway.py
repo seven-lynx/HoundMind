@@ -5,22 +5,22 @@
     context.get("safety_action") or context.get("watchdog_action") \\
         or context.get("navigation_action") or context.get("behavior_action")
 
-and then deduplicate on the action *string*. Two bugs came straight out of that:
+and then deduplicate on the action *string*. Three bugs came straight out of that:
 
 - Precedence was implicit. `safety/supervisor.py` carried a `priority_map` describing the same
   order, and the two had to stay in sync by hand.
 - A `forward` from navigation and a `forward` from behaviour were the same string, so the
   second was silently dropped.
+- The intent never expired. Whatever was in those keys was re-stamped with the current tick's
+  timestamp, so a producer that wedged kept the dog walking: the deadman only ever protected
+  clients.
 
-The gateway resolves one winner per tick, sends it through the :class:`Interlock`, and
-publishes the outcome under `motion_command` / `motion_verdict`. Motors executes what the
-gateway decided; it no longer decides.
-
-Transitional note: producers still write their legacy context keys, so this module adapts them
-here — one place, not four. The control plane is the exception: it submits a ``Command`` on the
-:class:`~houndmind_ai.kernel.commands.CommandBus` and expects a ``Verdict`` back, so a client is
-told the truth about its own request instead of a guess. The legacy adapter is deleted in Phase 3,
-when behaviour, navigation and safety are ported onto typed commands.
+The gateway now reads one winner per tick from the :class:`~houndmind_ai.kernel.intents.IntentBoard`
+(internal producers, expiring unless refreshed) and from the
+:class:`~houndmind_ai.kernel.commands.CommandBus` (clients, with a per-command verdict), applies
+the mode policy, sends the winner through the :class:`Interlock`, and publishes the outcome under
+`motion_command` / `motion_verdict` / `motion_cancel`. Motors executes what the gateway decided;
+it no longer decides.
 """
 
 from __future__ import annotations
@@ -41,38 +41,24 @@ from houndmind_ai.kernel.commands import (
     CommandBus,
     Source,
     Verdict,
+    canonical_action,
+    legacy_action,
+    mode_allows,
 )
+from houndmind_ai.kernel.intents import IntentBoard
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["MotionGatewayModule"]
+# `canonical_action` / `legacy_action` live in `kernel/commands.py` now, next to the action
+# vocabulary they translate. Re-exported because this module was their only home until Phase 3.
+__all__ = ["MotionGatewayModule", "canonical_action", "legacy_action"]
 
-# Legacy producers spell motion with spaces; the command vocabulary uses underscores.
-# These are *aliases only*: the canonical spelling is always the underscore form, so the
-# inverse map below must not contain an entry for a canonical name.
-_TO_CANONICAL = {
-    "turn left": "turn_left",
-    "turn right": "turn_right",
+# Why a mode refused a request. A refusal without a reason is a bug: the operator is left
+# guessing whether the dog is broken or simply parked.
+_MODE_DETAIL = {
+    "rest": "the dog is in rest mode; switch to manual to drive it",
+    "manual": "the dog is in manual mode; autonomy is off until you switch back to idle",
 }
-_TO_LEGACY = {canonical: legacy for legacy, canonical in _TO_CANONICAL.items()}
-
-# Legacy key → who is asking. This is the precedence order that used to live in the `or` chain.
-_LEGACY_SOURCES: tuple[tuple[str, Source], ...] = (
-    ("safety_action", Source.SYSTEM),
-    ("watchdog_action", Source.WATCHDOG),
-    ("navigation_action", Source.NAVIGATION),
-    ("behavior_action", Source.BEHAVIOUR),
-)
-
-
-def canonical_action(action: str) -> str:
-    key = action.strip().lower()
-    return _TO_CANONICAL.get(key, key.replace(" ", "_"))
-
-
-def legacy_action(action: str) -> str:
-    """The spelling `pidog.ActionFlow` accepts."""
-    return _TO_LEGACY.get(action, action.replace("_", " "))
 
 
 class MotionGatewayModule(Module):
@@ -86,25 +72,41 @@ class MotionGatewayModule(Module):
         interlock: Interlock | None = None,
         clock: Callable[[], float] | None = None,
         bus: CommandBus | None = None,
+        board: IntentBoard | None = None,
     ) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self._clock = clock or time.monotonic
         self.interlock = interlock or Interlock(now=self._clock)
-        # The control plane's inbox. None means "no client can drive this dog", which is the
-        # state of every test that drives the gateway through the legacy keys alone.
+        # The control plane's inbox. None means "no client can drive this dog".
         self.bus = bus
-        self._last_key: tuple[str, Source] | None = None
+        # The internal producers' notice board. Created here when a caller does not inject one,
+        # so a gateway built on its own still works; `main.build_registry` lets it default.
+        self.board = board or IntentBoard(clock=self._clock)
+        self._last_key: tuple[str, Source, tuple[tuple[str, str], ...]] | None = None
         self._last_verdict: Verdict | None = None
+        self._last_cancelled: frozenset[tuple[str, Source]] = frozenset()
+
+    def start(self, context) -> None:
+        # Producing modules find the board through the context, so that not one constructor has
+        # to grow a parameter. Publication happens at start, which is before any producer's
+        # first tick because the gateway is registered ahead of them.
+        context.set("intent_board", self.board)
+        super().start(context)
+
+    def stop(self, context) -> None:
+        context.set("intent_board", None)
+        super().stop(context)
 
     def tick(self, context) -> None:
         now = self._clock()
         snapshot = self._snapshot(context)
-        winner, verdict = self._resolve(context, now, snapshot)
+        winner, verdict, cancelled = self._resolve(context, now, snapshot)
+        self._publish_cancellations(context, cancelled)
 
         if winner is None or verdict is None:
             # Nobody is asking for anything. Publishing None rather than leaving a stale
-            # command in place is what makes the deadman real: a producer that dies stops the
-            # dog on the next tick instead of leaving it walking.
+            # command in place is what makes the deadman real: a producer that stops refreshing
+            # its intent, or dies, stops the dog on the next tick instead of leaving it walking.
             self._last_key = None
             self._last_verdict = None
             self._publish(context, None, None)
@@ -119,7 +121,7 @@ class MotionGatewayModule(Module):
             context.set("tilt_latched", self.interlock.tilt_latched)
             return
 
-        key = (winner.action, winner.source)
+        key = (winner.action, winner.source, _params_key(winner.params))
         if key == self._last_key:
             # Same intent as last tick: keep the verdict visible but do not re-issue, or the
             # motor cooldown is bypassed and the action queue floods.
@@ -144,66 +146,87 @@ class MotionGatewayModule(Module):
 
     def _resolve(
         self, context, now: float, snapshot: SensorSnapshot
-    ) -> tuple[Command | None, Verdict | None]:
-        """Pick one winner and return it with its verdict.
+    ) -> tuple[Command | None, Verdict | None, list[Command]]:
+        """Pick one winner, return it with its verdict, and list what it displaced.
 
-        Two sources feed this: the legacy context keys (re-stamped every tick) and the
-        :class:`CommandBus` (stamped once, with a real deadman). A bus command is judged and
-        acknowledged individually, so every client learns the fate of its *own* request even
+        Two sources feed this. The :class:`IntentBoard` holds internal intents (behaviour,
+        navigation, watchdog, system): latest value per source, expiring unless refreshed. The
+        :class:`CommandBus` holds client commands: stamped once, with a real deadman, and judged
+        and acknowledged individually so every client learns the fate of its *own* request even
         when a higher-priority producer wins the tick.
+
+        The mode gate is applied to both before ranking, because a mode is a statement about the
+        whole machine, not a veto the interlock should have to express (it is a safety envelope,
+        not a policy).
         """
-        best: Command | None = None
-        best_rank: tuple[int, int] | None = None
+        mode = _mode_name(context)
+        candidates: list[tuple[tuple[int, int], Command]] = []
         verdicts: dict[str, Verdict] = {}
 
-        for key, source in _LEGACY_SOURCES:
-            raw = context.get(key)
-            if not raw:
+        for command in self.board.latest(now):
+            # `stop` passes the mode gate like it passes the interlock: it is how a motion ends.
+            if command.action != "stop" and not mode_allows(mode, command.source):
                 continue
-            command = Command(
-                action=canonical_action(str(raw)),
-                source=source,
-                # Legacy producers express intent by *value*, not by heartbeat: the key holds
-                # whatever they last wanted. Stamping it now keeps the command live while the
-                # value stands; the deadman governs submitted commands (API, clients).
-                issued_at=now,
-            )
-            rank = (int(source), 0)
-            if best_rank is None or rank > best_rank:
-                best, best_rank = command, rank
+            candidates.append(((int(command.source), 0), command))
 
         for command in self._drain_bus():
-            verdict = self._vet(command, snapshot, context)
+            verdict = self._vet(command, snapshot, mode)
             verdicts[command.id] = verdict
             # Ack before deciding the winner: a refusal is information the client asked for.
             if self.bus is not None:
                 self.bus.acknowledge(command, verdict)
             if not verdict.accepted:
                 continue
-            rank = (int(command.source), 1)
-            if best_rank is None or rank > best_rank:
-                best, best_rank = command, rank
+            candidates.append(((int(command.source), 1), command))
 
-        if best is None:
-            return None, None
-        return best, verdicts.get(best.id) or self._vet(best, snapshot, context)
+        if not candidates:
+            return None, None, []
+
+        # A `stop` outranks every other intent, whatever its source. It is the one action that
+        # exists to end motion, so a supervisor's stop must not lose a tick to a safety retreat
+        # merely because safety has a higher `Source`. Ties keep production order.
+        candidates.sort(key=lambda item: (item[1].action == "stop", item[0]))
+        _, best = candidates[-1]
+        # Anything a different action displaced this tick. Reported rather than silently
+        # dropped: "the dog ignored me" is the question this answers.
+        cancelled = [other for _, other in candidates[:-1] if other.action != best.action]
+        return best, verdicts.get(best.id) or self._vet(best, snapshot, mode), cancelled
+
+    def _publish_cancellations(self, context, cancelled: list[Command]) -> None:
+        payload = [command.to_dict() for command in cancelled]
+        context.set("motion_cancel", payload)
+        signature = frozenset((command.action, command.source) for command in cancelled)
+        if signature != self._last_cancelled:
+            self._last_cancelled = signature
+            if signature:
+                logger.info(
+                    "Precedence displaced: %s",
+                    ", ".join(
+                        f"{action} from {source.name.lower()}"
+                        for action, source in sorted(signature, key=lambda item: item[1])
+                    ),
+                )
 
     def _drain_bus(self) -> list[Command]:
         if self.bus is None:
             return []
         return self.bus.drain()
 
-    def _vet(self, command: Command, snapshot: SensorSnapshot, context) -> Verdict:
-        # A client cannot drive a dog that has been put to rest. The interlock has no notion of
-        # mode (it is a safety envelope, not a policy), so the refusal lives here, next to the
-        # other precedence rules, and it is reported like any other veto.
-        if command.source is Source.CLIENT and _mode_name(context) == "rest":
+    def _vet(self, command: Command, snapshot: SensorSnapshot, mode: str) -> Verdict:
+        # `stop` outranks every policy, including the mode gate: an escape hatch that a mode
+        # can refuse is not an escape hatch. The interlock says the same thing, first.
+        if command.action == "stop":
+            return Verdict(accepted=True, action="stop", params=dict(command.params))
+        # The mode gate. Every source is subject to it, not just clients: while the dog was
+        # reported as resting, the FSM and the navigator could still walk it (P3-3). A refusal
+        # always says which mode is in force and what would unblock it.
+        if not mode_allows(mode, command.source):
             return Verdict(
                 accepted=False,
                 action=command.action,
                 params=dict(command.params),
                 veto="mode",
-                detail="the dog is in rest mode; switch to manual to drive it",
+                detail=_MODE_DETAIL.get(mode, f"'{mode}' mode does not allow that source"),
             )
         if command.action not in MOTION_ACTIONS:
             # Posture and expression are not gated. The authoritative action list belongs to
@@ -253,3 +276,13 @@ def _opt_float(value: Any) -> float | None:
         return None
     number = as_float(value, float("nan"))
     return None if number != number else number
+
+
+def _params_key(params: dict[str, Any]) -> tuple[tuple[str, str], ...]:
+    """A hashable, order-independent fingerprint of a command's parameters.
+
+    Dedupe used to compare `(action, source)` only, so a producer that kept asking for
+    `forward` at a new speed was silently ignored. `repr` is deliberate: motion params are
+    scalars, and a value that is not hashable still must not crash the tick.
+    """
+    return tuple(sorted((str(key), repr(value)) for key, value in params.items()))

@@ -16,13 +16,20 @@ from enum import IntEnum
 from typing import Any
 
 __all__ = [
+    "DEFAULT_MODE",
+    "DEFAULT_TTL_MS",
     "FORWARD_ACTIONS",
     "KNOWN_ACTIONS",
+    "MODE_ALLOWED_SOURCES",
     "MOTION_ACTIONS",
+    "RUNTIME_MODES",
     "Command",
     "CommandBus",
     "Source",
     "Verdict",
+    "canonical_action",
+    "legacy_action",
+    "mode_allows",
 ]
 
 
@@ -59,10 +66,55 @@ DEFAULT_TTL_MS = 300
 
 # The modes a client may switch between (`POST /api/v1/mode`). They live here, next to the
 # command vocabulary, because the gateway and the control plane must agree on the spelling:
-# `rest` is the one mode that vetoes client motion, and two definitions of that string is how
-# a safety rule quietly stops applying.
+# a second definition of these strings is how a safety rule quietly stops applying.
 RUNTIME_MODES: tuple[str, ...] = ("idle", "patrol", "manual", "rest")
 DEFAULT_MODE = "idle"
+
+# Which sources may command motion in each mode. Before this table, `rest` vetoed *clients*
+# only: `GET /state` told both apps the dog was resting while the FSM and the navigator kept
+# walking it. The mode is a statement about the whole machine, so it gates every source.
+#
+# `idle` and `patrol` are the autonomy modes and allow everyone. `manual` is a hand on the
+# wheel: a client may drive, autonomy may not. `rest` parks the servos and lets only the two
+# sources that exist to end a motion through — the watchdog and the system itself (safety,
+# supervisor). `stop` is never vetoed at any layer, so the escape hatch survives either way.
+MODE_ALLOWED_SOURCES: dict[str, frozenset[Source]] = {
+    "idle": frozenset(Source),
+    "patrol": frozenset(Source),
+    "manual": frozenset({Source.CLIENT, Source.WATCHDOG, Source.SYSTEM}),
+    "rest": frozenset({Source.WATCHDOG, Source.SYSTEM}),
+}
+
+
+def mode_allows(mode: str, source: Source) -> bool:
+    """True when `source` may command motion while the runtime is in `mode`.
+
+    An unknown mode is treated as `DEFAULT_MODE` rather than as "nothing allowed": a corrupt
+    value must not lock the dog out of its own recovery paths.
+    """
+    allowed = MODE_ALLOWED_SOURCES.get(mode) or MODE_ALLOWED_SOURCES[DEFAULT_MODE]
+    return source in allowed
+
+
+# Legacy producers spell motion with spaces ("turn left"); the command vocabulary uses
+# underscores. These are *aliases only*: the canonical spelling is always the underscore form,
+# so the inverse map below must not contain an entry for a canonical name.
+_TO_CANONICAL = {
+    "turn left": "turn_left",
+    "turn right": "turn_right",
+}
+_TO_LEGACY = {canonical: legacy for legacy, canonical in _TO_CANONICAL.items()}
+
+
+def canonical_action(action: str) -> str:
+    """The spelling everything above the HAL uses."""
+    key = action.strip().lower()
+    return _TO_CANONICAL.get(key, key.replace(" ", "_"))
+
+
+def legacy_action(action: str) -> str:
+    """The spelling `pidog.ActionFlow` accepts."""
+    return _TO_LEGACY.get(action, action.replace("_", " "))
 
 
 def _new_id() -> str:

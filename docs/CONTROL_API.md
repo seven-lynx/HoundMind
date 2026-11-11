@@ -140,12 +140,22 @@ The authoritative list is `config/actions.jsonc`. The API exposes it in
     "pitch_deg": 1.2, "roll_deg": -0.4, "imu_valid": true,
     "battery_v": 7.6, "battery_valid": false
   },
-  "actuators": { "last_command": "forward", "since_s": 0.8, "vetoed": false },
+  "actuators": { "last_command": "forward", "source": "navigation", "since_s": 0.8, "vetoed": false, "displaced": 0 },
   "nav": { "decision": "forward", "confidence": 0.82 },
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0 },
+  "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [] },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 }
 }
 ```
+
+`actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
+`navigation`, `behaviour`). `actuators.displaced` counts intents a higher-priority one overrode
+this tick — a client that pressed forward and sees `source: watchdog` can tell "someone else is
+driving" from "the dog ignored me".
+
+`supervisor` is the watchdog's own state: whether it is holding motion (`holding` + `reason`,
+which is `sensor stale` or `scan stale`), which modules it asked the runtime to restart, and which
+it has given up on. `holding: true` never means the dog was posed — recovery is stop-and-report.
 
 **Validity flags are mandatory and clients must honour them.** `distance_cm: 42.5` with
 `distance_valid: false` means "no measurement" — render "—", never "42 cm". This is the one

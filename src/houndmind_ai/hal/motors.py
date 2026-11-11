@@ -109,7 +109,11 @@ class MotorModule(Module):
 
         try:
             now = time.time()
-            if now - self.last_action_ts < min_interval:
+            # The rate limiter protects the action queue from a producer that changes its mind
+            # every tick. It must never delay a `stop`: at the shipped 200 ms interval, a
+            # watchdog hold could sit behind a gait for a fifth of a second, and "stop" a fifth
+            # of a second late is a different dog.
+            if action != "stop" and now - self.last_action_ts < min_interval:
                 return
             navigation_turn = context.get("navigation_turn")
             if isinstance(navigation_turn, dict):
@@ -273,6 +277,10 @@ class MotorModule(Module):
         ) = self._head_follow_config(context)
         if not respect_scanning:
             scan_block_s = 0.0
+        # A scan owns the head for its whole sweep. Moving it from here would corrupt the
+        # reading the navigator is about to act on, and would race the scan worker for the bus.
+        if respect_scanning and context.get("scan_in_flight"):
+            return True
         if not respect_attention:
             attention_block_s = 0.0
         blocked = False
@@ -303,7 +311,9 @@ class MotorModule(Module):
             return
         yaw = degrees if direction == "left" else -degrees
         try:
-            self.hal.action("head", {"yaw": yaw, "pitch": 0, "speed": speed, "wait": True})
+            # `wait=False`: this is cosmetic head-following. Blocking the tick on it is how a
+            # behaviour module ends up setting the loop's cadence (P3-2).
+            self.hal.action("head", {"yaw": yaw, "pitch": 0, "speed": speed, "wait": False})
         except Exception:  # noqa: BLE001
             return
 
@@ -314,7 +324,7 @@ class MotorModule(Module):
         if not enabled or self._head_follow_blocked(context):
             return
         try:
-            self.hal.action("head", {"yaw": 0, "pitch": 0, "speed": speed, "wait": True})
+            self.hal.action("head", {"yaw": 0, "pitch": 0, "speed": speed, "wait": False})
         except Exception:  # noqa: BLE001
             return
 

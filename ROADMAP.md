@@ -59,6 +59,7 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Sweep scan helper for arbitrary yaw angles
 - [x] Continuous scan loop + callback hook for streaming scans
 - [x] Always return head to center after scan
+- [x] Sweep runs on an owned worker (`kernel/scheduler.py`), never inside the tick; `scan_in_flight` guards the head
 
 ## Navigation & Obstacle Avoidance
 - [x] Obstacle avoidance with scan-based direction selection and cooldowns
@@ -100,6 +101,10 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Safety supervisor rules (`safety/supervisor.py`)
 - [x] Emergency stop command
 - [x] Watchdog heartbeat + timeout stop
+- [x] One watchdog on `kernel/supervisor.py`: exponential backoff, a give-up that is reported, and a candidate list of enabled *and* started modules
+- [x] Recovery is stop-and-report — a fault never poses the dog (`lie` recovery removed)
+- [x] `stop` outranks every source and bypasses the motor rate limiter
+- [x] One lock serialises the servo bus across motors, the scan worker and attention
  - [ ] Review and tighten safety defaults (emergency stop, balance); add automated tests and an onboarding validation checklist before enabling on-device
 
 ## Calibration

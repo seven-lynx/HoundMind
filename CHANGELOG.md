@@ -9,6 +9,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- `state.actuators.source` and `state.actuators.displaced`: the producer that won the tick, and how
+  many intents a higher-priority one overrode. A client that pressed forward can now tell "someone
+  else is driving" from "the dog ignored me".
+- `state.supervisor`: whether the watchdog is holding motion and why, which modules it asked the
+  runtime to restart, and which it has given up on. `docs/CONTROL_API.md` §4 documents both.
+
 ### Added
 - `services/`: the control plane — one process, one port (8420), one authenticated API (D7).
   REST, WebSocket telemetry, MJPEG and the web app are routes on the same aiohttp application,
@@ -75,6 +81,61 @@ Current Release: v2026.01.18 • Author: 7Lynx
   file without editing code.
 
 ### Changed
+- **One owner for the servo bus.** `PidogHAL` now serialises `read`, `sample_distance`, `action`
+  and `stop` on one re-entrant lock. The loop's motors, the scan worker and the attention module
+  were three callers of an I2C bus and a vendor action queue that is not thread-safe; two of them
+  interleaved is a servo command arriving mid-step. The cost is latency and it is deliberate:
+  every caller is a worker, never the decision loop.
+- **Head moves no longer block the tick.** Head-following (`hal/motors.py`) and attention
+  (`behavior/attention.py`) queue the move (`wait=False`) instead of waiting for the servos to
+  finish, and a scan in flight owns the head: nothing else moves it until the sweep is published.
+- **A scan no longer blocks the decision loop.** `ScanningModule` submits the sweep to an owned
+  worker (`kernel/scheduler.py`) and returns immediately, instead of running nine head moves and
+  27 distance samples inside `tick` (~2.6 s against a 200 ms budget, H-01/#13). The service's
+  private daemon thread is gone with it: a thread nobody owns cannot be stopped, and `daemon=True`
+  with no supervisor entry is the pattern the architecture forbids. `scan_in_flight` is published
+  while a sweep is running, and a request that arrives during one is dropped rather than queued —
+  its result would be superseded before it started.
+- `scan_continuous: false` now means "scan while a motion is being executed". The old flag
+  disabled scanning in exactly that case: the continuous thread only started when the flag was
+  true, and the tick path only ran when the dog was *not* moving.
+- **Internal producers publish typed intents; the four action keys are gone.** `safety_action`,
+  `watchdog_action`, `navigation_action` and `behavior_action` are no longer written or read.
+  `kernel/intents.py` keeps one slot per `Source`, and an entry expires unless it is refreshed
+  within the board's hold window. A producer that wedges or blocks stops the dog instead of
+  leaving it walking: the deadman used to protect clients only, because the gateway re-stamped
+  whatever it found in those keys on every tick. `motion_cancel` reports every intent a
+  higher-priority one displaced, so "the dog ignored me" has an answer in the event stream.
+- **A mode now gates every source, not just clients.** `rest` used to veto client motion while
+  the behaviour FSM and the navigator kept driving; `GET /state` reported a resting dog that was
+  walking. `manual` is now a hand on the wheel (client in, autonomy out) and `rest` allows only
+  the watchdog and the system. `stop` passes the mode gate and the interlock: an escape hatch a
+  mode can refuse is not an escape hatch.
+- Command dedupe compares action, source **and** parameters, so a producer that keeps asking for
+  `forward` at a new speed is heard instead of being dropped as the same intent.
+- `canonical_action` / `legacy_action` moved to `kernel/commands.py` next to the action
+  vocabulary they translate; `act/gateway.py` re-exports them.
+- **One watchdog, and recovery is "stop and report".** `safety/service_watchdog.py` is merged into
+  `safety/watchdog.py`, which now delegates the restart decision to `kernel/supervisor.py`.
+  Recovery no longer poses the dog: `recovery_mode`, `recovery_behavior` and `recovery_action` are
+  gone, and a stale reading publishes a `stop` intent through the same gateway and interlock as
+  any other command. Candidates are modules that are enabled *and* started — the old list was
+  `module_names`, which includes every disabled module, so the stale set was never empty on the
+  shipped config and the dog was told to lie down every five seconds (H-03).
+- **Restarts back off and eventually give up.** `restart_cooldown_s` is the base delay,
+  `restart_backoff_factor` the multiplier, `restart_max_delay_s` the cap, and after `max_restarts`
+  the module is reported failed instead of being retried forever. A module that stays up for
+  `healthy_after_s` earns a fresh budget.
+- **A slow scan is no longer "stale".** The scan staleness window is `max(scan_timeout_s, 1.5 ×
+  measured scan duration)`; the shipped sweep takes ~2.6 s and the old fixed window was 0.8 s, so
+  a healthy scan was stale by definition (P3-4).
+- **`stop` bypasses the motor rate limiter and outranks every source.** A watchdog hold used to be
+  able to sit behind a gait for the 200 ms action interval, and a supervisor's stop could lose a
+  tick to a higher-priority retreat. `hal/motors.py` skips `min_action_interval_s` for `stop`, and
+  `act/gateway.py` ranks a `stop` above any other intent whatever its source.
+- **A module that gives up during a restart is no longer marked started.** `core/runtime.py`
+  checks `status.enabled` after `start()` and reports the reason instead of putting a module that
+  just failed back into the tick list.
 - `optional/vision_pi4.py` publishes `vision_frame_jpeg` next to `vision_frame`, and
   `services/camera.py` reads the encoded key. The raw array is still what face recognition, the
   semantic labeler and SLAM consume; encoding once per frame replaces the old encode loop that ran
@@ -86,7 +147,7 @@ Current Release: v2026.01.18 • Author: 7Lynx
 - `aiohttp` is a base dependency. It is the only new dependency in this phase; its resident cost
   on a Pi 4 has not been measured yet, which is a Phase 3 device task.
 - `mode` is a typed value (`idle`, `patrol`, `manual`, `rest`) published as `runtime_mode`.
-  `rest` vetoes client motion with a reason; nothing else does, and `POST /stop` is never vetoed.
+  `rest` and `manual` gate every source, not just clients, and `POST /stop` is never refused.
 - `hal_motors` executes `motion_command` only; it no longer merges four context keys by `or` and
   deduplicates on the action string, which had made a `forward` from navigation and one from
   behaviour indistinguishable.
@@ -123,8 +184,24 @@ Current Release: v2026.01.18 • Author: 7Lynx
 ### Fixed
 - A client command that sat in a tunnel can no longer execute on arrival: the deadman starts
   when the device receives it, and an expired command is refused by the interlock.
+- **The placeholder vision inference thread is gone.** `vision_pi4` started a background thread on
+  any install that enabled the camera; its whole job was `sleep(0.05)` and `{"result": "ok"}`, and
+  it was on by default (M-03, #9). `inference_scheduler_enabled` now ships `false`, starts nothing
+  without an `inference_fn`, and reports `vision_inference_status: unconfigured` when it is turned
+  on with no model rather than pretending to infer. The scheduler and the preprocessor are kept and
+  are what a real model plugs into; the scheduler starts only after a camera opens, so a failed
+  camera cannot leave an orphan thread behind.
+- Removed the `__main__` demo in `optional/vision_inference_scheduler.py` — the only `print()` in
+  `src/houndmind_ai/` (L-03). The remaining prints are `src/tools/` device CLIs, where stdout is
+  the interface.
 
 ### Removed
+- `safety/service_watchdog.py`, `modules.service_watchdog` and `settings.service_watchdog`. The
+  restart policy lives in `kernel/supervisor.py`, driven by `settings.watchdog`.
+- `settings.watchdog.recovery_mode`, `recovery_behavior`, `recovery_action`, `restart_modules` and
+  `restart_module_cooldown_s`: the watchdog no longer poses the dog, and one backoff replaces two
+  cooldowns. An existing file that still sets them now fails to load with a did-you-mean, which is
+  the honest outcome — they described behaviour that no longer exists.
 - **The four per-feature HTTP servers.** Face recognition on 8088, the vision feed on 8090, voice
   control on 8091 and the telemetry dashboard on 8092 are gone, with their `http` config blocks.
   Three of them bound `0.0.0.0` and answered without any token; `GET /command?action=` on 8091 set
