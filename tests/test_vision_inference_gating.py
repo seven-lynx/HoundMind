@@ -7,6 +7,9 @@ keep the scheduler itself, which is the piece a real model will use.
 
 from __future__ import annotations
 
+import sys
+import types
+
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.optional.vision_pi4 import VisionPi4Module
 
@@ -58,14 +61,23 @@ def test_enabling_it_with_no_model_says_so() -> None:
         module.stop(ctx)
 
 
-def test_a_wired_model_still_uses_the_scheduler() -> None:
-    """The scheduler and preprocessor are kept: they are what a real model will plug into."""
+def test_a_wired_model_still_uses_the_scheduler(monkeypatch) -> None:
+    """The scheduler and preprocessor are kept: they are what a real model will plug into.
+
+    `cv2` is injected into `sys.modules` rather than assigned to `_cv2`, because `start()`
+    imports it: on CI OpenCV is installed and would replace any attribute set beforehand, and a
+    test that passes only on a machine without OpenCV is not a test.
+    """
+    fake_cv2 = types.ModuleType("cv2")
+    fake_cv2.VideoCapture = lambda index: _FakeCapture()  # type: ignore[attr-defined]
+    fake_cv2.imencode = lambda *args, **kwargs: (True, b"jpeg")  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+
     ctx = context(inference_scheduler_enabled=True)
-    seen: list[str] = []
-    module = VisionPi4Module("vision_pi4", inference_fn=lambda frame: seen.append(frame) or "ok")
-    module._cv2 = _FakeCV2()
+    module = VisionPi4Module("vision_pi4", inference_fn=lambda frame: "ok")
     module.start(ctx)
     try:
+        assert module.available is True
         assert module._inference_scheduler is not None
         assert ctx.get("vision_inference_status")["state"] == "ready"
     finally:
@@ -81,11 +93,3 @@ class _FakeCapture:
 
     def release(self) -> None:
         return None
-
-
-class _FakeCV2:
-    def VideoCapture(self, index: int) -> _FakeCapture:
-        return _FakeCapture()
-
-    def imencode(self, *args, **kwargs):
-        return True, b"jpeg"
