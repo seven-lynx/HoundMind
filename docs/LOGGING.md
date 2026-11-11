@@ -1,6 +1,12 @@
 # Logging Runbook
 
-This document describes how to collect logs, common troubleshooting commands, and quick `jq` examples for parsing JSON logs produced by HoundMind.
+Status: **runbook** — what to do once something has already gone wrong.
+Version: v2026.01.18 • Author: 7Lynx
+Pairs with: `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §10 (where logs come from),
+`docs/CONTROL_API.md` §2 (`/logs`, `/support-bundle`)
+
+This document describes how to collect logs, common troubleshooting commands, and quick `jq` examples
+for parsing JSON logs produced by HoundMind.
 
 Paths
 - Primary log directory: `logs/`
@@ -38,10 +44,24 @@ Troubleshooting tips
 - To enable file logging, set `settings.logging.enable_file` to `true` (default is enabled for on-device installs).
 
 Support bundle contents
-- `logs/` files (rotated files and current file)
-- `config/settings.jsonc` (current runtime settings)
-- `pyproject.toml` and `README.md` for environment context
-- `metadata.json` with timestamp and git commit (if available)
+
+There are **two** bundle producers and they do not carry the same files. Pick by what you need.
+
+**From the shell** — `python -m tools.collect_support_bundle out.zip` (`src/tools/collect_support_bundle.py`).
+This is the one to send when the problem is something the process logged.
+
+- `metadata.json` — timestamp, git commit, and the trace id (taken from `HOUNDMIND_TRACE_ID` if set,
+  otherwise found by scanning the newest log)
+- every file in `logs/`, plus a `.tail.txt` for the large ones
+- `config/settings.jsonc` — the runtime config as it was
+
+**Over the network** — `GET /api/v1/support-bundle`, `admin` scope (`services/api.py:210`). No log
+files; this is the one to ask a user for when you cannot reach the device yourself.
+
+- `meta.json`, `state.json`, `modules.json` — identity, the live snapshot, module status
+- `config.json` — the effective config with secrets redacted
+- `audit.json`, `sessions.json` — the motion audit trail and live sessions
+- `README.txt` — what the bundle is, and the note that file logs are not included yet
 
 Privacy
-- Support bundles may include local config and logs. Review and remove any personally identifiable data before sharing externally.
+- Both bundles may include local config and logs. Review and remove any personally identifiable data before sharing externally.

@@ -143,8 +143,23 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for every key and its defau
 
 ## Project layout (key paths)
 - `src/houndmind_ai/` — core runtime and modules
+- `src/tools/` — device CLIs, run as `python -m tools.<name>`
 - `config/settings.jsonc` — module enablement and parameters
-- `tests/` — unit tests for modular behavior
+- `tests/` — hardware-free unit tests (`PYTHONPATH=src python -m pytest`)
+
+## Documentation
+[docs/README.md](docs/README.md) is the index: every file, its status, and when to read it.
+
+| I want to… | Read |
+|---|---|
+| Install and verify on a Pi | [docs/INSTALL.md](docs/INSTALL.md) |
+| Know what a feature does, or turn it off | [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) |
+| Write a module, or find a context key | [docs/HOUNDMIND_PROGRAMMING_GUIDE.md](docs/HOUNDMIND_PROGRAMMING_GUIDE.md) |
+| Drive the vendor `pidog` library directly | [docs/PIDOG_PROGRAMMING_GUIDE.md](docs/PIDOG_PROGRAMMING_GUIDE.md) |
+| Build a client against the API | [docs/CONTROL_API.md](docs/CONTROL_API.md) |
+| Understand why the runtime is shaped this way | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Read the logs, or build a support bundle | [docs/LOGGING.md](docs/LOGGING.md) |
+| Know what the code looked like before the refactor | [docs/BASELINE.md](docs/BASELINE.md) |
 
 ## Notes
 - This project now runs **only on the real PiDog hardware** (no simulation/shim mode).
