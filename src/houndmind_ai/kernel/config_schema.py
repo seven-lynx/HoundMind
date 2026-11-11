@@ -319,24 +319,9 @@ _SENSOR_HEALTH = Section(
     }
 )
 
-# `safety/service_watchdog.py` — restart policy for modules that stop ticking.
-_SERVICE_WATCHDOG = Section(
-    fields={
-        "enabled": Bool(),
-        "module_timeout_s": _POSITIVE,
-        "restart_cooldown_s": _NON_NEGATIVE,
-        "max_restarts": IntSpec(minimum=0),
-        "monitor_modules": _NAMES,
-        "ignore_modules": _NAMES,
-        "restart_on_error": Bool(),
-        "restart_on_stale": Bool(),
-        "status_interval_s": _POSITIVE,
-    }
-)
-
-# `safety/watchdog.py` — `recovery_mode` is compared against "behavior" and everything else
-# is treated as "action", so only those two spellings mean anything. `recovery_behavior` and
-# `recovery_action` ship as `null` to mean "use the built-in default", hence the None.
+# `safety/watchdog.py` + `kernel/supervisor.py`. One policy for "the machine is not well": hold
+# motion when the data is stale, restart modules that stopped ticking with exponential backoff.
+# `restart_cooldown_s` is the *base* delay of that backoff, not a flat one.
 _WATCHDOG = Section(
     fields={
         "enabled": Bool(),
@@ -344,13 +329,12 @@ _WATCHDOG = Section(
         "scan_timeout_s": _POSITIVE,
         "module_timeout_s": _POSITIVE,
         "monitor_modules": _NAMES,
+        "ignore_modules": _NAMES,
         "restart_cooldown_s": _NON_NEGATIVE,
-        "restart_module_cooldown_s": _NON_NEGATIVE,
-        "recovery_mode": StrSpec(choices=("behavior", "action")),
-        "recovery_behavior": _NULLABLE_STR,
-        "recovery_action": _NULLABLE_STR,
-        "restart_modules": _NAMES,
+        "restart_backoff_factor": FloatSpec(minimum=1.0),
+        "restart_max_delay_s": _NON_NEGATIVE,
         "max_restarts": IntSpec(minimum=0),
+        "healthy_after_s": _NON_NEGATIVE,
     }
 )
 
@@ -949,7 +933,6 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "semantic_labeler": _SEMANTIC_LABELER,
     "sensor_health": _SENSOR_HEALTH,
     "sensors": _SENSORS,
-    "service_watchdog": _SERVICE_WATCHDOG,
     "slam_pi4": _SLAM_PI4,
     "vision_pi4": _VISION_PI4,
     "voice_assistant": _VOICE,

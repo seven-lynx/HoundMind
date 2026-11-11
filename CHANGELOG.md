@@ -91,6 +91,27 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `forward` at a new speed is heard instead of being dropped as the same intent.
 - `canonical_action` / `legacy_action` moved to `kernel/commands.py` next to the action
   vocabulary they translate; `act/gateway.py` re-exports them.
+- **One watchdog, and recovery is "stop and report".** `safety/service_watchdog.py` is merged into
+  `safety/watchdog.py`, which now delegates the restart decision to `kernel/supervisor.py`.
+  Recovery no longer poses the dog: `recovery_mode`, `recovery_behavior` and `recovery_action` are
+  gone, and a stale reading publishes a `stop` intent through the same gateway and interlock as
+  any other command. Candidates are modules that are enabled *and* started — the old list was
+  `module_names`, which includes every disabled module, so the stale set was never empty on the
+  shipped config and the dog was told to lie down every five seconds (H-03).
+- **Restarts back off and eventually give up.** `restart_cooldown_s` is the base delay,
+  `restart_backoff_factor` the multiplier, `restart_max_delay_s` the cap, and after `max_restarts`
+  the module is reported failed instead of being retried forever. A module that stays up for
+  `healthy_after_s` earns a fresh budget.
+- **A slow scan is no longer "stale".** The scan staleness window is `max(scan_timeout_s, 1.5 ×
+  measured scan duration)`; the shipped sweep takes ~2.6 s and the old fixed window was 0.8 s, so
+  a healthy scan was stale by definition (P3-4).
+- **`stop` bypasses the motor rate limiter and outranks every source.** A watchdog hold used to be
+  able to sit behind a gait for the 200 ms action interval, and a supervisor's stop could lose a
+  tick to a higher-priority retreat. `hal/motors.py` skips `min_action_interval_s` for `stop`, and
+  `act/gateway.py` ranks a `stop` above any other intent whatever its source.
+- **A module that gives up during a restart is no longer marked started.** `core/runtime.py`
+  checks `status.enabled` after `start()` and reports the reason instead of putting a module that
+  just failed back into the tick list.
 - `optional/vision_pi4.py` publishes `vision_frame_jpeg` next to `vision_frame`, and
   `services/camera.py` reads the encoded key. The raw array is still what face recognition, the
   semantic labeler and SLAM consume; encoding once per frame replaces the old encode loop that ran
@@ -141,6 +162,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
   when the device receives it, and an expired command is refused by the interlock.
 
 ### Removed
+- `safety/service_watchdog.py`, `modules.service_watchdog` and `settings.service_watchdog`. The
+  restart policy lives in `kernel/supervisor.py`, driven by `settings.watchdog`.
+- `settings.watchdog.recovery_mode`, `recovery_behavior`, `recovery_action`, `restart_modules` and
+  `restart_module_cooldown_s`: the watchdog no longer poses the dog, and one backoff replaces two
+  cooldowns. An existing file that still sets them now fails to load with a did-you-mean, which is
+  the honest outcome — they described behaviour that no longer exists.
 - **The four per-feature HTTP servers.** Face recognition on 8088, the vision feed on 8090, voice
   control on 8091 and the telemetry dashboard on 8092 are gone, with their `http` config blocks.
   Three of them bound `0.0.0.0` and answered without any token; `GET /command?action=` on 8091 set

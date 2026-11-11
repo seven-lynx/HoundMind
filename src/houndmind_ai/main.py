@@ -39,7 +39,6 @@ from houndmind_ai.perception.fusion import PerceptionModule
 from houndmind_ai.safety.balance import BalanceModule
 from houndmind_ai.safety.health_monitor import HealthMonitorModule
 from houndmind_ai.safety.sensor_health import SensorHealthModule
-from houndmind_ai.safety.service_watchdog import ServiceWatchdogModule
 from houndmind_ai.safety.supervisor import SafetyModule
 from houndmind_ai.safety.watchdog import WatchdogModule
 from houndmind_ai.services.module import ControlPlaneModule
@@ -90,7 +89,6 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(LedManagerModule("led_manager", **cfg("led_manager")), [Capability.TELEMETRY])
     registry.register(HealthMonitorModule("health", **cfg("health")), [Capability.DIAGNOSTICS])
     registry.register(SensorHealthModule("sensor_health", **cfg("sensor_health")), [Capability.DIAGNOSTICS])
-    registry.register(ServiceWatchdogModule("service_watchdog", **cfg("service_watchdog")), [Capability.SAFETY])
     registry.register(WatchdogModule("watchdog", **cfg("watchdog")), [Capability.SAFETY])
     registry.register(BalanceModule("balance", **cfg("balance")), [Capability.SAFETY])
     registry.register(SafetyModule("safety", **cfg("safety")), [Capability.SAFETY])

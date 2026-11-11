@@ -85,7 +85,10 @@ These modules run each tick and publish data into the runtime context.
 - **BehaviorModule**: publishes a `behaviour` intent to the board and handles overrides.
 - **AttentionModule**: uses sound direction to orient head; emits `led_request:attention`.
 - **SafetyModule**: publishes a `system` intent to the board, plus `safety_active`, `emergency_stop_active`, `tilt_warning`.
-- **WatchdogModule**: publishes a `watchdog` intent to the board, plus `behavior_override`, `restart_modules`.
+- **WatchdogModule**: holds motion (a `watchdog` `stop` intent) when sensor/scan data is stale,
+  and drives `kernel/supervisor.py` to restart modules that stopped ticking. Publishes
+  `watchdog_hold`, `watchdog_status`, and `restart_modules` when a restart is due. Recovery is
+  stop-and-report: it never poses the dog.
 - **HealthMonitorModule**: sets `health_status`, `health_degraded`, `scan_interval_override_s`.
 - **SensorHealthModule**: paints the sensor staleness badge via `led_request:health`. Ships disabled.
 - **BalanceModule**: IMU-based balance compensation, applied through `hal.action("rpy", ...)`.
@@ -139,6 +142,7 @@ instead of a mystery.
 - `motion_command` (dict | None), `motion_verdict` (dict | None), `motion_cancel` (list), `tilt_latched` (bool)
 - `intent_board` (IntentBoard) — what each source is asking for right now
 - `runtime_mode` (str: `idle` | `patrol` | `manual` | `rest`)
+- `watchdog_hold` (dict | None), `watchdog_status` (dict), `scan_duration_s` (float)
 - `health_status` (dict), `health_degraded` (bool)
 
 ---
