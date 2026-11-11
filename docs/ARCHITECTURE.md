@@ -134,7 +134,7 @@ Two entry points, one execution path:
 |---|---|
 | `id` | unique per issue; the dedupe key is the id, never the bare action string |
 | `source` | `behaviour`, `navigation`, `client`, `watchdog`, `system` |
-| `action` | a name from `kernel/commands.py::KNOWN_ACTIONS`, canonicalised from the catalog |
+| `action` | a known action name: `KNOWN_ACTIONS`, or anything classified in `config/actions.jsonc` (`kernel/actions.py`) |
 | `params` | action-specific; rewritten by the interlock when it clamps a speed |
 | `ttl_ms` | deadman. A motion stops when it expires unless renewed |
 | `priority` | the `Source` value — declared, not implied by dict order |
@@ -153,17 +153,26 @@ not.
 ## 5. The interlock (non-negotiable)
 
 The interlock is not a module and cannot be turned off from configuration. It sits between the
-gateway and the HAL and answers every command, in this order (`act/interlock.py:8-19`):
+gateway and the HAL and answers every command, in this order (`act/interlock.py:1-24`). The **class**
+of the action decides how much of the envelope applies; the class is data in `config/actions.jsonc`,
+loaded by `kernel/actions.py`, and it selects which limits apply without ever editing one.
 
 | # | Check | Behaviour |
 |---|---|---|
 | 1 | `stop` | **Always accepted.** The escape hatch is never vetoed, at any layer. |
-| 2 | Unknown action | Refused — `veto: "unknown_action"`. |
-| 3 | TTL / deadman | Refused once past `ttl_ms` (default 300 ms for motion). |
-| 4 | Tilt latch | Motion refused until a human clears it. Latched from a **valid** IMU only. |
-| 5 | Low voltage | Motion refused below `min_battery_v`, and only when the reading is valid. |
-| 6 | Obstacle veto | Last **valid** distance ≤ `emergency_stop_cm` refuses forward-family motion. |
-| 7 | Speed clamp | `speed` clamped to `max_speed`; the clamp is logged once per session. |
+| 2 | Unknown action | Refused — `veto: "unknown_action"`. Nothing classifies it. |
+| 3 | TTL / deadman | Refused past `ttl_ms` (default 300 ms). Every class spends it, an LED included. |
+| 4 | `non_motion` | Accepted here — `rgb`, `sound`, `speak`, `head`, `rpy`. A flat battery must not stop the dog saying the battery is flat. |
+| 5 | Tilt latch | Posture, expression and locomotion refused until a human clears it. Latched from a **valid** IMU only. |
+| 6 | Low voltage | The same three classes refused below `min_battery_v`, and only when the reading is valid. |
+| 7 | Obstacle veto | `locomotion`, **forward family** only: the last **valid** distance ≤ `emergency_stop_cm`. |
+| 8 | Speed clamp | `speed` clamped to `max_speed`; the clamp is logged once per session. |
+
+`forward`, `backward`, `turn_left` and `turn_right` are `locomotion` in every repertoire. A config
+that tries to classify one as anything weaker is refused at load with the action named, because the
+obstacle stop is not user config — the envelope belongs to the board, not to `settings.jsonc`.
+`backward` and the turns stay outside the obstacle rule on purpose: they are how the dog leaves a
+corner.
 
 Every veto returns `accepted: false` **with a reason string**, and emits an event. A silent refusal is
 a bug — the operator would have no way to learn why the dog did not move. The obstacle and tilt checks

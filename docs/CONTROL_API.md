@@ -61,6 +61,7 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see §4) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
+| `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params (§3) |
 | `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream (§5) |
 | `GET` | `/api/v1/camera/stream` | `state:read` (`?token=`) | MJPEG, multipart/x-mixed-replace |
 | `GET` | `/api/v1/camera/snapshot` | `state:read` (`?token=`) | single JPEG |
@@ -126,24 +127,60 @@ must show the reason to the user:
 **`429`** — the bounded command queue is full. **`503`** — no module answered within
 `api.command_ack_timeout_s`, which means the runtime is not ticking; the dog cannot be driven.
 
-### The command vocabulary
+### The command vocabulary, and the repertoire
 
 `config/actions.jsonc` is the action **catalog**: activity groups (`idle`, `alert`, `avoid`, `play`,
 `rest`, `patrol`, `explore`, `interact`, `custom`) of `pidog` ActionFlow names, which the behavior
-module draws from. The API accepts the smaller, fixed **command vocabulary** in
-`kernel/commands.py::KNOWN_ACTIONS`:
+module draws from. Beside them it carries the **classification** — one class per action — which is
+what decides how much of the safety envelope the interlock applies.
 
-| Family | Actions |
-|---|---|
-| Motion | `forward`, `backward`, `turn_left`, `turn_right`, `stop` |
-| Posture | `stand`, `sit`, `lie`, `stretch` |
-| Expression | `wag_tail`, `bark`, `head` (payload `{"yaw", "pitch", "roll"}` in degrees) |
+`POST /command` accepts any action that is either in `kernel/commands.py::KNOWN_ACTIONS` (the
+built-in vocabulary, always available) or classified in that file. Every action a bucket lists has
+to be classified, or the device refuses to start and says which name is missing: an action the
+behavior module can emit and the interlock must refuse is a bug, not a configuration style.
+
+| Class | Tilt latch | Obstacle stop | Battery floor | Deadman | Examples |
+|---|---|---|---|---|---|
+| `locomotion` | yes | forward family | yes | yes | `forward`, `backward`, `turn_left`, `trot` |
+| `posture` | yes | no | yes | yes | `sit`, `lie`, `stretch`, `high five` |
+| `expression` | yes | no | yes | yes | `wag_tail`, `bark`, `shake_head`, `pant` |
+| `non_motion` | no | no | no | yes | `rgb`, `sound`, `speak`, `head`, `rpy` |
+
+Three rules the table implies, and a client should not have to discover:
+
+1. **`non_motion` is never vetoed.** A dog at 6.3 V must still be able to whine about it, and an LED
+   must not be blocked because something is 8 cm away. It still spends its deadman: a stale colour
+   request is as wrong as a stale gait.
+2. **The obstacle stop is the forward family** (`forward`), not every locomotion action. `backward`
+   and the turns are how the dog gets out of a corner; a turn-in-place refused at 8 cm is a dog
+   frozen facing a wall.
+3. **The four gaits cannot be reclassified.** `forward`, `backward`, `turn_left` and `turn_right`
+   are `locomotion` whatever the file says; a config that tries to weaken one is refused at load
+   with the action named. `stop` is never vetoed, in any mode, from any class.
+
+A `409` carries the reason, so a client shows `veto` rather than guessing: `veto: "unknown_action"`,
+`"expired"`, `"tilt"`, `"low_voltage"`, `"obstacle"` or `"mode"` (§4 documents the state snapshot
+the same refusals appear in).
+
+`GET /api/v1/repertoire` is the honest menu: every action *this* device can run, so a client renders
+what the firmware reports instead of a list baked into the app. It unions the classification with the
+action list the HAL returns.
+
+```json
+{ "count": 43,
+  "actions": [ { "name": "sit",   "class": "posture",    "params": [] },
+               { "name": "sound", "class": "non_motion", "params": ["name", "volume"] } ] }
+```
+
+A `class` of `null` means the HAL can do it and nothing has classified it: the dog will not run it
+from a command until it is added to `config/actions.jsonc`. `null` is never a guess — the same rule
+`sensors` follows for a reading that could not be taken.
 
 Producers and the catalog spell motion with spaces (`"turn left"`, `"wag tail"`); the vocabulary is
-underscored, and `kernel/commands.py::canonical_action` is the only translation. The catalog is **not**
-served over HTTP — a client that needs it reads `config/actions.jsonc` from the repository, because
-`GET /meta`'s `capabilities` is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus
-`camera` and `pairing` when available), not a list of actions.
+underscored, and `kernel/commands.py::canonical_action` is the only translation. A client that wants
+the raw catalog still reads `config/actions.jsonc` from the repository — `GET /meta`'s `capabilities`
+is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus `camera` and `pairing` when
+available), not a list of actions.
 
 ### Semantics the client must respect
 

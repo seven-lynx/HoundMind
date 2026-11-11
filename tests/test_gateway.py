@@ -13,7 +13,8 @@ from houndmind_ai.act.gateway import MotionGatewayModule, canonical_action, lega
 from houndmind_ai.act.interlock import Interlock, InterlockLimits
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.hal.sensors import SensorReading
-from houndmind_ai.kernel.commands import Source
+from houndmind_ai.kernel.actions import build_repertoire
+from houndmind_ai.kernel.commands import Command, CommandBus, Source
 from houndmind_ai.kernel.intents import IntentBoard
 
 
@@ -31,22 +32,30 @@ class Clock:
 def build(
     reading: SensorReading | None = None,
     clock: Clock | None = None,
+    repertoire: dict | None = None,
+    bus: CommandBus | None = None,
     **limits: Any,
 ) -> tuple[MotionGatewayModule, RuntimeContext]:
     clock = clock or Clock()
     interlock = Interlock(
         limits=InterlockLimits(**limits) if limits else None,
         now=clock,
+        repertoire=build_repertoire(repertoire),
     )
     gateway = MotionGatewayModule(
         "motion_gateway",
         interlock=interlock,
         clock=clock,
+        bus=bus,
         # The board shares the fake clock, or an intent would be stamped with wall-clock time
         # and look decades old to the gateway.
         board=IntentBoard(clock=clock),
     )
     context = RuntimeContext()
+    if repertoire is not None:
+        # The runtime publishes the loaded classification in `settings`, and the gateway reads it
+        # at start. A test that wants a catalog action does what the runtime does.
+        context.set("settings", {"behavior": {"action_classes": repertoire}})
     # `start` publishes `intent_board`, which is how a real producer finds it.
     gateway.start(context)
     if reading is not None:
@@ -331,15 +340,25 @@ def test_tilt_latches_motion_until_cleared() -> None:
     assert context.get("motion_command")["action"] == "forward"
 
 
-def test_tilt_does_not_block_posture() -> None:
+def test_tilt_blocks_posture_but_not_non_motion() -> None:
+    """A tilted dog must not sit or bark. It can still move its head and say so.
+
+    Posture and expression move servos, so they answer to the tilt latch; `head` is `non_motion`
+    and stays available, which is what lets the dog look at the human who is about to right it.
+    """
     gateway, context = build()
     context.set("tilt_warning", {"pitch": 60.0, "roll": 0.0})
     ask(context, "sit", Source.BEHAVIOUR)
     gateway.tick(context)
-    assert context.get("motion_command")["action"] == "sit"
+    assert context.get("motion_command") is None
+    assert context.get("motion_verdict")["veto"] == "tilt"
+
+    ask(context, "head", Source.BEHAVIOUR)
+    gateway.tick(context)
+    assert context.get("motion_command")["action"] == "head"
 
 
-def test_low_voltage_blocks_motion_but_not_posture() -> None:
+def test_low_voltage_blocks_motion_and_posture_but_not_non_motion() -> None:
     gateway, context = build(min_battery_v=6.4)
     context.set("battery_voltage", 5.9)
     ask(context, "forward")
@@ -350,16 +369,51 @@ def test_low_voltage_blocks_motion_but_not_posture() -> None:
     drop(context)
     ask(context, "sit", Source.BEHAVIOUR)
     gateway.tick(context)
-    assert context.get("motion_command")["action"] == "sit"
+    assert context.get("motion_command") is None
+    assert context.get("motion_verdict")["veto"] == "low_voltage"
+
+    # The dog has to be able to complain about the battery it is running on.
+    ask(context, "sound", Source.BEHAVIOUR)
+    gateway.tick(context)
+    assert context.get("motion_command")["action"] == "sound"
 
 
-def test_unknown_posture_actions_are_not_refused() -> None:
-    """The dog's repertoire is the HAL's business, not this module's.
-    Refusing here would silently delete behaviours nobody listed in KNOWN_ACTIONS."""
-    gateway, context = build()
+def test_a_classified_catalog_action_is_not_refused() -> None:
+    """`high five` is a catalog posture. Once the classification says so, the gateway runs it.
+
+    The classification is read from the settings the runtime publishes, which is how an action a
+    user adds to `config/actions.jsonc` starts working without a code change.
+    """
+    gateway, context = build(repertoire={"high five": {"class": "posture"}})
     ask(context, "high five", Source.BEHAVIOUR)
     gateway.tick(context)
     assert context.get("motion_command")["action"] == "high five"
+
+
+def test_an_unclassified_action_is_vetoed_with_a_reason() -> None:
+    """The catalog is the vocabulary: a name nothing classifies does not reach a servo silently."""
+    gateway, context = build()
+    ask(context, "moonwalk", Source.BEHAVIOUR)
+    gateway.tick(context)
+    assert context.get("motion_command") is None
+    assert context.get("motion_verdict")["veto"] == "unknown_action"
+
+
+def test_a_stale_non_motion_command_still_expires() -> None:
+    """The deadman covers every class: an RGB request that sat in a queue does not run late."""
+    clock = Clock()
+    bus = CommandBus()
+    gateway, context = build(clock=clock, bus=bus)
+    command = Command("rgb", source=Source.CLIENT, params={"style": "breath"}, issued_at=clock.now)
+    assert bus.submit(command) is True
+    clock.advance(0.4)
+    gateway.tick(context)
+
+    verdict = bus.wait(command.id, timeout=0.1)
+    assert verdict is not None
+    assert verdict.accepted is False
+    assert verdict.veto == "expired"
+    assert context.get("motion_command") is None
 
 
 # ------------------------------------------------------------------ spelling

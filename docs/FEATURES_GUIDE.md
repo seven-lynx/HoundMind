@@ -38,6 +38,12 @@ place that imports `pidog`; every other module asks for `hal` and disables itsel
 if it is absent. On a workstation or in CI a `FakeDogHAL` is injected instead, so the sensor,
 scan, LED, head and posture paths run without hardware.
 
+**Audio and LED primitives:** the HAL owns `sound(name, volume)` (one of the dog's built-in sound
+effects), `speak(text, volume)` (the vendor's speech path, so a routine can talk without the optional
+`voice` module being enabled) and `rgb(style, color, brightness, bps)`. Audio is dispatched on its own
+worker, so a gait never waits for a sound, and `bps` is the LED effect's animation rate — it used to be
+dropped, which is why every effect ran at the vendor's default speed.
+
 **Disable:** `modules.hal.enabled = false` — with it off nothing can move and no sensor is read.
 
 ### Sensors (`modules.hal_sensors`)
@@ -91,6 +97,30 @@ what "stale" means for this board.
 
 ## 7) Behavior
 **What it does:** Picks actions based on state and rules.
+
+### The action repertoire and its classes
+
+Every action belongs to a **class**, and the class — not the name — decides which safety limits apply
+to it. The classes are data in `config/actions.jsonc` (`actions`), so a user who adds an action
+classifies it in the same file they added it to:
+
+| Class | Tilt latch | Obstacle stop | Battery floor | Deadman | Examples |
+|---|---|---|---|---|---|
+| `locomotion` | yes | forward family | yes | yes | `forward`, `backward`, `turn_left`, `trot` |
+| `posture` | yes | no | yes | yes | `sit`, `lie`, `stretch`, `high five` |
+| `expression` | yes | no | yes | yes | `wag_tail`, `bark`, `shake_head`, `pant` |
+| `non_motion` | no | no | no | yes | `rgb`, `sound`, `speak`, `head`, `rpy` |
+
+- Every action a catalog bucket lists must be classified, or the runtime refuses to start and names
+  the action it could not place. That is deliberate: an action the behavior module can pick and the
+  interlock has to refuse is a bug, not a configuration style.
+- `forward`, `backward`, `turn_left` and `turn_right` are `locomotion` in every repertoire; the file
+  cannot weaken one, so the obstacle stop cannot be switched off by editing the catalog.
+- `non_motion` is never refused for a tilt, a flat battery or something 8 cm ahead. It still expires
+  like everything else, so a stale LED request does not run late.
+- **Adding your own action:** add it to a bucket **and** to the `actions` table with a class, then
+  restart. It becomes commandable over `POST /api/v1/command`, and `GET /api/v1/repertoire` lists
+  what this device can actually run, with each action's class and parameters.
 
 **Micro-idle behaviors (lifelike idle):** When enabled, the robot occasionally performs small idle actions (e.g., `"shake head"`, `"wag tail"`, `"stretch"`) to feel more lifelike. These are safe, optional actions that do not affect navigation or safety logic.
 

@@ -1,5 +1,21 @@
 // HoundMind action catalog (PiDog ActionFlow names)
 // Add custom actions here, but keep names aligned with ActionFlow operations.
+//
+// `catalog` groups actions into activities the behavior module draws from.
+// `actions` classifies every action; the class decides how much of the safety envelope the
+// interlock applies (act/interlock.py):
+//
+//   locomotion  tilt latch + obstacle stop + battery floor + deadman
+//   posture     tilt latch + battery floor + deadman
+//   expression  tilt latch + battery floor + deadman
+//   non_motion  deadman only — a sound or an LED may never be blocked by sonar or a flat battery
+//
+// Every name a bucket lists must appear in `actions`, or the config is refused at load with a
+// did-you-mean. Actions the HAL implements but no bucket uses (`stop`, `head`, `rgb`, `rpy`) are
+// classified here too. `forward`, `backward`, `turn_left` and `turn_right` move the dog and are
+// always `locomotion`; the file cannot make them weaker.
+//
+// `params` lists what the action reads from a command, and is reported by `GET /api/v1/repertoire`.
 {
   "catalog": {
     // Low-energy idle actions.
@@ -15,7 +31,6 @@
       "tilting_head_right",
       "head_up_down",
       "nod",
-      "nod_lethargy",
       "relax neck",
       "think",
       "recall"
@@ -86,5 +101,62 @@
     ],
     // Custom actions (add your own names here).
     "custom": []
+  },
+
+  // One class per action. Keys are action names in either spelling (`turn left` and `turn_left`
+  // are the same action); `params` is optional and lists what the action reads.
+  "actions": {
+    // Locomotion: the dog changes where it is.
+    "forward":    {"class": "locomotion", "params": ["speed", "steps", "wait"]},
+    "backward":   {"class": "locomotion", "params": ["speed", "steps", "wait"]},
+    "turn left":  {"class": "locomotion", "params": ["speed", "steps", "wait"]},
+    "turn right": {"class": "locomotion", "params": ["speed", "steps", "wait"]},
+    "trot":       {"class": "locomotion", "params": ["speed", "steps", "wait"]},
+
+    // Posture: the dog changes shape where it stands.
+    "stand":      {"class": "posture"},
+    "sit":        {"class": "posture"},
+    "half_sit":   {"class": "posture"},
+    "lie":        {"class": "posture"},
+    "waiting":    {"class": "posture"},
+    "stretch":    {"class": "posture"},
+    "push up":    {"class": "posture"},
+    "high five":  {"class": "posture"},
+    "handshake":  {"class": "posture"},
+    "lick hand":  {"class": "posture"},
+    "feet shake": {"class": "posture"},
+    "scratch":    {"class": "posture"},
+    "twist body": {"class": "posture"},
+    "doze off":   {"class": "posture"},
+
+    // Expression: a look or a sound. A bark that needed clear sonar in front of it would not be
+    // a bark, so this class is never gated on an obstacle.
+    "wag tail":           {"class": "expression"},
+    "shake head":         {"class": "expression"},
+    "tilting_head":       {"class": "expression"},
+    "tilting_head_left":  {"class": "expression"},
+    "tilting_head_right": {"class": "expression"},
+    "head_up_down":       {"class": "expression"},
+    "nod":                {"class": "expression"},
+    "nod lethargy":       {"class": "expression"},
+    "relax neck":         {"class": "expression"},
+    "think":              {"class": "expression"},
+    "recall":             {"class": "expression"},
+    "bark":               {"class": "expression"},
+    "head_bark":          {"class": "expression"},
+    "bark harder":        {"class": "expression"},
+    "howling":            {"class": "expression"},
+    "pant":               {"class": "expression"},
+    "surprise":           {"class": "expression"},
+    "fluster":            {"class": "expression"},
+
+    // Non-motion: the HAL implements these, and no bucket has to list them. Nothing here can be
+    // blocked on battery, tilt or sonar — the dog must be able to say it is in trouble.
+    "stop":  {"class": "non_motion"},
+    "head":  {"class": "non_motion", "params": ["yaw", "pitch", "speed", "wait"]},
+    "rpy":   {"class": "non_motion", "params": ["roll", "pitch", "yaw"]},
+    "rgb":   {"class": "non_motion", "params": ["style", "color", "brightness", "bps"]},
+    "sound": {"class": "non_motion", "params": ["name", "volume"]},
+    "speak": {"class": "non_motion", "params": ["text", "volume"]}
   }
 }

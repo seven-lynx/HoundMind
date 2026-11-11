@@ -9,6 +9,19 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- **The action repertoire is classified.** `config/actions.jsonc` gained an `actions` table: one class
+  per action (`locomotion`, `posture`, `expression`, `non_motion`), and the class decides which part of
+  the interlock's envelope applies. Every name a catalog bucket lists must have a class, or the runtime
+  refuses to start and names the action it could not place.
+- `GET /api/v1/repertoire`: every action the running device can execute, with its class and the
+  parameters it reads — the classification unioned with the HAL's own action list. This is the menu a
+  client should render instead of one baked into the app.
+- **HAL audio**: `sound(name, volume)` plays one of the dog's built-in effects and
+  `speak(text, volume)` uses the vendor's speech path, so a routine can talk without the optional
+  `voice` module. Audio runs on its own worker, so a sound never holds up a gait; `FakeDogHAL` records
+  both.
+- `rgb` keeps its `bps` argument, so an LED effect can specify its animation rate instead of silently
+  running at the vendor's default.
 - `state.actuators.source` and `state.actuators.displaced`: the producer that won the tick, and how
   many intents a higher-priority one overrode. A client that pressed forward can now tell "someone
   else is driving" from "the dog ignored me".
@@ -25,6 +38,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
   board's published figures, not a bench result.
 
 ### Changed
+- `POST /api/v1/command` accepts any action classified in `config/actions.jsonc`, not only the twelve
+  names in `KNOWN_ACTIONS`. A name nothing classifies is still a `400` with a did-you-mean.
+- The interlock judges every class, not only the gaits: `act/gateway.py` returned early for anything
+  that was not a locomotion action. Two consequences — a posture or an expression now answers to the
+  tilt latch and the battery floor, and every action (`rgb`, `sound` and `head` included) spends its
+  deadman, so a stale non-motion command can no longer run late.
 - `profile` in `config/settings.jsonc` ships as `auto`: the profile now comes from the board instead of
   being hard-coded. `HOUNDMIND_PROFILE` still wins over the file.
 - An unknown profile name is a load-time error with a did-you-mean; it used to be a warning, so a typo
@@ -35,6 +54,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
   even though the package declares support for them.
 
 ### Fixed
+- The interlock's `unknown_action` veto was unreachable in the runtime: `act/gateway.py` skipped the
+  interlock for every action outside `MOTION_ACTIONS`, so the catalog's gestures were not vetoed — they
+  were unchecked. Every action is judged now, and a name nothing classifies is refused with a reason.
+- The action catalog listed `nod lethargy` twice, as `nod_lethargy` and `nod lethargy`. Both
+  canonicalise to the same vendor action, so it was two keys for one behaviour and two chances to
+  classify it differently.
 - The installer reported a Pi 5 as a Pi 4, and detected a Pi 3 it then tried to install on. It now
   refuses an unsupported board before touching anything and names `v2026.01.18` as the last release
   that ran on one. `tests/test_board_detect.py` holds the installer's copy of the rule and the
@@ -43,6 +68,10 @@ Current Release: v2026.01.18 • Author: 7Lynx
   legacy servers, so it had silently done nothing. It resolves `src/tools/` now.
 
 ### Docs
+- `docs/CONTROL_API.md` §2/§3 document `GET /api/v1/repertoire` and the four action classes;
+  `docs/FEATURES_GUIDE.md` §2/§7 cover the HAL audio primitives and how to classify a custom action;
+  `docs/ARCHITECTURE.md` §4/§5 replace the motion-only interlock table with the class table.
+
 - `docs/BASELINE.md` gains a second addendum: the re-measured counts (416 passed across 56 test files,
   84 source files under `mypy`), and the three items the Pi 5 edition closed — H-06, the installer's
   board mapping, and the installer's Python gate. Its "known gap" paragraph said the installer's

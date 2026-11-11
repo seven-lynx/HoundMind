@@ -39,8 +39,13 @@ class DummyContext:
 class World:
     """A fake dog wired the way the runtime wires it, without the runtime."""
 
-    def __init__(self, tmp_path, distance: float = 200.0) -> None:
-        self.context = DummyContext()
+    def __init__(
+        self,
+        tmp_path,
+        distance: float = 200.0,
+        context_settings: dict | None = None,
+    ) -> None:
+        self.context = DummyContext(context_settings)
         self.hal = FakeDogHAL()
         self.hal.set_distance(distance)
         self.bus = CommandBus()
@@ -50,6 +55,9 @@ class World:
         self.motors = MotorModule("hal_motors")
         self.motors.start(self.context)
         self.gateway = MotionGatewayModule("motion_gateway", bus=self.bus)
+        # `start` is what publishes the intent board and hands the interlock the classification
+        # from `settings.behavior.action_classes`; the runtime does it, so the test does too.
+        self.gateway.start(self.context)
         settings = ApiSettings(
             host="127.0.0.1",
             port=0,
@@ -199,6 +207,63 @@ def test_an_unknown_action_is_a_400_with_a_suggestion(tmp_path) -> None:
         assert response.status == 400
         assert body["error"] == "unknown_action"
         assert body["suggestion"] == "forward"
+
+    asyncio.run(scenario())
+
+
+# The classification as the runtime loads it: `actions.jsonc` -> settings.behavior.action_classes.
+_CLASSES = {
+    "behavior": {
+        "action_classes": {
+            "high five": {"class": "posture"},
+            "sound": {"class": "non_motion", "params": ["name", "volume"]},
+        }
+    }
+}
+
+
+def test_a_classified_catalog_action_reaches_the_hal(tmp_path) -> None:
+    """`high five` is data, not code: classifying it in the config is enough to command it."""
+
+    async def scenario() -> None:
+        world = World(tmp_path, context_settings=_CLASSES)
+        async with TestClient(TestServer(create_app(world.plane))) as client:
+            request = asyncio.create_task(
+                client.post(
+                    f"{API_PREFIX}/command",
+                    headers=world.auth(),
+                    json={"id": "c5", "action": "high five", "ttl_ms": 300},
+                )
+            )
+            await world.tick_until(request.done)
+            response = await request
+            body = await response.json()
+
+        assert response.status == 202, body
+        assert body["action"] == "high_five"
+        assert ("high_five", {}) in world.hal.calls, world.hal.calls
+
+    asyncio.run(scenario())
+
+
+def test_the_repertoire_reports_every_action_the_device_can_run(tmp_path) -> None:
+    """The menu is the device's, not the app's: class from the config, names from the HAL."""
+
+    async def scenario() -> None:
+        world = World(tmp_path, context_settings=_CLASSES)
+        async with TestClient(TestServer(create_app(world.plane))) as client:
+            response = await client.get(f"{API_PREFIX}/repertoire", headers=world.auth())
+            body = await response.json()
+
+        assert response.status == 200
+        by_name = {entry["name"]: entry for entry in body["actions"]}
+        assert body["count"] == len(body["actions"])
+        # From the classification that was loaded (canonical spelling)...
+        assert by_name["high_five"]["class"] == "posture"
+        # ...and from the HAL's own list, which is the only thing that knows what it implements.
+        assert by_name["forward"]["class"] == "locomotion"
+        assert by_name["rgb"]["class"] == "non_motion"
+        assert by_name["sound"]["params"] == ["name", "volume"]
 
     asyncio.run(scenario())
 

@@ -10,6 +10,7 @@ from typing import Any
 import json5
 
 from houndmind_ai.board.detect import SUPPORTED_KINDS, BoardInfo, detect
+from houndmind_ai.kernel.actions import action_classes_payload, check_repertoire
 from houndmind_ai.kernel.config_schema import (
     ConfigError,
     Problem,
@@ -189,6 +190,10 @@ def load_config(path: Path | None = None) -> Config:
 
     # Optional: load action catalog from a dedicated file.
     behavior_settings = config.settings.get("behavior", {})
+    # The classification can come from the catalog file or from `settings.jsonc` itself. Whichever
+    # is present is checked against whichever catalog is in force, before anything reads it: a
+    # bucket name with no class is how the FSM ends up publishing an intent nothing can execute.
+    raw_classes = behavior_settings.get("action_classes")
     actions_file = behavior_settings.get("actions_file")
     if actions_file:
         actions_path = Path(actions_file)
@@ -198,7 +203,18 @@ def load_config(path: Path | None = None) -> Config:
             actions_raw = _load_jsonc(actions_path)
             behavior_settings["catalog"] = actions_raw.get("catalog", {})
             config.settings["behavior"] = behavior_settings
+            # Before the check: this synthesises the buckets an `action_sets` role names, and those
+            # buckets are part of what has to be classified.
             _ensure_action_sets(behavior_settings)
+            if actions_raw.get("actions") is not None:
+                raw_classes = actions_raw.get("actions")
+
+    if raw_classes is not None:
+        problems = check_repertoire(raw_classes, behavior_settings.get("catalog", {}))
+        if problems:
+            raise ConfigError(problems)
+        behavior_settings["action_classes"] = action_classes_payload(raw_classes)
+        config.settings["behavior"] = behavior_settings
 
     return config
 

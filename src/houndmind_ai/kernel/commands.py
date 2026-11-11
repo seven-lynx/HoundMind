@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from typing import Any
 
 __all__ = [
@@ -23,6 +23,7 @@ __all__ = [
     "MODE_ALLOWED_SOURCES",
     "MOTION_ACTIONS",
     "RUNTIME_MODES",
+    "ActionClass",
     "Command",
     "CommandBus",
     "Source",
@@ -48,6 +49,8 @@ class Source(IntEnum):
 
 
 MOTION_ACTIONS = frozenset({"forward", "backward", "turn_left", "turn_right"})
+# The forward family, for readers: the obstacle rule is now driven by the `locomotion` class
+# (`kernel/actions.py`), which covers `trot` and the turns as well.
 FORWARD_ACTIONS = frozenset({"forward"})
 KNOWN_ACTIONS = MOTION_ACTIONS | frozenset(
     {
@@ -61,6 +64,22 @@ KNOWN_ACTIONS = MOTION_ACTIONS | frozenset(
         "head",
     }
 )
+
+
+class ActionClass(StrEnum):
+    """What kind of thing an action is, and therefore which limits apply to it.
+
+    Declared next to the vocabulary it classifies, because the interlock, the config schema and
+    the control plane must agree on the spelling: a second definition of these strings is how a
+    safety rule quietly stops applying. *Membership* is not here — it is data in
+    `config/actions.jsonc`, loaded and checked by `kernel/actions.py`, so a user who adds an
+    action can classify it in the same file they added it to.
+    """
+
+    LOCOMOTION = "locomotion"
+    POSTURE = "posture"
+    EXPRESSION = "expression"
+    NON_MOTION = "non_motion"
 
 DEFAULT_TTL_MS = 300
 
