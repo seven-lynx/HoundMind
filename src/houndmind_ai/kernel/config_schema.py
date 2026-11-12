@@ -789,6 +789,11 @@ _BEHAVIOR = Section(
         "micro_idle_actions": _NAMES,
         "micro_idle_interval_s": _POSITIVE,
         "micro_idle_chance": _FRACTION,
+        # Idle variety (L4). `idle_variety_interval_s` paces how often the idle action may change;
+        # `action_reuse_cooldown_s` is how long an action is excluded after it was used, which is the
+        # one that keeps a 14-entry bucket from cycling through two of them. 0 disables either.
+        "idle_variety_interval_s": _NON_NEGATIVE,
+        "action_reuse_cooldown_s": _NON_NEGATIVE,
         "habituation_enabled": Bool(),
         "habituation_threshold": IntSpec(minimum=1),
         "habituation_recovery_s": _NON_NEGATIVE,

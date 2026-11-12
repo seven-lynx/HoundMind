@@ -41,6 +41,11 @@ class BehaviorModule(Module):
         self._last_micro_ts = 0.0
         self._last_autonomy_ts = 0.0
         self._autonomy_mode: str | None = None
+        # Idle variety: when the bucket was last drawn from, and what it returned. Held separately
+        # from `last_action` so entering `idle` from another state shows an idle action rather than
+        # repeating whatever the previous state published.
+        self._last_idle_draw_ts = 0.0
+        self._last_idle_action: str | None = None
         self.library: BehaviorLibrary | None = None
         self.registry: BehaviorRegistry | None = None
         # Entry beats that were refused, so a typo in `behavior.state_expressions` is one warning
@@ -194,7 +199,7 @@ class BehaviorModule(Module):
                     interact_actions=catalog.get(
                         action_sets.get("interact", "interact"), [interact_action]
                     ),
-                    random_idle_chance=settings.get("random_idle_chance", 0.05),
+                    reuse_cooldown_s=float(settings.get("action_reuse_cooldown_s", 0.0)),
                 )
             )
         if self.registry is None:
@@ -577,6 +582,45 @@ class BehaviorModule(Module):
         return name
 
     def _select_idle_behavior(self, settings) -> str:
+        """What the dog does in `idle`, paced by `idle_variety_interval_s` and drawn from the bucket.
+
+        Two decisions live here rather than in the library, because both need the tick clock and a
+        memory of what idle last showed:
+
+        - **how often idle changes** (`idle_variety_interval_s`, ships 8 s). Without it a uniform draw
+          would rewrite the action every tick — ~2 Hz of twitching — and `action_cooldown_s` cannot
+          pace it, because that one holds *every* change, including a reaction to a touch.
+        - **whether it changes at all this time** (`random_idle_chance`, checked once per interval;
+          `0` never re-draws). This is the knob #37 found had no visible effect: it used to be
+          checked inside the picker, where both branches could only return one of two actions.
+
+        While it is not due, the last idle action is held — not `idle_actions[0]`, and not whatever
+        the previous state published.
+        """
+        now = time.time()
+        try:
+            interval = float(settings.get("idle_variety_interval_s", 8.0))
+        except (TypeError, ValueError):
+            interval = 8.0
+        try:
+            chance = float(settings.get("random_idle_chance", 0.6))
+        except (TypeError, ValueError):
+            chance = 0.6
+        chance = max(0.0, min(1.0, chance))
+
+        if self._last_idle_action is not None:
+            if (now - self._last_idle_draw_ts) < max(0.0, interval):
+                return self._last_idle_action
+            if random.random() > chance:
+                return self._last_idle_action
+
+        action = self._draw_idle_action(settings)
+        self._last_idle_action = action
+        self._last_idle_draw_ts = now
+        return action
+
+    def _draw_idle_action(self, settings) -> str:
+        """The weighted behaviour-item choice, then the library's recency-weighted bucket draw."""
         choices = settings.get("idle_choices", ["idle_behavior"])
         selection_mode = settings.get("behavior_selection_mode", "weighted")
         weights = settings.get("behavior_weights", {})
@@ -675,8 +719,12 @@ class BehaviorModule(Module):
                     w *= activity
             weights[m] = w
 
+        # `modes` are mode names and the registry's items are `<mode>_behavior`; `pick_mode` is the
+        # one place that translation happens. At L4's predecessor the raw list went to
+        # `pick_weighted`, which found no item and returned None, so the fallback below always won and
+        # autonomy never left `idle` (#82).
         choice = (
-            self.registry.pick_weighted(list(modes), weights) if self.registry else None
+            self.registry.pick_mode(list(modes), weights) if self.registry else None
         )
         self._autonomy_mode = choice or "idle"
         self._last_autonomy_ts = now
