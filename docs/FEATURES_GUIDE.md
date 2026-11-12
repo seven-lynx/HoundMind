@@ -42,7 +42,10 @@ scan, LED, head and posture paths run without hardware.
 effects), `speak(text, volume)` (the vendor's speech path, so a routine can talk without the optional
 `voice` module being enabled) and `rgb(style, color, brightness, bps)`. Audio is dispatched on its own
 worker, so a gait never waits for a sound, and `bps` is the LED effect's animation rate — it used to be
-dropped, which is why every effect ran at the vendor's default speed.
+dropped, which is why every effect ran at the vendor's default speed. The vendor answers `False` for a
+name it cannot find, and the HAL reports that once per name at `WARNING`: before
+[#81](https://github.com/seven-lynx/HoundMind/issues/81) a typo'd effect and a working one were
+indistinguishable from every surface, because `sound()` returns `None` either way.
 
 **Disable:** `modules.hal.enabled = false` — with it off nothing can move and no sensor is read.
 
@@ -171,8 +174,9 @@ dog enters the state.
   outright; the beat still plays.
 - `behavior.cue_sounds` lists the twelve effects a stock PiDog ships
   (`docs/pidog/PIDOG-EXPRESSION.md`). It is **advisory**: a name outside it is warned about once and
-  still played, because a build may ship its own files — and today the HAL cannot tell you a sound
-  file is missing ([#81](https://github.com/seven-lynx/HoundMind/issues/81)).
+  still played, because a build may ship its own files. A name the *vendor* cannot find is a
+  different matter, and the HAL reports it once per name at `WARNING` — `Sound '…' not found in the
+  vendor's sounds directory` ([#81](https://github.com/seven-lynx/HoundMind/issues/81)).
 - Audio never blocks the loop: `hal.sound` queues onto the HAL's audio thread.
 
 ### Choosing an action
