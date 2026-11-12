@@ -47,7 +47,9 @@ from houndmind_ai.services.auth import (
     Authorizer,
     MotionAudit,
     PairingWindow,
+    Principal,
     RateLimiter,
+    StreamTickets,
     TokenStore,
 )
 from houndmind_ai.services.camera import CameraService
@@ -103,6 +105,9 @@ class ControlPlane:
         self.pairing = PairingWindow(now=self._clock)
         self.authorizer = Authorizer(self.tokens, self.pairing, now=self._clock)
         self.sessions = SessionRegistry(now=self._clock, max_clients=settings.max_clients)
+        # Camera tickets (`#18`): an `<img>` cannot send a header, and the device token must never
+        # appear in a URL again.
+        self.tickets = StreamTickets(now=self._clock)
         self.audit = MotionAudit()
         self.camera = CameraService(context)
         self.pairing_limiter = RateLimiter(
@@ -297,17 +302,49 @@ def _authed(scope: str):
     return decorate
 
 
-def _camera_principal(plane: ControlPlane, request: web.Request):
-    """`<img>` cannot send a header, so the camera accepts `?token=` and nothing else does."""
+def _camera_principal(plane: ControlPlane, request: web.Request) -> Principal:
+    """`<img>` cannot send a header, so the camera accepts a ticket — and nothing else.
+
+    The query string used to carry the **device token**, which is the one credential that must never
+    reach a log: it appeared in browser history, the access log and any proxy in the path, and it
+    grants `move` and `config` to whoever reads it. `POST /api/v1/camera/ticket` replaces it with a
+    value that lasts a minute, works once, and buys exactly `state:read` on one frame (`#18`).
+
+    A ticket is spent here even if the frame is then refused for want of a producer: the alternative
+    is a ticket that survives its own use.
+    """
     header = request.headers.get("Authorization")
-    token = None
     if header:
         principal = plane.authorizer.authenticate(header)
+    elif plane.tickets.claim(request.query.get("ticket")):
+        principal = Principal(name="camera", scopes=frozenset({"state:read"}), kind="camera")
+    elif request.query.get("token"):
+        raise AuthError(
+            "unauthorized",
+            "the camera routes do not accept ?token= any more; mint one with "
+            "POST /api/v1/camera/ticket and pass ?ticket=",
+        )
     else:
-        token = request.query.get("token")
-        principal = plane.authorizer.authenticate_token(token)
+        raise AuthError(
+            "unauthorized",
+            "missing camera ticket; mint one with POST /api/v1/camera/ticket",
+        )
     plane.authorizer.require(principal, "state:read")
     return principal
+
+
+async def _camera_ticket(request: web.Request) -> web.Response:
+    """Mint a single-use ticket for the two camera routes.
+
+    `state:read` is required to ask for one, and it is all the ticket grants: a ticket cannot be
+    escalated into `move` or `config`, which is the reason it is not simply a second token.
+    """
+    plane = _plane(request)
+    ticket, expires_in = plane.tickets.issue()
+    return web.json_response(
+        {"ticket": ticket, "expires_in": expires_in},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 def _parse_json_body(raw: str) -> dict[str, object]:
@@ -1047,6 +1084,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/events", None, _events),
     ("GET", "/camera/stream", None, _camera_stream),
     ("GET", "/camera/snapshot", None, _camera_snapshot),
+    ("POST", "/camera/ticket", "state:read", _camera_ticket),
     ("POST", "/pair", None, _pair),
     ("POST", "/pair/open", "admin", _pair_open),
     ("POST", "/command", "move", _command),

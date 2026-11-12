@@ -9,6 +9,13 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- **The camera takes a ticket, not the device token** (`#18`): `POST /api/v1/camera/ticket` mints a
+  single-use, 60-second ticket that `/camera/stream` and `/camera/snapshot` accept as `?ticket=`, and
+  `?token=` on those two routes is refused with a `401` that names the replacement. The ticket grants
+  `state:read` on one frame and cannot be used as a bearer token anywhere else, so a URL that leaks
+  from browser history or an access log no longer carries the credential for `move` and `config`. The
+  bundled web app mints one when it starts the stream. **Breaking** for any client that built the old
+  URL by hand; clients that set headers are unaffected.
 - **TLS is optional, and off** (`#18`): `settings.api.tls_enabled` serves HTTPS on the same port with a
   self-signed certificate generated on first start (hostname plus every local address, 10 years, key
   `0600`, generated only while the feature is already on). `services/tls.py` builds the

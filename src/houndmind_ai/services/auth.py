@@ -31,6 +31,7 @@ __all__ = [
     "PairingWindow",
     "Principal",
     "RateLimiter",
+    "StreamTickets",
     "TokenStore",
 ]
 
@@ -169,6 +170,65 @@ class PairingWindow:
             self._code = None
             self._expires_at = 0.0
             return True
+
+
+class StreamTickets:
+    """Short-lived, single-use tickets for the two camera routes (`#18`).
+
+    An `<img>` tag cannot set a header, so `/camera/stream` used to take the **device token** in the
+    query string: the one credential that must never reach a log, sitting in browser history, the
+    access log and any proxy in the path. A ticket is the same idea with the blast radius reduced —
+    a minute, one use, and it grants `state:read` on a frame and nothing else.
+
+    Issued only to a caller who already presented a token (`state:read`), so a ticket cannot escalate:
+    it carries no scopes of its own beyond the read the camera routes need.
+    """
+
+    def __init__(
+        self,
+        now: Callable[[], float] | None = None,
+        ttl_s: float = 60.0,
+        max_tickets: int = 32,
+    ) -> None:
+        self._now = now or time.monotonic
+        self._ttl_s = max(5.0, min(ttl_s, 300.0))
+        self._max = max(1, min(max_tickets, 256))
+        self._tickets: dict[str, float] = {}
+        self._lock = threading.Lock()
+
+    def issue(self) -> tuple[str, float]:
+        """A ticket and how long it stays valid, in seconds."""
+        with self._lock:
+            self._purge()
+            while len(self._tickets) >= self._max:
+                # Oldest first. A client polling for tickets is not allowed to grow this unbounded.
+                self._tickets.pop(next(iter(self._tickets)))
+            ticket = secrets.token_urlsafe(24)
+            self._tickets[ticket] = self._now() + self._ttl_s
+            return ticket, self._ttl_s
+
+    def claim(self, ticket: str | None) -> bool:
+        """Spend a ticket. Single use, and it is spent whether or not the frame is served."""
+        if not ticket:
+            return False
+        with self._lock:
+            expires_at = self._tickets.pop(ticket, None)
+        return expires_at is not None and self._now() < expires_at
+
+    def clear(self) -> None:
+        with self._lock:
+            self._tickets.clear()
+
+    @property
+    def count(self) -> int:
+        with self._lock:
+            self._purge()
+            return len(self._tickets)
+
+    def _purge(self) -> None:
+        now = self._now()
+        for ticket in [name for name, expires_at in self._tickets.items() if expires_at <= now]:
+            self._tickets.pop(ticket, None)
 
 
 class RateLimiter:

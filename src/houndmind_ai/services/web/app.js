@@ -299,13 +299,21 @@ $("pair-open").addEventListener("click", async () => {
 
 function loadCamera() {
   const img = $("camera");
-  img.src = `/api/v1/camera/stream?token=${encodeURIComponent(token)}`;
-  img.classList.remove("hidden");
   img.addEventListener("error", () => {
     img.classList.add("hidden");
     $("camera-note").textContent =
       "No camera stream. Enable a vision module on the device to see frames here.";
   });
+  // A ticket, not the token: the stream URL lands in history and access logs, and the token is the
+  // credential for everything else (see #18).
+  api("/camera/ticket", { method: "POST", body: JSON.stringify({}) })
+    .then((payload) => {
+      img.src = `/api/v1/camera/stream?ticket=${encodeURIComponent(payload.ticket)}`;
+      img.classList.remove("hidden");
+    })
+    .catch((err) => {
+      $("camera-note").textContent = err.message;
+    });
 }
 
 applyAuthState();

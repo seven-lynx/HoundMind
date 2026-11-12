@@ -776,7 +776,7 @@ as specified in `docs/CONTROL_API.md`:
 | Module list | `GET /api/v1/modules` | `state:read` |
 | Decisions | `GET /api/v1/decisions` | `state:read` |
 | Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame |
-| Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?token=`) |
+| Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?ticket=`) |
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
 | Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration` | `config` |
 | History | `GET /api/v1/history` | `state:read` |
@@ -794,9 +794,14 @@ five minutes.
 **It is not encrypted by default.** The control plane speaks plain HTTP on port 8420: the token, every
 command and every camera frame travel in the clear. The token is the whole security boundary, so
 anyone watching the network reads `move` and `config` out of it — and `admin` if they catch the device
-token itself, which the MJPEG route accepts in a query string. Keep the dog on a network you trust, or
-close the door: `"host": "127.0.0.1"` plus an SSH tunnel, a firewall rule admitting only your devices,
-or a TLS-terminating proxy in front. Never port-forward 8420 to the internet.
+token itself. Keep the dog on a network you trust, or close the door: `"host": "127.0.0.1"` plus an
+SSH tunnel, a firewall rule admitting only your devices, or a TLS-terminating proxy in front. Never
+port-forward 8420 to the internet.
+
+**The camera does not take the token in a URL.** An `<img>` tag cannot set a header, so the stream used
+to carry `?token=` — the operator credential, in browser history and every access log. It now carries
+`?ticket=`: `POST /api/v1/camera/ticket` mints a value good for 60 seconds, one use, granting
+`state:read` on a single frame. The web app mints its own.
 
 **Turning TLS on** is one key — `"tls_enabled": true` — and the certificate is generated on first
 start, self-signed, for this device. Each client trusts it once; `docs/INSTALL.md` §*TLS* has the
