@@ -38,7 +38,9 @@ from houndmind_ai.kernel.commands import (
     Verdict,
     canonical_action,
 )
+from houndmind_ai.kernel.config_schema import Problem
 from houndmind_ai.kernel.decisions import DecisionRing
+from houndmind_ai.kernel.routine_store import StoreReport
 from houndmind_ai.services.auth import (
     AuthError,
     Authorizer,
@@ -210,6 +212,10 @@ class ControlPlane:
             capabilities.add("camera")
         if self.pairing.active:
             capabilities.add("pairing")
+        if self.context.get("routine_report") is not None:
+            # Advertised only when a runner is loaded: a screen behind a 503 is worse than one
+            # the client never shows.
+            capabilities.add("routines")
         return sorted(capabilities)
 
     # ---- support bundle ----------------------------------------------------
@@ -300,14 +306,32 @@ def _camera_principal(plane: ControlPlane, request: web.Request):
     return principal
 
 
-async def _json_body(request: web.Request) -> dict[str, object]:
+def _parse_json_body(raw: str) -> dict[str, object]:
+    """A JSON object or `AuthError(400)` — the one wording every POST body is judged by."""
     try:
-        payload = await request.json()
+        payload = json.loads(raw)
     except ValueError as exc:
         raise AuthError("bad_request", "body must be JSON", status=400) from exc
     if not isinstance(payload, dict):
         raise AuthError("bad_request", "body must be a JSON object", status=400)
     return payload
+
+
+async def _json_body(request: web.Request) -> dict[str, object]:
+    return _parse_json_body(await request.text())
+
+
+async def _optional_json_body(request: web.Request) -> dict[str, object]:
+    """A POST body that may be absent, read as `{}`.
+
+    `POST /command` and `POST /mode` are meaningless without their fields, but
+    `POST /routines/{id}/run` has none: a client that sends nothing means "run it, not dry".
+    Absent is not malformed, so it gets the same parser rather than a second set of rules.
+    """
+    if not request.can_read_body:
+        return {}
+    raw = await request.text()
+    return _parse_json_body(raw) if raw.strip() else {}
 
 
 # --------------------------------------------------------------------- routes
@@ -472,6 +496,12 @@ async def _stop(request: web.Request) -> web.Response:
     plane = _plane(request)
     # Not vetoable and not queued behind anything: this is the escape hatch in the contract.
     plane.stop_now("client stop", Source.SYSTEM)
+    # A running routine publishes its next step on the following tick, so a stop that only
+    # reached the actuators would be undone 200 ms later. The runner consumes this key and ends
+    # the run as `stopped` (behavior/routine_runner.py::_advance). Only when a runner is loaded:
+    # otherwise the flag would outlive the stop and kill the next run instead.
+    if plane.context.get("routine_report") is not None:
+        plane.context.set("routine_stop", True)
     plane.hub.publish_event("command_accepted", {"action": "stop"})
     return web.json_response({"accepted": True, "action": "stop"}, status=202)
 
@@ -542,6 +572,104 @@ def _allowed_actions(plane: ControlPlane) -> frozenset[str]:
 def _suggest_action(action: str, allowed: frozenset[str]) -> str | None:
     matches = get_close_matches(action, sorted(allowed), n=1)
     return matches[0] if matches else None
+
+
+# ----------------------------------------------------------------- routines
+#
+# A routine is playable state, not a command: `POST /routines/{id}/run` writes one request key and
+# `behavior/routine_runner.py` turns it into a step per tick. Both handlers read the *runner's*
+# report rather than the directory, because two readers of one directory are two answers to "which
+# routines exist" — and the dog can only play the ones it loaded.
+
+
+def _problem_dict(problem: Problem) -> dict[str, object]:
+    """One refused file's reason, in the shape `Problem` already has."""
+    return {"path": problem.path, "message": problem.message, "hint": problem.hint}
+
+
+def _routine_state(plane: ControlPlane) -> dict[str, object] | None:
+    """The run in progress, as the runner serialises it (`RoutineRun.to_dict`).
+
+    Duck-typed on purpose: `services` may not import `behavior` (the API would then own the
+    runner's shape), so this republishes the dict the runner built instead of rebuilding one.
+    """
+    run = plane.context.get("routine_run")
+    to_dict = getattr(run, "to_dict", None)
+    return to_dict() if callable(to_dict) else None
+
+
+async def _routines_list(request: web.Request) -> web.Response:
+    plane = _plane(request)
+    report = plane.context.get("routine_report")
+    if not isinstance(report, StoreReport):
+        return web.json_response(
+            {"error": "unavailable", "detail": "the routine runner is not running"}, status=503
+        )
+    return web.json_response(
+        {
+            "directory": str(report.directory),
+            "routines": [report.routines[routine_id].to_dict() for routine_id in report.ids()],
+            "refusals": {
+                name: [_problem_dict(problem) for problem in problems]
+                for name, problems in report.refusals.items()
+            },
+            "current": _routine_state(plane),
+        }
+    )
+
+
+async def _routine_run(request: web.Request) -> web.Response:
+    """Start one routine. The API asks; the runner and the interlock still decide, step by step.
+
+    Every check happens before the write, and nothing between them awaits, so two POSTs on the
+    same event loop cannot both pass the "is one already running?" test.
+    """
+    plane = _plane(request)
+    routine_id = str(request.match_info.get("id") or "").strip()
+    report = plane.context.get("routine_report")
+    if not isinstance(report, StoreReport):
+        return web.json_response(
+            {"error": "unavailable", "detail": "the routine runner is not running"}, status=503
+        )
+    routine = report.get(routine_id)
+    if routine is None:
+        matches = get_close_matches(routine_id, list(report.ids()), n=1)
+        return web.json_response(
+            {
+                "error": "not_found",
+                "detail": f"no routine named '{routine_id}' was loaded",
+                "suggestion": matches[0] if matches else None,
+            },
+            status=404,
+        )
+
+    body = await _optional_json_body(request)
+    dry_run = body.get("dry_run", False)
+    if not isinstance(dry_run, bool):
+        # A string "false" is truthy, so a coercion would start a real run for a client that asked
+        # for a rehearsal — the trap `kernel/routine.py` closes for `allow_locomotion`.
+        return web.json_response(
+            {"error": "bad_request", "detail": "dry_run must be true or false"}, status=400
+        )
+
+    current = plane.context.get("routine_run")
+    pending = plane.context.get("routine_request")
+    if getattr(current, "state", None) == "running" or pending is not None:
+        detail = (
+            "a run request is already queued for the next tick"
+            if pending is not None
+            else f"'{getattr(current, 'routine_id', 'a routine')}' is still running"
+        )
+        return web.json_response(
+            {"error": "conflict", "detail": detail, "current": _routine_state(plane)},
+            status=409,
+        )
+
+    plane.context.set("routine_request", {"id": routine.id, "dry_run": dry_run})
+    return web.json_response(
+        {"accepted": True, "id": routine.id, "dry_run": dry_run, "steps": len(routine.steps)},
+        status=202,
+    )
 
 
 def _header_token(request: web.Request) -> str | None:
@@ -732,6 +860,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/state", "state:read", _state),
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
+    ("GET", "/routines", "state:read", _routines_list),
     ("GET", "/decisions", "state:read", _decisions),
     ("GET", "/events", None, _events),
     ("GET", "/camera/stream", None, _camera_stream),
@@ -740,6 +869,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("POST", "/pair/open", "admin", _pair_open),
     ("POST", "/command", "move", _command),
     ("POST", "/stop", "move", _stop),
+    ("POST", "/routines/{id}/run", "move", _routine_run),
     ("GET", "/mode", "state:read", _mode_get),
     ("POST", "/mode", "move", _mode_post),
     ("GET", "/config", "config", _config_get),

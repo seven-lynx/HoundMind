@@ -132,6 +132,10 @@ than stopping the runtime.
 |---|---|---|
 | `settings.routines.dir` | `~/.houndmind/routines` | Directory the routine runner reads. `~` is expanded at startup; a missing directory is an empty list, not an error, and the dog never creates or writes it. |
 
+Two routes expose them: `GET /api/v1/routines` lists what the runner loaded and which files it
+refused, and `POST /api/v1/routines/{id}/run` starts one, optionally as a rehearsal
+(`{"dry_run": true}`). Both shapes, and the four status codes, are in `docs/CONTROL_API.md` §3.
+
 **Micro-idle behaviors (lifelike idle):** When enabled, the robot occasionally performs small idle actions (e.g., `"shake head"`, `"wag tail"`, `"stretch"`) to feel more lifelike. These are safe, optional actions that do not affect navigation or safety logic.
 
 **Settings:**

@@ -41,6 +41,28 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `patrol` are `frozenset(Source)`, so the new member is admitted there and excluded from `manual`
   and `rest` by construction. Nothing produces one yet: the runner arrives with the routines phase.
 
+- `GET /api/v1/routines` and `POST /api/v1/routines/{id}/run` (`docs/CONTROL_API.md` §2/§3): what the
+  runner loaded — including each refused file with the validator's own reason — and a start that
+  publishes one step per tick, optionally as a `dry_run` rehearsal that moves nothing. `409` covers
+  both a run in progress and a request still queued for the next tick, `404` suggests the closest id,
+  and `503` means no runner is loaded. `GET /meta`'s `capabilities` gains `routines` when one is.
+
+- **Routines run.** `behavior/routine_runner.py` plays a routine from `settings.routines.dir` one
+  step per tick through the normal intent path, so the interlock, the obstacle stop and the mode
+  gate all apply to it; the first refusal ends the run instead of skipping the step, `dry_run`
+  walks the steps without publishing anything, and a broken routine file is skipped by name rather
+  than stopping the runtime. Two identical steps are two commands: the runner retires its intent
+  between steps, which clears the dedupe memories that would otherwise merge them.
+- `settings.routines.dir`: where the routine files live, `~/.houndmind/routines` by default. `~` is
+  expanded at startup and a missing directory is an empty list, not an error.
+- Routine steps keep the parameters the catalog declares: a `forward` with `speed`/`steps`/`wait`
+  now reaches the HAL with them, and a parameterised locomotion step runs on the motor module's own
+  worker instead of holding the tick.
+- `POST /stop` stopped the motion but not a running routine: the runner published its next step on
+  the following tick and the dog walked again. The route now sets `routine_stop`, which the runner
+  consumes and ends the run as `stopped` — only when a runner is loaded, so the flag cannot outlive
+  the stop and kill the next run.
+
 ### Changed
 - `POST /api/v1/command` accepts any action classified in `config/actions.jsonc`, not only the twelve
   names in `KNOWN_ACTIONS`. A name nothing classifies is still a `400` with a did-you-mean.
@@ -57,17 +79,6 @@ Current Release: v2026.01.18 • Author: 7Lynx
   wrong in both directions: 3.10 is outside the range `pip install` accepts, and 3.12/3.13 were refused
   even though the package declares support for them.
 
-- **Routines run.** `behavior/routine_runner.py` plays a routine from `settings.routines.dir` one
-  step per tick through the normal intent path, so the interlock, the obstacle stop and the mode
-  gate all apply to it; the first refusal ends the run instead of skipping the step, `dry_run`
-  walks the steps without publishing anything, and a broken routine file is skipped by name rather
-  than stopping the runtime. Two identical steps are two commands: the runner retires its intent
-  between steps, which clears the dedupe memories that would otherwise merge them.
-- `settings.routines.dir`: where the routine files live, `~/.houndmind/routines` by default. `~` is
-  expanded at startup and a missing directory is an empty list, not an error.
-- Routine steps keep the parameters the catalog declares: a `forward` with `speed`/`steps`/`wait`
-  now reaches the HAL with them, and a parameterised locomotion step runs on the motor module's own
-  worker instead of holding the tick.
 
 ### Fixed
 - The interlock's `unknown_action` veto was unreachable in the runtime: `act/gateway.py` skipped the

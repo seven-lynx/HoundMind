@@ -90,7 +90,10 @@ def test_an_anonymous_request_is_refused_everywhere_but_liveness(tmp_path) -> No
             for method, path, _scope, _handler in ROUTES:
                 if path in PUBLIC or path == "/events":
                     continue
-                response = await client.request(method, f"{API_PREFIX}{path}")
+                # A route template is not a URL: `{id}` has to be filled in before it can be
+                # called, and aiohttp's dynamic segment does not match a literal `{id}`.
+                target = re.sub(r"\{[^}]+\}", "x", path)
+                response = await client.request(method, f"{API_PREFIX}{target}")
                 assert response.status == 401, f"{method} {path} answered {response.status}"
                 assert (await response.json())["error"] == "unauthorized"
 
@@ -125,6 +128,8 @@ def test_the_device_token_reaches_every_read_route(tmp_path) -> None:
         skipped += ("/camera/snapshot", "/logs")
         # `/decisions` is honestly 503 when nothing is publishing the ring (no runtime here).
         skipped += ("/decisions",)
+        # `/routines` is honestly 503 when no routine runner is loaded (no runtime here either).
+        skipped += ("/routines",)
         async with TestClient(TestServer(create_app(plane))) as client:
             for method, path, _scope, _handler in ROUTES:
                 if method != "GET" or path in skipped:
