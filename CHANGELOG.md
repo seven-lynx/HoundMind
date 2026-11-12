@@ -24,6 +24,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `sounds/` directory and the adapter discarded it, so a typo'd effect and a working one looked
   identical from every surface — `sound()` and `speak()` return `None` either way. The HAL now warns
   once per name (`#81`).
+- **Places** (`kernel/place.py`, `kernel/place_store.py`): the named poses a dog can be asked to go
+  to. A place is a heading and a distance from a named anchor, with a confidence, a timestamp and a
+  visit count — polar, because that is the pose this stack can produce and use. They live in one JSON
+  file at `settings.places.path` (`~/.houndmind/places.json`), and loading quarantines entry by entry:
+  one bad place does not cost the others, and a write over a partly-refused file copies the previous
+  contents to `<path>.bak` first. No route or navigator yet; those are the next two segments.
 - `rgb` keeps its `bps` argument, so an LED effect can specify its animation rate instead of silently
   running at the vendor's default.
 - `state.actuators.source` and `state.actuators.displaced`: the producer that won the tick, and how

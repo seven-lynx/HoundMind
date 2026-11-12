@@ -228,6 +228,7 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("battery", "low_voltage_v", "empty"),
     ("quiet_mode", "start_hour", 24),
     ("routines", "dir", 7),
+    ("places", "path", 7),
     ("attention", "head_yaw_max_deg", 91.0),
     ("navigation", "scan_mode", "sweepy"),
     ("mapping", "grid_size", [100]),
