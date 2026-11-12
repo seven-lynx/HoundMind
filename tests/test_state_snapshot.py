@@ -7,6 +7,7 @@ that answer "why did the dog do that" belong here, not in a log the client canno
 from __future__ import annotations
 
 from houndmind_ai.core.runtime import RuntimeContext
+from houndmind_ai.kernel.decisions import DecisionRecord
 from houndmind_ai.services.state import build_state
 
 
@@ -64,3 +65,23 @@ def test_the_supervisor_block_reports_a_hold_and_a_restart() -> None:
     assert supervisor["reason"] == "sensor stale"
     assert supervisor["restarts"] == ["scanning"]
     assert supervisor["failed"] == ["api"]
+
+
+def test_the_snapshot_carries_the_decision_record() -> None:
+    """One record, four surfaces: this is the one a client renders without a socket."""
+    context = RuntimeContext()
+    context.set(
+        "decision_record",
+        DecisionRecord(ts=7.0, mode="patrol", intent="forward", source="navigation"),
+    )
+
+    decision = build_state(context, now=8.0)["decision"]
+
+    assert decision["ts"] == 7.0
+    assert decision["intent"] == "forward"
+    assert decision["confidence"] is None, "unmeasured is null, never 0.0"
+
+
+def test_no_decision_yet_is_null_not_an_empty_record() -> None:
+    """Before the first tick the dog has decided nothing; an empty object would claim it had."""
+    assert build_state(RuntimeContext(), now=0.0)["decision"] is None

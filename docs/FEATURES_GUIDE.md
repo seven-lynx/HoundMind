@@ -527,6 +527,7 @@ as specified in `docs/CONTROL_API.md`:
 | Identity | `GET /api/v1/meta` | none |
 | State snapshot | `GET /api/v1/state` | `state:read` |
 | Module list | `GET /api/v1/modules` | `state:read` |
+| Decisions | `GET /api/v1/decisions` | `state:read` |
 | Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame |
 | Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?token=`) |
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -32,6 +33,19 @@ __all__ = ["EventHub"]
 # A client that cannot absorb this many non-droppable frames is not a slow client, it is a
 # broken one, and the socket is closed rather than grown.
 _EVENT_QUEUE = 64
+
+# What "the decision changed" means. An explicit whitelist rather than "everything except `ts` and
+# `inputs`": a field added to `DecisionRecord.to_dict()` later must not be able to start emitting
+# an event every tick by accident. A new reading is not a new decision.
+_DECISION_SIGNATURE_KEYS = ("mode", "state", "intent", "source", "vetoes")
+
+
+def _decision_signature(decision: object) -> str | None:
+    """A stable fingerprint of the choice this tick made, or None when there is no decision."""
+    if not isinstance(decision, dict):
+        return None
+    picked = {key: decision.get(key) for key in _DECISION_SIGNATURE_KEYS}
+    return json.dumps(picked, sort_keys=True, default=str)
 
 
 class _Subscriber:
@@ -99,12 +113,22 @@ class EventHub:
 
     async def _pump_states(self) -> None:
         interval = 1.0 / self.state_hz
+        last_decision: str | None = None
         while True:
             try:
-                frame: dict[str, object] = {"type": "state", "data": self._snapshot()}
+                snapshot = self._snapshot()
+                frame: dict[str, object] = {"type": "state", "data": snapshot}
                 for sub in list(self._subs):
                     sub.state = frame  # latest value: assignment *is* the queue policy
                     sub.wake.set()
+                # The `decision` event fires on a change of *choice*, not on a tick (C7). `event`
+                # is the non-droppable channel, so a per-tick event would turn a six-second stall
+                # into a disconnect - and `state` already carries the current decision.
+                decision = snapshot.get("decision")
+                signature = _decision_signature(decision)
+                if isinstance(decision, dict) and signature != last_decision:
+                    last_decision = signature
+                    self.publish_event("decision", decision)
                 self._check_link_loss()
             except asyncio.CancelledError:
                 raise

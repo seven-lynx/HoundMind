@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from houndmind_ai.kernel.commands import DEFAULT_MODE, RUNTIME_MODES
+from houndmind_ai.kernel.decisions import DecisionRecord
 
 __all__ = ["build_health", "build_modules", "build_state", "build_supervisor", "redact_config"]
 
@@ -156,6 +157,18 @@ def build_modules(context) -> dict[str, object]:
     return {"modules": entries, "counts": counts}
 
 
+def _decision(context) -> dict[str, Any] | None:
+    """The record behind this tick's verdict, or ``None`` before the gateway has decided anything.
+
+    The context holds the ``DecisionRecord`` itself — ``act/gateway.py`` publishes the object and
+    lets the boundary serialize it — so this is the same split as ``sensor_reading`` above: a
+    dataclass goes in, JSON comes out. ``None`` is honest here; an empty object would claim the
+    dog made a choice it has not made yet.
+    """
+    record = context.get("decision_record")
+    return record.to_dict() if isinstance(record, DecisionRecord) else None
+
+
 def build_state(context, *, now: float | None = None) -> dict[str, object]:
     """The full snapshot. ``now`` is the caller's monotonic clock, used for ``since_s``."""
     clock = 0.0 if now is None else now
@@ -168,6 +181,7 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "sensors": _sensors(context),
         "actuators": _actuators(context, clock),
         "nav": _nav(context),
+        "decision": _decision(context),
         "health": build_health(context),
         "supervisor": build_supervisor(context),
         "modules": counts,

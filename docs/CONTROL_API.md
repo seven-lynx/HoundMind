@@ -62,6 +62,7 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see §4) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params (§3) |
+| `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first (§4); 503 when the feed is not running |
 | `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream (§5) |
 | `GET` | `/api/v1/camera/stream` | `state:read` (`?token=`) | MJPEG, multipart/x-mixed-replace |
 | `GET` | `/api/v1/camera/snapshot` | `state:read` (`?token=`) | single JPEG |
@@ -218,6 +219,15 @@ available), not a list of actions.
     "vetoed": false, "veto": null, "tilt_latched": false, "displaced": 0
   },
   "nav": { "decision": "forward", "confidence": 0.82 },
+  "decision": {
+    "schema_version": 1, "ts": 4212.3, "trace_id": "trace123",
+    "mode": "patrol", "state": "alert", "intent": "forward", "source": "navigation",
+    "vetoes": [
+      { "action": "sit", "source": "behaviour", "reason": "precedence", "detail": "navigation outranks behaviour" }
+    ],
+    "inputs": { "distance_cm": 42.5, "distance_valid": true },
+    "confidence": null
+  },
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [] },
   "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [] },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 }
@@ -226,6 +236,16 @@ available), not a list of actions.
 
 `ts` is the runtime's **monotonic** clock, not epoch seconds: compare it to other timestamps in the
 same stream, never to wall time. Device identity and version live in `GET /meta`, not here.
+
+`decision` is the tick's decision record (`kernel/decisions.py`) — the same object
+`GET /api/v1/decisions` returns a list of. `intent` and `source` name the intent that won the tick;
+`vetoes` names every intent that lost and why, where `reason` is the interlock's own veto
+(`obstacle`, `tilt`, `low_voltage`, `expired`, `unknown_action`) or `mode`/`precedence` for an intent
+the mode policy dropped or a higher rank displaced; `inputs` carries the readings the decision used,
+**with their validity flags**. It is `null` until the gateway's first tick. `confidence` is `null` —
+never `0.0` — when nothing measured it. A client that diffs on `ts` sees one new record per tick; the
+WS `decision` event (§5) fires only when the *choice* changes, so treat the two as different
+cadences over the same object.
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
 `navigation`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode
@@ -282,9 +302,12 @@ Client frames: `{"type": "hello", "token": "..."}` then `{"type": "ping"}`. Anyt
 `error` with code `bad_request`.
 
 The only event names the server publishes today are `mode_changed`, `command_accepted`,
-`command_vetoed`, `command_expired` and `pairing_window_open`. A command's *outcome* is the
-synchronous reply to `POST /command` (§3) — there is no separate `command_ack` frame; the events are
-the broadcast, not the acknowledgement. Clients must tolerate an unknown `name` and ignore it.
+`command_vetoed`, `command_expired`, `pairing_window_open` and `decision`. The last one carries the
+§4 `decision` block and is sent when the *choice* changes — a new winner, a new refusal, a new mode
+or state — not on every tick, because this channel is never dropped and a client that falls behind
+it is disconnected. A command's *outcome* is the synchronous reply to `POST /command` (§3) — there is
+no separate `command_ack` frame; the events are the broadcast, not the acknowledgement. Clients must
+tolerate an unknown `name` and ignore it.
 
 Client rules:
 

@@ -362,6 +362,15 @@ Current Release: v2026.01.18 • Author: 7Lynx
   package discovery could not see by name.
 - The built wheel contains `tools/` and `houndmind_ai/core/`, so the documented
   `python -m tools.*` commands work after a real install.
+- **Decision records**: one record per tick explaining why the dog did that — the intent that won,
+  every intent that lost with its reason (`mode`, `precedence`, or the interlock's own veto), the
+  readings the decision used with their validity flags, and a `confidence` that stays `null` rather
+  than inventing `0.0`. Published four ways over one object: `GET /api/v1/decisions?limit=50` (the
+  last 200 in a bounded ring), `state.decision` in every snapshot, the `decision` WebSocket event
+  (sent when the *choice* changes, not on every tick, because that channel is never dropped), and an
+  optional JSONL (`logging.decision_log_file_enabled`, off by default — ~9 MB/hour at 10 Hz).
+- `state.behavior_state` publishes the FSM's current state, so a decision record can name the state
+  the dog was in when it decided.
 
 ### Notes
 - **Upgrading a config.** If `config/settings.jsonc` still has a `settings.<module>.http` block or
