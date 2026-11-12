@@ -143,6 +143,15 @@
       "enabled": true,
       "required": false
     },
+    "routine_runner": {
+      // Plays a user-authored routine from settings.routines.dir, one step per tick, as a
+      // `routine` intent through the gateway — the interlock, the obstacle stop and the mode gate
+      // apply to it exactly as they do to a command from a hand. With it off, /api/v1/routines
+      // answers 503 and /meta stops advertising `routines`; nothing else changes. The file format
+      // is docs/ROUTINES.md.
+      "enabled": true,
+      "required": false
+    },
     "attention": {
       // Head attention to sound direction.
       "enabled": true,

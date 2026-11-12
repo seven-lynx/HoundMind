@@ -141,6 +141,14 @@ The run in progress is also in every state snapshot (`state.routines`, the same 
 a client that started one follows it without polling, and a client that only watches the socket still
 sees it finish.
 
+**The runner (`modules.routine_runner`).** On by default. Each tick it publishes the next step to the
+intent board as `Source.ROUTINE`, so the mode gate, the interlock and the obstacle stop decide each
+step exactly like a command from a hand — a routine cannot bypass a limit that applies to one. The
+first refusal ends the run (`stopped` after `POST /stop`, `refused` on a veto) rather than skipping the
+step. Disable the runner and `/api/v1/routines` answers `503`, `/meta` drops `routines` from
+`capabilities`, and `state.routines` stays `null`; the rest of the runtime is unaffected. The file
+format is `docs/ROUTINES.md`.
+
 **Micro-idle behaviors (lifelike idle):** When enabled, the robot occasionally performs small idle actions (e.g., `"shake head"`, `"wag tail"`, `"stretch"`) to feel more lifelike. These are safe, optional actions that do not affect navigation or safety logic.
 
 **Settings:**

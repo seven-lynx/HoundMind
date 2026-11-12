@@ -163,6 +163,9 @@ What to expect from each package, and what to watch when it misbehaves.
 - `mapping/mapper.py` — openings, safe paths, optional home-map snapshots.
 - `behavior/` — FSM, action library, registry, attention and habituation. Actions come from
   `config/actions.jsonc`.
+- `behavior/routine_runner.py` — plays a user-authored routine (`docs/ROUTINES.md`) one step per tick,
+  publishing each step as a `Source.ROUTINE` intent and retracting it on the tick the step settles, so
+  two identical steps are two commands. The first refusal ends the run.
 
 **Safety and diagnostics**
 - `safety/watchdog.py` — holds motion when sensor or scan data is stale; asks the runtime to restart
@@ -236,6 +239,18 @@ The keys a module may rely on. Anything not here is private and may change.
 |---|---|
 | `decision_record` | `DecisionRecord` (`kernel/decisions.py`) — this tick's winner, refusals and inputs, published by `motion_gateway` |
 | `decision_ring` | `DecisionRing` — the last `decision_log_max_entries` records, oldest first, published by `decision_log` |
+
+**Routines** — the runner's request/answer pair
+
+| Key | Type |
+|---|---|
+| `routine_request` | `dict` — `{"id", "dry_run"}`, written by `POST /api/v1/routines/{id}/run`; the runner consumes it on the next tick |
+| `routine_report` | `StoreReport` (`kernel/routine_store.py`) — what `settings.routines.dir` held when the runner started, refusals included |
+| `routine_run` | `RoutineRun` (`behavior/routine_runner.py`) — the run in progress or just finished, republished every tick; `to_dict()` is the one object behind `/routines`, `state.routines` and the `routine` event |
+| `routine_stop` | `bool` — `POST /stop` sets it and the runner ends the run as `stopped`; only set when a runner is loaded, so the flag cannot outlive the stop |
+
+A routine is admitted in `idle`, `patrol` and `manual`; `rest` refuses it, so a routine started while
+the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py::MODE_ALLOWED_SOURCES`).
 
 **Safety, health, LEDs**
 
@@ -318,6 +333,7 @@ everything you tune lives under `settings`:
 | `navigation` | scan cadence, `turn_cooldown_s`, `safe_distance_cm`, stuck recovery |
 | `mapping` | home map, `path_planning_enabled`, `goal` |
 | `behavior` | action sets, cooldowns, autonomy, micro-idle, habituation |
+| `routines` | `dir` — where the routine files live (`docs/ROUTINES.md`), default `~/.houndmind/routines`; the runner reads it once at start |
 | `personality`, `energy`, `emotion` | behaviour bias multipliers |
 | `attention` | sound-direction head turns, `cooldown_s` |
 | `motors` | `min_action_interval_s`, speed defaults |
