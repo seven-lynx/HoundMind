@@ -122,6 +122,11 @@ config) and open:
 - `http://<pi-ip>:8420/api/v1/state` — JSON snapshot (token required)
 - `http://<pi-ip>:8420/api/v1/camera/stream` — MJPEG (token required)
 
+This is plaintext HTTP: the token crosses the LAN in the clear. `"tls_enabled": true` under
+`settings.api` serves HTTPS with a generated self-signed certificate instead — see
+[docs/INSTALL.md](docs/INSTALL.md) §*TLS* for the trust steps, and keep port 8420 off the internet
+either way.
+
 Everything under `/api/v1` needs the token from `~/.houndmind/api_token`; `/health` and `/meta`
 do not. The full contract is [docs/CONTROL_API.md](docs/CONTROL_API.md), and the token and pairing
 story is §26 of [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md).

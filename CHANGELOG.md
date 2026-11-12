@@ -9,6 +9,15 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- **TLS is optional, and off** (`#18`): `settings.api.tls_enabled` serves HTTPS on the same port with a
+  self-signed certificate generated on first start (hostname plus every local address, 10 years, key
+  `0600`, generated only while the feature is already on). `services/tls.py` builds the
+  `SSLContext` and shells to `openssl` rather than taking a new dependency; a missing binary or an
+  unreadable pair disables the control plane with a message naming the cause instead of failing the
+  runtime, so the dog keeps walking without an API. Each client trusts the certificate once —
+  `docs/INSTALL.md` §*TLS* has the browser, phone and `curl` steps, and says plainly that an Android
+  client rejects a self-signed certificate until it carries its own trust configuration.
+  `GET /api/v1/meta` now reports `scheme`.
 - **The control plane's exposure is written down** (`#18`): it speaks plaintext HTTP on port 8420, so
   the device token, every command and every camera frame cross the LAN in the clear, and the MJPEG
   route accepts that token in a query string. `docs/CONTROL_API.md` §1, `docs/FEATURES_GUIDE.md` §26

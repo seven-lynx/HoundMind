@@ -28,9 +28,11 @@ the device token itself. Keep the dog on a network you trust, or close the door:
 - A firewall rule that admits only your own devices to port 8420.
 - A TLS-terminating reverse proxy in front, if you need to reach it from beyond the LAN.
 
-There is no TLS in the runtime yet; that is tracked in
-[#18](https://github.com/seven-lynx/HoundMind/issues/18). **Do not port-forward 8420 to the
-internet.**
+**TLS is available and off by default.** `settings.api.tls_enabled: true` serves HTTPS with a
+self-signed certificate generated on first start for this device — `docs/INSTALL.md` has the trust
+steps for a browser and a phone. A client that cannot be taught to trust it (the Android app is one
+today) stays on the plaintext path above, with those workarounds. **Do not port-forward 8420 to the
+internet** either way.
 
 **Device token** — generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token`, directory `0700`, file `0600`. It is never in `config/settings.jsonc`,
@@ -70,7 +72,7 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 
 | Method | Path | Scope | Purpose |
 |---|---|---|---|
-| `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `device_id`, `board`, `profile`, `uptime_s`, `capabilities` |
+| `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `scheme`, `device_id`, `board`, `profile`, `uptime_s`, `capabilities` |
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see §4) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
@@ -434,6 +436,8 @@ display verbatim — it must never contain a path, a token, or a stack trace.
 - `GET /api/v1/meta` returns `{ "api_version": 1, "min_client": 1 }`.
 - Adding a field or a route is **not** a breaking change. Removing or renaming one is, and requires
   `v2` with the old route served for at least one release.
+- `GET /api/v1/meta` gained `scheme` (`"http"` | `"https"`) when TLS became optional: additive, and a
+  client that ignores it keeps working against both transports.
 - Enum values are additive: a client must handle an unknown `mode` or module `state` by displaying it
   read-only rather than crashing.
 - `docs/CONTROL_API.md` is the source of truth. `tests/test_api_routes.py` parses §2 and compares it

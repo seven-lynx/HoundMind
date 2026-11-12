@@ -269,6 +269,41 @@ On Windows PowerShell:
 python -m houndmind_ai
 ```
 
+## TLS for the control plane (optional)
+
+The control plane serves **plaintext HTTP** by default: the device token, every command and every
+camera frame cross the LAN in the clear (`docs/CONTROL_API.md` §1 names what that exposes and the
+workarounds). Turning TLS on is one setting:
+
+```jsonc
+// config/settings.jsonc
+"api": {
+  "tls_enabled": true,
+  "tls_cert": "~/.houndmind/tls/cert.pem",
+  "tls_key": "~/.houndmind/tls/key.pem"
+}
+```
+
+On the next start, if neither file exists, a **self-signed** certificate is generated for this device
+(hostname plus every address it answers on, valid 10 years, key `0600`). Nothing is generated while
+`tls_enabled` is `false`. Generation needs the `openssl` binary — `openssl version` should answer on
+Raspberry Pi OS; if it does not, the control plane disables itself with a message naming the missing
+command and the dog keeps running without an API.
+
+The certificate is self-signed, so each client trusts it once:
+
+- **Desktop browser** — open `https://<pi-ip>:8420/`, accept the warning once ("Advanced" →
+  "Proceed"), or import `~/.houndmind/tls/cert.pem` into the OS trust store.
+- **Phone** — transfer `cert.pem` and install it as a trusted CA (Android: *Settings → Security →
+  Encryption & credentials → Install a certificate → CA certificate*; iOS: AirDrop it, then
+  *Settings → General → VPN & Device Management*, and enable full trust). An Android HTTP client
+  rejects a self-signed certificate by default, so **an app without its own trust step will not
+  connect** — the browser workaround is to use the web app, which is same-origin.
+- **curl** — `curl --cacert cert.pem https://<pi-ip>:8420/api/v1/meta`.
+
+`GET /api/v1/meta` reports `"scheme"` (`"http"` or `"https"`) so a client can tell a wrong-scheme
+attempt from a wrong host.
+
 ## Feature Guide
 See [FEATURES_GUIDE.md](FEATURES_GUIDE.md) for what each feature does, how to use it, and how to disable it.
 

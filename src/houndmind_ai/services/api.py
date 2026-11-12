@@ -199,6 +199,9 @@ class ControlPlane:
         return {
             "api_version": API_VERSION,
             "min_client": 1,
+            # What the client actually connected to. A phone that guessed wrong cannot tell a
+            # wrong-scheme redirect from a wrong host otherwise.
+            "scheme": "https" if self.settings.tls_enabled else "http",
             "device_id": self.context.get("device_id") or device.get("device_id"),
             "board": self.context.get("board"),
             "profile": self.context.get("profile"),

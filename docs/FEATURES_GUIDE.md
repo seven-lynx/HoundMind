@@ -791,16 +791,21 @@ read it on the device: `cat ~/.houndmind/api_token`. To pair a phone or a second
 pairing window and enter the 6-digit code it prints — the code is single-use and expires after
 five minutes.
 
-**It is not encrypted.** The control plane speaks plain HTTP on port 8420: the token, every command
-and every camera frame travel in the clear. The token is the whole security boundary, so anyone
-watching the network reads `move` and `config` out of it — and `admin` if they catch the device token
-itself, which the MJPEG route accepts in a query string. Keep the dog on a network you trust, or close
-the door: `"host": "127.0.0.1"` plus an SSH tunnel, a firewall rule admitting only your devices, or a
-TLS-terminating proxy in front. Never port-forward 8420 to the internet. TLS in the runtime is tracked
-in [#18](https://github.com/seven-lynx/HoundMind/issues/18).
+**It is not encrypted by default.** The control plane speaks plain HTTP on port 8420: the token, every
+command and every camera frame travel in the clear. The token is the whole security boundary, so
+anyone watching the network reads `move` and `config` out of it — and `admin` if they catch the device
+token itself, which the MJPEG route accepts in a query string. Keep the dog on a network you trust, or
+close the door: `"host": "127.0.0.1"` plus an SSH tunnel, a firewall rule admitting only your devices,
+or a TLS-terminating proxy in front. Never port-forward 8420 to the internet.
+
+**Turning TLS on** is one key — `"tls_enabled": true` — and the certificate is generated on first
+start, self-signed, for this device. Each client trusts it once; `docs/INSTALL.md` §*TLS* has the
+browser, phone and `curl` steps, including the part that bites: an Android HTTP client rejects a
+self-signed certificate by default unless the app carries its own trust configuration.
 
 ```bash
 # Show a pairing code (valid 5 minutes, single use)
+# With TLS on, use https:// and add --cacert ~/.houndmind/tls/cert.pem
 curl -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
      -X POST http://127.0.0.1:8420/api/v1/pair/open
 ```
@@ -816,6 +821,9 @@ mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed.
 | `host` | `0.0.0.0` | Bind address. The token is the security boundary, not the bind — and the traffic is cleartext. |
 | `port` | `8420` | One port for REST, WebSocket, MJPEG and the web app. |
 | `token_path` | `~/.houndmind/api_token` | Where the install-issued token lives. |
+| `tls_enabled` | `false` | Serve HTTPS instead of HTTP. Off means cleartext — see the warning above. |
+| `tls_cert` | `~/.houndmind/tls/cert.pem` | Certificate. Generated self-signed on first start when missing while TLS is on. |
+| `tls_key` | `~/.houndmind/tls/key.pem` | Private key for that certificate, `0600`. |
 | `state_hz` | `10.0` | Telemetry push rate. |
 | `pairing_enabled` | `true` | Allow pairing codes. |
 | `pairing_attempts_per_minute` | `5` | Rate limit per peer. |
