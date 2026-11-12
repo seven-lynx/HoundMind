@@ -1026,6 +1026,11 @@ _API = Section(
         "port": IntSpec(minimum=1, maximum=65535),
         # The install-issued token. Referenced by path, never pasted (D8).
         "token_path": StrSpec(),
+        # TLS (#18): off serves plaintext HTTP on every interface, on serves HTTPS with a
+        # self-signed pair generated on first start when neither file exists.
+        "tls_enabled": Bool(),
+        "tls_cert": StrSpec(),
+        "tls_key": StrSpec(),
         "static_root": _NULLABLE_STR,
         "state_hz": FloatSpec(minimum=1.0, maximum=50.0),
         "pairing_enabled": Bool(),

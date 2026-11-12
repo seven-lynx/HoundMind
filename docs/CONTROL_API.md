@@ -19,6 +19,21 @@ file. A route that exists in code and not here — or here and not in code — f
 Two mechanisms, both bearer-style. Everything requires a token except `/meta`, `/health` and
 `/pair`, which is the exchange that *produces* a token.
 
+**This is plaintext HTTP.** Nothing on port 8420 is encrypted: the device token, every command and
+every camera frame cross the LAN in the clear. The token *is* the security boundary, so anyone who can
+observe the network — or read a single access log — holds `move`, `config`, and `admin` if they catch
+the device token itself. Keep the dog on a network you trust, or close the door:
+
+- `settings.api.host: "127.0.0.1"` and an SSH tunnel: `ssh -L 8420:localhost:8420 <user>@<pi>`.
+- A firewall rule that admits only your own devices to port 8420.
+- A TLS-terminating reverse proxy in front, if you need to reach it from beyond the LAN.
+
+**TLS is available and off by default.** `settings.api.tls_enabled: true` serves HTTPS with a
+self-signed certificate generated on first start for this device — `docs/INSTALL.md` has the trust
+steps for a browser and a phone. A client that cannot be taught to trust it (the Android app is one
+today) stays on the plaintext path above, with those workarounds. **Do not port-forward 8420 to the
+internet** either way.
+
 **Device token** — generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token`, directory `0700`, file `0600`. It is never in `config/settings.jsonc`,
 never in a log line, and never in this repository. The web app does not receive it automatically: on
@@ -47,9 +62,11 @@ because rotating the device token is an operator decision, not a client one.
 | `config` | `GET`/`PATCH /config`, `GET /calibration` |
 | `admin` | `POST /pair/open`, `GET /logs`, `GET /support-bundle` — device token only |
 
-Header: `Authorization: Bearer <token>`. A query-string token is accepted **only** on the two camera
-routes, because an `<img>` tag cannot set a header; those routes require `state:read` and never grant
-`config` or `admin`.
+Header: `Authorization: Bearer <token>`. The two camera routes also accept `?ticket=<ticket>` because an
+`<img>` tag cannot set a header: mint one with `POST /api/v1/camera/ticket` (`state:read`), it is valid
+for 60 seconds and **single use**, and it buys `state:read` on one frame and nothing else. The device
+token is **not** accepted in a query string — it used to be, and that put the credential for `move`
+and `config` into browser history and access logs (`#18`).
 
 ---
 
@@ -57,7 +74,7 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 
 | Method | Path | Scope | Purpose |
 |---|---|---|---|
-| `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `device_id`, `board`, `profile`, `uptime_s`, `capabilities` |
+| `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `scheme`, `device_id`, `board`, `profile`, `uptime_s`, `capabilities` |
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see §4) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
@@ -66,8 +83,9 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 | `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress (§8) |
 | `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first (§4); 503 when the feed is not running |
 | `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream (§5) |
-| `GET` | `/api/v1/camera/stream` | `state:read` (`?token=`) | MJPEG, multipart/x-mixed-replace |
-| `GET` | `/api/v1/camera/snapshot` | `state:read` (`?token=`) | single JPEG |
+| `GET` | `/api/v1/camera/stream` | `state:read` (`?ticket=`) | MJPEG, multipart/x-mixed-replace |
+| `GET` | `/api/v1/camera/snapshot` | `state:read` (`?ticket=`) | single JPEG |
+| `POST` | `/api/v1/camera/ticket` | `state:read` | mint a single-use camera ticket: `{ticket, expires_in}` |
 | `POST` | `/api/v1/pair` | none | exchange a pairing code for a client token |
 | `POST` | `/api/v1/pair/open` | `admin` | open a pairing window; returns the 6-digit code |
 | `POST` | `/api/v1/command` | `move` | issue a command (§3) |
@@ -421,6 +439,12 @@ display verbatim — it must never contain a path, a token, or a stack trace.
 - `GET /api/v1/meta` returns `{ "api_version": 1, "min_client": 1 }`.
 - Adding a field or a route is **not** a breaking change. Removing or renaming one is, and requires
   `v2` with the old route served for at least one release.
+- `GET /api/v1/meta` gained `scheme` (`"http"` | `"https"`) when TLS became optional: additive, and a
+  client that ignores it keeps working against both transports.
+- **Breaking**: the two camera routes no longer accept `?token=`. Mint a ticket at
+  `POST /api/v1/camera/ticket` and pass `?ticket=`. A client that sets headers needs no change at all,
+  and the bundled web app already does the right thing. Removing the token from the query string is
+  the point of the change (`#18`), so it is not kept behind a flag.
 - Enum values are additive: a client must handle an unknown `mode` or module `state` by displaying it
   read-only rather than crashing.
 - `docs/CONTROL_API.md` is the source of truth. `tests/test_api_routes.py` parses §2 and compares it

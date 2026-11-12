@@ -481,6 +481,9 @@ curl -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
      http://127.0.0.1:8420/api/v1/modules
 ```
 
+(With `settings.api.tls_enabled` on, that is `https://` plus `--cacert ~/.houndmind/tls/cert.pem`;
+`GET /api/v1/meta` reports the `scheme` the server is actually serving.)
+
 ---
 
 ## 11. Autonomy, attention and behaviour tuning

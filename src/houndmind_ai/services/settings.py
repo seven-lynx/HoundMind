@@ -60,6 +60,11 @@ class ApiSettings:
     # Path to the install-issued token. `~` is expanded by the token store, not here, so this
     # value stays readable in an error message.
     token_path: str = "~/.houndmind/api_token"
+    # TLS (#18). Off means plaintext HTTP: see `docs/CONTROL_API.md` §1 for what that exposes.
+    # On means HTTPS, and the pair below is generated on first start when neither file exists.
+    tls_enabled: bool = False
+    tls_cert: str = "~/.houndmind/tls/cert.pem"
+    tls_key: str = "~/.houndmind/tls/key.pem"
     # Directory holding the pre-built web app. None means "the bundled `web/` directory".
     static_root: str | None = None
     # Telemetry push rate on the WebSocket. 10 Hz is the contract; faster floods a phone.
@@ -85,6 +90,9 @@ class ApiSettings:
             host=_as_str(raw.get("host"), DEFAULT_HOST),
             port=_as_int(raw.get("port"), DEFAULT_PORT, 1, 65535),
             token_path=_as_str(token_path, cls.token_path),
+            tls_enabled=_as_bool(raw.get("tls_enabled"), cls.tls_enabled),
+            tls_cert=_as_str(raw.get("tls_cert"), cls.tls_cert),
+            tls_key=_as_str(raw.get("tls_key"), cls.tls_key),
             static_root=static_root if isinstance(static_root, str) and static_root else None,
             state_hz=_as_float(raw.get("state_hz"), cls.state_hz, 1.0, 50.0),
             pairing_enabled=_as_bool(raw.get("pairing_enabled"), cls.pairing_enabled),

@@ -19,6 +19,7 @@ from typing import Any
 
 from houndmind_ai.core.module import Module
 from houndmind_ai.services.settings import ApiSettings
+from houndmind_ai.services.tls import TlsError, build_context
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +125,17 @@ class ControlPlaneModule(Module):
 
         plane = ControlPlane(context, settings, bus, clock=time.monotonic)
         self._plane = plane
+        # Built before the runner: a TLS failure is a configuration problem, and reporting it
+        # costs no socket. `None` means plaintext, which is what aiohttp wants for that too.
+        try:
+            ssl_context = build_context(settings)
+        except TlsError as exc:
+            self._error = str(exc)
+            self._ready.set()
+            return
         runner = web.AppRunner(create_app(plane), access_log=None)
         await runner.setup()
-        site = web.TCPSite(runner, settings.host, settings.port)
+        site = web.TCPSite(runner, settings.host, settings.port, ssl_context=ssl_context)
         try:
             await site.start()
         except OSError as exc:
@@ -138,7 +147,8 @@ class ControlPlaneModule(Module):
         self._stop_event = asyncio.Event()
         self._ready.set()
         logger.info(
-            "Control plane listening on http://%s:%s (token: %s)",
+            "Control plane listening on %s://%s:%s (token: %s)",
+            "https" if ssl_context is not None else "http",
             settings.host,
             settings.port,
             plane.tokens.path,

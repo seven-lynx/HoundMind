@@ -1172,13 +1172,24 @@
     // CONTROL PLANE (services/api.py) — one port for REST, WebSocket, MJPEG
     // =====================================================================
     "api": {
-      // Bind address. Reachable on the LAN on purpose: the token is the security boundary.
-      // Use "127.0.0.1" to keep it on the device, or disable `modules.api` to remove it.
+      // Bind address. Reachable on the LAN on purpose — but the traffic is NOT encrypted: the
+      // token, every command and every camera frame cross the network in the clear, so this host
+      // reachable means the token is readable by anyone who can watch the LAN (see #18).
+      // Use "127.0.0.1" plus an SSH tunnel, or a firewall rule, to keep it private; disable
+      // `modules.api` to remove the surface entirely.
       "host": "0.0.0.0",
       "port": 8420,
       // The install-issued API token. Generated on first start, 0600, never pasted into this
       // file and never written to a log.
       "token_path": "~/.houndmind/api_token",
+      // TLS (#18). Off serves plaintext HTTP on every interface, which is what the warning at the
+      // top of this block is about. On serves HTTPS with a self-signed certificate, generated on
+      // first start when neither file below exists — that needs `openssl` on the device.
+      // A self-signed certificate has to be trusted once by each client: the browser shows a
+      // warning until it is, and an Android client rejects it by default (see docs/INSTALL.md).
+      "tls_enabled": false,
+      "tls_cert": "~/.houndmind/tls/cert.pem",
+      "tls_key": "~/.houndmind/tls/key.pem",
       // Pre-built web app location. Null means the copy bundled with the package.
       "static_root": null,
       // Telemetry push rate on /api/v1/events.

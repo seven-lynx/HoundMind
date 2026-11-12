@@ -165,9 +165,21 @@ def test_the_camera_says_why_there_is_no_picture(tmp_path) -> None:
             assert snapshot.status == 200
             assert await snapshot.read() == b"\xff\xd8jpegdata"
 
-            # The query-string token path exists because `<img>` cannot send a header.
+            # The query-string path exists because `<img>` cannot send a header — and it takes a
+            # ticket now, not the device token (`#18`).
+            minted = await client.post(
+                f"{API_PREFIX}/camera/ticket", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert minted.status == 200
+            ticket = (await minted.json())["ticket"]
+            via_ticket = await client.get(f"{API_PREFIX}/camera/snapshot?ticket={ticket}")
+            assert via_ticket.status == 200
+            assert await via_ticket.read() == b"\xff\xd8jpegdata"
+
+            # The credential that drives the dog is refused in a URL, and says what to use instead.
             via_query = await client.get(f"{API_PREFIX}/camera/snapshot?token={token}")
-            assert via_query.status == 200
+            assert via_query.status == 401
+            assert "camera/ticket" in (await via_query.json())["detail"]
 
     asyncio.run(scenario())
 
