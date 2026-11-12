@@ -83,6 +83,10 @@ class PidogHAL:
         self._audio: queue.Queue[tuple[str, int] | None] = queue.Queue(maxsize=1)
         self._audio_lock = threading.Lock()
         self._audio_thread: threading.Thread | None = None
+        # Names the vendor could not find, reported once each: a cue that fires on every entry
+        # into a state must not turn one missing effect into a log flood (#81). Only the audio
+        # worker thread touches this, so it needs no lock.
+        self._warned_sounds: set[str] = set()
         # The vendor's action list, read once (see `_read_vendor_actions`).
         self._vendor_action_names: frozenset[str] | None = None
         self._closed = False
@@ -504,12 +508,25 @@ class PidogHAL:
                 logger.debug("Vendor exposes no speak(); %r dropped", text)
                 return
             try:
-                speaker(text, volume=volume)
+                played = speaker(text, volume=volume)
             except TypeError:
                 # Older vendor builds take the text only.
-                speaker(text)
+                played = speaker(text)
+            # `False` is the vendor's way of saying it could not find the effect
+            # (`docs/pidog/PIDOG-EXPRESSION.md:81`), and it is the only signal there is: `sound()`
+            # and `speak()` return `None` either way, so a typo in a cue name would otherwise be a
+            # no-op with no trace anywhere an operator can read (#81).
+            if played is False:
+                self._warn_missing_sound(text)
         except Exception:  # noqa: BLE001 - audio is cosmetic and must not kill the worker
             logger.warning("Audio output failed", exc_info=True)
+
+    def _warn_missing_sound(self, name: str) -> None:
+        """Name the missing effect once; a repeated cue then stays silent about it."""
+        if name in self._warned_sounds:
+            return
+        self._warned_sounds.add(name)
+        logger.warning("Sound %r not found in the vendor's sounds directory", name)
 
     def _stop_audio(self) -> None:
         """Wake the worker so it can exit; it is a daemon, so it never blocks shutdown."""

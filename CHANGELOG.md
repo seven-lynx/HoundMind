@@ -20,6 +20,10 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `speak(text, volume)` uses the vendor's speech path, so a routine can talk without the optional
   `voice` module. Audio runs on its own worker, so a sound never holds up a gait; `FakeDogHAL` records
   both.
+- **A missing sound is no longer silent.** The vendor returns `False` for a name that is not in its
+  `sounds/` directory and the adapter discarded it, so a typo'd effect and a working one looked
+  identical from every surface — `sound()` and `speak()` return `None` either way. The HAL now warns
+  once per name (`#81`).
 - `rgb` keeps its `bps` argument, so an LED effect can specify its animation rate instead of silently
   running at the vendor's default.
 - `state.actuators.source` and `state.actuators.displaced`: the producer that won the tick, and how

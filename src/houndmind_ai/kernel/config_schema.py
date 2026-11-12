@@ -813,7 +813,9 @@ _BEHAVIOR = Section(
         "state_expressions": _STATE_EXPRESSIONS,
         # The cue a state entry plays (`behavior/fsm.py::_entry_cue`). `cue_sounds` is advisory: the
         # vendor's twelve effects are the ones a stock build has, and a name outside the list is
-        # warned once rather than refused, because a build may ship its own (#81).
+        # warned once rather than refused, because a build may ship its own. A name the vendor cannot
+        # find is reported by the HAL itself (`hal/vendor.py::_warn_missing_sound`), so this list is a
+        # hint and no longer the only evidence a cue did not play (#81).
         "cue_volume": IntSpec(minimum=0, maximum=100),
         "cue_sounds": _NAMES,
         "autonomy_enabled": Bool(),

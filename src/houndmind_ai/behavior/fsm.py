@@ -544,9 +544,9 @@ class BehaviorModule(Module):
           rather than in the HAL because it is a behaviour decision, and the timer that owns it is
           the runtime's (`core/runtime.py:147`).
         - a name outside the advisory `behavior.cue_sounds` list. That list is a hint, not a
-          whitelist: a build with its own effects may use them, and the vendor will not find a file
-          that is not there (see #81, `hal: a missing sound effect is undetectable`), so the mismatch is
-          warned once per name and the cue still plays.
+          whitelist: a build with its own effects may use them, so the mismatch is warned once per
+          name and the cue still plays. Whether the vendor actually has the file is a separate
+          question, and the HAL answers it (`hal/vendor.py::_warn_missing_sound`, #81).
         """
         table = settings.get("state_expressions")
         if not isinstance(table, dict):
