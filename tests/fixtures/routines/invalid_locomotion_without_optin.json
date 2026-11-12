@@ -1,0 +1,11 @@
+{
+  "id": "locomotion_without_optin",
+  "steps": [
+    {
+      "action": "forward",
+      "params": {
+        "speed": 0.5
+      }
+    }
+  ]
+}

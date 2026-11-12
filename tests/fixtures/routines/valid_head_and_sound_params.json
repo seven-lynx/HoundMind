@@ -1,0 +1,18 @@
+{
+  "id": "head_and_sound",
+  "steps": [
+    {
+      "action": "head",
+      "params": {
+        "yaw": 20,
+        "pitch": 5
+      }
+    },
+    {
+      "action": "sound",
+      "params": {
+        "name": "woohoo"
+      }
+    }
+  ]
+}

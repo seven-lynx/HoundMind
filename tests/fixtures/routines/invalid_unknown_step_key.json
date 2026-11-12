@@ -1,0 +1,9 @@
+{
+  "id": "unknown_step_key",
+  "steps": [
+    {
+      "action": "sit",
+      "wait": 1
+    }
+  ]
+}

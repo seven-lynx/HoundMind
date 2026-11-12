@@ -1,0 +1,14 @@
+{
+  "id": "postures",
+  "steps": [
+    {
+      "action": "sit"
+    },
+    {
+      "action": "stand"
+    },
+    {
+      "action": "lie"
+    }
+  ]
+}

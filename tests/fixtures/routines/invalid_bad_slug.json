@@ -1,0 +1,8 @@
+{
+  "id": "Morning Greeting",
+  "steps": [
+    {
+      "action": "sit"
+    }
+  ]
+}

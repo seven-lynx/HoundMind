@@ -1,0 +1,16 @@
+{
+  "id": "patrol_march",
+  "allow_locomotion": true,
+  "steps": [
+    {
+      "action": "forward",
+      "params": {
+        "speed": 0.5,
+        "steps": 3
+      }
+    },
+    {
+      "action": "sit"
+    }
+  ]
+}

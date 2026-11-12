@@ -1,0 +1,14 @@
+{
+  "id": "expressions",
+  "steps": [
+    {
+      "action": "wag tail"
+    },
+    {
+      "action": "nod"
+    },
+    {
+      "action": "tilting_head"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "say_hello",
+  "steps": [
+    {
+      "action": "speak",
+      "params": {
+        "text": "Good morning",
+        "volume": 0.8
+      }
+    }
+  ]
+}
