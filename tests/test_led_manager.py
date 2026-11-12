@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from houndmind_ai.hal.fake import FakeDogHAL
-from houndmind_ai.logging.led_manager import LedManagerModule
+from houndmind_ai.logging.led_manager import DEFAULT_PRIORITY, LedManagerModule
 
 
 class DummyContext:
@@ -83,6 +85,54 @@ def rgb_calls(ctx: DummyContext) -> list[dict[str, Any]]:
     return [params for name, params in ctx.get("hal").calls if name == "rgb"]
 
 
+# What each source looks like on the strip under `full_settings()`: the mode its producer writes, then
+# the (style, colour) pair that identifies the winner in the HAL call. Four producers, four shapes
+# (`safety/supervisor.py:102`, `navigation/obstacle_avoidance.py:839`, `behavior/attention.py:96`,
+# `optional/energy_emotion.py:88`) — kept real rather than a bare `{"mode": ...}` so the precedence
+# tests exercise the requests the loop actually publishes.
+_SOURCES: dict[str, tuple[str, str, str]] = {
+    "safety": ("emergency", "boom", "red"),
+    "navigation": ("patrol", "breath", "green"),
+    "attention": ("listen", "listen", "cyan"),
+    "emotion": ("happy", "breath", "violet"),
+}
+
+# The int each producer stamps on its request from its own section's `led_priority`. The manager
+# never reads it — the list order decides — which is why the tests below pass it and still expect
+# the order to win.
+_PRODUCER_PRIORITY = {"safety": 80, "navigation": 50, "attention": 60, "emotion": 40}
+
+
+def full_settings() -> dict[str, Any]:
+    """Settings carrying all four sources, so precedence can be asked for any pair."""
+    settings = led_settings(
+        priority=list(DEFAULT_PRIORITY),
+        attention_color="cyan",
+        attention_mode="listen",
+        emotion_mode="breath",
+    )
+    settings["emotion"] = {"led_colors": {"happy": "violet"}}
+    return settings
+
+
+def publish(ctx: DummyContext, source: str, until_ts: float | None = None) -> None:
+    mode = _SOURCES[source][0]
+    request: dict[str, Any] = {
+        "timestamp": 0.0,
+        "mode": mode,
+        "priority": _PRODUCER_PRIORITY[source],
+    }
+    if until_ts is not None:
+        request["until_ts"] = until_ts
+    ctx.set(f"led_request:{source}", request)
+
+
+def shown(ctx: DummyContext) -> tuple[str, str]:
+    """The (style, colour) pair the strip was last told, which identifies the winning source."""
+    last = rgb_calls(ctx)[-1]
+    return (last["style"], last["color"])
+
+
 def test_led_manager_priority_selection():
     ctx = DummyContext()
     hal = FakeDogHAL()
@@ -116,6 +166,55 @@ def test_led_manager_priority_selection():
     assert calls, "LED manager should update the strip"
     assert calls[-1]["style"] == "boom"
     assert calls[-1]["color"] == "red"
+
+def test_the_default_order_puts_safety_first() -> None:
+    """§15's guarantee is the shipped list's, so pin the list, not only what the selector does with it."""
+    assert DEFAULT_PRIORITY[0] == "safety"
+    assert list(DEFAULT_PRIORITY) == ["safety", "navigation", "attention", "emotion"]
+
+
+@pytest.mark.parametrize(("winner", "loser"), list(zip(DEFAULT_PRIORITY, DEFAULT_PRIORITY[1:])))
+def test_the_higher_source_wins_while_both_are_live(winner: str, loser: str) -> None:
+    """One case per adjacent pair: the list is walked front to back and the first live request wins."""
+    clock = Clock()
+    module, ctx = build(full_settings(), clock=clock)
+    publish(ctx, loser)
+    publish(ctx, winner)
+
+    module.tick(ctx)
+
+    assert shown(ctx) == _SOURCES[winner][1:]
+
+
+def test_an_expression_never_beats_a_live_safety_request() -> None:
+    """The sentence in §15, end to end: safety holds the strip, then hands it over when it expires."""
+    clock = Clock()
+    module, ctx = build(full_settings(), clock=clock)
+    publish(ctx, "emotion")
+    publish(ctx, "safety", until_ts=clock() + 2.0)
+
+    module.tick(ctx)
+    assert shown(ctx) == ("boom", "red"), "safety outranks every expression while it is live"
+
+    clock.advance(3.0)
+    module.tick(ctx)
+    assert ctx.get("led_request:safety") is None
+    assert shown(ctx) == ("breath", "violet"), "the expression it was holding off takes the strip"
+
+
+def test_reordering_the_list_is_how_a_user_overrides_the_default() -> None:
+    """The guarantee belongs to the default list, not to the selector: a reordered config really wins."""
+    clock = Clock()
+    settings = full_settings()
+    settings["led"]["priority"] = ["emotion", "safety"]
+    module, ctx = build(settings, clock=clock)
+    publish(ctx, "safety")
+    publish(ctx, "emotion")
+
+    module.tick(ctx)
+
+    assert shown(ctx) == ("breath", "violet")
+
 
 def test_an_expired_high_priority_request_loses_to_a_live_one() -> None:
     clock = Clock()

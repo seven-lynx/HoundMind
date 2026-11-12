@@ -403,7 +403,11 @@ reading and cannot accept commands.
 **What it does:** Centralized LED priority handling. It picks the highest-priority live request from
 `led_request:<source>` and applies it through the HAL's `rgb`, so a colour and its animation rate come
 from one place instead of from whichever module wrote last. The order is `settings.led.priority`
-(default `["safety", "navigation", "attention", "emotion"]`).
+(default `["safety", "navigation", "attention", "emotion"]`), and **the order is the precedence**: the
+list is walked front to back and the first source with a live request owns the strip, so `safety` first
+is a guarantee rather than an accident of the default. Reordering that list is the one way to override
+it — put `emotion` ahead of `safety` and an expression does take the strip — and the numeric `priority`
+a producer stamps on its request is not consulted at all.
 
 **Requests can expire.** A request is `{mode, color?, bps?, until_ts?}`. `until_ts` is a deadline on
 the runtime's monotonic clock; once it passes, the request stops winning and its key is cleared, so the
