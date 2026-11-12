@@ -199,6 +199,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Navigation & Obstacle Avoidance| Enabled     |                                       |
 | Mapping                        | Enabled     |                                       |
 | Behavior                       | Enabled     |                                       |
+| Routines                       | Enabled     | `modules.routine_runner`              |
 | Attention                      | Enabled     |                                       |
 | Watchdog                       | Enabled     | Holds motion on stale data; restarts stopped modules with backoff |
 | Event Logging                  | Enabled     |                                       |

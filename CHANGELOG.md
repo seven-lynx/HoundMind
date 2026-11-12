@@ -69,6 +69,13 @@ Current Release: v2026.01.18 • Author: 7Lynx
   it, which is the rule P1 set for `decision`. A client that was told `202` can now follow the
   run to its end and see the `veto` that stopped it.
 
+- `modules.routine_runner` in the shipped config and `docs/ROUTINES.md`, the routine file format as a
+  `contract`: keys, `allow_locomotion`, the refusal rules, and one example `check_routine` accepts —
+  asserted by `tests/test_docs_routines.py`, so the doc cannot drift into printing a routine the device
+  refuses. `docs/README.md` gains its row, and the programming guide the context keys the runner
+  publishes (`routine_request`, `routine_report`, `routine_run`, `routine_stop`) and the `routines`
+  config section it shipped with.
+
 ### Changed
 - `POST /api/v1/command` accepts any action classified in `config/actions.jsonc`, not only the twelve
   names in `KNOWN_ACTIONS`. A name nothing classifies is still a `400` with a did-you-mean.
