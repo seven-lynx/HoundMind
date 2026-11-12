@@ -9,6 +9,7 @@ from houndmind_ai.act.gateway import MotionGatewayModule
 from houndmind_ai.behavior.attention import AttentionModule
 from houndmind_ai.behavior.fsm import BehaviorModule
 from houndmind_ai.behavior.habituation import HabituationModule
+from houndmind_ai.behavior.routine_runner import RoutineRunnerModule
 from houndmind_ai.board.detect import BoardInfo, detect
 from houndmind_ai.calibration.workflow import CalibrationModule
 from houndmind_ai.core.config import load_config
@@ -87,6 +88,12 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(BehaviorModule("behavior", **cfg("behavior")), [Capability.BEHAVIOUR])
     registry.register(HabituationModule("habituation", **cfg("habituation")), [Capability.BEHAVIOUR])
     registry.register(AttentionModule("attention", **cfg("attention")), [Capability.BEHAVIOUR])
+    # A routine is a producer like the others: it publishes a `Source.ROUTINE` intent and the
+    # gateway decides. It ticks after the gateway, so a step is resolved on the next tick — the
+    # same one-tick lag every behaviour module has (`act/gateway.py::_record`).
+    registry.register(
+        RoutineRunnerModule("routine_runner", **cfg("routine_runner")), [Capability.BEHAVIOUR]
+    )
     registry.register(EventLoggerModule("event_log", **cfg("event_log")), [Capability.TELEMETRY])
     # The decision feed ticks every loop tick and does not share the event logger's settings: a
     # device with `event_log_enabled: false` still answers `/decisions`.

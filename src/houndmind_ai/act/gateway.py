@@ -241,10 +241,16 @@ class MotionGatewayModule(Module):
                     detail=f"outranked by {best.action} from {best.source.name.lower()}",
                 )
             )
+        verdict = verdicts.get(best.id) or self._vet(best, snapshot, mode)
+        if not verdict.accepted:
+            # A board intent has no client to acknowledge it (`_drain_bus` handles those), so
+            # without this the record names an action the dog refused and keeps no reason for it —
+            # which is the one thing rule 3 of `kernel/decisions.py` forbids.
+            vetoes.append(_refusal(best, verdict))
         return Resolution(
             mode=mode,
             winner=best,
-            verdict=verdicts.get(best.id) or self._vet(best, snapshot, mode),
+            verdict=verdict,
             cancelled=tuple(cancelled),
             vetoes=tuple(vetoes),
         )

@@ -23,6 +23,7 @@ from typing import Any
 
 from houndmind_ai.core.module import Module
 from houndmind_ai.hal.iface import DogHAL
+from houndmind_ai.kernel.scheduler import LatestJobWorker
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +51,42 @@ def _canonical(action: str) -> str:
     return action.strip().lower().replace(" ", "_")
 
 
+def _params_key(params: Any) -> tuple[tuple[str, str], ...]:
+    """A comparable form of a command's parameters (`act/gateway.py` keys its dedupe the same way).
+
+    `repr` rather than `value` because a params dict is JSON, so `"2"` and `2` are different
+    commands, and a nested value that never reaches a servo still has to compare equal to itself.
+    """
+    if not isinstance(params, dict):
+        return ()
+    return tuple(sorted((str(key), repr(value)) for key, value in params.items()))
+
+
 # Actions whose parameters are the whole command. A `sound` with no effect name, or an `rgb` with
-# no colour, is a no-op, so these must reach the HAL verbatim. Locomotion stays out on purpose: a
-# `speed`/`steps` pair takes the HAL's synchronous `_direct` path, which can hold the tick.
-_PARAM_ACTIONS = frozenset({"sound", "speak", "rgb", "rpy", "head"})
+# no colour, is a no-op, so these must reach the HAL verbatim. Locomotion joined them in P2 R4
+# (#64): `config/actions.jsonc` has declared `speed`/`steps`/`wait` for the five moving actions all
+# along, and `hal/vendor.py:385` is the code that honours them — dropping them here made the
+# catalog a promise the device did not keep.
+_PARAM_ACTIONS = frozenset(
+    {
+        "sound",
+        "speak",
+        "rgb",
+        "rpy",
+        "head",
+        "forward",
+        "backward",
+        "turn_left",
+        "turn_right",
+        "trot",
+    }
+)
+
+# The subset that can block. A parameterised step takes `hal/vendor.py::_direct`, which holds the
+# servo bus and, with `wait`, keeps it until the gait finishes; one head sweep can own that bus for
+# seconds. Those calls leave the tick and run on the module's own worker. A bare `forward` still
+# goes straight through: the vendor queues it and returns.
+_LOCOMOTION_ACTIONS = frozenset({"forward", "backward", "turn_left", "turn_right", "trot"})
 
 
 class MotorModule(Module):
@@ -62,8 +95,18 @@ class MotorModule(Module):
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self.hal: DogHAL | None = None
+        # The dedupe memory is the action *and its parameters*: two identical steps are one
+        # command unless something else happened between them, and an absent command clears it
+        # (`tick`), which is what lets a routine run the same step twice (F-P2-2, #65).
         self.last_action: str | None = None
+        self.last_params: tuple[tuple[str, str], ...] = ()
         self.last_action_ts = 0.0
+        # Blocking locomotion steps run here, never on the decision loop.
+        self.worker: LatestJobWorker | None = None
+        # Diagnostics. A deferral is a command that will run later; a silent one is the hole #65
+        # reported. Both counters rise only while something is genuinely holding the dog back.
+        self.rate_limited = 0
+        self.deferred = 0
 
     def start(self, context) -> None:
         if not self.status.enabled:
@@ -73,6 +116,8 @@ class MotorModule(Module):
             self.disable("no HAL available")
             return
         self.hal = hal
+        self.worker = LatestJobWorker(f"houndmind-{self.name}")
+        self.worker.start()
 
         # Servo offsets are user data written by the calibration workflow: apply them if the
         # file asks for it, otherwise leave the servos where the hardware put them.
@@ -88,12 +133,19 @@ class MotorModule(Module):
         self._release_head_follow_if_due(context)
         command = context.get("motion_command")
         if not isinstance(command, dict):
+            # "Nothing asked" is a state, not a pause: forget the last command, so an identical one
+            # that arrives later is a new step. The gateway clears its own dedupe key the same way
+            # (`act/gateway.py::tick`), and the routine runner retracts between two equal steps
+            # precisely so this branch runs (F-P2-2, #65).
+            self.last_action = None
+            self.last_params = ()
             return
         raw = command.get("canonical_action") or command.get("action")
         if not raw:
             return
         action = _canonical(str(raw))
-        if action == self.last_action:
+        params_key = _params_key(command.get("params"))
+        if action == self.last_action and params_key == self.last_params:
             return
         if self.hal is None:
             return
@@ -120,12 +172,24 @@ class MotorModule(Module):
             # watchdog hold could sit behind a gait for a fifth of a second, and "stop" a fifth
             # of a second late is a different dog.
             if action != "stop" and now - self.last_action_ts < min_interval:
+                # The command is *not* consumed: it stays in the context, so the first tick after
+                # the interval runs it. Returning without a word is what made a dropped step
+                # invisible (#65).
+                self.rate_limited += 1
+                if self.rate_limited == 1:
+                    logger.info(
+                        "Action %s deferred: %.2f s of the %.2f s interval left",
+                        action,
+                        min_interval - (now - self.last_action_ts),
+                        min_interval,
+                    )
                 return
             navigation_turn = context.get("navigation_turn")
             if isinstance(navigation_turn, dict):
                 if self._turn_by_angle(context, navigation_turn):
                     context.set("navigation_turn", None)
                     self.last_action = "turn"
+                    self.last_params = ()
                     self.last_action_ts = now
                     return
 
@@ -135,24 +199,46 @@ class MotorModule(Module):
 
             # Execute action; optionally follow with a retreat/turn sequence. The actions whose
             # params are the whole command get them; everything else stays fire-and-forget.
+            payload: dict[str, Any] = {}
             if action in _PARAM_ACTIONS:
                 raw_params = command.get("params")
-                payload: dict[str, Any] = (
-                    dict(raw_params) if isinstance(raw_params, dict) else {}
-                )
+                payload = dict(raw_params) if isinstance(raw_params, dict) else {}
                 if action == "head":
                     # The API answers 202 before the head arrives; blocking here would let a
                     # cosmetic command set the loop's cadence (P3-2).
                     payload["wait"] = False
-                self.hal.action(action, payload)
+            if action in _LOCOMOTION_ACTIONS and payload:
+                if not self._dispatch_off_tick(action, payload):
+                    return
             else:
-                self.hal.action(action, {})
+                self.hal.action(action, payload)
             self._apply_followup(context)
             self.last_action = action
+            self.last_params = params_key
             self.last_action_ts = now
+            self.rate_limited = 0
         except Exception as exc:  # noqa: BLE001
             logger.warning("Motor action failed: %s", exc)
             self.disable(str(exc))
+
+    def _dispatch_off_tick(self, action: str, payload: dict[str, Any]) -> bool:
+        """Run one blocking step on this module's worker. False means "retry next tick".
+
+        A refusal is not a drop: `motion_command` stays in the context, so the tick after the
+        worker frees is this step, not whichever step a producer has moved on to.
+        """
+        worker = self.worker
+        hal = self.hal
+        if worker is None or hal is None:
+            return False
+        if worker.busy:
+            self.deferred += 1
+            if self.deferred == 1:
+                logger.info("Locomotion step %s deferred: the motor worker is busy", action)
+            return False
+        worker.submit("step", lambda: hal.action(action, payload))
+        self.deferred = 0
+        return True
 
     def _apply_followup(self, context) -> None:
         """Retreat or sequence the navigation layer asked for, queued behind the action."""
@@ -245,6 +331,10 @@ class MotorModule(Module):
 
     def stop(self, context) -> None:
         """The HAL belongs to `HalModule`; this module only gives up its reference."""
+        worker = self.worker
+        self.worker = None
+        if worker is not None:
+            worker.stop()
         self.hal = None
 
     def _hardware_stop(self) -> None:

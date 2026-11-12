@@ -24,9 +24,10 @@ no parameters for any action, so only a repertoire loaded from `config/actions.j
 
 What "declared" means is worth stating, because it is where this module refuses something the HAL
 could technically accept: a parameter key is legal only if the action's catalog entry lists it. The
-vendor honours `wait` for any servo action (`hal/vendor.py:385-404`), but `hal/motors.py:138` hands
+vendor honours `wait` for any servo action (`hal/vendor.py:385-404`), but `hal/motors.py` hands
 parameters to the HAL for `_PARAM_ACTIONS` only, so a `wait` on `sit` would be dropped without a
-word today. Advertising it before that path exists would be the same silent half-run rule 2 forbids.
+word today (#69). Advertising it before that path exists would be the same silent half-run rule 2
+forbids.
 
 No I/O, no clock, no config at import time.
 """

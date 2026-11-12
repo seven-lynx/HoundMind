@@ -319,6 +319,23 @@ def test_obstacle_vetoes_forward_and_says_why() -> None:
     assert "8.0 cm" in verdict["detail"]
 
 
+def test_a_refused_board_intent_is_recorded_with_its_reason() -> None:
+    """A board intent has no client to acknowledge it, so the record is the only place it is named.
+
+    Without the veto the record says the dog's intent was `forward` and gives no reason it did not
+    happen — which reads as a bug in the record, not a decision (`kernel/decisions.py` rule 3).
+    """
+    gateway, context = build(reading(8.0), emergency_stop_cm=12.0)
+    ask(context, "forward", Source.ROUTINE)
+    gateway.tick(context)
+
+    record = context.get("decision_record")
+    assert record.intent == "forward"
+    assert record.source == "routine"
+    assert [veto.reason for veto in record.vetoes] == ["obstacle"]
+    assert record.vetoes[0].source == "routine"
+
+
 def test_obstacle_blocks_forward_but_not_backward() -> None:
     gateway, context = build(reading(8.0), emergency_stop_cm=12.0)
     ask(context, "backward")

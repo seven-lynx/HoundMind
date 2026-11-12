@@ -63,7 +63,7 @@ src/houndmind_ai/
   safety/     supervisor.py  watchdog.py  balance.py  health_monitor.py  sensor_health.py
   navigation/ scanning.py  obstacle_avoidance.py  orientation.py  local_planner.py
   mapping/    mapper.py  path_planner.py
-  behavior/   fsm.py  library.py  registry.py  attention.py  habituation.py
+  behavior/   fsm.py  library.py  registry.py  attention.py  habituation.py  routine_runner.py
   perception/ fusion.py
   calibration/ servo_calibration.py  workflow.py
   logging/    event_logger.py  led_manager.py

@@ -37,10 +37,10 @@ def greeting(**overrides) -> dict:
     """The canon's morning greeting (§8.1), with the parameters today's catalog declares.
 
     §8.1 writes `stand {wait: true}`, `stretch {wait: true}` and `wag_tail {steps: 6}`. None of the
-    three is declared in `config/actions.jsonc`, and `hal/motors.py:138` hands parameters to the HAL
-    for `_PARAM_ACTIONS` only — a `wait` on `stand` is dropped in silence. The validator refuses
-    what the gateway would ignore, so the example is written here with the parameters that reach
-    the HAL today; declaring the rest is R4's job once G1 decides the param path.
+    three is declared in `config/actions.jsonc`, and `hal/motors.py` hands parameters to the HAL for
+    `_PARAM_ACTIONS` only — locomotion since P2 R4, posture nowhere yet — so a `wait` on `stand` is
+    dropped in silence. The validator refuses what the gateway would ignore, so the example is
+    written here with the parameters that reach the HAL today; the posture half is **#69**.
     """
     document = {
         "id": "morning_greeting",
@@ -71,9 +71,9 @@ def test_the_worked_example_validates_against_the_shipped_repertoire() -> None:
 def test_a_parameter_the_catalog_does_not_declare_is_refused() -> None:
     """The catalog is the authority on what an action reads, not the vendor library.
 
-    `hal/vendor.py:385-404` honours `wait` for any servo action, but `hal/motors.py:138` forwards
-    parameters for `_PARAM_ACTIONS` only, so this routine would wait for nothing. Refused until
-    the gateway carries it.
+    `hal/vendor.py:385-404` honours `wait` for any servo action, but `hal/motors.py` forwards
+    parameters for `_PARAM_ACTIONS` only, and posture is not in that set yet (#69), so this routine
+    would wait for nothing. Refused until the gateway carries it.
     """
     problems = check_routine(
         greeting(steps=[{"action": "sit", "params": {"wait": True}}]), shipped()
