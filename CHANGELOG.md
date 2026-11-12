@@ -74,6 +74,14 @@ Current Release: v2026.01.18 • Author: 7Lynx
   is *named* for, and `RoutineStore` loads the directory in place, because it is a legal routines
   directory. The quarantine rule is therefore proved over real files rather than invented ones, and
   `docs/ROUTINES.md` points at the set.
+- The LED manager's requests gained a lifetime: `{mode, color?, bps?, until_ts?}`. `until_ts` is a
+  deadline on the monotonic clock — once it passes, the request stops winning, its key is cleared and
+  the next source in `settings.led.priority` takes the strip. A request without `until_ts` stands until
+  it is replaced, so nothing that ships today changes behaviour. When the request that owned the strip
+  expires and nothing else is live, the strip now returns to `led.default_color` with the new
+  `led.idle_mode` (default `breath`) instead of keeping the last expression forever. A request's own
+  `color` is honoured (it used to be dropped, `safety/sensor_health.py` was already sending one) and
+  `bps` finally reaches the HAL, from the request or from the new `led.bps` map keyed by source.
 - `modules.routine_runner` in the shipped config and `docs/ROUTINES.md`, the routine file format as a
   `contract`: keys, `allow_locomotion`, the refusal rules, and one example `check_routine` accepts —
   asserted by `tests/test_docs_routines.py`, so the doc cannot drift into printing a routine the device

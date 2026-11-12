@@ -736,6 +736,12 @@ _LED = Section(
         "nav_retreat_mode": StrSpec(),
         "emotion_mode": StrSpec(),
         "emotion_color": StrSpec(),
+        # The rate an effect runs at, per source (`{"safety": 4}`). Absent means "use the HAL's
+        # default", which is what every effect did before P3 L1; a request may carry its own `bps`.
+        "bps": MapOf(_NON_NEGATIVE),
+        # What the strip falls back to when the request that owned it expires and nothing else is
+        # live — §5.2's "then back to idle" — paired with `default_color`.
+        "idle_mode": StrSpec(),
     }
 )
 
