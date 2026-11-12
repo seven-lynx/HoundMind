@@ -122,6 +122,16 @@ classifies it in the same file they added it to:
   restart. It becomes commandable over `POST /api/v1/command`, and `GET /api/v1/repertoire` lists
   what this device can actually run, with each action's class and parameters.
 
+### Routines and their directory
+
+A routine is a user-authored list of steps, one JSON file per routine. The files sit outside the
+tracked tree, so editing one is not a dirty worktree, and a broken file is skipped by name rather
+than stopping the runtime.
+
+| Key | Default | What it does |
+|---|---|---|
+| `settings.routines.dir` | `~/.houndmind/routines` | Directory the routine runner reads. `~` is expanded at startup; a missing directory is an empty list, not an error, and the dog never creates or writes it. |
+
 **Micro-idle behaviors (lifelike idle):** When enabled, the robot occasionally performs small idle actions (e.g., `"shake head"`, `"wag tail"`, `"stretch"`) to feel more lifelike. These are safe, optional actions that do not affect navigation or safety logic.
 
 **Settings:**

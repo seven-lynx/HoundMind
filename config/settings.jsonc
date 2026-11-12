@@ -1019,6 +1019,15 @@
       "motor_min_action_interval_s": 0.6
     },
     // =====================================================================
+    // ROUTINES (user-authored step lists; behavior/routine_runner.py reads them)
+    // =====================================================================
+    "routines": {
+      // One JSON file per routine. `~` is expanded at startup. A missing directory
+      // is an empty list, not an error, and the dog never writes here.
+      "dir": "~/.houndmind/routines"
+    },
+
+    // =====================================================================
     // CONTROL PLANE (services/api.py) — one port for REST, WebSocket, MJPEG
     // =====================================================================
     "api": {

@@ -452,6 +452,11 @@ _BATTERY = Section(
 
 # `core/runtime.py` + `navigation/scanning.py` + `hal/motors.py` — the night window and the
 # slower intervals that apply inside it.
+# Routine files are user data outside the tracked tree (`kernel/routine_store.py` owns the reader).
+# The key exists so a device can point the runner at a different directory without editing code.
+_ROUTINES = Section(fields={"dir": StrSpec()})
+
+
 _QUIET_MODE = Section(
     fields={
         "enabled": Bool(),
@@ -965,6 +970,7 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "performance": _PERFORMANCE,
     "personality": _PERSONALITY,
     "quiet_mode": _QUIET_MODE,
+    "routines": _ROUTINES,
     "safety": _SAFETY,
     "semantic_labeler": _SEMANTIC_LABELER,
     "sensor_health": _SENSOR_HEALTH,

@@ -101,13 +101,14 @@ DEFAULT_MODE = "idle"
 # walking it. The mode is a statement about the whole machine, so it gates every source.
 #
 # `idle` and `patrol` are the autonomy modes and allow everyone. `manual` is a hand on the
-# wheel: a client may drive, autonomy may not. `rest` parks the servos and lets only the two
-# sources that exist to end a motion through — the watchdog and the system itself (safety,
-# supervisor). `stop` is never vetoed at any layer, so the escape hatch survives either way.
+# wheel: a client may drive and a routine may run — a routine is the same hand, scripted — but
+# autonomy may not. `rest` parks the servos and lets only the two sources that exist to end a
+# motion through — the watchdog and the system itself (safety, supervisor). `stop` is never
+# vetoed at any layer, so the escape hatch survives either way.
 MODE_ALLOWED_SOURCES: dict[str, frozenset[Source]] = {
     "idle": frozenset(Source),
     "patrol": frozenset(Source),
-    "manual": frozenset({Source.CLIENT, Source.WATCHDOG, Source.SYSTEM}),
+    "manual": frozenset({Source.CLIENT, Source.ROUTINE, Source.WATCHDOG, Source.SYSTEM}),
     "rest": frozenset({Source.WATCHDOG, Source.SYSTEM}),
 }
 

@@ -57,6 +57,18 @@ Current Release: v2026.01.18 • Author: 7Lynx
   wrong in both directions: 3.10 is outside the range `pip install` accepts, and 3.12/3.13 were refused
   even though the package declares support for them.
 
+- **Routines run.** `behavior/routine_runner.py` plays a routine from `settings.routines.dir` one
+  step per tick through the normal intent path, so the interlock, the obstacle stop and the mode
+  gate all apply to it; the first refusal ends the run instead of skipping the step, `dry_run`
+  walks the steps without publishing anything, and a broken routine file is skipped by name rather
+  than stopping the runtime. Two identical steps are two commands: the runner retires its intent
+  between steps, which clears the dedupe memories that would otherwise merge them.
+- `settings.routines.dir`: where the routine files live, `~/.houndmind/routines` by default. `~` is
+  expanded at startup and a missing directory is an empty list, not an error.
+- Routine steps keep the parameters the catalog declares: a `forward` with `speed`/`steps`/`wait`
+  now reaches the HAL with them, and a parameterised locomotion step runs on the motor module's own
+  worker instead of holding the tick.
+
 ### Fixed
 - The interlock's `unknown_action` veto was unreachable in the runtime: `act/gateway.py` skipped the
   interlock for every action outside `MOTION_ACTIONS`, so the catalog's gestures were not vetoed — they
@@ -72,8 +84,9 @@ Current Release: v2026.01.18 • Author: 7Lynx
   legacy servers, so it had silently done nothing. It resolves `src/tools/` now.
 - A classified non-motion command returned `202` and then did nothing: `hal/motors.py` passed an
   empty dict to the HAL, so a `sound` had no effect name and an `rgb` no colour. The actions whose
-  parameters are the whole command now reach the HAL verbatim; locomotion keeps the empty-params
-  path, because `speed`/`steps` would make the HAL block the tick.
+  parameters are the whole command now reach the HAL verbatim. Locomotion stayed out of that set
+  here because `speed`/`steps` would make the HAL block the tick; it landed with the motor worker
+  described above.
 - `trot` skipped the obstacle stop: the forward family was `{"forward"}` even though `trot` is a
   forward gait. `trot` is a motion action now (so it also counts for the watchdog hold and the
   scan lock) and the sonar gate applies to it.
@@ -82,6 +95,20 @@ Current Release: v2026.01.18 • Author: 7Lynx
   the head by that angle and the pitch channel stayed at zero. Every caller in the tree sends
   `pitch: 0`, which is why the shipped runtime looked correct — a client using the parameter
   `DogHAL.action` documents got the wrong joint with no error to notice.
+
+- The motor cooldown swallowed commands: a repeat inside `min_action_interval_s` returned without a
+  word and the command was never retried, and the dedupe compared action names only, so a step with
+  new parameters was treated as the step already running. The key is now the action **and** its
+  parameters, an absent command clears it, and a deferred command runs on the first tick after the
+  interval — with a counter and one log line that prove it was not lost.
+- A refused intent from an internal producer (navigation, behaviour, a routine) appeared in the
+  decision record as the tick's intent with no veto: `act/gateway.py::_resolve` recorded refusals for
+  clients and for the mode gate only. The record carries the reason now, which is what lets a
+  routine stop at the first veto instead of guessing from `motion_verdict`.
+- `manual` mode refused `Source.ROUTINE` (`kernel/commands.py`), so a user who started a routine from
+  a client watched it die at step one. A routine is the same hand on the wheel, scripted: `manual`
+  still excludes navigation and behaviour, and `rest` still excludes routines.
+
 
 ### Docs
 - `docs/CONTROL_API.md` §2/§3 document `GET /api/v1/repertoire` and the four action classes;

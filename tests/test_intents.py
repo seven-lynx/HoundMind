@@ -158,11 +158,12 @@ def test_rest_allows_only_the_sources_that_can_end_a_motion() -> None:
     assert not mode_allows("rest", Source.ROUTINE)
 
 
-def test_manual_keeps_autonomy_out_and_the_client_in() -> None:
+def test_manual_keeps_autonomy_out_and_the_hand_in() -> None:
+    """`manual` refuses autonomy, not the user: a routine is the same hand, scripted (G3)."""
     assert mode_allows("manual", Source.CLIENT)
+    assert mode_allows("manual", Source.ROUTINE)
     assert not mode_allows("manual", Source.NAVIGATION)
     assert not mode_allows("manual", Source.BEHAVIOUR)
-    assert not mode_allows("manual", Source.ROUTINE)
 
 
 def test_an_unknown_mode_falls_back_to_the_default() -> None:
