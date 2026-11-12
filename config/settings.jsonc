@@ -1172,8 +1172,11 @@
     // CONTROL PLANE (services/api.py) — one port for REST, WebSocket, MJPEG
     // =====================================================================
     "api": {
-      // Bind address. Reachable on the LAN on purpose: the token is the security boundary.
-      // Use "127.0.0.1" to keep it on the device, or disable `modules.api` to remove it.
+      // Bind address. Reachable on the LAN on purpose — but the traffic is NOT encrypted: the
+      // token, every command and every camera frame cross the network in the clear, so this host
+      // reachable means the token is readable by anyone who can watch the LAN (see #18).
+      // Use "127.0.0.1" plus an SSH tunnel, or a firewall rule, to keep it private; disable
+      // `modules.api` to remove the surface entirely.
       "host": "0.0.0.0",
       "port": 8420,
       // The install-issued API token. Generated on first start, 0600, never pasted into this

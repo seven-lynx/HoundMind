@@ -19,6 +19,19 @@ file. A route that exists in code and not here — or here and not in code — f
 Two mechanisms, both bearer-style. Everything requires a token except `/meta`, `/health` and
 `/pair`, which is the exchange that *produces* a token.
 
+**This is plaintext HTTP.** Nothing on port 8420 is encrypted: the device token, every command and
+every camera frame cross the LAN in the clear. The token *is* the security boundary, so anyone who can
+observe the network — or read a single access log — holds `move`, `config`, and `admin` if they catch
+the device token itself. Keep the dog on a network you trust, or close the door:
+
+- `settings.api.host: "127.0.0.1"` and an SSH tunnel: `ssh -L 8420:localhost:8420 <user>@<pi>`.
+- A firewall rule that admits only your own devices to port 8420.
+- A TLS-terminating reverse proxy in front, if you need to reach it from beyond the LAN.
+
+There is no TLS in the runtime yet; that is tracked in
+[#18](https://github.com/seven-lynx/HoundMind/issues/18). **Do not port-forward 8420 to the
+internet.**
+
 **Device token** — generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token`, directory `0700`, file `0600`. It is never in `config/settings.jsonc`,
 never in a log line, and never in this repository. The web app does not receive it automatically: on

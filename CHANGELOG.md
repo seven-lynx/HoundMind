@@ -9,6 +9,11 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- **The control plane's exposure is written down** (`#18`): it speaks plaintext HTTP on port 8420, so
+  the device token, every command and every camera frame cross the LAN in the clear, and the MJPEG
+  route accepts that token in a query string. `docs/CONTROL_API.md` §1, `docs/FEATURES_GUIDE.md` §26
+  and the `settings.api.host` comment now say so, and name the three workarounds that exist today:
+  `host: "127.0.0.1"` plus an SSH tunnel, a firewall rule, or a TLS-terminating reverse proxy.
 - **The action repertoire is classified.** `config/actions.jsonc` gained an `actions` table: one class
   per action (`locomotion`, `posture`, `expression`, `non_motion`), and the class decides which part of
   the interlock's envelope applies. Every name a catalog bucket lists must have a class, or the runtime
