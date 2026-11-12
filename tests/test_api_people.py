@@ -269,3 +269,252 @@ def test_a_name_with_no_usable_characters_is_not_a_person(tmp_path) -> None:
 
     assert [person["id"] for person in published(context)["people"]] == ["alex"]
 
+
+# ---- DELETE: a forget is a mutation, and the exit criterion of P4 (canon `:444`, `:827`)
+
+
+def identity_plane(
+    tmp_path: Path,
+    *,
+    names: tuple[str, ...] = ("Alex", "Sam"),
+    backend: str = "face_recognition",
+) -> tuple[ControlPlane, FaceRecognitionModule]:
+    """A plane whose module really is running the way `_become_ready` leaves it.
+
+    Built from the module rather than a hand-written roster, so the route is tested against the
+    writer that will publish it on the Pi — a fake roster would make the fake the thing under test.
+    """
+    context = DummyContext(load_config().settings)
+    module = FaceRecognitionModule("face_recognition")
+    module.backend = backend
+    module._embeddings_path = tmp_path / "face_references.json"
+    module._known_names = list(names)
+    module._known_embeddings = [[0.25] * 4 for _ in names]
+    module._save_embeddings()
+    module._become_ready(context, backend)
+    settings = ApiSettings(
+        host="127.0.0.1",
+        port=0,
+        token_path=str(tmp_path / "api_token"),
+        pairing_enabled=False,
+    )
+    return ControlPlane(context, settings, CommandBus()), module
+
+
+def names_on_disk(path: Path) -> list[str]:
+    return json.loads(path.read_text(encoding="utf-8"))["names"]
+
+
+def test_forgetting_a_person_removes_them_from_disk_and_from_the_roster(tmp_path) -> None:
+    """The exit criterion: gone from the file, gone from `/people`, and the answer says who."""
+
+    async def scenario() -> None:
+        plane, _ = identity_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.delete(f"{API_PREFIX}/people/alex", headers=auth(plane))
+            body = await response.json()
+
+            assert response.status == 200
+            assert body["removed"] == {"id": "alex", "name": "Alex"}
+            assert body["path"] == str(tmp_path / "face_references.json")
+            assert names_on_disk(tmp_path / "face_references.json") == ["Sam"]
+
+            roster = await (await client.get(f"{API_PREFIX}/people", headers=auth(plane))).json()
+            assert [person["id"] for person in roster["people"]] == ["sam"]
+
+    asyncio.run(scenario())
+
+
+def test_a_second_delete_is_a_404_not_a_silent_success(tmp_path) -> None:
+    """A client that retries must learn the person was already gone, or it will believe it failed."""
+
+    async def scenario() -> None:
+        plane, _ = identity_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            first = await client.delete(f"{API_PREFIX}/people/alex", headers=auth(plane))
+            second = await client.delete(f"{API_PREFIX}/people/alex", headers=auth(plane))
+            body = await second.json()
+
+            assert first.status == 200
+            assert second.status == 404
+            assert body["error"] == "not_found"
+
+    asyncio.run(scenario())
+
+
+def test_a_paired_client_cannot_forget_anyone(tmp_path) -> None:
+    """Forgetting is `admin`, and `move` is not `admin` — biometric data leaves only by the token."""
+
+    async def scenario() -> None:
+        plane, _ = identity_plane(tmp_path)
+        client_token, _ = plane.authorizer.issue_client_token("Pixel 8")
+        async with TestClient(TestServer(create_app(plane))) as client:
+            refused = await client.delete(
+                f"{API_PREFIX}/people/alex", headers={"Authorization": f"Bearer {client_token}"}
+            )
+
+            assert refused.status == 403
+            assert names_on_disk(tmp_path / "face_references.json") == ["Alex", "Sam"]
+
+    asyncio.run(scenario())
+
+
+def test_forget_is_a_503_when_identity_is_not_running(tmp_path) -> None:
+    """A write cannot say "removed" about a module that is not there; a read can say "nothing"."""
+
+    async def scenario() -> None:
+        plane = plane_for(
+            tmp_path,
+            status=module_status(
+                disabled_reason="identity is disabled; enable modules.face_recognition"
+            ),
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.delete(f"{API_PREFIX}/people/alex", headers=auth(plane))
+            body = await response.json()
+
+            assert response.status == 503
+            assert body["error"] == "unavailable"
+            assert "modules.face_recognition" in body["detail"]
+
+    asyncio.run(scenario())
+
+
+def test_a_name_that_slugs_alike_is_one_person_and_one_forget(tmp_path) -> None:
+    """PL6 collapsed them into one id, so the delete has to take both or the id survives."""
+
+    async def scenario() -> None:
+        plane, module = identity_plane(tmp_path, names=("Alex Kim", "Alex  Kim", "Sam"))
+        async with TestClient(TestServer(create_app(plane))) as client:
+            before = await (await client.get(f"{API_PREFIX}/people", headers=auth(plane))).json()
+            assert [person["id"] for person in before["people"]] == ["alex_kim", "sam"]
+
+            response = await client.delete(f"{API_PREFIX}/people/alex_kim", headers=auth(plane))
+            assert response.status == 200
+
+            assert names_on_disk(tmp_path / "face_references.json") == ["Sam"]
+            assert module._known_names == ["Sam"]
+            after = await (await client.get(f"{API_PREFIX}/people", headers=auth(plane))).json()
+            assert [person["id"] for person in after["people"]] == ["sam"]
+
+    asyncio.run(scenario())
+
+
+class FakeRecognizer:
+    """Enough of `cv2.face.LBPHFaceRecognizer` to prove which object the module ends up holding."""
+
+    def __init__(self) -> None:
+        self.trained = False
+
+    def train(self, faces, labels) -> None:
+        self.trained = True
+
+    def save(self, path) -> None:
+        Path(path).write_text("model", encoding="utf-8")
+
+    def read(self, path) -> None:
+        return None
+
+
+class FakeCv2:
+    """Only what a forget reaches: a fresh recognizer factory."""
+
+    class face:  # noqa: N801 - the attribute name cv2 itself uses
+        @staticmethod
+        def LBPHFaceRecognizer_create() -> FakeRecognizer:
+            return FakeRecognizer()
+
+
+def opencv_module(tmp_path: Path, people: tuple[str, ...] = ("Alex", "Sam")):
+    """An LBPH module with images on disk, a label map, and a trained-model stand-in."""
+    module = FaceRecognitionModule("face_recognition")
+    module.backend = "opencv"
+    module._cv2 = FakeCv2
+    module._recognizer = FakeRecognizer()
+    module._dataset_dir = tmp_path / "dataset"
+    module._model_path = tmp_path / "face_model.yml"
+    module._label_map_path = tmp_path / "face_labels.json"
+    module._model_path.write_text("model", encoding="utf-8")
+    module._label_map = {}
+    for index, name in enumerate(people):
+        person_dir = module._dataset_dir / name
+        person_dir.mkdir(parents=True)
+        (person_dir / "1.png").write_bytes(b"png")
+        module._label_map[index] = name
+    module._label_map_path.write_text(json.dumps(module._label_map), encoding="utf-8")
+    return module
+
+
+def test_forgetting_one_of_two_people_retrains_the_model(tmp_path) -> None:
+    """The images go, the model is rebuilt from the rest, and the roster stops naming the person."""
+    module = opencv_module(tmp_path)
+    context = DummyContext()
+    module._publish_roster(context)
+    trained: list[Path] = []
+    module._train_lbph_locked = lambda dataset, model, labels: trained.append(dataset)
+
+    removed = module.forget("alex", context)
+
+    assert removed == {"id": "alex", "name": "Alex"}
+    assert not (tmp_path / "dataset" / "Alex").exists()
+    assert (tmp_path / "dataset" / "Sam").exists()
+    assert trained == [tmp_path / "dataset"]
+    assert [person["id"] for person in published(context)["people"]] == ["sam"]
+
+
+def test_forgetting_the_last_person_retires_the_trained_model(tmp_path) -> None:
+    """`_train_lbph` returns early on an empty dataset; leaving the model keeps naming somebody."""
+    module = opencv_module(tmp_path, people=("Alex",))
+    context = DummyContext()
+    module._publish_roster(context)
+    old_recognizer = module._recognizer
+
+    removed = module.forget("alex", context)
+
+    assert removed == {"id": "alex", "name": "Alex"}
+    assert not module._model_path.exists()
+    assert json.loads(module._label_map_path.read_text(encoding="utf-8")) == {}
+    assert module._label_map == {}
+    # A fresh untrained object, not `None`: `_train_lbph_locked` refuses to train a `None`, so the
+    # next enrolment would be silently anonymous for ever.
+    assert module._recognizer is not old_recognizer
+    assert isinstance(module._recognizer, FakeRecognizer)
+    assert not module._recognizer.trained
+    assert published(context)["people"] == []
+
+
+def test_an_unknown_person_is_not_an_error_and_writes_nothing(tmp_path) -> None:
+    """`None` is the signal the route turns into a 404; a stray write here would be a lie."""
+    module = opencv_module(tmp_path, people=("Alex",))
+    context = DummyContext()
+    before = (tmp_path / "dataset" / "Alex" / "1.png").read_bytes()
+
+    assert module.forget("nobody", context) is None
+    assert (tmp_path / "dataset" / "Alex" / "1.png").read_bytes() == before
+
+
+def test_a_configured_path_expands_home() -> None:
+    """#104: `~` must not become a literal directory inside the install tree."""
+    module = FaceRecognitionModule("face_recognition")
+
+    resolved = module._resolve_path("~/.houndmind/face/face_references.json")
+
+    assert resolved.is_absolute()
+    assert resolved == Path.home() / ".houndmind" / "face" / "face_references.json"
+    assert module.repo_root not in resolved.parents
+
+
+def test_stopping_the_module_takes_the_forgetter_with_it() -> None:
+    """A route that can still write through a stopped module is writing into nothing."""
+    module = FaceRecognitionModule("face_recognition")
+    module.backend = "stub"
+    context = DummyContext()
+    module._become_ready(context, "stub")
+    assert context.get("identity_admin") is not None
+
+    module.stop(context)
+
+    assert context.get("identity_admin") is None
+    assert context.get("identity_roster") is None
+    assert module.available is False
+

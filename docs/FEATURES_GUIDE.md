@@ -640,6 +640,17 @@ Identity ships `enabled: false`, so the answer while it is off is a **reason**, 
 `disabled_reason` when it has one (`missing dependency: face_recognition (dlib)`). `people: []` next
 to `identity.enabled: false` is never "nobody is enrolled".
 
+**Where it is stored.** Enrolment writes under `~/.houndmind/face/`, beside the API token, places and
+routines: `face_embeddings.json` for the dlib backend, and `dataset/<name>/*.png` (the reference
+images), `face_model.yml` and `face_labels.json` for LBPH. That directory is the biometric data — copy
+none of it off the device, and delete it if the dog is passed on. Older builds wrote `data/face_*`
+inside the install tree; that directory is left untouched and is not read any more (#104).
+
+**Forgetting someone** — `DELETE /api/v1/people/{id}`, `admin` scope (§9 of `docs/CONTROL_API.md`).
+The id is the slug of the name, and the call removes the embeddings, the reference images and the
+trained model rather than just the name: a model trained on images you deleted still recognises the
+person. The last person to go leaves LBPH untrained — faces are still detected, nobody is named.
+
 **Disable:** `modules.face_recognition.enabled = false`
 
 ---
@@ -791,7 +802,7 @@ as specified in `docs/CONTROL_API.md`:
 | Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame |
 | Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?ticket=`) |
 | Places | `GET`/`POST`/`DELETE /api/v1/places`, `POST /places/{id}/go` | `state:read` / `config` / `move` |
-| People | `GET /api/v1/people` | `admin` — ids and names only, never an embedding |
+| People | `GET /api/v1/people`, `DELETE /api/v1/people/{id}` | `admin` — ids and names only, never an embedding |
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
 | Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration` | `config` |
 | History | `GET /api/v1/history` | `state:read` |

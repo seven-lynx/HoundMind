@@ -341,18 +341,19 @@
       "min_face_px": 60,
       // OpenCV (lite) settings.
       "opencv_haar_path": "",
+      // Everything a face leaves on disk lives under ~/.houndmind/face, like the token, places and
+      // routines. It is biometric data: it has to be writable by the service user, it has to survive
+      // a reinstall, and `DELETE /api/v1/people/{id}` has to be able to find it to delete it (#104).
       "lbph": {
         "enabled": true,
-        "model_path": "data/face_model.yml",
-        "dataset_dir": "data/face_dataset",
-        "label_map_path": "data/face_labels.json",
+        "model_path": "~/.houndmind/face/face_model.yml",
+        "dataset_dir": "~/.houndmind/face/dataset",
+        "label_map_path": "~/.houndmind/face/face_labels.json",
         "confidence_threshold": 70.0
       },
-      // face_recognition (heavy) settings.
-      // NOTE: this default points inside the install tree, unlike every other persisted file
-      // (places, routines, the token all live in ~/.houndmind). It may not be writable on a real
-      // install and a reinstall takes it with it — see #104 before relying on it.
-      "embeddings_path": "data/face_embeddings.json",
+      // face_recognition (heavy) settings: the embeddings file `GET /api/v1/people` reports as
+      // `path`, so a user can find the biometric data and delete it.
+      "embeddings_path": "~/.houndmind/face/face_embeddings.json",
       "match_threshold": 0.6
     },
     // =====================================================================

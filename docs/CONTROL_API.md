@@ -60,7 +60,7 @@ because rotating the device token is an operator decision, not a client one.
 | `state:read` | `GET /state`, `/modules`, `/events` (WS), `/camera/*`, `/history` |
 | `move` | `POST /command`, `POST /stop`, `POST /mode` |
 | `config` | `GET`/`PATCH /config`, `GET /calibration` |
-| `admin` | `POST /pair/open`, `GET /people`, `GET /logs`, `GET /support-bundle` — device token only |
+| `admin` | `POST /pair/open`, `GET /people`, `DELETE /people/{id}`, `GET /logs`, `GET /support-bundle` — device token only |
 
 Header: `Authorization: Bearer <token>`. The two camera routes also accept `?ticket=<ticket>` because an
 `<img>` tag cannot set a header: mint one with `POST /api/v1/camera/ticket` (`state:read`), it is valid
@@ -82,6 +82,7 @@ and `config` into browser history and access logs (`#18`).
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress (§3) |
 | `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress (§8) |
 | `GET` | `/api/v1/people` | `admin` | enrolled people: ids and names only, never an embedding (§9) |
+| `DELETE` | `/api/v1/people/{id}` | `admin` | forget one person: the embedding and every reference face go, not just the name (§9) |
 | `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first (§4); 503 when the feed is not running |
 | `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream (§5) |
 | `GET` | `/api/v1/camera/stream` | `state:read` (`?ticket=`) | MJPEG, multipart/x-mixed-replace |
@@ -495,6 +496,7 @@ publishes the roster; this route reports it and nothing else.
 | Route | Scope | Answers |
 |---|---|---|
 | `GET /api/v1/people` | `admin` | `{identity, path, people}` |
+| `DELETE /api/v1/people/{id}` | `admin` | `{removed: {id, name}, path}` · `404` · `503` |
 
 ```jsonc
 {"identity": {"enabled": true, "backend": "face_recognition", "reason": null},
@@ -527,6 +529,35 @@ keeps the two states apart is the block:
 `reason` is the module's `disabled_reason` verbatim when it has one — `missing dependency:
 face_recognition (dlib)` is a different problem from a switched-off module, and the module is the one
 that knows which. `people: []` beside `identity.enabled: false` is never read as "nobody is enrolled".
+
+### Forgetting
+
+```http
+DELETE /api/v1/people/alex_kim
+→ 200 {"removed": {"id": "alex_kim", "name": "Alex Kim"}, "path": "/home/pi/.houndmind/face/face_references.json"}
+```
+
+Admin scope, like the read. **The data goes, not just the name**: for the dlib backend the embeddings
+are dropped from the JSON and written back; for OpenCV the person's image directory is deleted and the
+LBPH model is retrained from the images that remain, because deleting images without retraining leaves
+a model that still recognises the person. Forgotten the last person? The model file is removed, the
+label map is emptied, and the recognizer is replaced with an untrained one — face detection continues,
+naming stops. `_train_lbph` returns early on an empty dataset, so without that step the old model would
+stay trained and keep naming somebody the user had just deleted.
+
+`id` is matched by slug against **every** raw name, not against the one display name the roster shows:
+two enrolments that slug alike are one person in `GET /people`, so they are one delete.
+
+- **`404` on a second call** — never a silent success. A client retrying must learn the person was
+  already gone, or it will conclude the first attempt failed.
+- **`503`** when no identity module is running, with the same `detail` the read route puts in
+  `identity.reason`. The asymmetry with the read's `200` is deliberate: a read can honestly report
+  "nothing to show", a write cannot honestly report "removed".
+
+This is the route that satisfies the design's *"Deletable"* requirement (`robot-pet-design.md:444`).
+That sentence also promises the thumbnail is removed; nothing in this build generates one, so what
+exists and what is tested is the embedding and the reference images — thumbnails would be a separate
+feature, not a claim this route can honour today.
 
 **Enrolment is not a route.** It is still a runtime command (§20 of `docs/FEATURES_GUIDE.md`), so a
 client cannot add a person yet; this route is what a client reads after someone has

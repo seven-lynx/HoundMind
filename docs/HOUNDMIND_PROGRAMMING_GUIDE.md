@@ -222,6 +222,8 @@ The keys a module may rely on. Anything not here is private and may change.
 | `place_request` | `dict` in, consumed once — `{"id": "<slug or name>", "at_anchor": true}` |
 | `place_goal` | `dict \| None` — the trip in progress, or why it was refused (`navigation/place_navigator.py`) |
 | `place_store` | `PlaceStore \| None` — the one store for `settings.places.path`, published by the navigator at start and cleared at stop; the `/places` routes write through it, so a second store would be a second writer (`kernel/place_store.py`) |
+| `identity_roster` | `dict \| None` — `{backend, path, people: [{id, name}]}`, published by `optional/face_recognition.py` at start and after every mutation; what `GET /api/v1/people` serves, and never an embedding |
+| `identity_admin` | `IdentityForgetter \| None` — the module's `forget(id)` and nothing else, published at start and cleared at stop; `DELETE /api/v1/people/{id}` is its only caller, and it runs in an executor because an LBPH retrain reads every image |
 | `mapping_openings`, `mapping_state` | `dict` |
 | `path_planning`, `path_planning_hook` | `list` / callable |
 | `behavior_override` | `str \| None` |

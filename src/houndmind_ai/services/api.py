@@ -1127,6 +1127,43 @@ async def _people_list(request: web.Request) -> web.Response:
     )
 
 
+async def _people_delete(request: web.Request) -> web.Response:
+    """Forget one person. A second call is a `404`, never a silent success (§7's rule for places).
+
+    `503` where `/people` answers `200`, and the asymmetry is the point: a read can honestly report
+    "nothing to show" about a module that is not running, a write cannot honestly report "removed".
+
+    The work runs in an executor. Deleting the last LBPH person retrains the model from the images
+    that remain — file reads and a `cv2.train`, which is not something to hold the event loop for.
+    `ControlPlane.wait_for` already does exactly this for `CommandBus.wait`.
+    """
+    plane = _plane(request)
+    admin = plane.context.get("identity_admin")
+    if admin is None:
+        return _no_identity(plane)
+    wanted = str(request.match_info.get("id") or "").strip()
+    if not wanted:
+        return web.json_response(
+            {"error": "bad_request", "detail": "a person id is required"}, status=400
+        )
+
+    removed = await asyncio.get_running_loop().run_in_executor(None, admin.forget, wanted)
+    if removed is None:
+        return web.json_response(
+            {"error": "not_found", "detail": f"no person with id {wanted!r}"}, status=404
+        )
+    roster = plane.context.get("identity_roster")
+    path = roster.get("path") if isinstance(roster, dict) else None
+    return web.json_response({"removed": removed, "path": path})
+
+
+def _no_identity(plane: ControlPlane) -> web.Response:
+    """503 with the reason a client would have read in `identity`, for a write that cannot happen."""
+    return web.json_response(
+        {"error": "unavailable", "detail": _identity_off_reason(plane)}, status=503
+    )
+
+
 # ------------------------------------------------------------------ the table
 #
 # One declaration, used both to register the routes and to check them against
@@ -1157,6 +1194,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("POST", "/routines/{id}/run", "move", _routine_run),
     ("POST", "/places", "config", _places_create),
     ("DELETE", "/places/{id}", "config", _place_delete),
+    ("DELETE", "/people/{id}", "admin", _people_delete),
     ("POST", "/places/{id}/go", "move", _place_go),
     ("GET", "/mode", "state:read", _mode_get),
     ("POST", "/mode", "move", _mode_post),
