@@ -23,8 +23,14 @@ def test_source_precedence_is_declared_not_discovered() -> None:
         > Source.WATCHDOG
         > Source.CLIENT
         > Source.NAVIGATION
+        > Source.ROUTINE
         > Source.BEHAVIOUR
     )
+
+
+def test_a_routine_source_reaches_the_wire_as_its_name() -> None:
+    """`to_dict` is the shape `/state` and `/decisions` carry, so the spelling is a contract."""
+    assert Command("sit", source=Source.ROUTINE).to_dict()["source"] == "routine"
 
 
 def test_ids_are_unique_per_command() -> None:

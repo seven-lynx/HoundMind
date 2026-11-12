@@ -42,6 +42,11 @@ class Source(IntEnum):
     """
 
     BEHAVIOUR = 10
+    # A routine yields to the navigator — it must not walk the dog into what the navigator is
+    # avoiding — and outranks idle behaviour. 15 keeps that order without renumbering the members
+    # above it, and `MODE_ALLOWED_SOURCES` needs no edit: `idle`/`patrol` are `frozenset(Source)`,
+    # so a new member is admitted there and excluded from `manual`/`rest` by construction.
+    ROUTINE = 15
     NAVIGATION = 20
     CLIENT = 30
     WATCHDOG = 40

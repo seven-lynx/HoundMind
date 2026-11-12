@@ -36,6 +36,10 @@ Current Release: v2026.01.18 • Author: 7Lynx
 - `profiles.pi5`: the same cadence and enablement as `pi4`, with thermal warning thresholds that suit a
   board which idles near 65 °C and throttles at 80 °C. **Unmeasured on hardware** — the values are the
   board's published figures, not a bench result.
+- `Source.ROUTINE` (`15`): a routine ranks above idle behaviour and below navigation, so a routine
+  yields to whatever is avoiding an obstacle. `MODE_ALLOWED_SOURCES` needed no edit — `idle` and
+  `patrol` are `frozenset(Source)`, so the new member is admitted there and excluded from `manual`
+  and `rest` by construction. Nothing produces one yet: the runner arrives with the routines phase.
 
 ### Changed
 - `POST /api/v1/command` accepts any action classified in `config/actions.jsonc`, not only the twelve
