@@ -48,6 +48,20 @@ def _decision_signature(decision: object) -> str | None:
     return json.dumps(picked, sort_keys=True, default=str)
 
 
+# What "the routine moved" means: a new step, a new state, or the reason it stopped. `started_at` is
+# deliberately absent — a fresh run already changes `id` and `index`, and a wall-clock float in a
+# signature would let two identical frames look different.
+_ROUTINE_SIGNATURE_KEYS = ("id", "state", "index", "action", "veto", "detail", "dry_run")
+
+
+def _routine_signature(routines: object) -> str | None:
+    """A stable fingerprint of the run's progress, or None when no routine is loaded."""
+    if not isinstance(routines, dict):
+        return None
+    picked = {key: routines.get(key) for key in _ROUTINE_SIGNATURE_KEYS}
+    return json.dumps(picked, sort_keys=True, default=str)
+
+
 class _Subscriber:
     """One connection's two channels."""
 
@@ -114,6 +128,7 @@ class EventHub:
     async def _pump_states(self) -> None:
         interval = 1.0 / self.state_hz
         last_decision: str | None = None
+        last_routine: str | None = None
         while True:
             try:
                 snapshot = self._snapshot()
@@ -129,6 +144,14 @@ class EventHub:
                 if isinstance(decision, dict) and signature != last_decision:
                     last_decision = signature
                     self.publish_event("decision", decision)
+                # Same rule for a routine: the runner re-publishes `routine_run` every tick, so
+                # only a new step, state or veto is a frame. A finished run keeps its block, which
+                # is how a client learns it ended without polling.
+                routines = snapshot.get("routines")
+                routine_signature = _routine_signature(routines)
+                if isinstance(routines, dict) and routine_signature != last_routine:
+                    last_routine = routine_signature
+                    self.publish_event("routine", routines)
                 self._check_link_loss()
             except asyncio.CancelledError:
                 raise
