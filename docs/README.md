@@ -4,8 +4,8 @@ Status: **index** — the map of `docs/`. If a file is not listed here, it shoul
 Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `README.md` (the front door), `ROADMAP.md` (what is planned)
 
-Nine documents, each with one job. Start at the row that matches what you are doing; do not read
-the whole directory.
+Nine documents plus one reference set, each with one job. Start at the row that matches what you
+are doing; do not read the whole directory.
 
 ---
 
@@ -17,6 +17,7 @@ the whole directory.
 | Know what a feature does and how to turn it off | [`FEATURES_GUIDE.md`](FEATURES_GUIDE.md) | reference |
 | Write code against the runtime (modules, context keys, config sections) | [`HOUNDMIND_PROGRAMMING_GUIDE.md`](HOUNDMIND_PROGRAMMING_GUIDE.md) | guide |
 | Drive the `pidog` library directly, with no HoundMind in the loop | [`PIDOG_PROGRAMMING_GUIDE.md`](PIDOG_PROGRAMMING_GUIDE.md) | guide |
+| Look up an exact `pidog` / `robot_hat` signature, pin, limit or trap | [`pidog/INDEX.md`](pidog/INDEX.md) | **reference** set |
 | Build a client against the REST/WebSocket API | [`CONTROL_API.md`](CONTROL_API.md) | **contract** |
 | Understand why the code is shaped this way | [`ARCHITECTURE.md`](ARCHITECTURE.md) | design |
 | Read the JSON logs or build a support bundle | [`LOGGING.md`](LOGGING.md) | runbook |
@@ -55,6 +56,9 @@ of them do.
    `pyproject.toml` for the interpreter range.
 5. **Delete, do not deprecate.** A guide for a feature that no longer exists is a second source of
    truth. The removals are recorded in `CHANGELOG.md`, which is where history belongs.
+6. **`docs/pidog/` is one set with its own index.** It documents the two SunFounder libraries at
+   API level, split so a reader opens one file and one section. A new file in that directory gets
+   a row in its `INDEX.md` file map, not a row here — only the set's entry point is listed above.
 
 ## Outside `docs/`
 
