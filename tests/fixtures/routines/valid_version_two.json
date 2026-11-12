@@ -1,0 +1,9 @@
+{
+  "id": "version_two",
+  "version": 2,
+  "steps": [
+    {
+      "action": "sit"
+    }
+  ]
+}

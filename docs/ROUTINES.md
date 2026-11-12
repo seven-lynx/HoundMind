@@ -142,6 +142,11 @@ refusal is reported next to the file a user has to fix.
 `GET /api/v1/routines` lists those refusals under `refusals`, keyed by file name, with the validator's
 own paths — `docs/CONTROL_API.md` §3 has the shape.
 
+The shipped example set — one file per rule above, accepted and refused — lives in
+`tests/fixtures/routines/`. That directory is a legal routines directory, and
+`tests/test_routine_fixtures.py` asserts every file in it against the catalog the device loads, so the
+examples cannot drift away from the format they document.
+
 ## What this file does not cover
 
 - The routes that list and start a routine: `docs/CONTROL_API.md` §3, and §4/§5 for the snapshot block

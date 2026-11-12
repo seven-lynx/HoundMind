@@ -1,0 +1,9 @@
+{
+  "id": "optin_not_bool",
+  "allow_locomotion": "false",
+  "steps": [
+    {
+      "action": "sit"
+    }
+  ]
+}

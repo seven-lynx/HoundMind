@@ -69,6 +69,11 @@ Current Release: v2026.01.18 • Author: 7Lynx
   it, which is the rule P1 set for `decision`. A client that was told `202` can now follow the
   run to its end and see the `veto` that stopped it.
 
+- Twenty routine fixtures in `tests/fixtures/routines/` — one file per rule in `docs/ROUTINES.md` — and
+  `tests/test_routine_fixtures.py` to hold them: every `invalid_` file is asserted against the problem it
+  is *named* for, and `RoutineStore` loads the directory in place, because it is a legal routines
+  directory. The quarantine rule is therefore proved over real files rather than invented ones, and
+  `docs/ROUTINES.md` points at the set.
 - `modules.routine_runner` in the shipped config and `docs/ROUTINES.md`, the routine file format as a
   `contract`: keys, `allow_locomotion`, the refusal rules, and one example `check_routine` accepts —
   asserted by `tests/test_docs_routines.py`, so the doc cannot drift into printing a routine the device

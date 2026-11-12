@@ -1,0 +1,11 @@
+{
+  "id": "undeclared_param",
+  "steps": [
+    {
+      "action": "sit",
+      "params": {
+        "wait": 1
+      }
+    }
+  ]
+}

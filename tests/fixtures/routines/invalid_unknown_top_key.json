@@ -1,0 +1,9 @@
+{
+  "id": "unknown_top_key",
+  "description": "a morning greeting",
+  "steps": [
+    {
+      "action": "sit"
+    }
+  ]
+}

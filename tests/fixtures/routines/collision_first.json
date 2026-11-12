@@ -1,0 +1,8 @@
+{
+  "id": "collision",
+  "steps": [
+    {
+      "action": "sit"
+    }
+  ]
+}

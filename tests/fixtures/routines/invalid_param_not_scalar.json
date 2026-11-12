@@ -1,0 +1,14 @@
+{
+  "id": "param_not_scalar",
+  "steps": [
+    {
+      "action": "head",
+      "params": {
+        "yaw": [
+          1,
+          2
+        ]
+      }
+    }
+  ]
+}
