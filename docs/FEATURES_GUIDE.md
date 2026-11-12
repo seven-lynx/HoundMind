@@ -150,6 +150,31 @@ tail wag on `play` — in `settings.behavior.state_expressions`:
   (`Source.BEHAVIOUR = 10`), so a navigator, a routine, a client, the watchdog or the system all
   outrank it.
 
+### Entry cues (the transition sound)
+
+The same table carries a sound: `<state>.sound` names one of the dog's effects, played on the tick the
+dog enters the state.
+
+```jsonc
+"state_expressions": {
+  "alert": { "action": "head_up_down", "sound": "single_bark_1" }
+}
+```
+
+- It is a **cue on the command**, not an action of its own. The gateway resolves exactly one winner per
+  tick, so a cue published as its own intent would take that tick from the beat — and from the step,
+  on entry to `patrol` or `explore`. Attached to the entry command, it costs neither: `hal_motors`
+  plays it and strips it before anything reaches the vendor.
+- A state with **no** beat still gets its cue, and a cue never turns a repeated step into a second
+  step — it is excluded from the action fingerprint that decides what counts as a new command.
+- `behavior.cue_volume` (0–100, ships `60`) sets the volume, and `quiet_mode` suppresses the cue
+  outright; the beat still plays.
+- `behavior.cue_sounds` lists the twelve effects a stock PiDog ships
+  (`docs/pidog/PIDOG-EXPRESSION.md`). It is **advisory**: a name outside it is warned about once and
+  still played, because a build may ship its own files — and today the HAL cannot tell you a sound
+  file is missing ([#81](https://github.com/seven-lynx/HoundMind/issues/81)).
+- Audio never blocks the loop: `hal.sound` queues onto the HAL's audio thread.
+
 ### Routines and their directory
 
 A routine is a user-authored list of steps, one JSON file per routine. The files sit outside the

@@ -56,10 +56,20 @@ def _params_key(params: Any) -> tuple[tuple[str, str], ...]:
 
     `repr` rather than `value` because a params dict is JSON, so `"2"` and `2` are different
     commands, and a nested value that never reaches a servo still has to compare equal to itself.
+
+    `cue` is excluded, deliberately: it rides the command as a transition marker (P3 L3), so two
+    otherwise identical commands — one announcing a state entry, one not — must stay the same step.
+    Otherwise every entry into a state would re-issue the action it was already running.
     """
     if not isinstance(params, dict):
         return ()
-    return tuple(sorted((str(key), repr(value)) for key, value in params.items()))
+    return tuple(
+        sorted(
+            (str(key), repr(value))
+            for key, value in params.items()
+            if key != "cue"
+        )
+    )
 
 
 # Actions whose parameters are the whole command. A `sound` with no effect name, or an `rgb` with
@@ -101,6 +111,10 @@ class MotorModule(Module):
         self.last_action: str | None = None
         self.last_params: tuple[tuple[str, str], ...] = ()
         self.last_action_ts = 0.0
+        # The cue this module last played, as `(name, volume, action, params)`. A board slot stays
+        # live for its TTL, so the same command reaches this module on several ticks; the signature
+        # is what keeps a transition to one sound (P3 L3).
+        self._cue_key: tuple[str, int, str, tuple[tuple[str, str], ...]] | None = None
         # Blocking locomotion steps run here, never on the decision loop.
         self.worker: LatestJobWorker | None = None
         # Diagnostics. A deferral is a command that will run later; a silent one is the hole #65
@@ -139,12 +153,19 @@ class MotorModule(Module):
             # precisely so this branch runs (F-P2-2, #65).
             self.last_action = None
             self.last_params = ()
+            self._cue_key = None
             return
         raw = command.get("canonical_action") or command.get("action")
         if not raw:
             return
         action = _canonical(str(raw))
-        params_key = _params_key(command.get("params"))
+        params = command.get("params")
+        # The cue is played before the dedupe below on purpose: a state entry must sound even when
+        # the action it rides is a repeat of the one already running (`patrol` → `explore` picking
+        # the same `forward`). It is stripped from the payload and from the fingerprint, so it can
+        # never turn that repeat into a second step, and `_cue_key` keeps a live slot to one sound.
+        self._play_cue(action, params)
+        params_key = _params_key(params)
         if action == self.last_action and params_key == self.last_params:
             return
         if self.hal is None:
@@ -201,8 +222,11 @@ class MotorModule(Module):
             # params are the whole command get them; everything else stays fire-and-forget.
             payload: dict[str, Any] = {}
             if action in _PARAM_ACTIONS:
-                raw_params = command.get("params")
+                raw_params = params
                 payload = dict(raw_params) if isinstance(raw_params, dict) else {}
+                # The cue is this repo's annotation, not the vendor's parameter: it was played
+                # above and must not ride into a vendor call that has no idea what it means.
+                payload.pop("cue", None)
                 if action == "head":
                     # The API answers 202 before the head arrives; blocking here would let a
                     # cosmetic command set the loop's cadence (P3-2).
@@ -220,6 +244,37 @@ class MotorModule(Module):
         except Exception as exc:  # noqa: BLE001
             logger.warning("Motor action failed: %s", exc)
             self.disable(str(exc))
+
+    def _play_cue(self, action: str, params: Any) -> None:
+        """Play the sound attached to this command, at most once per command.
+
+        A cue is a transition marker the behaviour layer hangs on the command it is already
+        publishing (P3 L3): it is not an action, it never reaches `motion_command`'s action, and it
+        never enters the fingerprint `_params_key` builds. Two failure modes are handled here rather
+        than upstream: the board slot lives for its TTL, so the same command arrives on several
+        ticks (`_cue_key` is what keeps that to one sound), and a malformed cue is dropped with one
+        warning instead of reaching the audio path.
+        """
+        cue = params.get("cue") if isinstance(params, dict) else None
+        if not isinstance(cue, dict):
+            self._cue_key = None
+            return
+        name = cue.get("name")
+        if not isinstance(name, str) or not name.strip():
+            self._cue_key = None
+            return
+        name = name.strip()
+        volume = max(0, min(100, _safe_int(cue.get("volume"), 70)))
+        key = (name, volume, action, _params_key(params))
+        if key == self._cue_key:
+            return
+        self._cue_key = key
+        if self.hal is None:
+            return
+        try:
+            self.hal.sound(name, volume)
+        except Exception:  # noqa: BLE001 - a cue is cosmetic and must never fail a step
+            logger.warning("Cue %r failed to play", name, exc_info=True)
 
     def _dispatch_off_tick(self, action: str, payload: dict[str, Any]) -> bool:
         """Run one blocking step on this module's worker. False means "retry next tick".

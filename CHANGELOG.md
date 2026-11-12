@@ -81,6 +81,14 @@ Current Release: v2026.01.18 • Author: 7Lynx
   action is one the repertoire cannot classify, or when it is `locomotion` — the table is not a
   second way to walk the dog — and it is skipped when the state's own action for that tick is a step.
   A misspelled state or entry key is a load-time error, and a state left out has no beat.
+- `behavior.state_expressions.<state>.sound`: a state entry can name a sound effect, played on the same
+  tick as the beat. The cue **rides the entry command** rather than taking an intent slot of its own,
+  so it costs neither the beat nor the step it rides — the gateway resolves one winner per tick, and a
+  cue on its own source would have taken that tick. `hal_motors` plays it once per command, strips it
+  before the vendor call, and excludes it from the action fingerprint, so a cue can never turn a
+  repeat into a second step. `behavior.cue_volume` (ships `60`) sets the volume, `behavior.cue_sounds`
+  lists the vendor's twelve effects — advisory, a name outside it is warned once and still played —
+  and `quiet_mode` suppresses cues entirely while the beat keeps playing.
 - The LED manager's requests gained a lifetime: `{mode, color?, bps?, until_ts?}`. `until_ts` is a
   deadline on the monotonic clock — once it passes, the request stops winning, its key is cleared and
   the next source in `settings.led.priority` takes the strip. A request without `until_ts` stands until

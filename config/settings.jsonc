@@ -704,13 +704,37 @@
       // refused too, because a beat is an expression and not a second way to walk the dog. The
       // locomotion states (`avoiding`, `patrol`, `explore`) deliberately ship no beat. A state left
       // out simply has no beat.
+      //
+      // `sound` is a cue, not an action: it rides the command the entry already publishes, so a
+      // locomotion state can announce itself without giving up its step, and the beat is never
+      // delayed. It is suppressed while `quiet_mode` is active. `cue_sounds` below is advisory — a
+      // name missing from it is warned about once and still played.
       "state_expressions": {
         "idle": { "action": "relax neck" },
-        "alert": { "action": "head_up_down" },
-        "play": { "action": "wag tail" },
-        "interact": { "action": "tilting_head" },
-        "rest": { "action": "nod" }
+        "alert": { "action": "head_up_down", "sound": "single_bark_1" },
+        "play": { "action": "wag tail", "sound": "woohoo" },
+        "interact": { "action": "tilting_head", "sound": "pant" },
+        "rest": { "action": "nod", "sound": "snoring" }
       },
+      // Volume for the entry cues, 0-100. Quieter than the HAL's own 70: an entry should not
+      // startle the room.
+      "cue_volume": 60,
+      // The effects a stock PiDog ships (`docs/pidog/PIDOG-EXPRESSION.md`). Advisory only: a build
+      // with its own files may name them, and a name outside this list is warned about once.
+      "cue_sounds": [
+        "angry",
+        "confused_1",
+        "confused_2",
+        "confused_3",
+        "growl_1",
+        "growl_2",
+        "howling",
+        "pant",
+        "single_bark_1",
+        "single_bark_2",
+        "snoring",
+        "woohoo"
+      ],
       // Optional micro-idle behaviors (lifelike idle). Disabled by default.
       "micro_idle_enabled": true,
       // Candidate actions to emit during idle (must exist in action catalog).

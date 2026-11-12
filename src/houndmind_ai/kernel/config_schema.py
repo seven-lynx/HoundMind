@@ -758,12 +758,15 @@ _BEHAVIOR_STATES = (
     "rest",
 )
 
-# One expression per state, fired once when the FSM enters it (`behavior/fsm.py::_entry_beat`). A
-# fixed-shape table rather than a free map, so a typo in a state name is a suggestion at load instead
-# of a beat that never fires; a state left out simply has no beat. Nested so the transition cue can
-# join the entry later without a format change.
+# One expression per state, fired once when the FSM enters it (`behavior/fsm.py::_entry_beat`), with
+# an optional `sound` cue played alongside it (`_entry_cue`). A fixed-shape table rather than a free
+# map, so a typo in a state name is a suggestion at load instead of a beat that never fires; a state
+# left out simply has no beat. Nested so a cue can ride the entry without a format change.
 _STATE_EXPRESSIONS = Section(
-    fields={state: Section(fields={"action": StrSpec()}) for state in _BEHAVIOR_STATES}
+    fields={
+        state: Section(fields={"action": StrSpec(), "sound": StrSpec()})
+        for state in _BEHAVIOR_STATES
+    }
 )
 
 # `behavior/fsm.py` — the state machine's whole repertoire. `catalog` and `action_classes` are
@@ -794,6 +797,11 @@ _BEHAVIOR = Section(
         "transition_confirm_ticks": IntSpec(minimum=1),
         "transition_immediate_states": _NAMES,
         "state_expressions": _STATE_EXPRESSIONS,
+        # The cue a state entry plays (`behavior/fsm.py::_entry_cue`). `cue_sounds` is advisory: the
+        # vendor's twelve effects are the ones a stock build has, and a name outside the list is
+        # warned once rather than refused, because a build may ship its own (#81).
+        "cue_volume": IntSpec(minimum=0, maximum=100),
+        "cue_sounds": _NAMES,
         "autonomy_enabled": Bool(),
         "autonomy_interval_s": _POSITIVE,
         "autonomy_modes": _NAMES,

@@ -13,6 +13,10 @@ from houndmind_ai.kernel.commands import Source
 
 logger = logging.getLogger(__name__)
 
+# A cue is a transition marker, not an event: it ships quieter than the HAL's own 70 so an entry
+# does not startle the room. `behavior.cue_volume` overrides it.
+_CUE_VOLUME_DEFAULT = 60
+
 
 class BehaviorState(StrEnum):
     IDLE = "idle"
@@ -42,6 +46,8 @@ class BehaviorModule(Module):
         # Entry beats that were refused, so a typo in `behavior.state_expressions` is one warning
         # rather than one per transition.
         self._warned_beats: set[str] = set()
+        # Cue names outside the advisory `behavior.cue_sounds` list, warned about once each.
+        self._warned_cues: set[str] = set()
         # habituation tracking: counts and last timestamp per stimulus type
         self._stim_counts: dict[str, int] = {}
         self._stim_last_ts: dict[str, float] = {}
@@ -438,6 +444,12 @@ class BehaviorModule(Module):
         # transition site would be replaced on any transition into `idle` — micro-idle ships enabled.
         # Recording it as `last_action` is what lets `action_cooldown_s` hold it for a window; at the
         # shipped 0.0 the beat is one tick and the vendor plays the action once.
+        #
+        # The cue rides the same command. The gateway resolves exactly one winner per tick
+        # (`act/gateway.py:200-254`), so a cue on a source of its own would take the entry tick from
+        # the beat — and from the step, on entry to `patrol` or `explore`. Attached here, it costs
+        # neither: `hal_motors` plays it and strips it before the vendor sees anything.
+        params: dict[str, object] | None = None
         if entered_state is not None:
             beat = self._entry_beat(settings, entered_state, action)
             if beat is not None:
@@ -445,8 +457,13 @@ class BehaviorModule(Module):
                 self.last_action = beat
                 self._last_action_ts = now
                 logger.info("Behavior entry beat -> %s (%s)", beat, entered_state.value)
+            cue = self._entry_cue(
+                settings, entered_state, bool(context.get("quiet_mode_active"))
+            )
+            if cue is not None:
+                params = {"cue": cue}
 
-        self._publish(context, action)
+        self._publish(context, action, params)
 
     def _entry_beat(
         self, settings: dict, state: BehaviorState, current_action: str
@@ -493,13 +510,61 @@ class BehaviorModule(Module):
             )
             return None
         return beat
-    def _publish(self, context, action: str) -> None:
-        """Offer `action` to the gateway as the behaviour source."""
+
+    def _entry_cue(
+        self, settings: dict, state: BehaviorState, quiet: bool
+    ) -> dict[str, object] | None:
+        """The sound this state's entry asks for, or None.
+
+        A cue is a transition marker, not an action: it is attached to whatever the entry already
+        publishes, so a state with no beat (a locomotion state) still gets one, and nothing waits a
+        tick for it. Two things can stop it:
+
+        - `quiet_mode_active` — a dog told to be quiet does not announce itself. The gate lives here
+          rather than in the HAL because it is a behaviour decision, and the timer that owns it is
+          the runtime's (`core/runtime.py:147`).
+        - a name outside the advisory `behavior.cue_sounds` list. That list is a hint, not a
+          whitelist: a build with its own effects may use them, and the vendor will not find a file
+          that is not there (see #81, `hal: a missing sound effect is undetectable`), so the mismatch is
+          warned once per name and the cue still plays.
+        """
+        table = settings.get("state_expressions")
+        if not isinstance(table, dict):
+            return None
+        entry = table.get(state.value)
+        if not isinstance(entry, dict):
+            return None
+        sound = entry.get("sound")
+        if not isinstance(sound, str) or not sound.strip():
+            return None
+        if quiet:
+            return None
+
+        name = sound.strip()
+        available = settings.get("cue_sounds")
+        if isinstance(available, list) and available and name not in available:
+            if name not in self._warned_cues:
+                self._warned_cues.add(name)
+                logger.warning(
+                    "Entry cue %r for state %s is not in behavior.cue_sounds; playing it anyway",
+                    name,
+                    state.value,
+                )
+
+        try:
+            volume = int(settings.get("cue_volume", _CUE_VOLUME_DEFAULT))
+        except (TypeError, ValueError):
+            volume = _CUE_VOLUME_DEFAULT
+        return {"name": name, "volume": max(0, min(100, volume))}
+    def _publish(
+        self, context, action: str, params: dict[str, object] | None = None
+    ) -> None:
+        """Offer `action` to the gateway as the behaviour source, with any entry cue attached."""
         board = context.get("intent_board")
         if board is None:
             logger.debug("No intent board; behaviour intent %s not published", action)
             return
-        board.publish(str(action), Source.BEHAVIOUR)
+        board.publish(str(action), Source.BEHAVIOUR, params)
 
     def _resolve_override(self, override: object) -> str:
         if self.registry is None:
