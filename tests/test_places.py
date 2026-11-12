@@ -367,3 +367,58 @@ def test_slug_and_normalize_name() -> None:
     assert normalize_name(" Kitchen  ") == "kitchen"
 
 
+
+
+# ------------------------------------------------------------------ visits and confidence
+
+
+def stored_place(**overrides) -> Place:
+    """A validated place, so `after_visit` can be reasoned about without a file."""
+    body = {"name": "Kitchen", "heading_deg": 90.0, "distance_cm": 310.0, **overrides}
+    return Place(
+        id="kitchen",
+        name=body["name"],
+        heading_deg=body["heading_deg"],
+        distance_cm=body["distance_cm"],
+        anchor=body.get("anchor", DEFAULT_ANCHOR),
+        confidence=body.get("confidence"),
+        created_ts=CREATED,
+        visits=body.get("visits", 0),
+    )
+
+
+def test_an_arrival_counts_a_visit_and_starts_a_confidence() -> None:
+    """One arrival is one measurement: the first confidence is `step`, not a hopeful 1.0."""
+    after = stored_place().after_visit(arrived=True)
+    assert after.visits == 1
+    assert after.confidence == pytest.approx(0.1)
+
+
+def test_a_measured_confidence_climbs_to_one_and_stops() -> None:
+    after = stored_place(confidence=0.95, visits=4).after_visit(arrived=True)
+    assert after.confidence == 1.0
+    assert after.visits == 5
+
+
+def test_a_failed_approach_decays_a_measured_confidence_only() -> None:
+    """A blocked path is not evidence about the place: unmeasured stays unmeasured."""
+    assert stored_place(confidence=0.5).after_visit(arrived=False).confidence == pytest.approx(0.4)
+    assert stored_place(confidence=0.05).after_visit(arrived=False).confidence == 0.0
+    assert stored_place().after_visit(arrived=False).confidence is None
+    assert stored_place(confidence=0.5).after_visit(arrived=False).visits == 0
+
+
+def test_the_store_persists_a_visit_once_and_names_an_unknown_place(tmp_path: Path) -> None:
+    places = store(tmp_path)
+    places.add(name="Kitchen", heading_deg=90.0, distance_cm=310.0)
+
+    updated, problems = places.record_visit("kitchen", arrived=True)
+    assert problems == ()
+    assert updated is not None and updated.visits == 1
+    assert json.loads((tmp_path / "places.json").read_text(encoding="utf-8"))["places"][0][
+        "visits"
+    ] == 1
+
+    missing, refusal = places.record_visit("garage", arrived=True)
+    assert missing is None and refusal, "an unknown handle is a reason, never a silent success"
+

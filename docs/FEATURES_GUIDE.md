@@ -105,6 +105,12 @@ can be confidently wrong about.
 | Key | Default | Meaning |
 |---|---|---|
 | `settings.places.path` | `~/.houndmind/places.json` | One JSON file holding every place. `~` is expanded at startup; a missing file is an empty list, not an error, and nothing creates it on a read. |
+| `settings.places.anchor` | `sonar_baseline` | The anchor this run navigates in. A place taught against a different one is refused by name instead of being walked on a stale vector. |
+| `settings.places.tolerance_cm` | `15` | Arriving inside this many cm of the stored distance counts as arrived. |
+| `settings.places.turn_tolerance_deg` | `8` | How far off the heading the dog may be and still count as facing the place. |
+| `settings.places.step_cm` | `25` | Dead reckoning: how far one accepted `forward` is believed to carry the dog. Nothing measures travel, so this is a guess until it is measured on the device. |
+| `settings.places.timeout_s` | `120` | Give up after this long. `0` means never. |
+| `settings.places.confidence_step` | `0.1` | How much one arrival raises a place's confidence, and one failed approach lowers it. |
 
 Each place is a pose **polar from an anchor** — `heading_deg` and `distance_cm` from a named
 `anchor` — with a `confidence` (`null` when nobody has confirmed it yet), `created_ts` and `visits`.
@@ -122,8 +128,23 @@ global path plan, which is why the stored pose is a bearing and a range.
   and never changes, so renaming the display name does not break a client that stored the id. Two
   names that differ only in case or spacing are the same place to a person, and the second is
   refused.
-- `GET`/`POST`/`DELETE /api/v1/places` is not wired yet; the file is the interface today, and
-  `kernel/place_store.py` is what owns it.
+- **Going there is one intent at a time.** `navigation/place_navigator.py` turns a request into
+  ordinary motion: it orients to `heading_deg`, walks `distance_cm` one accepted `forward` at a
+  time, and stops on arrival. Every step passes the gateway, the interlock and the obstacle stop
+  exactly as a command from a hand does, and the intent's priority is **17** — under `navigation`
+  (20), so an obstacle always wins the tick, and over `routine` (15), so a goal beats a script.
+- **The anchor is a precondition.** A stored distance was measured from the pose the dog stood at
+  when the place was taught, and nothing at this tier can verify that pose, so the request has to
+  say the dog is there (`at_anchor: true`). Without it, or when the place was taught against another
+  anchor, the navigator refuses and names the reason instead of walking a vector it cannot confirm.
+- **Arrival is dead reckoning, and it is written down as such.** Each accepted `forward` counts
+  `step_cm`; arriving inside `tolerance_cm` of the distance counts as a visit, which is the one write
+  a trip makes (`visits + 1`, confidence up by `confidence_step`). A goal that cannot get there — a
+  wall, a veto, a timer — ends as `abandoned` with its reason and, if a confidence was ever measured,
+  a decay instead of a rise.
+- `GET`/`POST`/`DELETE /api/v1/places` is not wired yet; the file and the `place_request` context key
+  are the interface today, and `kernel/place_store.py` plus `navigation/place_navigator.py` are what
+  own them.
 
 ---
 

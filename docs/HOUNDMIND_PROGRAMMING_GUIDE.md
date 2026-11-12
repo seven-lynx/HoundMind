@@ -217,6 +217,8 @@ The keys a module may rely on. Anything not here is private and may change.
 | Key | Type |
 |---|---|
 | `navigation_decision`, `navigation_turn`, `navigation_followup` | `dict` |
+| `place_request` | `dict` in, consumed once — `{"id": "<slug or name>", "at_anchor": true}` |
+| `place_goal` | `dict \| None` — the trip in progress, or why it was refused (`navigation/place_navigator.py`) |
 | `mapping_openings`, `mapping_state` | `dict` |
 | `path_planning`, `path_planning_hook` | `list` / callable |
 | `behavior_override` | `str \| None` |

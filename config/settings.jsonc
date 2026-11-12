@@ -157,6 +157,14 @@
       "enabled": true,
       "required": false
     },
+    "place_navigator": {
+      // Walks to a place in the file at settings.places.path by publishing `place` intents (priority
+      // 17, under `navigation`, so an obstacle always wins the tick). It is inert until something
+      // writes the `place_request` context key — the control plane does that at P4 PL5 — and with it
+      // off a request is simply never answered. Tuning lives in `settings.places`, not here.
+      "enabled": true,
+      "required": false
+    },
     "calibration": {
       // Calibration workflows (disabled by default).
       "enabled": false,
@@ -1110,7 +1118,28 @@
       // A file with a bad entry keeps the good ones and reports the rest; before
       // any write over such a file, its previous contents are copied to
       // `<path>.bak`. Requires `behavior` + `navigation` for the dog to go there.
-      "path": "~/.houndmind/places.json"
+      "path": "~/.houndmind/places.json",
+
+      // How the dog walks to one (navigation/place_navigator.py). A place is a heading and a
+      // distance from an anchor, so reaching it is "orient, step, re-check" — one motion intent at
+      // a time through the gateway, and an obstacle always outranks the goal.
+      //
+      // The anchor this run navigates in. A place taught against a different one is refused by
+      // name rather than walked on a stale vector, and a request must confirm the dog stands at
+      // the anchor ("at_anchor": true) because nothing here can verify that pose.
+      "anchor": "sonar_baseline",
+      // Arriving inside this many cm of the stored distance counts as arrived.
+      "tolerance_cm": 15,
+      // How far off the heading the dog may be and still count as facing the place (degrees).
+      "turn_tolerance_deg": 8,
+      // Dead reckoning: how far one accepted `forward` is believed to carry the dog. NOTHING
+      // measures travel, so this is a guess until it is measured on the device — a wrong value
+      // makes every trip short or long by the same ratio.
+      "step_cm": 25,
+      // Give up after this long (seconds). 0 means never.
+      "timeout_s": 120,
+      // How much one arrival raises a place's confidence, and one failed approach lowers it.
+      "confidence_step": 0.1
     },
 
     // =====================================================================

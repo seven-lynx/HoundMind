@@ -62,6 +62,7 @@ class EventLoggerModule(Module):
         snapshot = {
             "behavior_action": _intent(context, Source.BEHAVIOUR),
             "navigation_action": _intent(context, Source.NAVIGATION),
+            "place_action": _intent(context, Source.PLACE),
             "navigation_decision": context.get("navigation_decision"),
             "safety_action": _intent(context, Source.SYSTEM),
             "watchdog_action": _intent(context, Source.WATCHDOG),
@@ -83,6 +84,7 @@ class EventLoggerModule(Module):
             "timestamp": now,
             "behavior_action": snapshot["behavior_action"],
             "navigation_action": snapshot["navigation_action"],
+            "place_action": snapshot["place_action"],
             "navigation_decision": snapshot["navigation_decision"],
             "safety_action": snapshot["safety_action"],
             "watchdog_action": snapshot["watchdog_action"],

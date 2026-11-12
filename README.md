@@ -200,6 +200,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Mapping                        | Enabled     |                                       |
 | Behavior                       | Enabled     |                                       |
 | Routines                       | Enabled     | `modules.routine_runner`              |
+| Places (go to \<place\>)         | Enabled     | `modules.place_navigator`; intents at priority 17, under `navigation` |
 | Attention                      | Enabled     |                                       |
 | Watchdog                       | Enabled     | Holds motion on stale data; restarts stopped modules with backoff |
 | Event Logging                  | Enabled     |                                       |

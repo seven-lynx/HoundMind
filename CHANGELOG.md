@@ -29,7 +29,16 @@ Current Release: v2026.01.18 • Author: 7Lynx
   visit count — polar, because that is the pose this stack can produce and use. They live in one JSON
   file at `settings.places.path` (`~/.houndmind/places.json`), and loading quarantines entry by entry:
   one bad place does not cost the others, and a write over a partly-refused file copies the previous
-  contents to `<path>.bak` first. No route or navigator yet; those are the next two segments.
+  contents to `<path>.bak` first.
+- **A dog can now walk to a place.** `navigation/place_navigator.py` turns a `place_request` into
+  ordinary motion — orient to the place's heading, then advance its distance one accepted `forward`
+  at a time — and stops on arrival, which is the one moment a trip writes: `visits + 1` and a bounded
+  confidence nudge (`Place.after_visit`, `PlaceStore.record_visit`). `Source.PLACE = 17` is a slot of
+  its own, under `navigation` (20) so an obstacle always wins the tick and over `routine` (15) so a
+  goal beats a script; two producers were never put in one slot. Distance is dead reckoning —
+  `settings.places.step_cm` per accepted command — because nothing measures travel, and the request
+  must confirm the dog is at the anchor (`at_anchor: true`) because nothing can verify that pose.
+  No route yet: `POST /api/v1/places` and the rest are the next segment.
 - `rgb` keeps its `bps` argument, so an LED effect can specify its animation rate instead of silently
   running at the vendor's default.
 - `state.actuators.source` and `state.actuators.displaced`: the producer that won the tick, and how
