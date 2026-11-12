@@ -1063,6 +1063,70 @@ async def _index(request: web.Request) -> web.StreamResponse:
     return web.FileResponse(index)
 
 
+# ------------------------------------------------------------------ people (P4 PL6)
+
+# The module that owns the identities, and the name `GET /api/v1/modules` reports it under.
+_IDENTITY_MODULE = "face_recognition"
+
+
+def _identity_status(plane: ControlPlane) -> dict[str, Any]:
+    """What that module says about itself, or `{}` when it never registered."""
+    table = plane.context.get("module_statuses")
+    if isinstance(table, dict):
+        entry = table.get(_IDENTITY_MODULE)
+        if isinstance(entry, dict):
+            return entry
+    return {}
+
+
+def _identity_off_reason(plane: ControlPlane) -> str:
+    """Why there is no roster — in the module's own words when it has any, because it knows."""
+    status = _identity_status(plane)
+    if not status:
+        return "identity is not registered; enable modules.face_recognition"
+    if not status.get("enabled", True):
+        return str(
+            status.get("disabled_reason")
+            or "identity is disabled; enable modules.face_recognition"
+        )
+    return str(status.get("last_error") or "identity is running but published no roster")
+
+
+async def _people_list(request: web.Request) -> web.Response:
+    """Who the dog has been taught, as ids and names — never a face, never an embedding.
+
+    200 with an `identity` block rather than the 503 `/places` answers when no navigator runs:
+    identity ships `enabled: false`, so an error status would make the shipped default a permanent
+    failure on a screen a client wants to draw. The block is what stops `people: []` from being
+    read as "nobody is enrolled" — the one wrong answer this route exists to prevent.
+
+    `admin`, not `state:read`: an enrolled face is biometric data (`robot-pet-design.md` §6.4), so
+    a paired phone holding `move` does not get to enumerate who lives here.
+    """
+    plane = _plane(request)
+    roster = plane.context.get("identity_roster")
+    if not isinstance(roster, dict):
+        return web.json_response(
+            {
+                "identity": {
+                    "enabled": False,
+                    "backend": None,
+                    "reason": _identity_off_reason(plane),
+                },
+                "path": None,
+                "people": [],
+            }
+        )
+    people = roster.get("people")
+    return web.json_response(
+        {
+            "identity": {"enabled": True, "backend": roster.get("backend"), "reason": None},
+            "path": roster.get("path"),
+            "people": people if isinstance(people, list) else [],
+        }
+    )
+
+
 # ------------------------------------------------------------------ the table
 #
 # One declaration, used both to register the routes and to check them against
@@ -1080,6 +1144,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/routines", "state:read", _routines_list),
     ("GET", "/places", "state:read", _places_list),
+    ("GET", "/people", "admin", _people_list),
     ("GET", "/decisions", "state:read", _decisions),
     ("GET", "/events", None, _events),
     ("GET", "/camera/stream", None, _camera_stream),

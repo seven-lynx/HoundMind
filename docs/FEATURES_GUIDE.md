@@ -607,9 +607,9 @@ context.set("face_recognition_command", {"action": "enroll", "name": "Alice"})
 ```
 
 The next tick enrolls against the newest `vision_frame` (requires exactly one face in frame).
-The legacy port-8088 server is gone: `/status` is now `GET /api/v1/modules`, `/faces` is
-`GET /api/v1/state`, and enrollment has no v1 route yet. `python -m tools.face_recognition_cli`
-was deleted with the port.
+The legacy port-8088 server is gone: `/status` is now `GET /api/v1/modules`, the roster of enrolled
+people is `GET /api/v1/people` (§26), and enrollment still has no v1 route — it is the command above.
+`python -m tools.face_recognition_cli` was deleted with the port.
 
 **It needs a frame, and only §21 publishes one.** `vision_frame` comes from
 `modules.vision_pi4`, so this detector is Pi 4/5-only: the Pi 3 `modules.vision` path starts Vilib
@@ -626,6 +626,19 @@ a wheel that is not on PyPI; when it is absent the module logs
 `missing dependency: face_recognition` into `disabled_reason` instead of failing at enrolment or
 reporting an empty room. Nothing is imported at module scope, which
 `tests/test_imports.py::test_no_vendor_wheel_is_imported_at_module_scope` enforces.
+
+**Who it knows** — `GET /api/v1/people`, `admin` scope, ids and names only:
+`{"identity": {"enabled", "backend", "reason"}, "path", "people": [{"id", "name"}]}`. `id` is the
+slug of the name (`"Alex Kim"` → `alex_kim`), the rule places already follow, and two enrollments
+under one name are one person with two reference faces. Both backends report their own roster —
+`face_recognition` from its embeddings, OpenCV from its LBPH label map; the two keep their identities
+in different files, and `path` says which one is in use. No embedding, dataset image or face box is
+ever in a response: `path` is there so a user can find the file and delete it.
+
+Identity ships `enabled: false`, so the answer while it is off is a **reason**, not an empty roster:
+`"reason": "identity is disabled; enable modules.face_recognition"`, or the module's own
+`disabled_reason` when it has one (`missing dependency: face_recognition (dlib)`). `people: []` next
+to `identity.enabled: false` is never "nobody is enrolled".
 
 **Disable:** `modules.face_recognition.enabled = false`
 
@@ -777,6 +790,8 @@ as specified in `docs/CONTROL_API.md`:
 | Decisions | `GET /api/v1/decisions` | `state:read` |
 | Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame |
 | Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?ticket=`) |
+| Places | `GET`/`POST`/`DELETE /api/v1/places`, `POST /places/{id}/go` | `state:read` / `config` / `move` |
+| People | `GET /api/v1/people` | `admin` — ids and names only, never an embedding |
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
 | Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration` | `config` |
 | History | `GET /api/v1/history` | `state:read` |

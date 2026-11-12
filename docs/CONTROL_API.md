@@ -60,7 +60,7 @@ because rotating the device token is an operator decision, not a client one.
 | `state:read` | `GET /state`, `/modules`, `/events` (WS), `/camera/*`, `/history` |
 | `move` | `POST /command`, `POST /stop`, `POST /mode` |
 | `config` | `GET`/`PATCH /config`, `GET /calibration` |
-| `admin` | `POST /pair/open`, `GET /logs`, `GET /support-bundle` — device token only |
+| `admin` | `POST /pair/open`, `GET /people`, `GET /logs`, `GET /support-bundle` — device token only |
 
 Header: `Authorization: Bearer <token>`. The two camera routes also accept `?ticket=<ticket>` because an
 `<img>` tag cannot set a header: mint one with `POST /api/v1/camera/ticket` (`state:read`), it is valid
@@ -81,6 +81,7 @@ and `config` into browser history and access logs (`#18`).
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params (§3) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress (§3) |
 | `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress (§8) |
+| `GET` | `/api/v1/people` | `admin` | enrolled people: ids and names only, never an embedding (§9) |
 | `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first (§4); 503 when the feed is not running |
 | `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream (§5) |
 | `GET` | `/api/v1/camera/stream` | `state:read` (`?ticket=`) | MJPEG, multipart/x-mixed-replace |
@@ -485,3 +486,49 @@ returns as `goal`:
 `503` on any of the four means no place navigator is running (`modules.place_navigator.enabled` is
 off, so nothing owns the file). That is not an empty catalogue, and the two are worth distinguishing
 in a client.
+
+## 9. People
+
+Who the dog has been taught to recognise. `optional/face_recognition.py` owns the identities and
+publishes the roster; this route reports it and nothing else.
+
+| Route | Scope | Answers |
+|---|---|---|
+| `GET /api/v1/people` | `admin` | `{identity, path, people}` |
+
+```jsonc
+{"identity": {"enabled": true, "backend": "face_recognition", "reason": null},
+ "path": "/home/pi/.houndmind/face_references.json",
+ "people": [{"id": "alex_kim", "name": "Alex Kim"}]}
+```
+
+`identity` is the module's own account of itself: `backend` is whichever backend is running, and
+`reason` is why there is no roster. `path` names the file those identities are kept in — the one
+thing a user needs in order to delete them. `people` is `[{id, name}]`, where `id` is the slug of the
+name (`"Alex Kim"` → `alex_kim`), the rule a place already follows.
+
+**Nothing biometric is served.** No embedding, no dataset image, no vector and no face box — and
+`admin` rather than `state:read` for that reason: an enrolled face is biometric data, so a paired
+phone holding `move` does not get to enumerate who lives here (design §6.4). `GET /api/v1/meta` does
+not advertise the roster either, because it is unauthenticated: announcing that people are enrolled
+would undo the scope one route over.
+
+**Identity off is normal, so it is a `200`.** Identity ships `modules.face_recognition.enabled:
+false`, so an error status would make the shipped default a permanent failure on a screen a client
+wants to draw — the opposite of `/places`, where "no navigator" is a configuration mistake. What
+keeps the two states apart is the block:
+
+```jsonc
+{"identity": {"enabled": false, "backend": null,
+              "reason": "identity is disabled; enable modules.face_recognition"},
+ "path": null, "people": []}
+```
+
+`reason` is the module's `disabled_reason` verbatim when it has one — `missing dependency:
+face_recognition (dlib)` is a different problem from a switched-off module, and the module is the one
+that knows which. `people: []` beside `identity.enabled: false` is never read as "nobody is enrolled".
+
+**Enrolment is not a route.** It is still a runtime command (§20 of `docs/FEATURES_GUIDE.md`), so a
+client cannot add a person yet; this route is what a client reads after someone has
+([#103](https://github.com/seven-lynx/HoundMind/issues/103)).
+
