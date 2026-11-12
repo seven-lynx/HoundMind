@@ -9,7 +9,9 @@ def test_personality_bias_high_curiosity():
     registry = BehaviorRegistry()
     # register simple handlers that return their mode name
     for m in ["idle", "patrol", "explore", "interact", "play", "rest"]:
-        registry.register(m, lambda m=m: m)
+        # The names `behavior/fsm.py` registers, `<mode>_behavior` (#82). Registering the bare mode
+        # names here made this test pass against a registry the runtime never builds.
+        registry.register(f"{m}_behavior", lambda m=m: m)
     module.registry = registry
 
     settings = {

@@ -675,8 +675,12 @@ class BehaviorModule(Module):
                     w *= activity
             weights[m] = w
 
+        # `modes` are mode names and the registry's items are `<mode>_behavior`; `pick_mode` is the
+        # one place that translation happens. At L4's predecessor the raw list went to
+        # `pick_weighted`, which found no item and returned None, so the fallback below always won and
+        # autonomy never left `idle` (#82).
         choice = (
-            self.registry.pick_weighted(list(modes), weights) if self.registry else None
+            self.registry.pick_mode(list(modes), weights) if self.registry else None
         )
         self._autonomy_mode = choice or "idle"
         self._last_autonomy_ts = now
