@@ -801,7 +801,14 @@
       "nav_obstacle_mode": "bark",
       "nav_retreat_mode": "boom",
       "emotion_mode": "breath",
-      "emotion_color": "blue"
+      "emotion_color": "blue",
+      // LED effect rate, per source, e.g. `{"safety": 4}` runs the safety effect at 4 bps. Empty by
+      // default, which leaves every effect at the vendor's rate — the same rate it ran at before
+      // this key existed. A request may carry its own `bps` instead.
+      "bps": {},
+      // What the strip returns to when the request that owned it expires and nothing else is live
+      // (`default_color` + this effect). Before this, the last colour simply stayed.
+      "idle_mode": "breath"
     },
     // =====================================================================
     // ATTENTION (sound direction -> head yaw)

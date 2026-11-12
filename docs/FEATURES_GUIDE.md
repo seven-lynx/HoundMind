@@ -317,7 +317,21 @@ reading and cannot accept commands.
 ---
 
 ## 15) LED Manager
-**What it does:** Centralized LED priority handling.
+**What it does:** Centralized LED priority handling. It picks the highest-priority live request from
+`led_request:<source>` and applies it through the HAL's `rgb`, so a colour and its animation rate come
+from one place instead of from whichever module wrote last. The order is `settings.led.priority`
+(default `["safety", "navigation", "attention", "emotion"]`).
+
+**Requests can expire.** A request is `{mode, color?, bps?, until_ts?}`. `until_ts` is a deadline on
+the runtime's monotonic clock; once it passes, the request stops winning and its key is cleared, so the
+next source in the priority list takes the strip. A request with no `until_ts` stands until it is
+replaced — that is what every producer in this tree writes, and their behaviour is unchanged. When the
+request that owned the strip expires and nothing else is live, the strip returns to
+`settings.led.default_color` with `settings.led.idle_mode` (default `breath`), once.
+
+**Rate.** `bps` is the effect's animation rate. A request may carry its own; otherwise
+`settings.led.bps` maps a source name to a rate (`{"safety": 4}`). Absent from both, the key is not
+sent and the HAL's own default applies — the rate every effect ran at before this existed.
 
 **Disable:** `modules.led_manager.enabled = false`
 
