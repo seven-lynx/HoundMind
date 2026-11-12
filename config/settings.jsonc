@@ -698,6 +698,19 @@
       "random_idle_chance": 0.05,
       // Minimum time between behavior action changes (seconds).
       "action_cooldown_s": 0.0,
+      // One expression per state, emitted once when the FSM enters that state — never every tick.
+      // `action_cooldown_s` above decides how long it is held. Names come from the action catalog
+      // (`actions.jsonc`): an action nothing classifies is refused with a warning, and locomotion is
+      // refused too, because a beat is an expression and not a second way to walk the dog. The
+      // locomotion states (`avoiding`, `patrol`, `explore`) deliberately ship no beat. A state left
+      // out simply has no beat.
+      "state_expressions": {
+        "idle": { "action": "relax neck" },
+        "alert": { "action": "head_up_down" },
+        "play": { "action": "wag tail" },
+        "interact": { "action": "tilting_head" },
+        "rest": { "action": "nod" }
+      },
       // Optional micro-idle behaviors (lifelike idle). Disabled by default.
       "micro_idle_enabled": true,
       // Candidate actions to emit during idle (must exist in action catalog).

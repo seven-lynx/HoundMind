@@ -745,6 +745,27 @@ _LED = Section(
     }
 )
 
+# `behavior/fsm.py::BehaviorState`, fixed here rather than imported: the schema is the layer that has
+# to load even when the behaviour package cannot, and a state name is the schema's business anyway.
+_BEHAVIOR_STATES = (
+    "idle",
+    "alert",
+    "avoiding",
+    "patrol",
+    "explore",
+    "interact",
+    "play",
+    "rest",
+)
+
+# One expression per state, fired once when the FSM enters it (`behavior/fsm.py::_entry_beat`). A
+# fixed-shape table rather than a free map, so a typo in a state name is a suggestion at load instead
+# of a beat that never fires; a state left out simply has no beat. Nested so the transition cue can
+# join the entry later without a format change.
+_STATE_EXPRESSIONS = Section(
+    fields={state: Section(fields={"action": StrSpec()}) for state in _BEHAVIOR_STATES}
+)
+
 # `behavior/fsm.py` — the state machine's whole repertoire. `catalog` and `action_classes` are
 # replaced at load from `config/actions.jsonc` (see `core/config.py`), so they validate as a map of
 # action lists and a map of classifications respectively.
@@ -772,6 +793,7 @@ _BEHAVIOR = Section(
         "transition_min_dwell_s": _NON_NEGATIVE,
         "transition_confirm_ticks": IntSpec(minimum=1),
         "transition_immediate_states": _NAMES,
+        "state_expressions": _STATE_EXPRESSIONS,
         "autonomy_enabled": Bool(),
         "autonomy_interval_s": _POSITIVE,
         "autonomy_modes": _NAMES,

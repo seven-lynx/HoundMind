@@ -176,6 +176,22 @@ def test_every_shipped_section_is_covered_by_the_schema() -> None:
     assert set(raw["settings"]) == set(_settings_section().fields)
 
 
+def test_a_state_name_typo_in_the_entry_table_is_rejected() -> None:
+    """`alertt` would be a beat that never fires: the config that loads and does nothing."""
+    problems = validate_config_tree(
+        {"settings": {"behavior": {"state_expressions": {"alertt": {"action": "nod"}}}}}
+    )
+    assert paths(problems) == ["config.settings.behavior.state_expressions.alertt"]
+    assert problems[0].hint == "alert"
+
+
+def test_an_entry_beat_accepts_only_the_keys_it_documents() -> None:
+    problems = validate_config_tree(
+        {"settings": {"behavior": {"state_expressions": {"alert": {"actoin": "nod"}}}}}
+    )
+    assert paths(problems) == ["config.settings.behavior.state_expressions.alert.actoin"]
+
+
 # ----------------------------------------------------- audited settings sections
 #
 # One row per covered section: a value of the wrong type must be rejected at load. The point

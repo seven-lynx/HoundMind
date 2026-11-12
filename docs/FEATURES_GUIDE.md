@@ -122,6 +122,34 @@ classifies it in the same file they added it to:
   restart. It becomes commandable over `POST /api/v1/command`, and `GET /api/v1/repertoire` lists
   what this device can actually run, with each action's class and parameters.
 
+### Entry beats
+
+Each FSM state may name **one expression** to play when the dog enters it — a head tilt on `alert`, a
+tail wag on `play` — in `settings.behavior.state_expressions`:
+
+```jsonc
+"state_expressions": {
+  "alert": { "action": "head_up_down" },
+  "play":  { "action": "wag tail" }
+}
+```
+
+- It fires **once, on the transition**, never every tick, and it wins the entry tick; the state's own
+  action resumes on the next one. `behavior.action_cooldown_s` decides how long the beat is held (it
+  ships `0.0`, so the beat is one tick and the vendor plays the action once).
+- Refused, each with a warning in the log, never silently:
+  - an action nothing classifies — a beat is not published on the strength of a spelling;
+  - a `locomotion` action — a beat is an expression, not a second way to walk the dog.
+- A beat is also **skipped** when the state's action for that tick is itself `locomotion`: the dog
+  keeps moving and the beat waits for the next transition. That is why the locomotion states
+  (`avoiding`, `patrol`, `explore`) ship with no beat.
+- A state left out has no beat. A misspelled state name or entry key is a **load-time error** with a
+  suggestion, so a table that could never fire cannot load.
+- The beat is an ordinary expression through the gateway: the interlock judges it by its class (tilt
+  latch and battery floor), and it is the lowest-ranked intent on the board
+  (`Source.BEHAVIOUR = 10`), so a navigator, a routine, a client, the watchdog or the system all
+  outrank it.
+
 ### Routines and their directory
 
 A routine is a user-authored list of steps, one JSON file per routine. The files sit outside the
