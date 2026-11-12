@@ -105,6 +105,14 @@ Current Release: v2026.01.18 • Author: 7Lynx
   config section it shipped with.
 
 ### Changed
+- Idle is no longer a constant: `behavior/library.py` draws from the whole bucket with a recency weight
+  instead of returning `idle_actions[0]` nineteen times in twenty (#37). Three knobs set it —
+  `behavior.action_reuse_cooldown_s` (ships `20`: how long an action stays out of its bucket before it
+  fades back in), `behavior.idle_variety_interval_s` (ships `8`: how often `idle` may change at all) and
+  `behavior.random_idle_chance` (now `0.6`, checked once per interval, `0` = never — it used to mean
+  "draw from the bucket instead of returning the first entry", at `0.05`). `action_cooldown_s` is
+  untouched: it holds every behaviour change including a reaction to touch, so it was never the right
+  pacer for variety.
 - `POST /api/v1/command` accepts any action classified in `config/actions.jsonc`, not only the twelve
   names in `KNOWN_ACTIONS`. A name nothing classifies is still a `400` with a did-you-mean.
 - The interlock judges every class, not only the gaits: `act/gateway.py` returned early for anything
@@ -122,6 +130,15 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 
 ### Fixed
+- `behavior.autonomy_modes` never left `idle`: `_select_autonomy_mode` handed the mode names to a
+  registry keyed by `<mode>_behavior`, so `pick_weighted` found no item, returned `None`, and the
+  fallback won on every tick — `patrol`, `explore` and `interact` were unreachable through autonomy,
+  and `autonomy_weights` plus the `personality` multipliers were dead config for them (#82).
+  `BehaviorRegistry.pick_mode` owns that translation now, and `tests/test_personality_bias.py` — which
+  registered the bare mode names, the same mistake in a fixture — uses the real ones.
+- An empty behaviour bucket raised `IndexError` inside the tick. It falls back to the FSM's own default
+  for that bucket (`stand`, `lie`, `forward`, …) now, and a bucket whose actions are all inside their
+  reuse cooldown returns the least recently used one rather than nothing.
 - The interlock's `unknown_action` veto was unreachable in the runtime: `act/gateway.py` skipped the
   interlock for every action outside `MOTION_ACTIONS`, so the catalog's gestures were not vetoed — they
   were unchecked. Every action is judged now, and a name nothing classifies is refused with a reason.

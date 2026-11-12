@@ -694,8 +694,17 @@
         "explore": "explore",
         "interact": "interact"
       },
-      // Probability (0-1) to emit an idle action each tick.
-      "random_idle_chance": 0.05,
+      // Chance (0-1) that idle re-draws its action once the variety interval below has elapsed.
+      // 0 keeps the current idle action forever. It gates a draw now; it no longer picks one (#37).
+      "random_idle_chance": 0.6,
+      // Minimum seconds before idle may change its action again. Paces the variety: without it a
+      // fresh draw every tick (~2 Hz) reads as twitching, and `action_cooldown_s` cannot pace it
+      // because that one also holds reactions to touch and sound.
+      "idle_variety_interval_s": 8.0,
+      // Seconds an action is excluded from its bucket after being used, then faded back in from a
+      // 5% weight over a second window. This is what turns the 14-entry `idle` bucket into a
+      // repertoire instead of a two-action loop (#37). 0 disables recency: a uniform draw.
+      "action_reuse_cooldown_s": 20.0,
       // Minimum time between behavior action changes (seconds).
       "action_cooldown_s": 0.0,
       // One expression per state, emitted once when the FSM enters that state — never every tick.

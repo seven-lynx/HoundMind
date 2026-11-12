@@ -175,6 +175,28 @@ dog enters the state.
   file is missing ([#81](https://github.com/seven-lynx/HoundMind/issues/81)).
 - Audio never blocks the loop: `hal.sound` queues onto the HAL's audio thread.
 
+### Choosing an action
+
+Every behaviour bucket (`idle`, `alert`, `avoid`, `play`, `rest`, `patrol`, `explore`, `interact`) is
+filled by one **recency-weighted draw** — not by `random.choice`, and no longer by a fixed first entry.
+
+- **Recency.** An action used within `behavior.action_reuse_cooldown_s` (ships `20`) is out of the
+  pool; past the window it fades back in from a 5 % weight over one more window. If everything is
+  inside its cooldown the least recently used action is returned, so a one-action bucket answers
+  instead of hanging, and an empty bucket falls back to the FSM's own default (`stand`, `lie`,
+  `forward`, …) instead of raising inside the tick.
+- **Pace.** `behavior.idle_variety_interval_s` (ships `8`) is how often `idle` may change its action,
+  and `behavior.random_idle_chance` (ships `0.6`, checked once per interval, `0` = never) decides
+  whether it does. Both are separate from `action_cooldown_s`, which holds *every* behaviour change
+  including a reaction to a touch — raising that one to slow idle down would slow the dog's reflexes
+  with it.
+- **Autonomy.** `behavior.autonomy_modes` and `autonomy_weights` pick the *mode* every
+  `autonomy_interval_s`, and `personality` multiplies those weights (`curiosity` → `explore`,
+  `sociability` → `interact`, `activity` → `patrol`/`play`). Modes are registered as
+  `<mode>_behavior`; the translation happens in one place, `BehaviorRegistry.pick_mode`.
+- `behavior.behavior_selection_mode: "sequential"` still applies to the idle *behaviour items*
+  (`idle_choices`), which is how a test gets a deterministic order.
+
 ### Routines and their directory
 
 A routine is a user-authored list of steps, one JSON file per routine. The files sit outside the
