@@ -439,7 +439,7 @@ Also exposes musical scaffolding: `time_signature(top, bottom)`, `key_signature(
 `sound_play_threading` is what `Pidog.speak` calls, so a bark never blocks the caller — but it
 also never stops: a long clip keeps playing after your script moves on.
 
-### 9.2 `Speaker` — the 2.5.x task-based player
+### 9.2 `Speaker` — the 2.5.x player with task handles
 
 ```python
 from robot_hat.speaker import Speaker
