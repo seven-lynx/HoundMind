@@ -407,8 +407,11 @@ class PidogHAL:
         dog = self._ensure_dog()
         if not hasattr(dog, "head_move"):
             return
+        # The vendor reads a target as `[yaw, roll, pitch]`: `head_rpy_to_angle` unpacks it in
+        # that order, so pitch belongs in slot 2. Sending `[yaw, pitch, 0]` rolled the head by the
+        # caller's pitch and left the pitch channel at zero (#59).
         dog.head_move(
-            [[as_float(params.get("yaw"), 0.0), as_float(params.get("pitch"), 0.0), 0]],
+            [[as_float(params.get("yaw"), 0.0), 0.0, as_float(params.get("pitch"), 0.0)]],
             speed=as_int(params.get("speed"), 70),
         )
         if params.get("wait") and hasattr(dog, "wait_head_done"):
