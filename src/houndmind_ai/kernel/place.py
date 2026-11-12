@@ -1,10 +1,10 @@
 """Places: a named pose a user teaches, checked before it is stored or navigated to.
 
-A place is the answer to "go to the kitchen" â€” the feature the design says a user actually wants
-(`robot-pet-design.md` Â§6.3, Â§5.2). The pose is **polar from an anchor**, not a map coordinate:
+A place is the answer to "go to the kitchen" — the feature the design says a user actually wants
+(`robot-pet-design.md` §6.3, §5.2). The pose is **polar from an anchor**, not a map coordinate:
 `heading_deg` and `distance_cm` from a named `anchor`, because that is the only pose this stack can
 produce. `navigation/` has a heading, the mapper builds a *robot-centric* cell grid, and L0 is
-"metres of drift, no loop closure" â€” a Cartesian place would be a number nothing can measure. The
+"metres of drift, no loop closure" — a Cartesian place would be a number nothing can measure. The
 local sequence that reaches a place (orient to the heading, move, re-scan, correct) is exactly what
 these two numbers allow.
 
@@ -12,7 +12,7 @@ Three rules carry the design.
 
 1. **A place is created by a person, never inferred.** A place the dog invented is a place the dog
    can be confidently wrong about; `confidence` is stored and shown for that reason, and it may be
-   `null` â€” "55 % sure this is the kitchen" is honest, "the kitchen" at 55 % is a lie (Â§6.3).
+   `null` — "55 % sure this is the kitchen" is honest, "the kitchen" at 55 % is a lie (§6.3).
 2. **An id is data a client stores, so a rename must not break it.** The id is a slug of the name at
    creation and never changes; the name is the display string. `kernel/routine.py` makes the same
    split for the same reason.
@@ -22,7 +22,7 @@ Three rules carry the design.
 
 Checking is split from loading: `check_*` explains what is wrong with a document, `load_places`
 answers the store's question (*which entries may be kept, and what is refused*). Two functions rather
-than one because one bad entry must not cost the others â€” the quarantine rule of
+than one because one bad entry must not cost the others — the quarantine rule of
 `kernel/routine_store.py` applied to a list instead of a directory.
 
 No I/O, no clock, no config at import time.
@@ -54,7 +54,7 @@ __all__ = [
     "slug",
 ]
 
-# The keys a place may carry, in the order `robot-pet-design.md` Â§6.3 writes them. `id` first because
+# The keys a place may carry, in the order `robot-pet-design.md` §6.3 writes them. `id` first because
 # it is what a client stores; `created_ts` and `visits` last because they are bookkeeping.
 PLACE_KEYS: tuple[str, ...] = (
     "id",
@@ -80,7 +80,7 @@ MAX_ANCHOR_CHARS = 32
 # however far it walked. 20 m is a sanity bound on a typo, not a range the sensor reaches.
 MAX_DISTANCE_CM = 2000.0
 
-# A place id is **not** a file name â€” `kernel/routine.py`'s strict ASCII pattern guards that, because
+# A place id is **not** a file name — `kernel/routine.py`'s strict ASCII pattern guards that, because
 # there an id is a path. One file holds every place, so this pattern only has to survive a URL path
 # segment, and it keeps `\w` so a name typed in a user's own language stays readable instead of being
 # mangled to `caf`.
@@ -184,7 +184,7 @@ def check_place_entry(entry: Any, index: int) -> list[Problem]:
     """Every problem with one entry, its paths rooted at `places[index]`.
 
     The index is the position in the file rather than an id, because an entry has to be refusable
-    *before* it has a usable id â€” a refusal must be able to name something.
+    *before* it has a usable id — a refusal must be able to name something.
     """
     path = f"places[{index}]"
     problems: list[Problem] = []
@@ -305,7 +305,7 @@ def parse_place(entry: Any) -> Place | None:
 
     Tolerant by design, like `kernel/actions.py::build_repertoire`: a value it cannot read falls back
     to the field's default instead of raising, because an entry reaches here from a file a user
-    edited. Call it after a clean `check_place_entry` â€” what that function reports as an error this
+    edited. Call it after a clean `check_place_entry` — what that function reports as an error this
     one will copy without complaint.
     """
     if not isinstance(entry, Mapping):
@@ -342,7 +342,7 @@ def load_places(raw: Any) -> PlaceLoad:
     """The entries a document can keep, and the reason per entry it cannot.
 
     The store's salvage pass: an entry that fails `check_place_entry` is refused by index and does
-    not cost the others, and two entries claiming one id or name keep the first in file order â€” file
+    not cost the others, and two entries claiming one id or name keep the first in file order — file
     order is the order the user wrote, so the winner is reproducible and explainable.
     """
     problems: list[Problem] = []

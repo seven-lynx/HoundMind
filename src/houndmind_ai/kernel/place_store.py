@@ -2,7 +2,7 @@
 
 A place is user data (`kernel/place.py`), and this store is the only thing that touches the file. It
 answers two questions the runtime has to be able to ask: *which places may the dog go to right now*
-(`load`) and *add/forget this one* (`add`, `remove`). Nothing here decides what a legal place is â€”
+(`load`) and *add/forget this one* (`add`, `remove`). Nothing here decides what a legal place is —
 that is the model's job, and both callers reach it through the same validator, so a place the store
 writes is a place `load` will read back.
 
@@ -12,7 +12,7 @@ directory, applied here to a list:
 - A missing file is not an error, and it is not created by a read. A fresh install has no places and
   must still boot; a read that writes is a surprise a support bundle cannot explain.
 - One bad entry never costs the others. A bad heading, a name with a newline or an unreadable number
-  is refused by index (`places[2].distance_cm`) and the rest of the file still loads â€” the same
+  is refused by index (`places[2].distance_cm`) and the rest of the file still loads — the same
   salvage pass a user editing JSON by hand needs.
 - A file that is not JSON at all is one refusal, and **the bytes are left alone**.
 
@@ -23,9 +23,9 @@ to `<path>.bak` first and the report names it, so a user's typo cannot be destro
 request. A corrupt file is therefore recoverable rather than merely reported.
 
 Why here and not a `Module`: the navigator (`navigation/`) and the control plane (`services/`) both
-read the same store, so it belongs on their shared side of the dependency rule (`services` â†’
-`kernel`) and next to the model it validates. It is stateless â€” `load()` returns the report, the
-caller keeps it â€” so "is the list stale?" has no answer to get wrong, and a write re-reads first.
+read the same store, so it belongs on their shared side of the dependency rule (`services` →
+`kernel`) and next to the model it validates. It is stateless — `load()` returns the report, the
+caller keeps it — so "is the list stale?" has no answer to get wrong, and a write re-reads first.
 
 Nothing here runs at import time: the path is resolved when a store is constructed.
 """
@@ -116,8 +116,8 @@ class PlaceReport:
 class PlaceStore:
     """The places file, read through `load()` and written through `add()`/`remove()`.
 
-    `read_text` and `write_text` are injectable because the interesting failures â€” a permission
-    denied, a device unplugged mid-read â€” are exactly the ones a test cannot provoke portably.
+    `read_text` and `write_text` are injectable because the interesting failures — a permission
+    denied, a device unplugged mid-read — are exactly the ones a test cannot provoke portably.
     `RoutineStore` and `PairingWindow` take their seams the same way, so this is the repo's own
     pattern rather than a mock. `clock` is injectable for the same reason: `created_ts` is the only
     clock in the format.
@@ -175,7 +175,7 @@ class PlaceStore:
         """Create one place and persist it, or return the reasons it was refused.
 
         The candidate is checked by the same document validator `load` uses, over the current file
-        plus the new entry â€” so a duplicate name, a heading outside the range and a second place with
+        plus the new entry — so a duplicate name, a heading outside the range and a second place with
         the same id are all one pass, and there is no second rule to keep in step.
 
         Problems are returned rather than raised, because they are answers a client shows a user
