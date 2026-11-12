@@ -57,7 +57,7 @@ src/houndmind_ai/
   board/      detect.py
   core/       config.py  runtime.py  module.py  logging_setup.py
   kernel/     state.py  commands.py  intents.py  registry.py  scheduler.py  supervisor.py
-              config_schema.py
+              config_schema.py  routine.py  routine_store.py
   hal/        iface.py  fake.py  vendor.py  module.py  sensors.py  motors.py
   act/        gateway.py  interlock.py
   safety/     supervisor.py  watchdog.py  balance.py  health_monitor.py  sensor_health.py
