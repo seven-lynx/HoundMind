@@ -233,12 +233,16 @@ class PlaceNavigatorModule(Module):
                 path if isinstance(path, str) and path.strip() else DEFAULT_PLACES_PATH
             )
         context.set("place_goal", None)
+        # The one store for this path, published so the control plane writes through the same
+        # instance and therefore through the same lock (`kernel/place_store.py`).
+        context.set("place_store", self.store)
         super().start(context)
 
     def stop(self, context) -> None:
         self._retract(context)
         self.goal = None
         context.set("place_goal", None)
+        context.set("place_store", None)
         super().stop(context)
 
     # ---- the loop ----------------------------------------------------------

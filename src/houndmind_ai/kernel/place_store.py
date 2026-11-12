@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -122,6 +123,13 @@ class PlaceStore:
     `RoutineStore` and `PairingWindow` take their seams the same way, so this is the repo's own
     pattern rather than a mock. `clock` is injectable for the same reason: `created_ts` is the only
     clock in the format.
+
+    The store has **two writers at P4 PL5**: the navigator records an arrival on the tick thread,
+    and the control plane creates or deletes a place on the event loop. Both are read-modify-write
+    pairs over one file, so `add`, `remove` and `record_visit` hold `_write_lock` across the whole
+    pair; `load` and `save` are each a single atomic file operation and need no lock of their own.
+    One `PlaceStore` per path is what makes that lock mean anything — the navigator builds it and
+    publishes it as `place_store` rather than each caller building its own.
     """
 
     def __init__(
@@ -138,6 +146,8 @@ class PlaceStore:
         self._read_text = read_text or _read_utf8
         self._write_text = write_text or _write_utf8
         self._clock = clock or time.time
+        # Guards a read-modify-write pair, not the file: see the class docstring.
+        self._write_lock = threading.Lock()
 
     # ------------------------------------------------------------------ reading
 
@@ -174,6 +184,28 @@ class PlaceStore:
         confidence: float | None = None,
     ) -> tuple[Place | None, tuple[Problem, ...]]:
         """Create one place and persist it, or return the reasons it was refused.
+
+        The lock is taken here, on the only layer that sees both the read and the write.
+        """
+        with self._write_lock:
+            return self._add(
+                name,
+                heading_deg=heading_deg,
+                distance_cm=distance_cm,
+                anchor=anchor,
+                confidence=confidence,
+            )
+
+    def _add(
+        self,
+        name: str,
+        *,
+        heading_deg: float,
+        distance_cm: float,
+        anchor: str = DEFAULT_ANCHOR,
+        confidence: float | None = None,
+    ) -> tuple[Place | None, tuple[Problem, ...]]:
+        """The unlocked body of `add`; call `add`.
 
         The candidate is checked by the same document validator `load` uses, over the current file
         plus the new entry — so a duplicate name, a heading outside the range and a second place with
@@ -216,6 +248,11 @@ class PlaceStore:
         An unknown handle is a refusal with a message, never a silent success: P4 PL6 needs a second
         `DELETE` to be visibly a no-op (`404`, not `200`), and that starts here.
         """
+        with self._write_lock:
+            return self._remove(place_id)
+
+    def _remove(self, place_id: str) -> tuple[Place | None, tuple[Problem, ...]]:
+        """The unlocked body of `remove`; call `remove`."""
         report = self.load()
         wanted = place_id.strip() if isinstance(place_id, str) else ""
         victim = report.get(wanted) if wanted else None
@@ -237,7 +274,18 @@ class PlaceStore:
         arrived: bool,
         step: float = DEFAULT_CONFIDENCE_STEP,
     ) -> tuple[Place | None, tuple[Problem, ...]]:
-        """Persist one arrival — or one failed approach — for a place, and return the new record.
+        """Persist one arrival — or one failed approach — for a place, and return the new record."""
+        with self._write_lock:
+            return self._record_visit(place_id, arrived=arrived, step=step)
+
+    def _record_visit(
+        self,
+        place_id: str,
+        *,
+        arrived: bool,
+        step: float = DEFAULT_CONFIDENCE_STEP,
+    ) -> tuple[Place | None, tuple[Problem, ...]]:
+        """The unlocked body of `record_visit`; call `record_visit`.
 
         The navigator is the only caller that can observe an arrival (`navigation/place_navigator.py`),
         and it calls this **once per goal**: a visit is a transition, not a state, so a write per tick
