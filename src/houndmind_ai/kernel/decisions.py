@@ -19,6 +19,10 @@ ring that keeps the last few seconds of them. Four rules ride on it.
    ranking, ``precedence`` for one the interlock accepted and a higher rank then displaced.
 4. **Nothing is invented.** `inputs` carries the readings the decision used, with their validity
    flags, and a missing reading is absent rather than zero.
+5. **The wire shape is read back by the module that writes it.** `to_dict` is what the route, the
+   socket and the JSONL emit; `from_dict` is the reader `SCHEMA_VERSION` exists for. A log from a
+   build that writes a different shape is refused by name, never half-understood, because a replay
+   tool that guesses is a replay of a dog that never existed.
 
 The record's per-tick identity is `ts`, from the producer's monotonic clock. `trace_id` identifies
 the *run* — it is generated once per process (`core/runtime.py`) — so it joins a record to the log
@@ -122,6 +126,88 @@ class DecisionRecord:
             "inputs": dict(self.inputs),
             "confidence": self.confidence,
         }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object]) -> DecisionRecord:
+        """Read `to_dict` output back — the reader `SCHEMA_VERSION` exists for.
+
+        Every refusal is by name and specific, because the callers are a replay tool and anything
+        else that stored a line: "unsupported schema_version 2" is actionable, while a record that
+        silently loses its `vetoes` would show a client a dog that refused nothing for no reason.
+        A missing optional field stays `None`; a missing `ts` or `mode` is an error, since neither
+        can be defaulted without claiming something that was never recorded.
+        """
+        if not isinstance(data, Mapping):
+            raise ValueError(f"a decision record must be a mapping, not {type(data).__name__}")
+
+        raw_version = data.get("schema_version")
+        version = as_int(raw_version, -1)
+        if version != SCHEMA_VERSION:
+            raise ValueError(
+                f"unsupported decision schema_version {raw_version!r}"
+                f" (this build reads {SCHEMA_VERSION})"
+            )
+
+        ts = _opt_float(data.get("ts"))
+        if ts is None:
+            raise ValueError("decision record has no numeric ts")
+
+        mode = data.get("mode")
+        if not isinstance(mode, str) or not mode:
+            # Defaulting here would make the snapshot claim a mode the dog was never in.
+            raise ValueError("decision record has no mode")
+
+        raw_vetoes = data.get("vetoes")
+        if raw_vetoes is None:
+            raw_vetoes = ()
+        if not isinstance(raw_vetoes, (list, tuple)):
+            raise ValueError("decision record vetoes must be a list")
+
+        raw_inputs = data.get("inputs")
+        if raw_inputs is None:
+            raw_inputs = {}
+        if not isinstance(raw_inputs, Mapping):
+            raise ValueError("decision record inputs must be a mapping")
+
+        return cls(
+            ts=ts,
+            mode=mode,
+            state=_opt_str(data.get("state")),
+            intent=_opt_str(data.get("intent")),
+            source=_opt_str(data.get("source")),
+            vetoes=tuple(_refusal_from_dict(item) for item in raw_vetoes),
+            inputs=raw_inputs,
+            confidence=confidence_or_none(data.get("confidence")),
+            trace_id=_opt_str(data.get("trace_id")),
+        )
+
+
+def _opt_float(value: Any) -> float | None:
+    """`confidence_or_none` under the name the reader uses: absent stays absent, never `0.0`."""
+    return confidence_or_none(value)
+
+
+def _opt_str(value: Any) -> str | None:
+    """A non-empty string, or None. `""` is a missing value, not an empty name."""
+    return value if isinstance(value, str) and value else None
+
+
+def _refusal_from_dict(data: Any) -> Refusal:
+    """One veto off the wire. A veto without a reason is refused, not repaired."""
+    if not isinstance(data, Mapping):
+        raise ValueError(f"a veto must be a mapping, not {type(data).__name__}")
+    fields: dict[str, str] = {}
+    for name in ("action", "source", "reason"):
+        value = data.get(name)
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"a veto needs a non-empty {name}")
+        fields[name] = value
+    return Refusal(
+        action=fields["action"],
+        source=fields["source"],
+        reason=fields["reason"],
+        detail=_opt_str(data.get("detail")),
+    )
 
 
 class DecisionRing:

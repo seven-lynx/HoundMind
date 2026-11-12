@@ -282,6 +282,11 @@ two are separate keys because `/decisions` is a live surface, not a diagnostic.
 
 **Disable:** `modules.decision_log.enabled = false`
 
+**Replay:** `python -m tools.replay_decisions logs/houndmind_decisions.jsonl --check` validates a
+recorded file and prints what is in it; the same command without `--check` serves it through the
+control plane. See `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §16 — a replay has no touch or sound
+reading and cannot accept commands.
+
 ---
 
 ## 15) LED Manager

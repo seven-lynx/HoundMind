@@ -371,6 +371,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
   optional JSONL (`logging.decision_log_file_enabled`, off by default — ~9 MB/hour at 10 Hz).
 - `state.behavior_state` publishes the FSM's current state, so a decision record can name the state
   the dog was in when it decided.
+- `python -m tools.replay_decisions` replays a recorded `logs/houndmind_decisions.jsonl` through the
+  real control plane, so the decision feed can be built and reviewed without the dog on the desk.
+  `--check` validates a file and serves nothing; `--speed 0` plays it instantly. `DecisionRecord`
+  gained `from_dict` — the reader `SCHEMA_VERSION` always implied: an unknown shape is refused by
+  name, and a veto without a reason is an error rather than a guess. Replay is read-only and moves
+  nothing.
 
 ### Notes
 - **Upgrading a config.** If `config/settings.jsonc` still has a `settings.<module>.http` block or

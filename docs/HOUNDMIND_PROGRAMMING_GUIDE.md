@@ -607,6 +607,22 @@ python -m tools.camera_check --list-devices
 python -m tools.collect_support_bundle /tmp/support.zip
 ```
 
+Replaying a recorded session — no dog, no motion. With `logging.decision_log_file_enabled: true` the
+runtime writes `logs/houndmind_decisions.jsonl`; this tool serves that history through the real
+control plane, so a client can be built against a dog that is not on the desk:
+
+```bash
+python -m tools.replay_decisions logs/houndmind_decisions.jsonl --check   # validate, serve nothing
+python -m tools.replay_decisions logs/houndmind_decisions.jsonl            # 1x, then exit
+python -m tools.replay_decisions logs/houndmind_decisions.jsonl --speed 0 --limit 300 --linger 60
+```
+
+`GET /api/v1/decisions`, `state.decision` and the `decision` socket event behave exactly as they do
+on the device. Three limits, all deliberate: the record carries no touch or sound reading, so those
+stay invalid in `state.sensors`; `POST /command` answers 503, because nothing drains the command bus;
+and `decision.ts` is the device's monotonic clock, not this machine's. The token file *path* is
+printed, never the token.
+
 Installer:
 
 ```bash
