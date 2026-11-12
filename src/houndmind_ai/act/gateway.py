@@ -27,7 +27,8 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from houndmind_ai.act.interlock import Interlock
@@ -45,6 +46,7 @@ from houndmind_ai.kernel.commands import (
     legacy_action,
     mode_allows,
 )
+from houndmind_ai.kernel.decisions import DecisionRecord, Refusal, confidence_or_none
 from houndmind_ai.kernel.intents import IntentBoard
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,22 @@ _MODE_DETAIL = {
     "rest": "the dog is in rest mode; switch to manual to drive it",
     "manual": "the dog is in manual mode; autonomy is off until you switch back to idle",
 }
+
+
+@dataclass(frozen=True)
+class Resolution:
+    """One tick's ranking, complete enough to explain it after the fact.
+
+    Frozen with tuple fields on purpose: a frozen dataclass holding a `list` is the trap
+    `kernel/decisions.py` documents — the attribute cannot be rebound, the list behind it still
+    mutates, and a record already handed downstream starts describing a different tick.
+    """
+
+    mode: str
+    winner: Command | None = None
+    verdict: Verdict | None = None
+    cancelled: tuple[Command, ...] = ()
+    vetoes: tuple[Refusal, ...] = ()
 
 
 class MotionGatewayModule(Module):
@@ -103,8 +121,12 @@ class MotionGatewayModule(Module):
     def tick(self, context) -> None:
         now = self._clock()
         snapshot = self._snapshot(context)
-        winner, verdict, cancelled = self._resolve(context, now, snapshot)
-        self._publish_cancellations(context, cancelled)
+        resolution = self._resolve(context, now, snapshot)
+        self._publish_cancellations(context, resolution.cancelled)
+        # Published before the branches below, and only here: "nobody asked", "refused" and
+        # "the same intent as last tick" are decisions too, and four publish sites would drift.
+        context.set("decision_record", self._record(context, now, snapshot, resolution).to_dict())
+        winner, verdict = resolution.winner, resolution.verdict
 
         if winner is None or verdict is None:
             # Nobody is asking for anything. Publishing None rather than leaving a stale
@@ -149,8 +171,8 @@ class MotionGatewayModule(Module):
 
     def _resolve(
         self, context, now: float, snapshot: SensorSnapshot
-    ) -> tuple[Command | None, Verdict | None, list[Command]]:
-        """Pick one winner, return it with its verdict, and list what it displaced.
+    ) -> Resolution:
+        """Pick one winner, return it with its verdict, and keep what it beat.
 
         Two sources feed this. The :class:`IntentBoard` holds internal intents (behaviour,
         navigation, watchdog, system): latest value per source, expiring unless refreshed. The
@@ -161,14 +183,23 @@ class MotionGatewayModule(Module):
         The mode gate is applied to both before ranking, because a mode is a statement about the
         whole machine, not a veto the interlock should have to express (it is a safety envelope,
         not a policy).
+
+        Every intent that does not become the winner leaves a :class:`Refusal` behind, including
+        the ones the mode gate drops before they are ever ranked. That is the difference between
+        this method's answer and a client's own verdict: the client learns the fate of its own
+        request, while the record says who won the tick and why everyone else did not.
         """
         mode = _mode_name(context)
         candidates: list[tuple[tuple[int, int], Command]] = []
         verdicts: dict[str, Verdict] = {}
+        vetoes: list[Refusal] = []
 
         for command in self.board.latest(now):
             # `stop` passes the mode gate like it passes the interlock: it is how a motion ends.
             if command.action != "stop" and not mode_allows(mode, command.source):
+                # No longer a silent `continue`: an intent the mode dropped is exactly the
+                # "why is the dog ignoring me" a record has to answer.
+                vetoes.append(_refusal(command, self._mode_verdict(command, mode)))
                 continue
             candidates.append(((int(command.source), 0), command))
 
@@ -179,11 +210,13 @@ class MotionGatewayModule(Module):
             if self.bus is not None:
                 self.bus.acknowledge(command, verdict)
             if not verdict.accepted:
+                vetoes.append(_refusal(command, verdict))
                 continue
             candidates.append(((int(command.source), 1), command))
 
         if not candidates:
-            return None, None, []
+            # "Nobody asked" is a decision, and it is the one an operator most needs to see.
+            return Resolution(mode=mode, vetoes=tuple(vetoes))
 
         # A `stop` outranks every other intent, whatever its source. It is the one action that
         # exists to end motion, so a supervisor's stop must not lose a tick to a safety retreat
@@ -193,9 +226,27 @@ class MotionGatewayModule(Module):
         # Anything a different action displaced this tick. Reported rather than silently
         # dropped: "the dog ignored me" is the question this answers.
         cancelled = [other for _, other in candidates[:-1] if other.action != best.action]
-        return best, verdicts.get(best.id) or self._vet(best, snapshot, mode), cancelled
+        # A displaced intent lost to rank, not to the interlock, so it is recorded as
+        # `precedence` with the winner named. A same-action loser is not listed: the dog did
+        # what it asked, and calling that a refusal would read as "ignored".
+        for other in cancelled:
+            vetoes.append(
+                Refusal(
+                    action=other.action,
+                    source=other.source.name.lower(),
+                    reason="precedence",
+                    detail=f"outranked by {best.action} from {best.source.name.lower()}",
+                )
+            )
+        return Resolution(
+            mode=mode,
+            winner=best,
+            verdict=verdicts.get(best.id) or self._vet(best, snapshot, mode),
+            cancelled=tuple(cancelled),
+            vetoes=tuple(vetoes),
+        )
 
-    def _publish_cancellations(self, context, cancelled: list[Command]) -> None:
+    def _publish_cancellations(self, context, cancelled: Sequence[Command]) -> None:
         payload = [command.to_dict() for command in cancelled]
         context.set("motion_cancel", payload)
         signature = frozenset((command.action, command.source) for command in cancelled)
@@ -224,18 +275,58 @@ class MotionGatewayModule(Module):
         # reported as resting, the FSM and the navigator could still walk it (P3-3). A refusal
         # always says which mode is in force and what would unblock it.
         if not mode_allows(mode, command.source):
-            return Verdict(
-                accepted=False,
-                action=command.action,
-                params=dict(command.params),
-                veto="mode",
-                detail=_MODE_DETAIL.get(mode, f"'{mode}' mode does not allow that source"),
-            )
+            return self._mode_verdict(command, mode)
         # Every class is judged here, not just the gaits: the interlock applies the envelope its
         # class selects (`posture`/`expression` get tilt and battery, `non_motion` gets the
         # deadman), and an action nothing classifies is refused with a reason instead of reaching
         # a servo on the strength of a spelling.
         return self.interlock.evaluate(command, snapshot)
+
+    def _mode_verdict(self, command: Command, mode: str) -> Verdict:
+        """The refusal a mode policy produces. One wording, shared with the record.
+
+        Extracted so the recorded refusal and the acknowledged verdict cannot diverge: a client
+        that reads `veto: "mode"` and a record that explains the same tick must quote the same
+        sentence, or one of them is lying.
+        """
+        return Verdict(
+            accepted=False,
+            action=command.action,
+            params=dict(command.params),
+            veto="mode",
+            detail=_MODE_DETAIL.get(mode, f"'{mode}' mode does not allow that source"),
+        )
+
+    def _record(
+        self, context, now: float, snapshot: SensorSnapshot, resolution: Resolution
+    ) -> DecisionRecord:
+        """This tick's decision, in the shape `kernel/decisions.py` defines.
+
+        Nothing here is invented. A reading that did not answer keeps `None` beside its
+        `*_valid` flag, and a confidence no producer measured stays `None` rather than `0.0`.
+        `state` is whatever `behavior_state` holds — absent until the FSM publishes it, which is
+        a fact about the tick, not a gap to paper over.
+        """
+        decision = context.get("navigation_decision")
+        confidence = (
+            confidence_or_none(decision.get("confidence"))
+            if isinstance(decision, Mapping)
+            else None
+        )
+        state = context.get("behavior_state")
+        trace_id = context.get("trace_id")
+        winner = resolution.winner
+        return DecisionRecord(
+            ts=now,
+            mode=resolution.mode,
+            state=state if isinstance(state, str) else None,
+            intent=winner.action if winner is not None else None,
+            source=winner.source.name.lower() if winner is not None else None,
+            vetoes=resolution.vetoes,
+            inputs=_decision_inputs(snapshot),
+            confidence=confidence,
+            trace_id=trace_id if isinstance(trace_id, str) else None,
+        )
 
     @staticmethod
     def _snapshot(context) -> SensorSnapshot:
@@ -270,6 +361,33 @@ def _mode_name(context) -> str:
     """The mode a client selected, or the default when nothing sane is set."""
     mode = context.get("runtime_mode")
     return mode if isinstance(mode, str) and mode in RUNTIME_MODES else DEFAULT_MODE
+
+
+def _refusal(command: Command, verdict: Verdict) -> Refusal:
+    """A refused command as the record spells it: `source` is the wire spelling, not the enum."""
+    return Refusal(
+        action=command.action,
+        source=command.source.name.lower(),
+        reason=verdict.veto or "refused",
+        detail=verdict.detail,
+    )
+
+
+def _decision_inputs(snapshot: SensorSnapshot) -> dict[str, object]:
+    """The readings the decision used, each with its validity flag.
+
+    `*_valid` travels beside its value because `distance_cm=100` with `distance_valid=False` is
+    not "clear at 1 m" — the same rule the HAL follows.
+    """
+    return {
+        "distance_cm": snapshot.distance_cm,
+        "distance_valid": snapshot.distance_valid,
+        "battery_v": snapshot.battery_v,
+        "battery_valid": snapshot.battery_valid,
+        "pitch_deg": snapshot.pitch_deg,
+        "roll_deg": snapshot.roll_deg,
+        "imu_valid": snapshot.imu_valid,
+    }
 
 
 def _opt_float(value: Any) -> float | None:

@@ -14,7 +14,7 @@ from houndmind_ai.act.interlock import Interlock, InterlockLimits
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.hal.sensors import SensorReading
 from houndmind_ai.kernel.actions import build_repertoire
-from houndmind_ai.kernel.commands import Command, CommandBus, Source
+from houndmind_ai.kernel.commands import DEFAULT_MODE, Command, CommandBus, Source
 from houndmind_ai.kernel.intents import IntentBoard
 
 
@@ -424,3 +424,162 @@ def test_legacy_and_canonical_spellings_round_trip() -> None:
     assert canonical_action("forward") == "forward"
     assert legacy_action("turn_left") == "turn left"
     assert legacy_action("wag_tail") == "wag tail"
+
+
+# ------------------------------------------------------------------ decision record
+
+
+def published(context) -> dict[str, Any]:
+    """The record this tick published, as a client would receive it."""
+    payload = context.get("decision_record")
+    assert isinstance(payload, dict), "every tick publishes a record"
+    return payload
+
+
+def test_every_tick_publishes_a_record_even_when_nobody_asks() -> None:
+    """An unexplained pet is indistinguishable from a broken one, so silence is a decision."""
+    gateway, context = build()
+    gateway.tick(context)
+
+    record = published(context)
+    assert set(record) == {
+        "schema_version",
+        "ts",
+        "trace_id",
+        "mode",
+        "state",
+        "intent",
+        "source",
+        "vetoes",
+        "inputs",
+        "confidence",
+    }
+    assert record["intent"] is None
+    assert record["source"] is None
+    assert record["vetoes"] == []
+    assert record["ts"] == 1000.0
+    assert record["mode"] == DEFAULT_MODE
+
+
+def test_the_record_names_the_winner_and_where_it_came_from() -> None:
+    gateway, context = build(reading=reading(100.0))
+    ask(context, "forward", Source.NAVIGATION)
+    gateway.tick(context)
+
+    record = published(context)
+    assert record["intent"] == "forward"
+    assert record["source"] == "navigation"
+
+
+def test_a_displaced_intent_is_recorded_with_its_reason() -> None:
+    """`motion_cancel` said an intent lost; the record has to say what beat it."""
+    gateway, context = build(reading=reading(100.0))
+    ask(context, "sit", Source.BEHAVIOUR)
+    ask(context, "forward", Source.NAVIGATION)
+    gateway.tick(context)
+
+    record = published(context)
+    assert record["intent"] == "forward"
+    assert len(record["vetoes"]) == 1
+    refusal = record["vetoes"][0]
+    assert refusal["action"] == "sit"
+    assert refusal["source"] == "behaviour"
+    assert refusal["reason"] == "precedence"
+    assert "forward" in refusal["detail"]
+
+
+def test_a_mode_refused_intent_is_recorded_instead_of_dropped() -> None:
+    """The mode gate used to `continue` without a trace: the intent simply vanished."""
+    gateway, context = build(reading=reading(100.0))
+    context.set("runtime_mode", "rest")
+    ask(context, "forward", Source.NAVIGATION)
+    gateway.tick(context)
+
+    assert context.get("motion_command") is None
+    record = published(context)
+    assert record["mode"] == "rest"
+    assert record["intent"] is None
+    assert record["vetoes"][0]["reason"] == "mode"
+    assert record["vetoes"][0]["source"] == "navigation"
+    assert "rest" in record["vetoes"][0]["detail"]
+
+
+def test_a_refused_client_command_keeps_the_interlock_reason() -> None:
+    bus = CommandBus()
+    gateway, context = build(bus=bus, min_battery_v=6.4)
+    context.set("battery_voltage", 5.9)
+    assert bus.submit(Command("forward", source=Source.CLIENT, issued_at=1000.0)) is True
+    gateway.tick(context)
+
+    record = published(context)
+    assert record["intent"] is None
+    assert record["vetoes"][0]["reason"] == "low_voltage"
+    assert record["vetoes"][0]["source"] == "client"
+
+
+def test_the_record_carries_validity_flags_and_absent_readings_stay_absent() -> None:
+    gateway, context = build()
+    gateway.tick(context)
+    inputs = published(context)["inputs"]
+    assert inputs["distance_cm"] is None
+    assert inputs["distance_valid"] is False
+    assert inputs["battery_v"] is None
+    assert inputs["battery_valid"] is False
+
+    gateway, context = build(reading=reading(42.0))
+    context.set("battery_voltage", 7.4)
+    gateway.tick(context)
+    inputs = published(context)["inputs"]
+    assert inputs["distance_cm"] == 42.0
+    assert inputs["distance_valid"] is True
+    assert inputs["battery_v"] == 7.4
+    assert inputs["battery_valid"] is True
+
+
+def test_confidence_is_absent_unless_a_producer_measured_it() -> None:
+    """`0.0` is a measurement; `None` is not zero, and a bool is not a confidence."""
+    gateway, context = build()
+    gateway.tick(context)
+    assert published(context)["confidence"] is None
+
+    context.set("navigation_decision", {"confidence": 0.0})
+    gateway.tick(context)
+    assert published(context)["confidence"] == 0.0
+
+    context.set("navigation_decision", {"confidence": True})
+    gateway.tick(context)
+    assert published(context)["confidence"] is None
+
+
+def test_the_behavior_state_is_carried_once_the_fsm_publishes_it() -> None:
+    gateway, context = build()
+    gateway.tick(context)
+    assert published(context)["state"] is None
+
+    context.set("behavior_state", "walking")
+    gateway.tick(context)
+    assert published(context)["state"] == "walking"
+
+
+def test_the_record_joins_the_run_by_trace_id() -> None:
+    gateway, context = build()
+    context.set("trace_id", "run-1")
+    gateway.tick(context)
+    assert published(context)["trace_id"] == "run-1"
+
+
+def test_a_deduplicated_tick_still_publishes_a_fresh_record() -> None:
+    """The dedupe path returns early, so this is what keeps a single publish site honest."""
+    clock = Clock()
+    gateway, context = build(clock=clock, reading=reading(100.0))
+    ask(context, "forward", Source.NAVIGATION)
+    gateway.tick(context)
+    first = published(context)["ts"]
+
+    # Under the intent TTL, so the same intent is still asking and takes the dedupe path.
+    clock.advance(0.1)
+    gateway.tick(context)
+    second = published(context)
+    assert second["ts"] == 1000.1
+    assert second["ts"] != first
+    assert second["intent"] == "forward"
