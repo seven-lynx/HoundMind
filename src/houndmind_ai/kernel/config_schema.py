@@ -690,6 +690,16 @@ _PERCEPTION = Section(
                 "fusion_min_confidence": _ALPHA,
             }
         ),
+        # `perception/fusion.py` — the occupancy hysteresis (P4 PL3). Three keys, all bounds on a
+        # camera's evidence rather than a tuning surface for behaviour; the bias that reads them
+        # lives in `settings.behavior.social_*`.
+        "occupancy": Section(
+            fields={
+                "max_age_s": _NON_NEGATIVE,
+                "min_frames": IntSpec(minimum=1),
+                "release_frames": IntSpec(minimum=1),
+            }
+        ),
     }
 )
 
@@ -829,6 +839,11 @@ _BEHAVIOR = Section(
         # actions join the pool and outrank it, saturating at `autonomy_rest_energy_max`. 0 turns the
         # band off; a config that predates the key gets the 0.5 default.
         "energy_bias_start": _FRACTION,
+        # Social bias (PL3): the `interact` weight multiplier at full presence, and how long the
+        # interest survives once the sight is lost. Both are inert without an occupancy reading.
+        "social_bias_enabled": Bool(),
+        "social_bias_peak": _POSITIVE,
+        "social_decay_s": _NON_NEGATIVE,
         "habituation_enabled": Bool(),
         "habituation_threshold": IntSpec(minimum=1),
         "habituation_recovery_s": _NON_NEGATIVE,

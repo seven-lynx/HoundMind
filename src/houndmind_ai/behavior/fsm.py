@@ -20,6 +20,13 @@ _CUE_VOLUME_DEFAULT = 60
 # not a knob: three times a fresh idle action, so a tired dog dozes off often without the bucket
 # disappearing (`behavior.energy_bias_start` decides how far up the band opens).
 _ENERGY_BIAS_PEAK = 3.0
+# How much more likely `interact` is with somebody in front of the dog (PL3). Lower than the energy
+# peak on purpose: presence is a reason to prefer company, not a reason to stop doing anything else,
+# and the autonomy draw keeps five other modes in the table beside it.
+_SOCIAL_BIAS_PEAK = 2.5
+# Seconds for the social level to fall from full to nothing once the sight is lost, so a dog that
+# loses you mid-step looks for you instead of snapping back to being alone.
+_SOCIAL_DECAY_S = 5.0
 
 
 class BehaviorState(StrEnum):
@@ -55,6 +62,11 @@ class BehaviorModule(Module):
         # called with no arguments.
         self._energy_level: float | None = None
         self._idle_settings: dict = {}
+        # Social drive (PL3): how interesting the room currently is, 0..1, and when it was last
+        # updated — a level without its timestamp cannot decay, and a bias that never decays would
+        # leave the dog greeting an empty room for the rest of the run.
+        self._social_level = 0.0
+        self._social_ts: float | None = None
         self.library: BehaviorLibrary | None = None
         self.registry: BehaviorRegistry | None = None
         # Entry beats that were refused, so a typo in `behavior.state_expressions` is one warning
@@ -178,6 +190,9 @@ class BehaviorModule(Module):
         # `optional/energy_emotion.py` on an earlier tick — the idle band reads the key, the same way
         # `_select_autonomy_mode` does.
         self._energy_level = context.get("energy_level")
+        # PL3: the same pattern for the other measured input. The level is stashed here so the
+        # autonomy draw can read it without knowing which module produced it.
+        self._update_social_level(perception, settings)
         idle_action = settings.get("idle_action", "stand")
         touch_action = settings.get("touch_action", "wag tail")
         sound_action = settings.get("sound_action", "shake head")
@@ -699,6 +714,51 @@ class BehaviorModule(Module):
         factor = 1.0 + frac * (_ENERGY_BIAS_PEAK - 1.0)
         return extras, {name: factor for name in extras}
 
+    def _update_social_level(self, perception, settings, now: float | None = None) -> None:
+        """How interesting the room is right now, 0..1. Raises with presence, decays without it.
+
+        Presence is evidence and raises the level at once; losing sight of somebody — or losing the
+        *reading*, which is not the same thing — lets it fall. Unknown decays rather than holding,
+        because a bias a dropped frame could keep alive is a claim nothing measured (PL3).
+
+        `now` is injectable so a test can age the level instead of sleeping through the decay.
+        """
+        stamp = time.time() if now is None else now
+        config = settings if isinstance(settings, dict) else {}
+        if not bool(config.get("social_bias_enabled", True)):
+            self._social_level = 0.0
+            self._social_ts = stamp
+            return
+        try:
+            decay_s = float(config.get("social_decay_s", _SOCIAL_DECAY_S))
+        except (TypeError, ValueError):
+            decay_s = _SOCIAL_DECAY_S
+
+        elapsed = 0.0 if self._social_ts is None else max(0.0, stamp - self._social_ts)
+        self._social_ts = stamp
+
+        seen = perception if isinstance(perception, dict) else {}
+        if seen.get("occupancy_valid") is True and seen.get("occupancy") is True:
+            self._social_level = 1.0
+            return
+        if decay_s <= 0.0:
+            self._social_level = 0.0
+            return
+        self._social_level = max(0.0, self._social_level - elapsed / decay_s)
+
+    def _interact_social_factor(self, settings) -> float:
+        """The multiplier presence adds to the `interact` weight. 1.0 when nothing measured it."""
+        config = settings if isinstance(settings, dict) else {}
+        if not bool(config.get("social_bias_enabled", True)):
+            return 1.0
+        try:
+            peak = float(config.get("social_bias_peak", _SOCIAL_BIAS_PEAK))
+        except (TypeError, ValueError):
+            peak = _SOCIAL_BIAS_PEAK
+        peak = max(1.0, peak)
+        level = min(1.0, max(0.0, float(self._social_level or 0.0)))
+        return 1.0 + level * (peak - 1.0)
+
     def _pick_action_for_state(
         self,
         state: BehaviorState,
@@ -771,6 +831,7 @@ class BehaviorModule(Module):
         activity = float(personality.get("activity", 0.5))
 
         weights: dict[str, float] = {}
+        social = self._interact_social_factor(settings)
         for m in modes:
             w = float(base_weights.get(m, 1.0))
             if apply_personality:
@@ -780,6 +841,11 @@ class BehaviorModule(Module):
                     w *= sociability
                 elif m in ("patrol", "play"):
                     w *= activity
+            if m == "interact":
+                # Presence is a measurement, not a personality trait, so it applies whether or not
+                # `apply_to_autonomy` is on — and only to a mode this table actually offers, which
+                # is why the multiplication sits here rather than appending a mode (PL3).
+                w *= social
             weights[m] = w
 
         # `modes` are mode names and the registry's items are `<mode>_behavior`; `pick_mode` is the

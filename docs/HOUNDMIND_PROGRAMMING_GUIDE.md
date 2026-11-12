@@ -208,6 +208,8 @@ The keys a module may rely on. Anything not here is private and may change.
 | `scan_reading` | `ScanReading` (§5) |
 | `scan_latest`, `scan_quality`, `scan_history` | `dict` |
 | `scan_duration_s` | `float` — measured sweep length |
+| `perception` | `dict` — `obstacle`, `touch`, `sound`, `sound_direction`, `distance`, `occupancy`, `occupancy_valid`, `occupancy_frames` |
+| `faces` | `dict \| None` — what the detector saw: `timestamp`, `backend`, `detected` (read by `perception`, P4 PL3) |
 | `scan_in_flight` | `bool` |
 | `scan_worker`, `scan_service` | worker and service handles |
 | `current_heading` | `float` — degrees |

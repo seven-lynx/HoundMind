@@ -39,6 +39,19 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `settings.places.step_cm` per accepted command — because nothing measures travel, and the request
   must confirm the dog is at the anchor (`at_anchor: true`) because nothing can verify that pose.
   No route yet: `POST /api/v1/places` and the rest are the next segment.
+- **Occupancy** (`perception/fusion.py`, `behavior/fsm.py`): the fused snapshot now answers "is
+  somebody in front of the dog?" with `occupancy`, `occupancy_valid` and `occupancy_frames`, read from
+  the `faces` payload a detector publishes. No detector, no frame and a stale frame all read as
+  *unknown* — never as an empty room — because the failure that matters is a dropped frame talking
+  the dog into believing it is alone. Claiming presence needs `settings.perception.occupancy.min_frames`
+  consecutive frames and dropping it needs `release_frames`, so a blink does not flap it. Behaviour
+  turns a valid reading into a bias on the `interact` weight in the autonomy draw, decaying over
+  `social_decay_s`. It ships dark: `modules.face_recognition` is still `enabled: false`, so with the
+  shipped config occupancy is unknown and the bias is inert — enabling presence is a config change,
+  not a consequence of updating.
+- The source of that occupancy is the design's missing half, tracked in `#96`: §5.4 promises a drive
+  set (energy, curiosity, social) and only the energy *band* ever landed, so `social` here is a bias
+  on an existing weight table rather than a drive.
 - `rgb` keeps its `bps` argument, so an LED effect can specify its animation rate instead of silently
   running at the vendor's default.
 - `state.actuators.source` and `state.actuators.displaced`: the producer that won the tick, and how

@@ -294,6 +294,20 @@
       "fusion": {
         "fusion_anchor_distance_cm": 120,
         "fusion_min_confidence": 0.3
+      },
+      // Occupancy (P4 PL3): is somebody in front of the dog? Read from the `faces` payload a
+      // detector publishes (`modules.face_recognition`, or any module that fills it), and published
+      // in `perception` as `occupancy` + `occupancy_valid` + `occupancy_frames`.
+      //
+      // The three unknown cases are on purpose: no detector, no frame, or a frame older than
+      // `max_age_s` all read as `occupancy: null` / `occupancy_valid: false` — never as an empty
+      // room. Claiming somebody is there needs `min_frames` consecutive frames; dropping the claim
+      // needs `release_frames` so a blink does not flap it. With no detector configured this does
+      // nothing at all, which is the shipped state.
+      "occupancy": {
+        "max_age_s": 1.0,
+        "min_frames": 3,
+        "release_frames": 5
       }
     },
     // =====================================================================
@@ -721,6 +735,15 @@
       // Needs an `energy_level` reading (`settings.energy` or `modules.energy_emotion`); without one
       // it does nothing at all.
       "energy_bias_start": 0.5,
+      // Social bias (P4 PL3). Somebody in front of the dog raises the `interact` weight in the
+      // autonomy draw, beside `personality.sociability`: `social_bias_peak` is how much more
+      // likely `interact` is at full presence, and `social_decay_s` is how long the interest lasts
+      // once the sight is lost. Needs an `occupancy` reading with `occupancy_valid` true —
+      // `settings.perception.occupancy` plus a detector publishing `faces` — and does nothing at
+      // all without one. `social_bias_enabled: false` leaves the weight table exactly as it was.
+      "social_bias_enabled": true,
+      "social_bias_peak": 2.5,
+      "social_decay_s": 5.0,
       // Minimum time between behavior action changes (seconds).
       "action_cooldown_s": 0.0,
       // One expression per state, emitted once when the FSM enters that state — never every tick.
