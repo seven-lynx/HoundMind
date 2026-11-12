@@ -74,6 +74,13 @@ Current Release: v2026.01.18 • Author: 7Lynx
   is *named* for, and `RoutineStore` loads the directory in place, because it is a legal routines
   directory. The quarantine rule is therefore proved over real files rather than invented ones, and
   `docs/ROUTINES.md` points at the set.
+- `behavior.state_expressions`: one expression per state, played **once when the FSM enters it**
+  rather than every tick — a head tilt on `alert`, a tail wag on `play`. The beat is applied after the
+  cooldown and micro-idle blocks, which both rewrite the tick's action, so entering `idle` could
+  otherwise be swallowed by micro-idle (it ships enabled). It is refused with one warning when the
+  action is one the repertoire cannot classify, or when it is `locomotion` — the table is not a
+  second way to walk the dog — and it is skipped when the state's own action for that tick is a step.
+  A misspelled state or entry key is a load-time error, and a state left out has no beat.
 - The LED manager's requests gained a lifetime: `{mode, color?, bps?, until_ts?}`. `until_ts` is a
   deadline on the monotonic clock — once it passes, the request stops winning, its key is cleared and
   the next source in `settings.led.priority` takes the strip. A request without `until_ts` stands until

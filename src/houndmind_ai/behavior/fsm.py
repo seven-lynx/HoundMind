@@ -8,6 +8,7 @@ from enum import StrEnum
 from houndmind_ai.behavior.library import BehaviorLibrary, BehaviorLibraryConfig
 from houndmind_ai.behavior.registry import BehaviorRegistry
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.actions import ActionClass, repertoire_from_settings
 from houndmind_ai.kernel.commands import Source
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,9 @@ class BehaviorModule(Module):
         self._autonomy_mode: str | None = None
         self.library: BehaviorLibrary | None = None
         self.registry: BehaviorRegistry | None = None
+        # Entry beats that were refused, so a typo in `behavior.state_expressions` is one warning
+        # rather than one per transition.
+        self._warned_beats: set[str] = set()
         # habituation tracking: counts and last timestamp per stimulus type
         self._stim_counts: dict[str, int] = {}
         self._stim_last_ts: dict[str, float] = {}
@@ -254,6 +258,10 @@ class BehaviorModule(Module):
 
         desired_state: BehaviorState
         desired_action: str
+        # The state this tick *entered*, or None. Set at the one place each transition is decided
+        # and read once below, so entry gets an edge from the FSM's own bookkeeping rather than a
+        # second detector watching `behavior_state`.
+        entered_state: BehaviorState | None = None
 
         override = context.get("behavior_override")
         if override:
@@ -338,6 +346,7 @@ class BehaviorModule(Module):
                     self._candidate_ticks = 0
                     self.state = desired_state
                     self._last_state_ts = now
+                    entered_state = desired_state
                 else:
                     if self._candidate_state != desired_state:
                         self._candidate_state = desired_state
@@ -366,10 +375,12 @@ class BehaviorModule(Module):
                         self._candidate_ticks = 0
                         self.state = desired_state
                         self._last_state_ts = now
+                        entered_state = desired_state
         else:
             if desired_state != self.state:
                 self.state = desired_state
                 self._last_state_ts = now
+                entered_state = desired_state
 
         # Published after the transition block and before the habituated-stimulus return
         # below, which can end the tick on the very tick the state changed. The gateway reads
@@ -422,8 +433,66 @@ class BehaviorModule(Module):
                 self._last_action_ts = now
                 logger.info("Behavior -> %s (%s)", action, self.state)
 
+        # The entry beat is the last write before the publish, deliberately: the cooldown block
+        # above and the micro-idle block before it both rewrite `action`, so a beat applied at the
+        # transition site would be replaced on any transition into `idle` — micro-idle ships enabled.
+        # Recording it as `last_action` is what lets `action_cooldown_s` hold it for a window; at the
+        # shipped 0.0 the beat is one tick and the vendor plays the action once.
+        if entered_state is not None:
+            beat = self._entry_beat(settings, entered_state, action)
+            if beat is not None:
+                action = beat
+                self.last_action = beat
+                self._last_action_ts = now
+                logger.info("Behavior entry beat -> %s (%s)", beat, entered_state.value)
+
         self._publish(context, action)
 
+    def _entry_beat(
+        self, settings: dict, state: BehaviorState, current_action: str
+    ) -> str | None:
+        """The action this state's entry asks for, or None.
+
+        One lookup per transition from `behavior.state_expressions`. Nothing is guessed in either
+        direction: an action the repertoire cannot classify is refused with one warning (a name that
+        reaches a servo on the strength of a spelling is the `unknown action` bug this repo already
+        paid for), and a locomotion action is refused on either side — a beat must not stand in for
+        a step, and the table is not a second way to make the dog walk.
+        """
+        table = settings.get("state_expressions")
+        if not isinstance(table, dict):
+            return None
+        entry = table.get(state.value)
+        if not isinstance(entry, dict):
+            return None
+        beat = entry.get("action")
+        if not isinstance(beat, str) or not beat.strip():
+            return None
+
+        repertoire = repertoire_from_settings({"behavior": settings})
+        spec = repertoire.spec(beat)
+        if spec is None or spec.action_class is ActionClass.LOCOMOTION:
+            if beat not in self._warned_beats:
+                self._warned_beats.add(beat)
+                logger.warning(
+                    "Entry beat %r for state %s ignored: %s",
+                    beat,
+                    state.value,
+                    "not an action this repertoire knows"
+                    if spec is None
+                    else "locomotion is not an expression",
+                )
+            return None
+
+        if repertoire.classify(current_action) is ActionClass.LOCOMOTION:
+            logger.debug(
+                "Entry beat %s skipped for %s: %s is locomotion, not an expression",
+                beat,
+                state.value,
+                current_action,
+            )
+            return None
+        return beat
     def _publish(self, context, action: str) -> None:
         """Offer `action` to the gateway as the behaviour source."""
         board = context.get("intent_board")
