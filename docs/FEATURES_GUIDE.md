@@ -96,6 +96,35 @@ what "stale" means for this board.
 
 **Disable:** `modules.mapping.enabled = false`
 
+### Places
+
+A **place** is a named pose the dog can be asked to go to — the kitchen, your bed, the door. Places
+are **taught, never inferred**: no scan creates one, because a place the dog invented is a place it
+can be confidently wrong about.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.places.path` | `~/.houndmind/places.json` | One JSON file holding every place. `~` is expanded at startup; a missing file is an empty list, not an error, and nothing creates it on a read. |
+
+Each place is a pose **polar from an anchor** — `heading_deg` and `distance_cm` from a named
+`anchor` — with a `confidence` (`null` when nobody has confirmed it yet), `created_ts` and `visits`.
+That is what this dog can actually measure: it has a heading and a sonar, and no map coordinates to
+spare. Reaching a place is a local sequence (turn to the heading, walk, re-scan, correct), not a
+global path plan, which is why the stored pose is a bearing and a range.
+
+- **One bad entry never costs the others.** A heading outside −180..180 or an unreadable number is
+  refused by index (`places[2].distance_cm`) and the rest of the file still loads. A file that is not
+  JSON at all is one refusal, and its bytes are left untouched for the user to fix.
+- **A write cannot destroy a typo.** Before writing over a file that had refused entries, the
+  previous contents are copied to `<path>.bak`, and the write itself is a temporary file plus a
+  rename, so a power cut leaves the old file or the new one and never half of either.
+- **Ids are stable.** A place's id is a slug of its name at creation (`The Kitchen` → `the_kitchen`)
+  and never changes, so renaming the display name does not break a client that stored the id. Two
+  names that differ only in case or spacing are the same place to a person, and the second is
+  refused.
+- `GET`/`POST`/`DELETE /api/v1/places` is not wired yet; the file is the interface today, and
+  `kernel/place_store.py` is what owns it.
+
 ---
 
 ## 7) Behavior

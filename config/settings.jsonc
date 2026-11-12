@@ -1101,6 +1101,19 @@
     },
 
     // =====================================================================
+    // PLACES (named poses a user teaches; kernel/place_store.py owns the file)
+    // =====================================================================
+    "places": {
+      // One JSON file holding every place. `~` is expanded at startup. A missing
+      // file is an empty list, not an error, and nothing invents a place: they
+      // are created by a person (or a routine step), never inferred from a scan.
+      // A file with a bad entry keeps the good ones and reports the rest; before
+      // any write over such a file, its previous contents are copied to
+      // `<path>.bak`. Requires `behavior` + `navigation` for the dog to go there.
+      "path": "~/.houndmind/places.json"
+    },
+
+    // =====================================================================
     // CONTROL PLANE (services/api.py) — one port for REST, WebSocket, MJPEG
     // =====================================================================
     "api": {

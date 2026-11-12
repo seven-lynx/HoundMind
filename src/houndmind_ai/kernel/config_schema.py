@@ -456,6 +456,10 @@ _BATTERY = Section(
 # The key exists so a device can point the runner at a different directory without editing code.
 _ROUTINES = Section(fields={"dir": StrSpec()})
 
+# The places file is the same kind of thing — user data outside the tree, one JSON file this time
+# (`kernel/place_store.py` owns it). A place is taught, never inferred, so the path is the only knob.
+_PLACES = Section(fields={"path": StrSpec()})
+
 
 _QUIET_MODE = Section(
     fields={
@@ -1021,6 +1025,7 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "perception": _PERCEPTION,
     "performance": _PERFORMANCE,
     "personality": _PERSONALITY,
+    "places": _PLACES,
     "quiet_mode": _QUIET_MODE,
     "routines": _ROUTINES,
     "safety": _SAFETY,
