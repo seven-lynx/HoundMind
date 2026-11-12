@@ -166,10 +166,10 @@ class SafetyModule(Module):
         # Ordered priority list: earlier items are higher priority.
         priority = settings.get(
             "override_priority",
-            ["safety", "watchdog", "navigation", "behavior"],
+            ["safety", "watchdog", "navigation", "place", "behavior"],
         )
         if not isinstance(priority, list) or not priority:
-            priority = ["safety", "watchdog", "navigation", "behavior"]
+            priority = ["safety", "watchdog", "navigation", "place", "behavior"]
 
         # Avoid rewriting context on every tick when already active.
         if self._last_override_active:
@@ -188,6 +188,9 @@ class SafetyModule(Module):
             "safety": Source.SYSTEM,
             "watchdog": Source.WATCHDOG,
             "navigation": Source.NAVIGATION,
+            # A place goal is a motion intent like any other: an emergency stop that left it on the
+            # board would walk the dog on again the moment safety released.
+            "place": Source.PLACE,
             "behavior": Source.BEHAVIOUR,
         }
         if "safety" not in priority:

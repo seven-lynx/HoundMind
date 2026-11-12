@@ -42,6 +42,7 @@ from pathlib import Path
 from houndmind_ai.kernel.config_schema import Problem
 from houndmind_ai.kernel.place import (
     DEFAULT_ANCHOR,
+    DEFAULT_CONFIDENCE_STEP,
     Place,
     check_places_document,
     load_places,
@@ -228,6 +229,42 @@ class PlaceStore:
         remaining = tuple(place for place in report.places if place.id != victim.id)
         self.save(remaining, keep_original=report.refused > 0)
         return victim, ()
+
+    def record_visit(
+        self,
+        place_id: str,
+        *,
+        arrived: bool,
+        step: float = DEFAULT_CONFIDENCE_STEP,
+    ) -> tuple[Place | None, tuple[Problem, ...]]:
+        """Persist one arrival — or one failed approach — for a place, and return the new record.
+
+        The navigator is the only caller that can observe an arrival (`navigation/place_navigator.py`),
+        and it calls this **once per goal**: a visit is a transition, not a state, so a write per tick
+        would rewrite the file for as long as the dog stood still.
+
+        The arithmetic is the model's (`Place.after_visit`), not a second rule kept here — the store
+        reads, applies and writes, the same split `add` uses for validation.
+
+        `None` with a reason means nothing was written: a failed write raises instead, because a store
+        that reports success on a write that did not happen is the one thing a store must never do.
+        """
+        report = self.load()
+        wanted = place_id.strip() if isinstance(place_id, str) else ""
+        victim = report.get(wanted) if wanted else None
+        if victim is None and wanted:
+            # A name is accepted here for the same reason `remove` accepts one: the caller is
+            # reporting an arrival, not proving it knows the handle.
+            victim = report.by_name(wanted)
+        if victim is None:
+            return None, (Problem("places", f"no place with id or name {place_id!r}"),)
+
+        updated = victim.after_visit(arrived=arrived, step=step)
+        places = tuple(
+            updated if place.id == victim.id else place for place in report.places
+        )
+        self.save(places, keep_original=report.refused > 0)
+        return updated, ()
 
     def save(self, places: Sequence[Place], *, keep_original: bool = False) -> PlaceReport:
         """Write the whole file atomically: a temporary file, then a rename.

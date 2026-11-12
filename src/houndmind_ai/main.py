@@ -30,6 +30,7 @@ from houndmind_ai.mapping.mapper import MappingModule
 from houndmind_ai.navigation.local_planner import LocalPlannerModule
 from houndmind_ai.navigation.obstacle_avoidance import ObstacleAvoidanceModule
 from houndmind_ai.navigation.orientation import OrientationModule
+from houndmind_ai.navigation.place_navigator import PlaceNavigatorModule
 from houndmind_ai.navigation.scanning import ScanningModule
 from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
 from houndmind_ai.optional.face_recognition import FaceRecognitionModule
@@ -93,6 +94,12 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     # same one-tick lag every behaviour module has (`act/gateway.py::_record`).
     registry.register(
         RoutineRunnerModule("routine_runner", **cfg("routine_runner")), [Capability.BEHAVIOUR]
+    )
+    # A place goal is the other client-initiated producer: it publishes `Source.PLACE` intents (17,
+    # under `NAVIGATION` so an obstacle always wins) and is inert until something writes
+    # `place_request`. Registered here, beside the runner, because both are asked by name.
+    registry.register(
+        PlaceNavigatorModule("place_navigator", **cfg("place_navigator")), [Capability.NAVIGATION]
     )
     registry.register(EventLoggerModule("event_log", **cfg("event_log")), [Capability.TELEMETRY])
     # The decision feed ticks every loop tick and does not share the event logger's settings: a

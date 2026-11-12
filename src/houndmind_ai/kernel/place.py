@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from difflib import get_close_matches
 from typing import Any
 
@@ -40,6 +40,7 @@ from houndmind_ai.kernel.config_schema import Problem
 
 __all__ = [
     "DEFAULT_ANCHOR",
+    "DEFAULT_CONFIDENCE_STEP",
     "MAX_ANCHOR_CHARS",
     "MAX_DISTANCE_CM",
     "MAX_NAME_CHARS",
@@ -79,6 +80,11 @@ MAX_ANCHOR_CHARS = 32
 # A place is taught from where the dog stands, so the distance is what the sonar reported plus
 # however far it walked. 20 m is a sanity bound on a typo, not a range the sensor reaches.
 MAX_DISTANCE_CM = 2000.0
+
+# How much one arrival raises a place's confidence, and one failed approach lowers it. Small on
+# purpose: a confidence is a count of evidence, and a place that moved should take several visits to
+# look certain again.
+DEFAULT_CONFIDENCE_STEP = 0.1
 
 # A place id is **not** a file name — `kernel/routine.py`'s strict ASCII pattern guards that, because
 # there an id is a path. One file holds every place, so this pattern only has to survive a URL path
@@ -146,6 +152,29 @@ class Place:
             "created_ts": self.created_ts,
             "visits": self.visits,
         }
+
+    def after_visit(self, *, arrived: bool, step: float = DEFAULT_CONFIDENCE_STEP) -> Place:
+        """This place one arrival later — or one failed approach later.
+
+        `visits` counts arrivals only: a visit is something that happened to the place, and a
+        failed approach is something that did not.
+
+        A failed approach **only decays a value that was measured**. A place nobody has reached yet
+        has no confidence to lose, and a blocked path is not evidence about the place, so `None`
+        stays `None` until the first arrival — the same rule `kernel/decisions.py` applies to a
+        confidence that nothing measured. On the first arrival the value starts at `step`, because
+        one arrival is one measurement and pretending to more would be the lie §6.3 rules out.
+        """
+        delta = min(1.0, max(0.0, _safe_float(step, DEFAULT_CONFIDENCE_STEP)))
+        current = self.confidence
+        confidence: float | None
+        if arrived:
+            confidence = delta if current is None else min(1.0, current + delta)
+        else:
+            confidence = None if current is None else max(0.0, current - delta)
+        return replace(
+            self, visits=self.visits + (1 if arrived else 0), confidence=confidence
+        )
 
 
 @dataclass(frozen=True)

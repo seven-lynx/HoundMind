@@ -372,7 +372,7 @@ _SAFETY = Section(
         "tilt_cooldown_s": _NON_NEGATIVE,
         "led_priority": _PRIORITY,
         "override_priority": ListOf(
-            StrSpec(choices=("safety", "watchdog", "navigation", "behavior"))
+            StrSpec(choices=("safety", "watchdog", "navigation", "place", "behavior"))
         ),
         "override_clear_lower": Bool(),
     }
@@ -457,8 +457,30 @@ _BATTERY = Section(
 _ROUTINES = Section(fields={"dir": StrSpec()})
 
 # The places file is the same kind of thing — user data outside the tree, one JSON file this time
-# (`kernel/place_store.py` owns it). A place is taught, never inferred, so the path is the only knob.
-_PLACES = Section(fields={"path": StrSpec()})
+# (`kernel/place_store.py` owns it). A place is taught, never inferred, so the file has no content
+# knobs; the rest is how the dog walks to one (`navigation/place_navigator.py`), and every key here
+# is a bound on a guess rather than a tuning surface: `step_cm` is the one number that has to be
+# measured on a device (PL7) instead of assumed.
+_PLACES = Section(
+    fields={
+        # The file itself.
+        "path": StrSpec(),
+        # The anchor a place must have been taught against to be reachable in this run. A goal
+        # taught from a different reference pose is refused by name, not walked on a stale vector.
+        "anchor": StrSpec(),
+        # How close is close enough: an arrival inside this many cm of the stored distance counts.
+        "tolerance_cm": _NON_NEGATIVE,
+        # How far off the heading the dog may be before it still counts as facing the place.
+        "turn_tolerance_deg": FloatSpec(minimum=0.0, maximum=180.0),
+        # Dead reckoning: what one accepted `forward` is believed to cover. A device measurement.
+        "step_cm": _POSITIVE,
+        # Give up after this long. 0 means never, which is a choice a user may make for a place
+        # that is genuinely far away rather than an accident.
+        "timeout_s": _NON_NEGATIVE,
+        # How much one arrival raises (or one failed approach lowers) a place's confidence.
+        "confidence_step": _FRACTION,
+    }
+)
 
 
 _QUIET_MODE = Section(
