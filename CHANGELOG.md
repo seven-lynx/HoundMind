@@ -73,6 +73,11 @@ Current Release: v2026.01.18 • Author: 7Lynx
 - `trot` skipped the obstacle stop: the forward family was `{"forward"}` even though `trot` is a
   forward gait. `trot` is a motion action now (so it also counts for the watchdog hold and the
   scan lock) and the sonar gate applies to it.
+- The `head` action ignored its `pitch` parameter: `hal/vendor.py` built the target as
+  `[yaw, pitch, 0]`, while the vendor unpacks `[yaw, roll, pitch]`, so a non-zero `pitch` rolled
+  the head by that angle and the pitch channel stayed at zero. Every caller in the tree sends
+  `pitch: 0`, which is why the shipped runtime looked correct — a client using the parameter
+  `DogHAL.action` documents got the wrong joint with no error to notice.
 
 ### Docs
 - `docs/CONTROL_API.md` §2/§3 document `GET /api/v1/repertoire` and the four action classes;
