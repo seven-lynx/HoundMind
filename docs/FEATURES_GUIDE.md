@@ -136,6 +136,11 @@ Two routes expose them: `GET /api/v1/routines` lists what the runner loaded and 
 refused, and `POST /api/v1/routines/{id}/run` starts one, optionally as a rehearsal
 (`{"dry_run": true}`). Both shapes, and the four status codes, are in `docs/CONTROL_API.md` §3.
 
+The run in progress is also in every state snapshot (`state.routines`, the same object the route calls
+`current`) and is pushed as a `routine` event whenever it moves — a new step, a new state, a veto — so
+a client that started one follows it without polling, and a client that only watches the socket still
+sees it finish.
+
 **Micro-idle behaviors (lifelike idle):** When enabled, the robot occasionally performs small idle actions (e.g., `"shake head"`, `"wag tail"`, `"stretch"`) to feel more lifelike. These are safe, optional actions that do not affect navigation or safety logic.
 
 **Settings:**

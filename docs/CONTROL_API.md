@@ -284,6 +284,11 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "inputs": { "distance_cm": 42.5, "distance_valid": true },
     "confidence": null
   },
+  "routines": {
+    "id": "morning_greeting", "name": "Morning greeting", "index": 1, "total": 3,
+    "state": "running", "dry_run": false, "action": "sit", "veto": null, "detail": null,
+    "started_at": 1762771200.31
+  },
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [] },
   "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [] },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 }
@@ -302,6 +307,14 @@ the mode policy dropped or a higher rank displaced; `inputs` carries the reading
 never `0.0` — when nothing measured it. A client that diffs on `ts` sees one new record per tick; the
 WS `decision` event (§5) fires only when the *choice* changes, so treat the two as different
 cadences over the same object.
+
+`routines` is the run the runner is playing — the **same object** `GET /api/v1/routines` returns as
+`current` — or `null` before the first run and after a restart. `state` is `running`, `done`,
+`stopped` or `refused`; a refused run keeps the `veto` and `detail` that ended it, so a client shows
+"stopped at step 2: obstacle" instead of an unexplained halt. It is rewritten every tick while the run
+is live, whereas the WS `routine` event (§5) fires only when the run *moves*: a new step, a new state,
+or a new veto. `started_at` is epoch seconds from the device's wall clock, not the monotonic `ts` —
+it is a timestamp to display, not one to compare against this stream.
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
 `navigation`, `routine`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode
@@ -358,9 +371,10 @@ Client frames: `{"type": "hello", "token": "..."}` then `{"type": "ping"}`. Anyt
 `error` with code `bad_request`.
 
 The only event names the server publishes today are `mode_changed`, `command_accepted`,
-`command_vetoed`, `command_expired`, `pairing_window_open` and `decision`. The last one carries the
-§4 `decision` block and is sent when the *choice* changes — a new winner, a new refusal, a new mode
-or state — not on every tick, because this channel is never dropped and a client that falls behind
+`command_vetoed`, `command_expired`, `pairing_window_open`, `decision` and `routine`. The last two
+carry the §4 `decision` and `routines` blocks and are sent only when the object changes — a new
+winner, a new refusal, a new mode or state for the decision; a new step, a new state or a new veto for
+a routine — never on every tick, because this channel is never dropped and a client that falls behind
 it is disconnected. A command's *outcome* is the synchronous reply to `POST /command` (§3) — there is
 no separate `command_ack` frame; the events are the broadcast, not the acknowledgement. Clients must
 tolerate an unknown `name` and ignore it.

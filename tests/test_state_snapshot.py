@@ -6,6 +6,7 @@ that answer "why did the dog do that" belong here, not in a log the client canno
 
 from __future__ import annotations
 
+from houndmind_ai.behavior.routine_runner import RoutineRun
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.kernel.decisions import DecisionRecord
 from houndmind_ai.services.state import build_state
@@ -85,3 +86,37 @@ def test_the_snapshot_carries_the_decision_record() -> None:
 def test_no_decision_yet_is_null_not_an_empty_record() -> None:
     """Before the first tick the dog has decided nothing; an empty object would claim it had."""
     assert build_state(RuntimeContext(), now=0.0)["decision"] is None
+
+
+def test_the_snapshot_carries_the_running_routine() -> None:
+    """One object, three surfaces: `GET /routines`' `current`, this block, and the `routine` event.
+
+    A client that was told `202` by `POST /routines/{id}/run` needs to see whether the run actually
+    started and how far it got, without a second route in the loop.
+    """
+    context = RuntimeContext()
+    context.set(
+        "routine_run",
+        RoutineRun(
+            routine_id="morning",
+            name="Morning greeting",
+            total=3,
+            index=1,
+            action="sit",
+            started_at=5.0,
+        ),
+    )
+
+    routines = build_state(context, now=6.0)["routines"]
+
+    assert routines["id"] == "morning"
+    assert routines["name"] == "Morning greeting"
+    assert routines["index"] == 1
+    assert routines["total"] == 3
+    assert routines["state"] == "running"
+    assert routines["action"] == "sit"
+
+
+def test_no_routine_yet_is_null_not_an_empty_run() -> None:
+    """`null` is "nothing has been played"; an empty object would be a run with no steps."""
+    assert build_state(RuntimeContext(), now=0.0)["routines"] is None

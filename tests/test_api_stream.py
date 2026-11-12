@@ -12,6 +12,7 @@ import asyncio
 from aiohttp import WSMsgType
 from aiohttp.test_utils import TestClient, TestServer
 
+from houndmind_ai.behavior.routine_runner import RoutineRun
 from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.kernel.decisions import DecisionRecord
 from houndmind_ai.services.api import API_PREFIX, ControlPlane, create_app
@@ -216,6 +217,61 @@ def test_a_new_reading_does_not_emit_a_second_decision_event(tmp_path) -> None:
             await ws.close()
 
         assert "decision" not in event_names(frames)
+        assert any(frame.get("type") == "state" for frame in frames), "the pump kept running"
+
+    asyncio.run(scenario())
+
+def test_a_new_step_is_published_as_a_routine_event(tmp_path) -> None:
+    """The pump is the only producer, so a phone learns about a step without polling `/routines`."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            ws = await client.ws_connect(f"{API_PREFIX}/events")
+            await ws.send_json({"type": "hello", "token": plane.tokens.ensure()})
+            await until(ws, "welcome")
+
+            plane.context.set(
+                "routine_run",
+                RoutineRun(routine_id="calm", name="calm", total=2, index=0, action="sit"),
+            )
+            event = await until_event(ws, "routine")
+            await ws.close()
+
+        assert event["data"]["data"]["id"] == "calm"
+        assert event["data"]["data"]["index"] == 0
+        assert event["data"]["data"]["state"] == "running"
+
+    asyncio.run(scenario())
+
+
+def test_an_unchanged_step_emits_no_second_routine_event(tmp_path) -> None:
+    """The runner republishes `routine_run` every tick; the signature is what keeps it quiet."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            ws = await client.ws_connect(f"{API_PREFIX}/events")
+            await ws.send_json({"type": "hello", "token": plane.tokens.ensure()})
+            await until(ws, "welcome")
+
+            plane.context.set(
+                "routine_run",
+                RoutineRun(routine_id="calm", name="calm", total=2, index=1, action="wag_tail"),
+            )
+            await until_event(ws, "routine")
+
+            # Same step, next tick, republished unchanged.
+            plane.context.set(
+                "routine_run",
+                RoutineRun(routine_id="calm", name="calm", total=2, index=1, action="wag_tail"),
+            )
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 0.4
+            frames: list[dict] = []
+            while loop.time() < deadline:
+                frames.append(await asyncio.wait_for(ws.receive_json(), timeout=1.0))
+            await ws.close()
+
+        assert "routine" not in event_names(frames)
         assert any(frame.get("type") == "state" for frame in frames), "the pump kept running"
 
     asyncio.run(scenario())

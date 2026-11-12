@@ -169,6 +169,19 @@ def _decision(context) -> dict[str, Any] | None:
     return record.to_dict() if isinstance(record, DecisionRecord) else None
 
 
+def _routines(context) -> dict[str, Any] | None:
+    """The routine the runner is playing, or ``None`` before the first run.
+
+    Duck-typed on purpose, the same call `services/api.py::_routine_state` makes: `services` may not
+    import `behavior`, and the shape belongs to ``RoutineRun.to_dict()``. One object, three surfaces
+    — `GET /routines`' ``current``, this block and the ``routine`` event — so a client can compare
+    them without translating between three spellings of the same run.
+    """
+    run = context.get("routine_run")
+    to_dict = getattr(run, "to_dict", None)
+    return to_dict() if callable(to_dict) else None
+
+
 def build_state(context, *, now: float | None = None) -> dict[str, object]:
     """The full snapshot. ``now`` is the caller's monotonic clock, used for ``since_s``."""
     clock = 0.0 if now is None else now
@@ -182,6 +195,7 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "actuators": _actuators(context, clock),
         "nav": _nav(context),
         "decision": _decision(context),
+        "routines": _routines(context),
         "health": build_health(context),
         "supervisor": build_supervisor(context),
         "modules": counts,

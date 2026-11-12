@@ -63,6 +63,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
   consumes and ends the run as `stopped` — only when a runner is loaded, so the flag cannot outlive
   the stop and kill the next run.
 
+- `state.routines` in the snapshot and a `routine` socket event: the run the runner is playing,
+  step by step, as the same object `GET /api/v1/routines` calls `current`. The event fires only
+  when the run moves — a new step, a new state or a veto — never on the tick that republishes
+  it, which is the rule P1 set for `decision`. A client that was told `202` can now follow the
+  run to its end and see the `veto` that stopped it.
+
 ### Changed
 - `POST /api/v1/command` accepts any action classified in `config/actions.jsonc`, not only the twelve
   names in `KNOWN_ACTIONS`. A name nothing classifies is still a `400` with a did-you-mean.
