@@ -401,6 +401,14 @@ _LOGGING = Section(
         "event_log_file_enabled": Bool(),
         "event_log_path": StrSpec(),
         "event_log_max_mb": IntSpec(minimum=1),
+        # The decision feed: its own flag and file, because `/decisions` must keep working on a
+        # device that turned the event log off. The file defaults to off there (9 MB/hour at
+        # 10 Hz); the ring in memory does not.
+        "decision_log_enabled": Bool(),
+        "decision_log_file_enabled": Bool(),
+        "decision_log_max_entries": IntSpec(minimum=1),
+        "decision_log_path": StrSpec(),
+        "decision_log_max_mb": IntSpec(minimum=1),
     }
 )
 

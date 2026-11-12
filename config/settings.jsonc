@@ -158,6 +158,12 @@
         "enabled": true,
         "required": false
       },
+    "decision_log": {
+      // Decision feed: the last decisions in a bounded ring, plus an optional JSONL mirror.
+      // Kept separate from the event logger so `/decisions` works when the event log is off.
+      "enabled": true,
+      "required": false
+    },
       "health": {
         // Lightweight system health monitor.
         "enabled": false,
@@ -943,6 +949,17 @@
       // Cap on the JSONL file itself. When it reaches this size it is renamed to `.1` and a
       // fresh file is started, so a dog left running cannot fill the SD card.
       "event_log_max_mb": 5,
+      // Decision feed (per-tick ring + optional JSONL). Separate from the event log on purpose:
+      // the ring feeds `/decisions` and the `decision` socket event, so it keeps working on a
+      // device that turned the event log off.
+      "decision_log_enabled": true,
+      "decision_log_max_entries": 200,
+      // Off by default: ten records a second is ~9 MB an hour, so this file is opt-in for a
+      // post-mortem or a replay run.
+      "decision_log_file_enabled": false,
+      "decision_log_path": "logs/houndmind_decisions.jsonl",
+      // One rotated generation at this size, the same rule as the event log.
+      "decision_log_max_mb": 5,
     },
     // =====================================================================
     // PERFORMANCE SAFEGUARDS

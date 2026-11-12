@@ -21,6 +21,7 @@ from houndmind_ai.hal.sensors import SensorModule
 from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.kernel.config_schema import ConfigError
 from houndmind_ai.kernel.registry import Capability, ModuleRegistry
+from houndmind_ai.logging.decision_log import DecisionLogModule
 from houndmind_ai.logging.event_logger import EventLoggerModule
 from houndmind_ai.logging.led_manager import LedManagerModule
 from houndmind_ai.mapping import default_path_planning_hook
@@ -87,6 +88,11 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(HabituationModule("habituation", **cfg("habituation")), [Capability.BEHAVIOUR])
     registry.register(AttentionModule("attention", **cfg("attention")), [Capability.BEHAVIOUR])
     registry.register(EventLoggerModule("event_log", **cfg("event_log")), [Capability.TELEMETRY])
+    # The decision feed ticks every loop tick and does not share the event logger's settings: a
+    # device with `event_log_enabled: false` still answers `/decisions`.
+    registry.register(
+        DecisionLogModule("decision_log", **cfg("decision_log")), [Capability.TELEMETRY]
+    )
     registry.register(LedManagerModule("led_manager", **cfg("led_manager")), [Capability.TELEMETRY])
     registry.register(HealthMonitorModule("health", **cfg("health")), [Capability.DIAGNOSTICS])
     registry.register(SensorHealthModule("sensor_health", **cfg("sensor_health")), [Capability.DIAGNOSTICS])
