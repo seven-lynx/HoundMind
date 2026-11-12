@@ -230,6 +230,13 @@ The keys a module may rely on. Anything not here is private and may change.
 | `motion_cancel` | `list` — lower-priority intents this tick displaced |
 | `tilt_latched` | `bool` |
 
+**Decisions** — the answer to "why did the dog do that"
+
+| Key | Type |
+|---|---|
+| `decision_record` | `DecisionRecord` (`kernel/decisions.py`) — this tick's winner, refusals and inputs, published by `motion_gateway` |
+| `decision_ring` | `DecisionRing` — the last `decision_log_max_entries` records, oldest first, published by `decision_log` |
+
 **Safety, health, LEDs**
 
 | Key | Type |

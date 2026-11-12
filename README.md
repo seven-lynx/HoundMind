@@ -202,6 +202,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Attention                      | Enabled     |                                       |
 | Watchdog                       | Enabled     | Holds motion on stale data; restarts stopped modules with backoff |
 | Event Logging                  | Enabled     |                                       |
+| Decision Feed                  | Enabled     | Last 200 decisions behind `/decisions`; JSONL off by default |
 | Control Plane (REST/WS/web)    | Enabled     | Port 8420, token-gated; `modules.api`  |
 | LED Manager                    | Enabled     |                                       |
 | Calibration                    | Enabled     |                                       |

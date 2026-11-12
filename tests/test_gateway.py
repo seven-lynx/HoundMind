@@ -15,6 +15,7 @@ from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.hal.sensors import SensorReading
 from houndmind_ai.kernel.actions import build_repertoire
 from houndmind_ai.kernel.commands import DEFAULT_MODE, Command, CommandBus, Source
+from houndmind_ai.kernel.decisions import DecisionRecord
 from houndmind_ai.kernel.intents import IntentBoard
 
 
@@ -431,9 +432,11 @@ def test_legacy_and_canonical_spellings_round_trip() -> None:
 
 def published(context) -> dict[str, Any]:
     """The record this tick published, as a client would receive it."""
-    payload = context.get("decision_record")
-    assert isinstance(payload, dict), "every tick publishes a record"
-    return payload
+    record = context.get("decision_record")
+    assert isinstance(record, DecisionRecord), "every tick publishes a record"
+    # The context holds the record; serializing is what `/decisions`, the socket and the JSONL
+    # each do at their own boundary (and what this helper checks here).
+    return record.to_dict()
 
 
 def test_every_tick_publishes_a_record_even_when_nobody_asks() -> None:

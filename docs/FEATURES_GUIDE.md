@@ -267,6 +267,21 @@ used for the badge.
 
 **Disable:** `modules.event_log.enabled = false`
 
+### Decision feed (`decision_log`)
+**What it does:** Keeps the last decision records in memory for `GET /api/v1/decisions` and the
+`decision` socket event, and can mirror them to JSONL. One record per tick — including the ticks
+where the dog did nothing, because "did nothing" is also a decision.
+
+**Defaults:** the ring holds `logging.decision_log_max_entries` records (200). The JSONL is
+**off** (`logging.decision_log_file_enabled: false`): at 10 Hz it would write about 9 MB an hour,
+so turn it on for a post-mortem or a replay run. When on, it rotates to `.1` at
+`logging.decision_log_max_mb` — one generation, the same rule as the event log.
+
+**Independent of the event log:** `modules.event_log.enabled: false` does not stop the ring. The
+two are separate keys because `/decisions` is a live surface, not a diagnostic.
+
+**Disable:** `modules.decision_log.enabled = false`
+
 ---
 
 ## 15) LED Manager
