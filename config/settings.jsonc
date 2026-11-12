@@ -160,8 +160,11 @@
     "place_navigator": {
       // Walks to a place in the file at settings.places.path by publishing `place` intents (priority
       // 17, under `navigation`, so an obstacle always wins the tick). It is inert until something
-      // writes the `place_request` context key — the control plane does that at P4 PL5 — and with it
-      // off a request is simply never answered. Tuning lives in `settings.places`, not here.
+      // writes the `place_request` context key — the control plane's `POST /api/v1/places/{id}/go`
+      // does that — and with it off a request is simply never answered. It also builds the one
+      // `PlaceStore` and publishes it as `place_store`, which the `/places` routes write through;
+      // turn this off and those routes answer 503 rather than inventing a second writer.
+      // Tuning lives in `settings.places`, not here.
       "enabled": true,
       "required": false
     },

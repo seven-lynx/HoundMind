@@ -63,6 +63,7 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params (§3) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress (§3) |
+| `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress (§8) |
 | `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first (§4); 503 when the feed is not running |
 | `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream (§5) |
 | `GET` | `/api/v1/camera/stream` | `state:read` (`?token=`) | MJPEG, multipart/x-mixed-replace |
@@ -72,6 +73,9 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 | `POST` | `/api/v1/command` | `move` | issue a command (§3) |
 | `POST` | `/api/v1/stop` | `move` | unconditional stop; never vetoed, never queued, and it ends a running routine |
 | `POST` | `/api/v1/routines/{id}/run` | `move` | start one routine; optional `{"dry_run": true}` (§3) |
+| `POST` | `/api/v1/places` | `config` | create one place; a refused body is `400` with `problems[]` (§8) |
+| `DELETE` | `/api/v1/places/{id}` | `config` | forget one place by id or name; a second call is `404` (§8) |
+| `POST` | `/api/v1/places/{id}/go` | `move` | ask the dog to walk to one place; optional `{"at_anchor": true}` (§8) |
 | `GET` | `/api/v1/mode` | `state:read` | current mode |
 | `POST` | `/api/v1/mode` | `move` | switch `idle` \| `patrol` \| `manual` \| `rest` |
 | `GET` | `/api/v1/config` | `config` | effective config, secrets redacted |
@@ -422,3 +426,38 @@ display verbatim — it must never contain a path, a token, or a stack trace.
 - `docs/CONTROL_API.md` is the source of truth. `tests/test_api_routes.py` parses §2 and compares it
   to the route table in `services/api.py`, so a route that exists in one and not the other fails CI.
   Change both, in the same commit.
+
+---
+
+## 8. Places
+
+A place is a named pose a person taught: `{id, name, heading_deg, distance_cm, anchor, confidence,
+created_ts, visits}`. `id` is the slug of the name (`"Living Room"` → `living_room`) and is what every
+other route takes. Nothing infers a place from a scan, and `DELETE` is the only way one disappears.
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/v1/places` | `{"name", "heading_deg", "distance_cm"}` required; `{"anchor", "confidence"}` optional | `201 {"place": {...}}` · `400 {"problems": [...]}` · `503` |
+| `DELETE /api/v1/places/{id}` | none — the path segment may be an id **or** a name | `200 {"removed": {...}}` · `404` + `suggestion` · `503` |
+| `POST /api/v1/places/{id}/go` | `{"at_anchor": true}` — optional, see below | `202 {"accepted", "id", "name", "at_anchor"}` · `404` · `409` · `503` |
+
+`400` bodies carry `problems[]` in the `{path, message, hint}` shape §2's config validator already
+uses, so a client shows them without translating: a duplicate name, a heading the format does not
+allow, a name with no characters usable in an id (`"///"` slugs to `""`), or the catalogue limit.
+
+**Types are not coerced.** `{"heading_deg": true}` is a `400`, not 1.0 — `true` is an `int` in
+Python — and `{"heading_deg": "90"}` is a `400`, not 90 degrees.
+
+**`POST /places/{id}/go` asks; it does not command.** The request is written for the next tick, like
+`POST /routines/{id}/run`, and the navigator answers through `place_goal`, which `GET /api/v1/places`
+returns as `goal`:
+
+- `at_anchor: true` is the user confirming the dog is standing at the place's anchor. Without it the
+  navigator refuses (`anchor_mismatch`) instead of walking a vector measured from somewhere else —
+  that arrives as `202` then a refusal in `goal`, because the rule belongs to the navigator, which
+  also has to answer for a place taught against a *different* anchor.
+- `409` means a walk is already in flight; `current` is the goal that is.
+
+`503` on any of the four means no place navigator is running (`modules.place_navigator.enabled` is
+off, so nothing owns the file). That is not an empty catalogue, and the two are worth distinguishing
+in a client.

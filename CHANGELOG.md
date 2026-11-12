@@ -49,6 +49,17 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `social_decay_s`. It ships dark: `modules.face_recognition` is still `enabled: false`, so with the
   shipped config occupancy is unknown and the bias is inert — enabling presence is a config change,
   not a consequence of updating.
+- **A place has an HTTP surface** (`P4 PL5`): `GET /api/v1/places` lists the catalogue and the walk in
+  progress, `POST` creates one, `DELETE /{id}` forgets one by id or name, and
+  `POST /{id}/go` asks the dog to walk there — which closes a gap that had no entry point at all:
+  until now the only writer of `place_request` in the tree was a test. Refusals keep the shapes the
+  store already produced: a bad body is `400` with `problems[]`, an unknown handle is `404` with a
+  `suggestion`, and a second walk while one is in flight is `409`. A JSON `true` is refused where a
+  number is required, and a string is never coerced into one.
+- **One store, one lock** (`kernel/place_store.py`): `places.json` now has two writers — an arrival on
+  the tick thread, a create or delete on the event loop — so `add`, `remove` and `record_visit` hold a
+  lock across their read-modify-write pair, and the navigator publishes its store as `place_store` so
+  the routes use that instance rather than building a second one over the same file.
 - **Identity stays off a Pi 4** (`tests/test_imports.py`): "a Pi 4 run imports no dlib" is now
   structural rather than inspection. An AST guard fails on any module-scope import of `pidog`,
   `robot_hat`, `vilib`, `dlib`, `cv2` and friends in `hal/` or `optional/` — including one hidden

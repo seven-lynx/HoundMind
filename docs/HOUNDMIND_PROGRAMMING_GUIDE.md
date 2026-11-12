@@ -221,6 +221,7 @@ The keys a module may rely on. Anything not here is private and may change.
 | `navigation_decision`, `navigation_turn`, `navigation_followup` | `dict` |
 | `place_request` | `dict` in, consumed once — `{"id": "<slug or name>", "at_anchor": true}` |
 | `place_goal` | `dict \| None` — the trip in progress, or why it was refused (`navigation/place_navigator.py`) |
+| `place_store` | `PlaceStore \| None` — the one store for `settings.places.path`, published by the navigator at start and cleared at stop; the `/places` routes write through it, so a second store would be a second writer (`kernel/place_store.py`) |
 | `mapping_openings`, `mapping_state` | `dict` |
 | `path_planning`, `path_planning_hook` | `list` / callable |
 | `behavior_override` | `str \| None` |
