@@ -68,6 +68,41 @@ turn that reads the heading between steps. It performs no vendor call of its own
 ## 3) Perception
 **What it does:** Lightweight sensor fusion and obstacle signals.
 
+The fused snapshot is the `perception` context key: `obstacle`, `touch`, `sound`,
+`sound_direction`, `distance`, and — since P4 PL3 — occupancy. Every key in it is a measurement, so
+every key can fail, and the failed read has to stay distinguishable from a real one.
+
+**Occupancy** answers one question: is somebody in front of the dog? It is read from the `faces`
+payload a detector publishes (`modules.face_recognition`, `opencv`/Haar backend — presence, no
+biometrics), and it is a *fact*, not a mood: behaviour turns it into a bias, not the other way round.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.perception.occupancy.max_age_s` | `1.0` | A frame older than this says nothing about now. |
+| `settings.perception.occupancy.min_frames` | `3` | Consecutive frames needed to claim somebody is there. |
+| `settings.perception.occupancy.release_frames` | `5` | Consecutive empty frames needed to drop the claim. |
+
+`perception` carries it as `occupancy` (`true`/`false`/`null`), `occupancy_valid` and
+`occupancy_frames`. Three of those are unknowns on purpose: **no detector, no frame, and a stale
+frame all read `occupancy: null` with `occupancy_valid: false`**. A dropped frame is never an empty
+room, and an empty room from an unknown start is believed at once, because claiming nobody is there
+is not a claim about a person.
+
+**This ships dark.** `modules.face_recognition` is `enabled: false`, so with the shipped config
+occupancy is always unknown and the bias below does nothing. Turning presence on is a config change
+with its own install cost, not a consequence of the update.
+
+**Social bias** (`settings.behavior`, §7): while occupancy is valid and true, the `interact` weight in
+the autonomy draw is multiplied by `social_bias_peak` beside `personality.sociability`, and it decays
+over `social_decay_s` when the sight is lost. Only a mode the table already offers can be biased —
+`autonomy_modes` has to list `interact`, which the shipped config does.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.behavior.social_bias_enabled` | `true` | `false` leaves the weight table exactly as it was. |
+| `settings.behavior.social_bias_peak` | `2.5` | Multiplier on `interact` at full presence. |
+| `settings.behavior.social_decay_s` | `5.0` | How long the interest survives without a reading. |
+
 **Disable:** `modules.perception.enabled = false`
 
 ---
