@@ -217,6 +217,7 @@ The keys a module may rely on. Anything not here is private and may change.
 | `mapping_openings`, `mapping_state` | `dict` |
 | `path_planning`, `path_planning_hook` | `list` / callable |
 | `behavior_override` | `str \| None` |
+| `behavior_state` | `str` — the FSM's published state (`idle`, `alert`, …), not a command |
 | `runtime_mode` | `idle` \| `patrol` \| `manual` \| `rest` |
 
 **Motion** — the only keys `hal_motors` reads

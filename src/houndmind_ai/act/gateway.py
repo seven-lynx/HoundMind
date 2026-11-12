@@ -304,8 +304,10 @@ class MotionGatewayModule(Module):
 
         Nothing here is invented. A reading that did not answer keeps `None` beside its
         `*_valid` flag, and a confidence no producer measured stays `None` rather than `0.0`.
-        `state` is whatever `behavior_state` holds — absent until the FSM publishes it, which is
-        a fact about the tick, not a gap to paper over.
+        `state` comes from `behavior_state`, which the FSM publishes at the end of its own
+        tick. `behavior` runs later in the registry than this module, so a record pairs tick N's
+        resolution with the state at the end of tick N-1 — the state that raised those intents.
+        Only a run's first tick has no state to name. Diff on `ts`, never on `state`.
         """
         decision = context.get("navigation_decision")
         confidence = (

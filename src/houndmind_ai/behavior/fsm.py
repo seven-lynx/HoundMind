@@ -371,6 +371,11 @@ class BehaviorModule(Module):
                 self.state = desired_state
                 self._last_state_ts = now
 
+        # Published after the transition block and before the habituated-stimulus return
+        # below, which can end the tick on the very tick the state changed. The gateway reads
+        # this on its next tick to name the state that raised the intents.
+        context.set("behavior_state", self.state.value)
+
         # Optional micro-idle behaviors for lifelike idle without affecting core logic.
         micro_enabled = bool(settings.get("micro_idle_enabled", False))
         micro_actions = settings.get("micro_idle_actions", [])
