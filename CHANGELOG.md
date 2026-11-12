@@ -9,6 +9,16 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- **`GET /api/v1/people`** (`admin`): who the dog has been taught, as `[{id, name}]` where `id` is the
+  slug of the name — the rule places already follow, so two enrollments under one name are one person.
+  Nothing biometric is in the response: no embedding, no dataset image, no box, only the `path` of the
+  file the identities live in. `admin` rather than `state:read` because an enrolled face is biometric
+  data, and `/meta` deliberately does not advertise the roster since it is unauthenticated. Identity
+  ships disabled, so the answer while it is off is `identity.reason` — the module's own
+  `disabled_reason` when it has one — and not an empty roster to be misread as "nobody is enrolled".
+  `optional/face_recognition.py` publishes it (`identity_roster`) from whichever backend holds the
+  names: dlib from its embeddings, OpenCV from its LBPH label map. Enrolment is still a runtime
+  command, not a route — filed as #103.
 - **The camera takes a ticket, not the device token** (`#18`): `POST /api/v1/camera/ticket` mints a
   single-use, 60-second ticket that `/camera/stream` and `/camera/snapshot` accept as `?ticket=`, and
   `?token=` on those two routes is refused with a `401` that names the replacement. The ticket grants

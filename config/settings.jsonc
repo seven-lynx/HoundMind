@@ -349,6 +349,9 @@
         "confidence_threshold": 70.0
       },
       // face_recognition (heavy) settings.
+      // NOTE: this default points inside the install tree, unlike every other persisted file
+      // (places, routines, the token all live in ~/.houndmind). It may not be writable on a real
+      // install and a reinstall takes it with it — see #104 before relying on it.
       "embeddings_path": "data/face_embeddings.json",
       "match_threshold": 0.6
     },

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.kernel.place import slug
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +21,8 @@ class FaceRecognitionModule(Module):
     Enrollment is driven from the runtime, not from an HTTP endpoint: publish
     `{"action": "enroll", "name": "Alice"}` under `face_recognition_command` and the next
     tick runs it against the newest `vision_frame`. The legacy port-8088 server (`/status`,
-    `/faces`, `/enroll`) is gone; `/status` is now `GET /api/v1/modules` and `/faces` is
-    `GET /api/v1/state`.
+    `/faces`, `/enroll`) is gone; `/status` is now `GET /api/v1/modules` and the roster of
+    enrolled people is `GET /api/v1/people`, published here under `identity_roster`.
     """
 
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
@@ -34,6 +35,9 @@ class FaceRecognitionModule(Module):
         self._cascade: Any | None = None
         self._recognizer: Any | None = None
         self._label_map: dict[int, str] = {}
+        # Where those names came from, for `GET /api/v1/people` to report. The two backends keep
+        # their identities in different files; only one of them is ever in use at a time.
+        self._label_map_path: Path | None = None
 
         self._embeddings_path: Path | None = None
         self._known_embeddings: list[list[float]] = []
@@ -52,6 +56,7 @@ class FaceRecognitionModule(Module):
             context.set(
                 "face_recognition_status", {"status": "ready", "backend": backend}
             )
+            self._publish_roster(context)
             return
 
         if backend == "opencv":
@@ -98,6 +103,7 @@ class FaceRecognitionModule(Module):
                     lbph_settings.get("label_map_path", "data/face_labels.json")
                 )
                 self._label_map = self._load_label_map(label_map_path)
+                self._label_map_path = label_map_path
                 if model_path.exists():
                     try:
                         self._recognizer.read(str(model_path))
@@ -110,6 +116,7 @@ class FaceRecognitionModule(Module):
             context.set(
                 "face_recognition_status", {"status": "ready", "backend": backend}
             )
+            self._publish_roster(context)
             return
 
         if backend == "face_recognition":
@@ -127,6 +134,7 @@ class FaceRecognitionModule(Module):
             context.set(
                 "face_recognition_status", {"status": "ready", "backend": backend}
             )
+            self._publish_roster(context)
             return
 
         self.disable(f"Unknown face recognition backend: {backend}")
@@ -179,6 +187,49 @@ class FaceRecognitionModule(Module):
             "backend": self.backend,
             "detected": detections,
         }
+
+    def _publish_roster(self, context) -> None:
+        """Who this module can recognise, and which file taught it — names and ids only.
+
+        The embeddings never leave this object: `GET /api/v1/people` is `admin` for exactly that
+        reason (`robot-pet-design.md` §6.4), so the roster it serves is a list of people, not a
+        list of biometrics (P4 PL6).
+
+        The id is `slug(name)`, the rule `Place.id` already follows — an id is data a client stores,
+        so it has to be stable while the name is (`kernel/place.py:16`). Two enrollments under one
+        name are one person with two reference faces, which is how `_detect_face_recognition`
+        already treats them. No count of those faces is published: `face_recognition` could report
+        one and LBPH could not, and a field that is sometimes `null` is a field clients get wrong.
+
+        Every mutation calls this. A new writer of `_known_names` or `_label_map` that forgets to
+        leaves the roster stale while the detector keeps recognising a person the roster omits.
+        """
+        if self.backend == "face_recognition":
+            names = list(self._known_names)
+            path = self._embeddings_path
+        elif self.backend == "opencv":
+            # LBPH identifies too — `_detect_opencv` labels each face out of this map. It is the
+            # Haar cascade alone that only ever answers "a person is here".
+            names = list(self._label_map.values())
+            path = self._label_map_path
+        else:
+            names, path = [], None
+
+        people: dict[str, dict[str, str]] = {}
+        for name in names:
+            if not isinstance(name, str) or not name.strip():
+                continue
+            key = slug(name)
+            if key and key not in people:
+                people[key] = {"id": key, "name": name}
+        context.set(
+            "identity_roster",
+            {
+                "backend": self.backend,
+                "path": str(path) if path is not None else None,
+                "people": [people[key] for key in sorted(people)],
+            },
+        )
 
     def _detect_opencv(self, frame, settings: dict) -> list[dict[str, Any]]:
         if self._cv2 is None or self._cascade is None:
@@ -263,6 +314,10 @@ class FaceRecognitionModule(Module):
             self._enroll_opencv(name, frame, settings)
         elif self.backend == "face_recognition":
             self._enroll_face_recognition(name, frame, settings)
+        else:
+            # Nothing was written, so the roster cannot have changed.
+            return
+        self._publish_roster(context)
 
     def _enroll_opencv(self, name: str, frame, settings: dict) -> None:
         if self._cv2 is None or self._cascade is None:
