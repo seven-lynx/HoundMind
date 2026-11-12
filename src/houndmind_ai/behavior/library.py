@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -48,15 +48,25 @@ class BehaviorLibrary:
         self._clock: Callable[[], float] = clock or (lambda: time.time())
         self._last_used: dict[str, float] = {}
 
-    def pick_idle_action(self) -> str:
-        """Pick an idle action from the whole `idle` bucket.
+    def pick_idle_action(
+        self,
+        *,
+        extra: Iterable[str] = (),
+        bias: dict[str, float] | None = None,
+    ) -> str:
+        """Pick an idle action from the whole `idle` bucket, plus whatever the caller adds.
 
         #37: this used to return `idle_actions[0]` on nineteen calls out of twenty, which made a
         fourteen-entry bucket a constant. The "does an idle action happen at all" decision belongs to
         the tick, not to the picker — it lives in `behavior/fsm.py::_select_idle_behavior`, next to
         the clock that can pace it.
+
+        `extra` and `bias` are the energy band's inputs (P3 L5): the FSM decides that a tired dog may
+        also show a `rest` action while idle, and how much that action should outrank the bucket. They
+        arrive as arguments because this file knows nothing about energy, thresholds or which catalog
+        bucket an action came from — it only weighs what it is given.
         """
-        return self._pick(self.config.idle_actions, "stand")
+        return self._pick(self.config.idle_actions, "stand", extra=extra, bias=bias)
 
     def pick_alert_action(self) -> str:
         return self._pick(self.config.alert_actions, "bark")
@@ -79,8 +89,14 @@ class BehaviorLibrary:
     def pick_interact_action(self) -> str:
         return self._pick(self.config.interact_actions, "wag tail")
 
-    def _pick(self, actions: list[str], default: str) -> str:
-        """Draw from `actions`, weighted so the least recently used win.
+    def _pick(
+        self,
+        actions: list[str],
+        default: str,
+        extra: Iterable[str] = (),
+        bias: dict[str, float] | None = None,
+    ) -> str:
+        """Draw from `actions` (+ `extra`), weighted by recency and then by `bias`.
 
         Three cases, in order:
 
@@ -91,25 +107,41 @@ class BehaviorLibrary:
         3. every candidate is inside its cooldown → the least recently used one, because a bucket
            smaller than the cooldown must answer rather than hang (the one-action pool in P3 L4's
            exit criteria is this case with no escape).
+
+        `extra` joins the candidates after the bucket, deduped, so a caller can widen the pool without
+        being able to replace it. `bias` multiplies the recency weight — a missing key is 1.0, so an
+        unweighted draw is exactly L4's — and it cannot resurrect an action recency excluded, because
+        multiplying zero leaves zero.
         """
         candidates = [str(a) for a in actions if isinstance(a, str) and a.strip()]
+        if extra:
+            seen = set(candidates)
+            for name in extra:
+                if not isinstance(name, str) or not name.strip() or name in seen:
+                    continue
+                candidates.append(name)
+                seen.add(name)
         if not candidates:
             return default
 
+        bias = bias or {}
         now = self._clock()
         cooldown = max(0.0, float(self.config.reuse_cooldown_s))
         weights: dict[str, float] = {}
         for name in candidates:
             last = self._last_used.get(name)
             if last is None or cooldown <= 0.0:
-                weights[name] = 1.0
-                continue
-            elapsed = max(0.0, now - last)
-            if elapsed < cooldown:
-                weights[name] = 0.0
+                weight = 1.0
             else:
-                slowly = min(1.0, (elapsed - cooldown) / max(cooldown, _MIN_SPAN))
-                weights[name] = _WEIGHT_FLOOR + (1.0 - _WEIGHT_FLOOR) * slowly
+                elapsed = max(0.0, now - last)
+                if elapsed < cooldown:
+                    weight = 0.0
+                else:
+                    slowly = min(1.0, (elapsed - cooldown) / max(cooldown, _MIN_SPAN))
+                    weight = _WEIGHT_FLOOR + (1.0 - _WEIGHT_FLOOR) * slowly
+            if weight > 0.0:
+                weight *= self._bias_factor(bias, name)
+            weights[name] = weight
 
         if not any(weight > 0.0 for weight in weights.values()):
             oldest = min(candidates, key=lambda name: self._last_used.get(name, float("-inf")))
@@ -119,6 +151,14 @@ class BehaviorLibrary:
         pick = self._weighted(weights)
         self._last_used[pick] = now
         return pick
+
+    @staticmethod
+    def _bias_factor(bias: dict[str, float], name: str) -> float:
+        """The caller's multiplier for `name`: 1.0 when absent or unusable, never negative."""
+        try:
+            return max(0.0, float(bias.get(name, 1.0)))
+        except (TypeError, ValueError):
+            return 1.0
 
     @staticmethod
     def _weighted(weights: dict[str, float]) -> str:

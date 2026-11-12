@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 # A cue is a transition marker, not an event: it ships quieter than the HAL's own 70 so an entry
 # does not startle the room. `behavior.cue_volume` overrides it.
 _CUE_VOLUME_DEFAULT = 60
+# How much a rest action may outrank an idle one at the bottom of the energy band (L5). Saturation,
+# not a knob: three times a fresh idle action, so a tired dog dozes off often without the bucket
+# disappearing (`behavior.energy_bias_start` decides how far up the band opens).
+_ENERGY_BIAS_PEAK = 3.0
 
 
 class BehaviorState(StrEnum):
@@ -46,6 +50,11 @@ class BehaviorModule(Module):
         # repeating whatever the previous state published.
         self._last_idle_draw_ts = 0.0
         self._last_idle_action: str | None = None
+        # Energy band (L5): the reading this tick saw, and the behaviour settings the idle picker
+        # needs. Both are stashed because `idle_behavior` is a registry handler, and a handler is
+        # called with no arguments.
+        self._energy_level: float | None = None
+        self._idle_settings: dict = {}
         self.library: BehaviorLibrary | None = None
         self.registry: BehaviorRegistry | None = None
         # Entry beats that were refused, so a typo in `behavior.state_expressions` is one warning
@@ -117,6 +126,8 @@ class BehaviorModule(Module):
 
         # Behavior settings are centralized in settings.json for easy tuning.
         settings = (context.get("settings") or {}).get("behavior", {})
+        # The idle picker runs later through the registry, with no arguments, so it reads these two.
+        self._idle_settings = settings
         # Energy / internal state: initialize, apply stimulus boosts, decay, and persist.
         energy_settings = (context.get("settings") or {}).get("energy", {})
         energy_enabled = bool(energy_settings.get("enabled", False))
@@ -163,6 +174,10 @@ class BehaviorModule(Module):
                 pass
             energy = max(energy_min, min(energy_max, energy))
             context.set("energy_level", energy)
+        # Whatever produced the reading — this module's own block above, or
+        # `optional/energy_emotion.py` on an earlier tick — the idle band reads the key, the same way
+        # `_select_autonomy_mode` does.
+        self._energy_level = context.get("energy_level")
         idle_action = settings.get("idle_action", "stand")
         touch_action = settings.get("touch_action", "wag tail")
         sound_action = settings.get("sound_action", "shake head")
@@ -204,7 +219,7 @@ class BehaviorModule(Module):
             )
         if self.registry is None:
             self.registry = BehaviorRegistry()
-            self.registry.register("idle_behavior", self.library.pick_idle_action)
+            self.registry.register("idle_behavior", self._pick_idle_action)
             self.registry.register("rest_behavior", self.library.pick_rest_action)
             self.registry.register("play_behavior", self.library.pick_play_action)
             self.registry.register("patrol_behavior", self.library.pick_patrol_action)
@@ -625,7 +640,7 @@ class BehaviorModule(Module):
         selection_mode = settings.get("behavior_selection_mode", "weighted")
         weights = settings.get("behavior_weights", {})
         if self.registry is None:
-            return self.library.pick_idle_action() if self.library else "stand"
+            return self._pick_idle_action()
         if selection_mode == "sequential":
             choice = self.registry.pick_sequential(list(choices))
         else:
@@ -634,7 +649,55 @@ class BehaviorModule(Module):
             result = self.registry.run(choice)
             if result:
                 return result
-        return self.library.pick_idle_action() if self.library else "stand"
+        return self._pick_idle_action()
+
+    def _pick_idle_action(self) -> str:
+        """The `idle_behavior` item: the library's draw with the energy band applied.
+
+        Registered as this module's method rather than as `self.library.pick_idle_action` because a
+        registry handler takes no arguments and the band needs the reading and the catalog. It is also
+        the fallback `_draw_idle_action` uses, so both paths carry the same weight table.
+        """
+        if self.library is None:
+            return "stand"
+        extra, bias = self._idle_energy_bias(self._idle_settings)
+        return self.library.pick_idle_action(extra=extra, bias=bias)
+
+    def _idle_energy_bias(self, settings) -> tuple[list[str], dict[str, float] | None]:
+        """Which actions a tired dog may add to `idle`, and how much they outrank the bucket (L5).
+
+        Inert three ways — no `energy_level` reading, `energy_bias_start` at 0, or an energy above the
+        band — and each returns `([], None)`, i.e. exactly L4's draw. The band saturates at
+        `autonomy_rest_energy_max`, the threshold the autonomy gate uses to move the dog to `rest`, so
+        one notion of "tired" drives both; it opens *earlier* (0.5 by default) because under autonomy
+        the rest state wins at 0.35 and a bias confined below that would never be seen — which is the
+        whole reason this segment is not a no-op.
+
+        No mirror for high energy on purpose: `idle` and `play` share no action, so boosting play
+        actions inside `idle` would be config that does nothing, and a refreshed dog already reaches
+        the `play` state through `_select_autonomy_mode`.
+        """
+        energy = self._energy_level
+        if energy is None:
+            return [], None
+        try:
+            energy = float(energy)
+            start = float(settings.get("energy_bias_start", 0.5))
+            floor = float(settings.get("autonomy_rest_energy_max", 0.35))
+        except (TypeError, ValueError):
+            return [], None
+        if start <= 0.0 or energy >= start:
+            return [], None
+
+        rest_bucket = (settings.get("catalog") or {}).get("rest") or []
+        extras = [name for name in rest_bucket if isinstance(name, str) and name.strip()]
+        if not extras:
+            return [], None
+
+        span = max(start - floor, 1e-9)
+        frac = max(0.0, min(1.0, (start - max(energy, floor)) / span))
+        factor = 1.0 + frac * (_ENERGY_BIAS_PEAK - 1.0)
+        return extras, {name: factor for name in extras}
 
     def _pick_action_for_state(
         self,

@@ -705,6 +705,14 @@
       // 5% weight over a second window. This is what turns the 14-entry `idle` bucket into a
       // repertoire instead of a two-action loop (#37). 0 disables recency: a uniform draw.
       "action_reuse_cooldown_s": 20.0,
+      // Energy band. Above this reading `idle` draws from its own bucket only; below it the `rest`
+      // actions join the pool and outrank it, saturating at `autonomy_rest_energy_max` (0.35) — so a
+      // tired dog starts dozing off while idle instead of only once autonomy moves it to `rest`. The
+      // band opens at 0.5 rather than at the rest threshold on purpose: under autonomy the rest state
+      // wins at 0.35, so a bias confined below it would never be seen. 0 switches the band off.
+      // Needs an `energy_level` reading (`settings.energy` or `modules.energy_emotion`); without one
+      // it does nothing at all.
+      "energy_bias_start": 0.5,
       // Minimum time between behavior action changes (seconds).
       "action_cooldown_s": 0.0,
       // One expression per state, emitted once when the FSM enters that state — never every tick.

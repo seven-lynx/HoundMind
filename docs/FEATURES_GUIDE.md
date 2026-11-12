@@ -194,6 +194,14 @@ filled by one **recency-weighted draw** — not by `random.choice`, and no longe
   `autonomy_interval_s`, and `personality` multiplies those weights (`curiosity` → `explore`,
   `sociability` → `interact`, `activity` → `patrol`/`play`). Modes are registered as
   `<mode>_behavior`; the translation happens in one place, `BehaviorRegistry.pick_mode`.
+- **Energy.** When an `energy_level` reading exists (from `settings.energy` or the optional
+  `energy_emotion` module — both ship off), a reading below `behavior.energy_bias_start` (ships `0.5`)
+  lets the `rest` actions join the `idle` pool and outrank it, saturating at
+  `autonomy_rest_energy_max` (0.35): a tired dog starts to doze off while idle instead of only once
+  autonomy moves it to `rest`. With no reading, `energy_bias_start: 0`, or a reading above the band,
+  the draw is exactly the one described above. There is deliberately no high-energy mirror: `idle` and
+  `play` share no action, so boosting play actions inside `idle` would be config that does nothing,
+  and a refreshed dog reaches the `play` state through autonomy anyway.
 - `behavior.behavior_selection_mode: "sequential"` still applies to the idle *behaviour items*
   (`idle_choices`), which is how a test gets a deterministic order.
 
