@@ -842,6 +842,9 @@
     // =====================================================================
     "led": {
       "enabled": true,
+      // The order is the precedence: the list is walked front to back and the first source with a
+      // live request owns the strip, so "safety" first is a guarantee. Reordering overrides it —
+      // that is the only lever; the numeric priority a producer puts on a request is not read.
       "priority": ["safety", "navigation", "attention", "emotion"],
       "cooldown_s": 0.4,
       "brightness": 0.7,

@@ -720,6 +720,11 @@ _EMOTION = Section(
 _LED = Section(
     fields={
         "enabled": Bool(),
+        # The order *is* the precedence: `led_manager._select_request` walks this list front to back
+        # and the first live request owns the strip, so `safety` first is the §15 guarantee rather
+        # than a coincidence of the default. Reordering is allowed and deliberately overrides that
+        # guarantee — a user who puts `emotion` ahead of `safety` gets what they configured. The
+        # numeric `priority` the producers stamp on a request is not consulted at all.
         "priority": ListOf(
             StrSpec(choices=("safety", "navigation", "attention", "emotion"))
         ),
