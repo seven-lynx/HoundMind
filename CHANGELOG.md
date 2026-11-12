@@ -113,6 +113,12 @@ Current Release: v2026.01.18 • Author: 7Lynx
   "draw from the bucket instead of returning the first entry", at `0.05`). `action_cooldown_s` is
   untouched: it holds every behaviour change including a reaction to touch, so it was never the right
   pacer for variety.
+- The idle pool opens up when the dog is tired: with an `energy_level` reading below
+  `behavior.energy_bias_start` (ships `0.5`), the `rest` actions join `idle` and outrank it, saturating
+  at `autonomy_rest_energy_max` (0.35) — `doze off` and `nod lethargy` become reachable while idle,
+  where before they needed autonomy to switch the state. Inert with no reading, with the band at `0`,
+  and above the band. No high-energy mirror: `idle` and `play` share no action, so it would be config
+  that does nothing.
 - `POST /api/v1/command` accepts any action classified in `config/actions.jsonc`, not only the twelve
   names in `KNOWN_ACTIONS`. A name nothing classifies is still a `400` with a did-you-mean.
 - The interlock judges every class, not only the gaits: `act/gateway.py` returned early for anything

@@ -112,3 +112,68 @@ def test_every_bucket_uses_the_same_weighted_core() -> None:
     library, clock = _library(reuse_cooldown_s=20.0, play_actions=["stretch", "sit", "nod"])
     picks = {library.pick_play_action() for _ in range(50)}
     assert len(picks) == 3, f"the same recency rules apply outside `idle`; saw {picks}"
+
+
+# ---------------------------------------------------------------- the caller's bias (L5)
+# `extra` widens the pool, `bias` reweights it, and both are the caller's business: the library
+# multiplies what it is handed and knows nothing about energy.
+
+REST = ["doze off", "nod lethargy", "lie", "relax neck"]
+
+
+def test_a_bias_shifts_the_draw_towards_the_actions_it_names() -> None:
+    random.seed(17)
+    library, clock = _library()
+    biased = {name: 3.0 for name in ("action_03", "action_07")}
+    picks = [library.pick_idle_action(bias=biased) for _ in range(2000)]
+
+    share = sum(1 for p in picks if p in biased) / len(picks)
+    assert share > 0.25, f"two of fourteen actions at 3x should be well above 14%; got {share:.2f}"
+
+
+def test_a_bias_without_extra_is_inert() -> None:
+    """A key the bucket does not contain cannot invent an action, however large its weight."""
+    random.seed(19)
+    library, clock = _library()
+    picks = {library.pick_idle_action(bias={"doze off": 1000.0}) for _ in range(300)}
+
+    assert picks == set(IDLE)
+
+
+def test_extra_adds_actions_the_bucket_never_had() -> None:
+    random.seed(23)
+    library, clock = _library(idle_actions=["sit", "stand"])
+    picks = [library.pick_idle_action(extra=REST) for _ in range(400)]
+
+    assert {"doze off", "nod lethargy"} <= set(picks), "the rest bucket is reachable from idle"
+    assert {"sit", "stand"} <= set(picks), "the bucket is widened, not replaced"
+
+
+def test_a_zero_bias_cannot_resurrect_a_cooled_down_action() -> None:
+    random.seed(29)
+    library, clock = _library(reuse_cooldown_s=60.0, idle_actions=["sit", "lie"])
+    first = library.pick_idle_action()
+
+    clock["now"] += 1.0
+    assert library.pick_idle_action(bias={first: 0.0}) != first, (
+        "multiplying a recency zero leaves zero, whatever the bias"
+    )
+
+
+def test_no_arguments_reproduces_the_unbiased_draw() -> None:
+    """The default path must be byte-identical to L4, not merely similar."""
+    random.seed(31)
+    plain, plain_clock = _library(reuse_cooldown_s=5.0)
+    plain_picks = []
+    for _ in range(20):
+        plain_picks.append(plain.pick_idle_action())
+        plain_clock["now"] += 1.0
+
+    random.seed(31)
+    explicit, explicit_clock = _library(reuse_cooldown_s=5.0)
+    explicit_picks = []
+    for _ in range(20):
+        explicit_picks.append(explicit.pick_idle_action(extra=(), bias=None))
+        explicit_clock["now"] += 1.0
+
+    assert plain_picks == explicit_picks

@@ -242,6 +242,7 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("emotion", "led_colors", ["blue"]),
     ("led", "brightness", 1.4),
     ("behavior", "behavior_selection_mode", "random"),
+    ("behavior", "energy_bias_start", 1.5),
     ("vision_pi4", "backend", "webcam"),
     ("voice_assistant", "stt", []),
     ("face_recognition", "backend", "magic"),

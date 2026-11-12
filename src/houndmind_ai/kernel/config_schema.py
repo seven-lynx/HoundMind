@@ -794,6 +794,10 @@ _BEHAVIOR = Section(
         # one that keeps a 14-entry bucket from cycling through two of them. 0 disables either.
         "idle_variety_interval_s": _NON_NEGATIVE,
         "action_reuse_cooldown_s": _NON_NEGATIVE,
+        # Energy band (L5): above this reading `idle` draws from its own bucket only; below it, `rest`
+        # actions join the pool and outrank it, saturating at `autonomy_rest_energy_max`. 0 turns the
+        # band off; a config that predates the key gets the 0.5 default.
+        "energy_bias_start": _FRACTION,
         "habituation_enabled": Bool(),
         "habituation_threshold": IntSpec(minimum=1),
         "habituation_recovery_s": _NON_NEGATIVE,
