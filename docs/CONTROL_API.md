@@ -193,8 +193,9 @@ available), not a list of actions.
 3. **`409` is not retried blindly.** `veto: "obstacle"` means retrying makes it worse; `veto: "tilt"`
    needs a human to right the dog and clear the latch; `veto: "mode"` means the runtime is in `rest`.
 4. **Ordering is by priority, not arrival.** `system` > `watchdog` > `client` > `navigation` >
-   `behaviour` (`kernel/commands.py:36`). A `system` command preempts a `client` one, and the
-   preempted client can see it in `actuators.displaced`.
+   `routine` > `behaviour` (`kernel/commands.py:36`). A `system` command preempts a `client` one, and the
+   preempted client can see it in `actuators.displaced`. A `routine` sits just under `navigation`: it
+   yields to whatever is avoiding an obstacle, and overrides idle behaviour.
 
 ---
 
@@ -248,7 +249,7 @@ WS `decision` event (§5) fires only when the *choice* changes, so treat the two
 cadences over the same object.
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
-`navigation`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode
+`navigation`, `routine`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode
 this tick — a client that pressed forward and sees `source: "watchdog"` can tell "someone else is
 driving" from "the dog ignored me". `actuators.veto` carries the reason the last command was refused,
 and `actuators.tilt_latched` reports the latch state the client must surface.

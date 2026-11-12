@@ -155,12 +155,14 @@ def test_rest_allows_only_the_sources_that_can_end_a_motion() -> None:
     assert not mode_allows("rest", Source.CLIENT)
     assert not mode_allows("rest", Source.NAVIGATION)
     assert not mode_allows("rest", Source.BEHAVIOUR)
+    assert not mode_allows("rest", Source.ROUTINE)
 
 
 def test_manual_keeps_autonomy_out_and_the_client_in() -> None:
     assert mode_allows("manual", Source.CLIENT)
     assert not mode_allows("manual", Source.NAVIGATION)
     assert not mode_allows("manual", Source.BEHAVIOUR)
+    assert not mode_allows("manual", Source.ROUTINE)
 
 
 def test_an_unknown_mode_falls_back_to_the_default() -> None:

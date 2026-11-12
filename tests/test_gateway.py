@@ -140,6 +140,33 @@ def test_a_stop_outranks_even_a_higher_source() -> None:
     assert command["source"] == "watchdog"
 
 
+def test_a_routine_outranks_behaviour() -> None:
+    gateway, context = build()
+    ask(context, "sit", Source.BEHAVIOUR)
+    ask(context, "stand", Source.ROUTINE)
+    gateway.tick(context)
+    assert context.get("motion_command")["source"] == "routine"
+
+
+def test_navigation_outranks_a_routine() -> None:
+    """A routine must never walk the dog into what the navigator is avoiding."""
+    gateway, context = build()
+    ask(context, "forward", Source.ROUTINE)
+    ask(context, "turn_left", Source.NAVIGATION)
+    gateway.tick(context)
+    assert context.get("motion_command")["source"] == "navigation"
+
+
+def test_a_watchdog_hold_still_outranks_a_routine() -> None:
+    gateway, context = build()
+    ask(context, "forward", Source.ROUTINE)
+    ask(context, "stop", Source.WATCHDOG)
+    gateway.tick(context)
+    command = context.get("motion_command")
+    assert command["action"] == "stop"
+    assert command["source"] == "watchdog"
+
+
 def test_behaviour_is_lowest_priority() -> None:
     gateway, context = build()
     ask(context, "sit", Source.BEHAVIOUR)
