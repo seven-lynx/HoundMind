@@ -192,6 +192,22 @@ def test_an_entry_beat_accepts_only_the_keys_it_documents() -> None:
     assert paths(problems) == ["config.settings.behavior.state_expressions.alert.actoin"]
 
 
+def test_an_entry_cue_is_a_sound_name() -> None:
+    clean = {"settings": {"behavior": {"state_expressions": {"alert": {"sound": "woohoo"}}}}}
+    assert validate_config_tree(clean) == []
+
+    problems = validate_config_tree(
+        {"settings": {"behavior": {"state_expressions": {"alert": {"sound": 5}}}}}
+    )
+    assert paths(problems) == ["config.settings.behavior.state_expressions.alert.sound"]
+
+
+def test_a_cue_volume_is_a_percentage() -> None:
+    assert validate_config_tree({"settings": {"behavior": {"cue_volume": 60}}}) == []
+    problems = validate_config_tree({"settings": {"behavior": {"cue_volume": 101}}})
+    assert paths(problems) == ["config.settings.behavior.cue_volume"]
+
+
 # ----------------------------------------------------- audited settings sections
 #
 # One row per covered section: a value of the wrong type must be rejected at load. The point

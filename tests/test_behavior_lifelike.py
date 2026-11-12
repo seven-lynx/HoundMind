@@ -161,3 +161,111 @@ def test_a_beat_never_displaces_a_step():
 def test_a_malformed_entry_is_no_beat(entry):
     mod = BehaviorModule("behavior", enabled=True)
     assert mod._entry_beat({"state_expressions": {"alert": entry}}, BehaviorState.ALERT, "bark") is None
+
+
+CUE_SOUNDS = ["single_bark_1", "woohoo", "pant", "snoring"]
+
+
+def test_the_entry_command_carries_the_beat_and_its_cue(monkeypatch):
+    """One command, one tick: the cue rides the beat instead of competing with it for the source."""
+    mod, ctx, board = _module(
+        monkeypatch,
+        state_expressions={"alert": {"action": "head_up_down", "sound": "single_bark_1"}},
+        cue_sounds=CUE_SOUNDS,
+        cue_volume=55,
+    )
+    ctx.set("perception", {"touch": "P"})
+    mod.tick(ctx)
+
+    command = board.find(Source.BEHAVIOUR)
+    assert command.action == "head_up_down"
+    assert command.params == {"cue": {"name": "single_bark_1", "volume": 55}}
+
+
+def test_quiet_mode_drops_the_cue_and_keeps_the_beat(monkeypatch):
+    mod, ctx, board = _module(
+        monkeypatch,
+        state_expressions={"alert": {"action": "head_up_down", "sound": "single_bark_1"}},
+        cue_sounds=CUE_SOUNDS,
+    )
+    ctx.set("quiet_mode_active", True)
+    ctx.set("perception", {"touch": "P"})
+    mod.tick(ctx)
+
+    command = board.find(Source.BEHAVIOUR)
+    assert command.action == "head_up_down"
+    assert "cue" not in command.params
+
+
+def test_a_cue_rides_a_locomotion_command_without_displacing_it(monkeypatch):
+    """A cue belongs to the transition, not to the beat — and it must never cost the step it rides.
+
+    `autonomy_modes` cannot reach `patrol` today (#82), so the locomotion entry is staged through the
+    override path: it resolves `patrol_behavior`, which publishes a step rather than a posture.
+    """
+    mod, ctx, board = _module(
+        monkeypatch,
+        catalog={"rest": ["lie"], "patrol": ["forward"]},
+        state_expressions={"idle": {"sound": "pant"}},
+        cue_sounds=CUE_SOUNDS,
+    )
+    ctx.set("energy_level", 0.1)
+    mod.tick(ctx)
+    assert mod.state is BehaviorState.REST
+
+    ctx.set("behavior_override", "patrol_behavior")
+    mod.tick(ctx)
+
+    assert mod.state is BehaviorState.IDLE
+    command = board.find(Source.BEHAVIOUR)
+    assert command.action == "forward"
+    assert command.params == {"cue": {"name": "pant", "volume": 60}}
+
+
+def test_a_cue_outside_the_advisory_list_is_warned_once_and_still_played(caplog):
+    mod = BehaviorModule("behavior", enabled=True)
+    settings = {
+        "state_expressions": {"alert": {"sound": "custom_woof"}},
+        "cue_sounds": CUE_SOUNDS,
+    }
+    with caplog.at_level("WARNING"):
+        first = mod._entry_cue(settings, BehaviorState.ALERT, False)
+        second = mod._entry_cue(settings, BehaviorState.ALERT, False)
+
+    assert first == second == {"name": "custom_woof", "volume": 60}
+    warnings = [r for r in caplog.records if "custom_woof" in r.getMessage()]
+    assert len(warnings) == 1, "the advisory list is a hint, warned once per name"
+
+
+def test_the_cue_volume_is_defaulted_and_clamped():
+    mod = BehaviorModule("behavior", enabled=True)
+
+    def cue(**behavior) -> dict | None:
+        settings = {"state_expressions": {"alert": {"sound": "woohoo"}}}
+        settings.update(behavior)
+        return mod._entry_cue(settings, BehaviorState.ALERT, False)
+
+    assert cue()["volume"] == 60
+    assert cue(cue_volume=500)["volume"] == 100
+    assert cue(cue_volume=-5)["volume"] == 0
+    assert cue(cue_volume="loud")["volume"] == 60
+
+
+def test_a_beat_without_a_cue_publishes_no_params(monkeypatch):
+    mod, ctx, board = _module(
+        monkeypatch,
+        state_expressions={"alert": {"action": "head_up_down"}},
+        cue_sounds=CUE_SOUNDS,
+    )
+    ctx.set("perception", {"touch": "P"})
+    mod.tick(ctx)
+    assert board.find(Source.BEHAVIOUR).params == {}
+
+
+@pytest.mark.parametrize(
+    "entry", ["woohoo", {}, {"sound": ""}, {"sound": None}, {"sound": 5}]
+)
+def test_a_malformed_cue_is_no_cue(entry):
+    mod = BehaviorModule("behavior", enabled=True)
+    assert mod._entry_cue({"state_expressions": {"alert": entry}}, BehaviorState.ALERT, False) is None
+

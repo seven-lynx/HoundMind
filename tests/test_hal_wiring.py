@@ -170,6 +170,73 @@ def test_motors_disable_themselves_without_a_hal() -> None:
     assert module.status.disabled_reason == "no HAL available"
 
 
+def _motors_context() -> DummyContext:
+    """Real settings, minus the 200 ms action interval: these tests count steps, not pace."""
+    settings = load_config().settings
+    settings["motors"] = {**settings.get("motors", {}), "min_action_interval_s": 0.0}
+    return DummyContext(settings)
+
+
+def _motor_path(ctx: DummyContext, hal: FakeDogHAL) -> tuple[MotionGatewayModule, MotorModule]:
+    HalModule("hal", hal=hal).start(ctx)
+    publish_reading(ctx, hal)
+    motors = MotorModule("hal_motors")
+    motors.start(ctx)
+    gateway = MotionGatewayModule("motion_gateway")
+    ctx.set("intent_board", gateway.board)
+    return gateway, motors
+
+
+def test_a_cue_reaches_the_sound_path_and_not_the_vendor_call() -> None:
+    """A cue is the behaviour layer's annotation: it is played, and stripped before the action."""
+    hal = FakeDogHAL()
+    ctx = _motors_context()
+    gateway, motors = _motor_path(ctx, hal)
+    gateway.board.publish(
+        "wag_tail", Source.BEHAVIOUR, {"cue": {"name": "woohoo", "volume": 60}}
+    )
+
+    gateway.tick(ctx)
+    motors.tick(ctx)
+
+    assert hal.sounds == [("woohoo", 60)]
+    assert ("wag_tail", {}) in hal.calls, hal.calls
+
+
+def test_a_live_slot_plays_its_cue_once() -> None:
+    """An intent lives for its TTL, so the same command arrives on several ticks — one sound."""
+    hal = FakeDogHAL()
+    ctx = _motors_context()
+    gateway, motors = _motor_path(ctx, hal)
+    gateway.board.publish(
+        "wag_tail", Source.BEHAVIOUR, {"cue": {"name": "woohoo", "volume": 60}}
+    )
+
+    for _ in range(3):
+        gateway.tick(ctx)
+        motors.tick(ctx)
+
+    assert hal.sounds == [("woohoo", 60)]
+
+
+def test_a_cue_never_turns_a_repeat_into_a_second_step() -> None:
+    """The cue is excluded from the action fingerprint: announcing an entry is not a new step."""
+    hal = FakeDogHAL()
+    hal.set_distance(200.0)
+    ctx = _motors_context()
+    gateway, motors = _motor_path(ctx, hal)
+    gateway.board.publish("forward", Source.NAVIGATION, {"cue": {"name": "pant", "volume": 60}})
+    gateway.tick(ctx)
+    motors.tick(ctx)
+
+    gateway.board.publish("forward", Source.NAVIGATION)
+    gateway.tick(ctx)
+    motors.tick(ctx)
+
+    steps = [params for name, params in hal.calls if name == "forward"]
+    assert steps == [{}], steps
+
+
 def test_the_sensor_snapshot_carries_the_imu_and_sound_fields() -> None:
     """`SensorReading` consumers read `.acc`/`.gyro`/`.sound_detected`; the boundary must carry them."""
     hal = FakeDogHAL()
