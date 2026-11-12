@@ -38,6 +38,7 @@ from houndmind_ai.kernel.commands import (
     Verdict,
     canonical_action,
 )
+from houndmind_ai.kernel.decisions import DecisionRing
 from houndmind_ai.services.auth import (
     AuthError,
     Authorizer,
@@ -627,6 +628,33 @@ async def _history(request: web.Request) -> web.Response:
     )
 
 
+async def _decisions(request: web.Request) -> web.Response:
+    """The decision feed: one record per tick, oldest first (§4.2 of the design).
+
+    A missing ring answers 503 rather than an empty list. `modules.decision_log.enabled: false` and
+    "the dog has not decided anything yet" would otherwise look identical, and only one of them is
+    worth a bug report.
+    """
+    limit = request.query.get("limit", "50")
+    try:
+        count = max(1, min(int(limit), 200))
+    except (TypeError, ValueError):
+        raise AuthError("bad_request", "limit must be an integer", status=400) from None
+    ring = _plane(request).context.get("decision_ring")
+    if not isinstance(ring, DecisionRing):
+        return web.json_response(
+            {
+                "error": "unavailable",
+                "detail": "the decision feed is not running; enable modules.decision_log",
+            },
+            status=503,
+        )
+    records = ring.recent(count)
+    return web.json_response(
+        {"decisions": [record.to_dict() for record in records], "count": len(records)}
+    )
+
+
 async def _logs(request: web.Request) -> web.Response:
     plane = _plane(request)
     tail = request.query.get("tail")
@@ -704,6 +732,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/state", "state:read", _state),
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
+    ("GET", "/decisions", "state:read", _decisions),
     ("GET", "/events", None, _events),
     ("GET", "/camera/stream", None, _camera_stream),
     ("GET", "/camera/snapshot", None, _camera_snapshot),

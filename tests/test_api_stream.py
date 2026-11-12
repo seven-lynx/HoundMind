@@ -13,6 +13,7 @@ from aiohttp import WSMsgType
 from aiohttp.test_utils import TestClient, TestServer
 
 from houndmind_ai.kernel.commands import CommandBus
+from houndmind_ai.kernel.decisions import DecisionRecord
 from houndmind_ai.services.api import API_PREFIX, ControlPlane, create_app
 from houndmind_ai.services.settings import ApiSettings
 
@@ -139,5 +140,82 @@ def test_a_second_socket_with_the_same_token_evicts_the_first(tmp_path) -> None:
             await until(second, "welcome")
 
         assert evicted["error"] == "superseded"
+
+    asyncio.run(scenario())
+
+
+async def until_event(ws, name: str, timeout: float = 5.0) -> dict:
+    """Read until the named `event` arrives, skipping state frames and other events."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        assert remaining > 0, f"no '{name}' event arrived in {timeout}s"
+        frame = await asyncio.wait_for(ws.receive_json(), timeout=remaining)
+        if frame.get("type") == "event" and frame.get("data", {}).get("name") == name:
+            return frame
+
+
+def event_names(frames: list[dict]) -> list[str]:
+    return [frame["data"]["name"] for frame in frames if frame.get("type") == "event"]
+
+
+def test_a_new_choice_is_published_as_a_decision_event(tmp_path) -> None:
+    """The pump is the only producer, so the event has to come from it, not from a module."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            ws = await client.ws_connect(f"{API_PREFIX}/events")
+            await ws.send_json({"type": "hello", "token": plane.tokens.ensure()})
+            await until(ws, "welcome")
+
+            plane.context.set(
+                "decision_record",
+                DecisionRecord(ts=1.0, mode="patrol", intent="forward", source="navigation"),
+            )
+            event = await until_event(ws, "decision")
+            await ws.close()
+
+        assert event["data"]["data"]["intent"] == "forward"
+        assert event["data"]["data"]["ts"] == 1.0
+
+    asyncio.run(scenario())
+
+
+def test_a_new_reading_does_not_emit_a_second_decision_event(tmp_path) -> None:
+    """A moved sensor is not a decision. Ten events a second would break the never-drop rule."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            ws = await client.ws_connect(f"{API_PREFIX}/events")
+            await ws.send_json({"type": "hello", "token": plane.tokens.ensure()})
+            await until(ws, "welcome")
+
+            plane.context.set(
+                "decision_record",
+                DecisionRecord(ts=1.0, mode="patrol", intent="forward", source="navigation"),
+            )
+            await until_event(ws, "decision")
+
+            # Same choice, next tick, a different reading.
+            plane.context.set(
+                "decision_record",
+                DecisionRecord(
+                    ts=2.0,
+                    mode="patrol",
+                    intent="forward",
+                    source="navigation",
+                    inputs={"distance_cm": 20.0, "distance_valid": True},
+                ),
+            )
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 0.4
+            frames: list[dict] = []
+            while loop.time() < deadline:
+                frames.append(await asyncio.wait_for(ws.receive_json(), timeout=1.0))
+            await ws.close()
+
+        assert "decision" not in event_names(frames)
+        assert any(frame.get("type") == "state" for frame in frames), "the pump kept running"
 
     asyncio.run(scenario())

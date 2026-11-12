@@ -123,6 +123,8 @@ def test_the_device_token_reaches_every_read_route(tmp_path) -> None:
         skipped = ("/command", "/stop", "/mode", "/pair", "/events", "/camera/stream")
         # `/logs` is honestly 503 when no log file exists, which is the case in a test process.
         skipped += ("/camera/snapshot", "/logs")
+        # `/decisions` is honestly 503 when nothing is publishing the ring (no runtime here).
+        skipped += ("/decisions",)
         async with TestClient(TestServer(create_app(plane))) as client:
             for method, path, _scope, _handler in ROUTES:
                 if method != "GET" or path in skipped:
