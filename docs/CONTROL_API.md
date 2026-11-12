@@ -62,6 +62,7 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see §4) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params (§3) |
+| `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress (§3) |
 | `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first (§4); 503 when the feed is not running |
 | `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream (§5) |
 | `GET` | `/api/v1/camera/stream` | `state:read` (`?token=`) | MJPEG, multipart/x-mixed-replace |
@@ -69,7 +70,8 @@ routes, because an `<img>` tag cannot set a header; those routes require `state:
 | `POST` | `/api/v1/pair` | none | exchange a pairing code for a client token |
 | `POST` | `/api/v1/pair/open` | `admin` | open a pairing window; returns the 6-digit code |
 | `POST` | `/api/v1/command` | `move` | issue a command (§3) |
-| `POST` | `/api/v1/stop` | `move` | unconditional stop; never vetoed, never queued |
+| `POST` | `/api/v1/stop` | `move` | unconditional stop; never vetoed, never queued, and it ends a running routine |
+| `POST` | `/api/v1/routines/{id}/run` | `move` | start one routine; optional `{"dry_run": true}` (§3) |
 | `GET` | `/api/v1/mode` | `state:read` | current mode |
 | `POST` | `/api/v1/mode` | `move` | switch `idle` \| `patrol` \| `manual` \| `rest` |
 | `GET` | `/api/v1/config` | `config` | effective config, secrets redacted |
@@ -180,8 +182,8 @@ from a command until it is added to `config/actions.jsonc`. `null` is never a gu
 Producers and the catalog spell motion with spaces (`"turn left"`, `"wag tail"`); the vocabulary is
 underscored, and `kernel/commands.py::canonical_action` is the only translation. A client that wants
 the raw catalog still reads `config/actions.jsonc` from the repository — `GET /meta`'s `capabilities`
-is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus `camera` and `pairing` when
-available), not a list of actions.
+is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus `camera`, `pairing` and
+`routines` when available), not a list of actions.
 
 ### Semantics the client must respect
 
@@ -189,13 +191,66 @@ available), not a list of actions.
    every `ttl_ms`. If the app dies, the dog stops — and the deadman starts when the device received
    the command, so a command that sat in a tunnel does not run when it finally arrives.
 2. **`POST /stop` is never refused** and bypasses the queue. The UI must always have it reachable, and
-   must call it on `onPause`/`onStop`.
+   must call it on `onPause`/`onStop`. It ends a running routine too, so a stop is a stop.
 3. **`409` is not retried blindly.** `veto: "obstacle"` means retrying makes it worse; `veto: "tilt"`
    needs a human to right the dog and clear the latch; `veto: "mode"` means the runtime is in `rest`.
 4. **Ordering is by priority, not arrival.** `system` > `watchdog` > `client` > `navigation` >
    `routine` > `behaviour` (`kernel/commands.py:36`). A `system` command preempts a `client` one, and the
    preempted client can see it in `actuators.displaced`. A `routine` sits just under `navigation`: it
    yields to whatever is avoiding an obstacle, and overrides idle behaviour.
+
+### Routines
+
+A routine is a JSON file of steps the runner loaded at boot — one file per routine, from
+`settings.routines.dir` (`FEATURES_GUIDE.md` §7). These routes expose what the dog **loaded**, not
+what is on disk right now: a file added since boot appears after a restart, and a file the validator
+refused is listed with the reason instead of being hidden.
+
+`GET /api/v1/routines` — `state:read`:
+
+```json
+{
+  "directory": "/home/pi/.houndmind/routines",
+  "routines": [
+    { "id": "morning_greeting", "name": "Morning greeting", "version": 1,
+      "allow_locomotion": false,
+      "steps": [ { "action": "sound", "params": { "name": "woohoo" } }, { "action": "sit" } ] }
+  ],
+  "refusals": {
+    "broken.json": [ { "path": "routine.steps[0].action",
+                       "message": "'sitt' is not in the repertoire; …", "hint": "sit" } ]
+  },
+  "current": { "id": "morning_greeting", "name": "Morning greeting", "index": 1, "total": 2,
+               "state": "running", "dry_run": false, "action": "sit", "veto": null,
+               "detail": null, "started_at": 1762771200.31 }
+}
+```
+
+`current` is `null` before the first run and keeps the last run afterwards. `state` is `running`,
+`done`, `stopped` or `refused`; a refused run names its `veto` (`obstacle`, `tilt`, `mode`,
+`precedence`, …) in the same vocabulary as `motion_verdict`. `503` means no runner is loaded.
+
+`POST /api/v1/routines/{id}/run` — `move`. The body is optional; its only field is `dry_run`:
+
+```json
+{ "dry_run": true }     // walk the steps without publishing one: counters move, servos do not
+```
+
+**`202 Accepted`** — queued for the runner's next tick, which publishes one step per tick:
+
+```json
+{ "accepted": true, "id": "morning_greeting", "dry_run": false, "steps": 2 }
+```
+
+- **`400`** — `dry_run` was not a real boolean (`"true"` is refused, never coerced).
+- **`404`** — no routine by that id was loaded; `suggestion` carries the closest name.
+- **`409`** — a run is in progress, or a request is already queued for the next tick; `current` is
+  the run that blocked it.
+- **`503`** — no routine runner is loaded.
+
+Every step is published as a `routine` intent, so each one passes the mode gate and the interlock;
+a run that is refused **stops** there rather than skipping the step, because a routine that half-runs
+is worse than one that never starts. `POST /api/v1/stop` ends the run as well as the motion.
 
 ---
 
