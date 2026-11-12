@@ -9,6 +9,22 @@ Current Release: v2026.01.18 • Author: 7Lynx
 
 ## [Unreleased]
 
+- **`DELETE /api/v1/people/{id}`** (`admin`): forgets one person — the embeddings, the reference images
+  and the trained model, not just the name, because an LBPH model built from images you deleted still
+  recognises the person. A `404` on a second call, never a silent success; `503` when no identity module
+  is running. `id` is matched by slug against every raw name, so two enrolments that slug alike are one
+  delete. With the last person gone the model is removed and LBPH is left untrained: faces are still
+  detected, nobody is named. This is the design's *"Deletable"* requirement — see `docs/CONTROL_API.md`
+  §9, which also states plainly that thumbnails do not exist and are therefore not removed.
+- **Face data moved to `~/.houndmind/face/`** (fixes #104): `settings.face_recognition`'s
+  `embeddings_path` and the three `lbph` paths were inside the install tree, where the service user may
+  not be able to write and a reinstall takes enrolled people with it. `_resolve_path` now expands `~`
+  the way `PlaceStore` does. Notes: an existing `data/face_*` directory is **not** migrated and is no
+  longer read — identity has never shipped enabled, so remove it by hand or re-enrol.
+- **An identity mutation is safe across threads**: the control plane runs on its own thread
+  (`services/module.py:73`), so `optional/face_recognition.py` takes one lock to keep
+  `_known_names`/`_known_embeddings` a consistent pair for the detector and to make a forget atomic
+  against a frame in flight. Reads snapshot under the lock and never hold it across dlib or cv2.
 - **`GET /api/v1/people`** (`admin`): who the dog has been taught, as `[{id, name}]` where `id` is the
   slug of the name — the rule places already follow, so two enrollments under one name are one person.
   Nothing biometric is in the response: no embedding, no dataset image, no box, only the `path` of the
