@@ -49,6 +49,17 @@ Current Release: v2026.01.18 • Author: 7Lynx
   `social_decay_s`. It ships dark: `modules.face_recognition` is still `enabled: false`, so with the
   shipped config occupancy is unknown and the bias is inert — enabling presence is a config change,
   not a consequence of updating.
+- **Identity stays off a Pi 4** (`tests/test_imports.py`): "a Pi 4 run imports no dlib" is now
+  structural rather than inspection. An AST guard fails on any module-scope import of `pidog`,
+  `robot_hat`, `vilib`, `dlib`, `cv2` and friends in `hal/` or `optional/` — including one hidden
+  inside a `try/except`, which is the shape that loads dlib on a Pi and stays invisible on CI — and a
+  `sys.modules` check proves that constructing the runtime loads none of them.
+- **A missing wheel is a reason, not silence** (`optional/face_recognition.py`): enrolment and
+  detection used to `return` on `ImportError` with nothing logged and nothing reported, so a saved face
+  could be a file that was never written. Both now `disable("missing dependency: face_recognition …")`.
+  The face payload also carries the **frame's own capture time** (`vision_frame_ts`) instead of the
+  detector's tick, which is the value `settings.perception.occupancy` measures staleness against — a
+  frozen frame ages out now instead of reading as presence for ever.
 - The source of that occupancy is the design's missing half, tracked in `#96`: §5.4 promises a drive
   set (energy, curiosity, social) and only the energy *band* ever landed, so `social` here is a bias
   on an existing weight table rather than a drive.

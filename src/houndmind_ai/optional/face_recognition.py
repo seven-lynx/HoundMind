@@ -167,8 +167,15 @@ class FaceRecognitionModule(Module):
         context.set("faces", self._wrap_faces(context, detections))
 
     def _wrap_faces(self, context, detections: list[dict[str, Any]]) -> dict[str, Any]:
+        # The frame's own time when the producer stamps one (`vision_pi4.py:172`), because
+        # `settings.perception.occupancy` measures staleness against this value: a frozen frame has
+        # to age even while this module keeps ticking on it. Without one, the tick is the worse
+        # answer but still an answer (P4 PL4).
+        stamp = context.get("vision_frame_ts")
+        if stamp is None:
+            stamp = context.get("tick_ts")
         return {
-            "timestamp": context.get("tick_ts"),
+            "timestamp": stamp,
             "backend": self.backend,
             "detected": detections,
         }
@@ -211,7 +218,10 @@ class FaceRecognitionModule(Module):
     def _detect_face_recognition(self, frame, settings: dict) -> list[dict[str, Any]]:
         try:
             import face_recognition  # type: ignore
-        except Exception:
+        except ImportError as exc:
+            # An empty list is a claim that nobody is in frame; this module cannot make that claim
+            # when the wheel behind it is gone (`start` normally catches this first, PL4).
+            self.disable(f"missing dependency: face_recognition ({exc})")
             return []
 
         rgb = frame[:, :, ::-1]
@@ -328,7 +338,10 @@ class FaceRecognitionModule(Module):
     def _enroll_face_recognition(self, name: str, frame, settings: dict) -> None:
         try:
             import face_recognition  # type: ignore
-        except Exception:
+        except ImportError as exc:
+            # Returning here used to mean "enrolled" from the caller's side with no file written:
+            # a missing wheel is a module that cannot do its job, not a silent no-op (P4 PL4).
+            self.disable(f"missing dependency: face_recognition ({exc})")
             return
 
         rgb = frame[:, :, ::-1]

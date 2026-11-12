@@ -602,6 +602,22 @@ The legacy port-8088 server is gone: `/status` is now `GET /api/v1/modules`, `/f
 `GET /api/v1/state`, and enrollment has no v1 route yet. `python -m tools.face_recognition_cli`
 was deleted with the port.
 
+**It needs a frame, and only §21 publishes one.** `vision_frame` comes from
+`modules.vision_pi4`, so this detector is Pi 4/5-only: the Pi 3 `modules.vision` path starts Vilib
+and publishes no `vision_frame` at all (#98), which means the detector finds nothing to look at and
+publishes nothing — not "nobody there".
+
+**What it publishes.** `faces` = `{timestamp, backend, detected}`. `timestamp` is the **frame's own
+capture time** (`vision_frame_ts` from §21), falling back to the tick only when a producer does not
+stamp its frames. That distinction is load-bearing for §3's occupancy: a frozen frame has to age,
+or a dead camera reads as a person standing there for ever.
+
+**A missing wheel is a disabled module with a reason.** The `face_recognition` (dlib) backend needs
+a wheel that is not on PyPI; when it is absent the module logs
+`missing dependency: face_recognition` into `disabled_reason` instead of failing at enrolment or
+reporting an empty room. Nothing is imported at module scope, which
+`tests/test_imports.py::test_no_vendor_wheel_is_imported_at_module_scope` enforces.
+
 **Disable:** `modules.face_recognition.enabled = false`
 
 ---
