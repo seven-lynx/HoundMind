@@ -130,6 +130,8 @@ def test_the_device_token_reaches_every_read_route(tmp_path) -> None:
         skipped += ("/decisions",)
         # `/routines` is honestly 503 when no routine runner is loaded (no runtime here either).
         skipped += ("/routines",)
+        # `/places` is honestly 503 when no place navigator has published its store (same reason).
+        skipped += ("/places",)
         async with TestClient(TestServer(create_app(plane))) as client:
             for method, path, _scope, _handler in ROUTES:
                 if method != "GET" or path in skipped:

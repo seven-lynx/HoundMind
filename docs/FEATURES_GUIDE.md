@@ -177,9 +177,18 @@ global path plan, which is why the stored pose is a bearing and a range.
   a trip makes (`visits + 1`, confidence up by `confidence_step`). A goal that cannot get there — a
   wall, a veto, a timer — ends as `abandoned` with its reason and, if a confidence was ever measured,
   a decay instead of a rise.
-- `GET`/`POST`/`DELETE /api/v1/places` is not wired yet; the file and the `place_request` context key
-  are the interface today, and `kernel/place_store.py` plus `navigation/place_navigator.py` are what
-  own them.
+- **The HTTP surface is `/api/v1/places`** (`docs/CONTROL_API.md` §8): `GET` lists the catalogue and
+  the walk in progress, `POST` creates one (a refused body comes back as `400` with `problems[]`),
+  `DELETE /{id}` forgets one by id or name, and `POST /{id}/go` asks for a walk. The last one writes
+  `place_request` for the next tick — the route asks, the navigator decides — so a client that gets
+  `202` should read `goal` from `GET /places` for the navigator's answer, which is also where
+  `anchor_mismatch` and the other refusals appear. All four answer `503` when
+  `modules.place_navigator.enabled` is off, because nothing then owns the file.
+- **One store, one lock.** The navigator builds the store and publishes it as the `place_store`
+  context key; the routes write through that instance. Two writers touch `places.json` — an arrival on
+  the tick thread, a create or delete on the event loop — so `add`, `remove` and `record_visit` hold a
+  lock across their read-modify-write pair (`kernel/place_store.py`). A second store over the same
+  path would be a second writer holding a second lock.
 
 ---
 

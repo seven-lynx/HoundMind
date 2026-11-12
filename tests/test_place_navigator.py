@@ -375,3 +375,18 @@ def test_a_place_intent_is_admitted_in_the_autonomy_modes_only() -> None:
     assert mode_allows("patrol", Source.PLACE)
     assert mode_allows("manual", Source.PLACE)
     assert not mode_allows("rest", Source.PLACE)
+
+
+def test_the_store_is_published_for_the_control_plane(tmp_path: Path) -> None:
+    """PL5's routes write through *this* instance or not at all.
+
+    `PlaceStore` guards its read-modify-write pairs with a per-instance lock, so the API building its
+    own store over the same path would be a second writer with a second lock — the lost update the
+    lock is there to prevent. The navigator publishes the one store, and takes it away when it stops.
+    """
+    rig = Rig(tmp_path / "places.json")
+    assert rig.context.get("place_store") is rig.navigator.store
+
+    rig.navigator.stop(rig.context)
+    assert rig.context.get("place_store") is None
+

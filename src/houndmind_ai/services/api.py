@@ -40,6 +40,7 @@ from houndmind_ai.kernel.commands import (
 )
 from houndmind_ai.kernel.config_schema import Problem
 from houndmind_ai.kernel.decisions import DecisionRing
+from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.kernel.routine_store import StoreReport
 from houndmind_ai.services.auth import (
     AuthError,
@@ -672,6 +673,183 @@ async def _routine_run(request: web.Request) -> web.Response:
     )
 
 
+# ------------------------------------------------------------------ places (P4 PL5)
+
+
+def _place_store(plane: ControlPlane) -> PlaceStore | None:
+    """The one store the navigator published, or `None` when nothing owns the file.
+
+    The API does not build one of its own. `PlaceStore` locks its read-modify-write pairs per
+    instance (`kernel/place_store.py`), so a second store over the same path would be a second
+    writer holding a second lock — the lost update that lock exists to prevent.
+    """
+    store = plane.context.get("place_store")
+    return store if isinstance(store, PlaceStore) else None
+
+
+def _no_places() -> web.Response:
+    """503, not an empty catalogue: "nothing is defined yet" and "nothing is running" differ."""
+    return web.json_response(
+        {
+            "error": "unavailable",
+            "detail": "the place navigator is not running; enable modules.place_navigator",
+        },
+        status=503,
+    )
+
+
+def _bad_place(detail: str) -> web.Response:
+    return web.json_response({"error": "bad_request", "detail": detail}, status=400)
+
+
+def _number(value: object) -> float | None:
+    """A JSON number, or `None`. `bool` is an `int` in Python, so `true` would arrive as 1.0.
+
+    The same trap `POST /routines/{id}/run` closes for `dry_run`, where the *string* `"false"` is
+    truthy and would start a real run for a client that asked for a rehearsal.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _place_not_found(store: PlaceStore, wanted: str, detail: str) -> web.Response:
+    matches = get_close_matches(wanted, list(store.load().ids()), n=1)
+    return web.json_response(
+        {"error": "not_found", "detail": detail, "suggestion": matches[0] if matches else None},
+        status=404,
+    )
+
+
+async def _places_list(request: web.Request) -> web.Response:
+    """The catalogue, whatever the file refused, and the walk in progress."""
+    plane = _plane(request)
+    store = _place_store(plane)
+    if store is None:
+        return _no_places()
+    report = store.load()
+    return web.json_response(
+        {
+            "path": str(report.path),
+            "places": [place.to_dict() for place in report.places],
+            "refusals": [_problem_dict(problem) for problem in report.refusals],
+            "goal": plane.context.get("place_goal"),
+        }
+    )
+
+
+async def _places_create(request: web.Request) -> web.Response:
+    """Create one place. The store owns the rules; this owns the JSON types it was handed.
+
+    A duplicate name, a heading outside the range, a name with no usable characters and the
+    catalogue limit are all `Problem`s from `PlaceStore.add` — which `place_store.py` writes for a
+    client to show a user — so they become a 400 body rather than a second set of rules kept in
+    step by hand.
+    """
+    plane = _plane(request)
+    store = _place_store(plane)
+    if store is None:
+        return _no_places()
+
+    body = await _json_body(request)
+    name = body.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return _bad_place("name must be a non-empty string")
+    heading = _number(body.get("heading_deg"))
+    if heading is None:
+        return _bad_place("heading_deg must be a number")
+    distance = _number(body.get("distance_cm"))
+    if distance is None:
+        return _bad_place("distance_cm must be a number")
+    anchor = body.get("anchor", "")
+    if not isinstance(anchor, str):
+        return _bad_place("anchor must be a string")
+    raw_confidence = body.get("confidence")
+    confidence = None if raw_confidence is None else _number(raw_confidence)
+    if raw_confidence is not None and confidence is None:
+        return _bad_place("confidence must be a number or null")
+
+    place, problems = store.add(
+        name,
+        heading_deg=heading,
+        distance_cm=distance,
+        anchor=anchor,
+        confidence=confidence,
+    )
+    if place is None:
+        return web.json_response(
+            {
+                "error": "bad_request",
+                "detail": "the place was refused",
+                "problems": [_problem_dict(problem) for problem in problems],
+            },
+            status=400,
+        )
+    return web.json_response({"place": place.to_dict()}, status=201)
+
+
+async def _place_delete(request: web.Request) -> web.Response:
+    """Forget one place. A second call is a 404, never a silent success (P4 PL6)."""
+    plane = _plane(request)
+    store = _place_store(plane)
+    if store is None:
+        return _no_places()
+    wanted = str(request.match_info.get("id") or "").strip()
+    removed, problems = store.remove(wanted)
+    if removed is None:
+        detail = problems[0].message if problems else f"no place with id or name {wanted!r}"
+        return _place_not_found(store, wanted, detail)
+    return web.json_response({"removed": removed.to_dict(), "path": str(store.path)})
+
+
+async def _place_go(request: web.Request) -> web.Response:
+    """Ask the navigator to walk to one place. The API asks; the navigator and the interlock decide.
+
+    The request is written for the next tick, exactly like `POST /routines/{id}/run`: every check
+    happens before the write and nothing awaits between them. Whether the dog actually sets off —
+    the anchor confirmation, a missing heading, a veto — is the navigator's answer, published on
+    `place_goal` and readable at `GET /places`.
+    """
+    plane = _plane(request)
+    store = _place_store(plane)
+    if store is None:
+        return _no_places()
+
+    wanted = str(request.match_info.get("id") or "").strip()
+    report = store.load()
+    place = report.get(wanted) or report.by_name(wanted)
+    if place is None:
+        return _place_not_found(store, wanted, f"no place with id or name {wanted!r}")
+
+    body = await _optional_json_body(request)
+    at_anchor = body.get("at_anchor", False)
+    if not isinstance(at_anchor, bool):
+        # The string "false" is truthy, and this flag decides whether a walk across the room is
+        # allowed to start. Same trap, same answer as `dry_run`.
+        return _bad_place("at_anchor must be true or false")
+
+    goal = plane.context.get("place_goal")
+    # `"travelling"` is `navigation/place_navigator.py`'s own word for a walk in progress. Compared
+    # as a string on purpose: `services` may not import `navigation`, the same reason
+    # `_routine_state` reads `RoutineRun.to_dict` duck-typed instead of importing `behavior`.
+    travelling = isinstance(goal, dict) and goal.get("state") == "travelling"
+    if travelling or plane.context.get("place_request") is not None:
+        return web.json_response(
+            {
+                "error": "conflict",
+                "detail": "a walk to a place is already in flight",
+                "current": goal,
+            },
+            status=409,
+        )
+
+    plane.context.set("place_request", {"id": place.id, "at_anchor": at_anchor})
+    return web.json_response(
+        {"accepted": True, "id": place.id, "name": place.name, "at_anchor": at_anchor},
+        status=202,
+    )
+
+
 def _header_token(request: web.Request) -> str | None:
     header = request.headers.get("Authorization") or ""
     parts = header.split(None, 1)
@@ -861,6 +1039,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/routines", "state:read", _routines_list),
+    ("GET", "/places", "state:read", _places_list),
     ("GET", "/decisions", "state:read", _decisions),
     ("GET", "/events", None, _events),
     ("GET", "/camera/stream", None, _camera_stream),
@@ -870,6 +1049,9 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("POST", "/command", "move", _command),
     ("POST", "/stop", "move", _stop),
     ("POST", "/routines/{id}/run", "move", _routine_run),
+    ("POST", "/places", "config", _places_create),
+    ("DELETE", "/places/{id}", "config", _place_delete),
+    ("POST", "/places/{id}/go", "move", _place_go),
     ("GET", "/mode", "state:read", _mode_get),
     ("POST", "/mode", "move", _mode_post),
     ("GET", "/config", "config", _config_get),
