@@ -10,8 +10,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from houndmind_ai.act.gateway import MotionGatewayModule
+from houndmind_ai.act.interlock import Interlock
 from houndmind_ai.core.runtime import RuntimeContext
+from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.kernel.decisions import DecisionRecord
+from houndmind_ai.kernel.intents import IntentBoard
 from houndmind_ai.logging.decision_log import DecisionLogModule
 
 
@@ -146,3 +150,24 @@ def test_zero_cap_disables_rotation(tmp_path: Path):
     DecisionLogModule._rotate_if_needed(path, {"decision_log_max_mb": 0})
     assert not path.with_suffix(path.suffix + ".1").exists()
     assert path.exists()
+
+
+def test_the_ring_accepts_what_the_gateway_actually_publishes():
+    """Every other test here builds its own record; this one uses the real producer."""
+    context = RuntimeContext()
+    context.set("settings", {"logging": {}})
+    gateway = MotionGatewayModule(
+        "motion_gateway", interlock=Interlock(), bus=CommandBus(), board=IntentBoard()
+    )
+    gateway.start(context)
+    gateway.tick(context)
+
+    module = DecisionLogModule("decision_log")
+    module.start(context)
+    module.tick(context)
+
+    ring = context.get("decision_ring")
+    assert len(ring) == 1
+    # The gateway's own object, not a copy that happens to match.
+    assert ring.latest() is context.get("decision_record")
+    assert isinstance(ring.latest(), DecisionRecord)

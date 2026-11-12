@@ -125,7 +125,10 @@ class MotionGatewayModule(Module):
         self._publish_cancellations(context, resolution.cancelled)
         # Published before the branches below, and only here: "nobody asked", "refused" and
         # "the same intent as last tick" are decisions too, and four publish sites would drift.
-        context.set("decision_record", self._record(context, now, snapshot, resolution).to_dict())
+        # The record itself, not its wire form: consumers serialize where the bytes leave the
+        # process (`decision_log` does it for the ring and the JSONL), the way `sensor_reading`
+        # stays a `SensorReading` until `services/state.py` builds the snapshot.
+        context.set("decision_record", self._record(context, now, snapshot, resolution))
         winner, verdict = resolution.winner, resolution.verdict
 
         if winner is None or verdict is None:
