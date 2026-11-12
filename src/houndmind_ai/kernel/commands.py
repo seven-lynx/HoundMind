@@ -47,6 +47,11 @@ class Source(IntEnum):
     # above it, and `MODE_ALLOWED_SOURCES` needs no edit: `idle`/`patrol` are `frozenset(Source)`,
     # so a new member is admitted there and excluded from `manual`/`rest` by construction.
     ROUTINE = 15
+    # A goal the user named outranks a routine — it is the newer explicit request — and yields to
+    # the navigator, because a goal must never outvote an obstacle. 17 keeps both claims without
+    # renumbering a member, and a place intent is *not* written into the navigation slot: two
+    # producers sharing one slot would take turns publishing and the dog would stutter between them.
+    PLACE = 17
     NAVIGATION = 20
     CLIENT = 30
     WATCHDOG = 40
@@ -108,7 +113,11 @@ DEFAULT_MODE = "idle"
 MODE_ALLOWED_SOURCES: dict[str, frozenset[Source]] = {
     "idle": frozenset(Source),
     "patrol": frozenset(Source),
-    "manual": frozenset({Source.CLIENT, Source.ROUTINE, Source.WATCHDOG, Source.SYSTEM}),
+    # A place goal is a client's request, scripted or typed: a hand on the wheel may still say
+    # "go to the kitchen", the same way it may run a routine.
+    "manual": frozenset(
+        {Source.CLIENT, Source.ROUTINE, Source.PLACE, Source.WATCHDOG, Source.SYSTEM}
+    ),
     "rest": frozenset({Source.WATCHDOG, Source.SYSTEM}),
 }
 

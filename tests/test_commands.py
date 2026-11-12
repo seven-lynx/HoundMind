@@ -23,9 +23,15 @@ def test_source_precedence_is_declared_not_discovered() -> None:
         > Source.WATCHDOG
         > Source.CLIENT
         > Source.NAVIGATION
+        > Source.PLACE
         > Source.ROUTINE
         > Source.BEHAVIOUR
     )
+
+
+def test_a_place_reaches_the_wire_as_its_name() -> None:
+    """A goal sits under `navigation` and over `routine`: hazard first, goal second."""
+    assert Command("forward", source=Source.PLACE).to_dict()["source"] == "place"
 
 
 def test_a_routine_source_reaches_the_wire_as_its_name() -> None:

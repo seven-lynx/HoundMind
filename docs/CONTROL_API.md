@@ -195,9 +195,10 @@ is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus `camera`, `p
 3. **`409` is not retried blindly.** `veto: "obstacle"` means retrying makes it worse; `veto: "tilt"`
    needs a human to right the dog and clear the latch; `veto: "mode"` means the runtime is in `rest`.
 4. **Ordering is by priority, not arrival.** `system` > `watchdog` > `client` > `navigation` >
-   `routine` > `behaviour` (`kernel/commands.py:36`). A `system` command preempts a `client` one, and the
-   preempted client can see it in `actuators.displaced`. A `routine` sits just under `navigation`: it
-   yields to whatever is avoiding an obstacle, and overrides idle behaviour.
+   `place` > `routine` > `behaviour` (`kernel/commands.py:37`). A `system` command preempts a `client`
+   one, and the preempted client can see it in `actuators.displaced`. A `place` goal — "go to the
+   kitchen" — sits just under `navigation`, so a hazard always wins the tick and the goal resumes when
+   it clears; a `routine` sits under the goal, and over idle behaviour.
 
 ### Routines
 
