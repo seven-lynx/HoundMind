@@ -1,7 +1,6 @@
 # Logging Runbook
 
 Status: **runbook** — what to do once something has already gone wrong.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §10 (where logs come from),
 `docs/CONTROL_API.md` §2 (`/logs`, `/support-bundle`)
 

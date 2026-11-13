@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 
-Current Release: v2026.01.18 • Author: 7Lynx
+Current Release: v2026.01.18
 
 
 ## [Unreleased]

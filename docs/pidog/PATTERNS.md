@@ -2,7 +2,6 @@
 
 Status: **guide** — how to structure vendor code so it does not wedge the bus, plus the index of
 every quirk this set has found.
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
 Pairs with: `INDEX.md` (router), `src/houndmind_ai/hal/vendor.py` (the port of all of this)
 

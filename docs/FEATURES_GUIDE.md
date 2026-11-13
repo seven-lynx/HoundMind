@@ -1,7 +1,6 @@
 # HoundMind Features Guide
 
 Status: **reference** — what each module does, its default, and how to turn it off. Not a tutorial.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `config/settings.jsonc` (every default quoted here), `docs/CONTROL_API.md` (the wire
 contract), `docs/ARCHITECTURE.md` (why the modules are shaped this way)
 

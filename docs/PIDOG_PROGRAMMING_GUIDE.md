@@ -3,7 +3,6 @@
 
 Status: **guide** — the SunFounder `pidog` library itself, with no HoundMind in the loop. Every
 method below is vendor API; nothing here is HoundMind's.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `docs/pidog/INDEX.md` (the API-level reference: exact signatures, channel map, travel
 limits and known defects), `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` (writing modules instead of
 scripts), `docs/FEATURES_GUIDE.md` (turning HoundMind features on and off)

@@ -2,7 +2,6 @@
 
 Status: **reference** — the built-in action catalogue and the `ActionFlow` runner. This is the
 layer most example scripts actually use.
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/pidog@cee4bff`
 Pairs with: `PIDOG-MOTION.md` §4 (what a frame is), `PIDOG-EXPRESSION.md` (sound the actions use)
 

@@ -2,7 +2,6 @@
 
 Status: **design** — why the runtime is layered the way it is. Where this file and the tree
 disagree, the tree is right and this file is a bug.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `docs/CONTROL_API.md` (the wire contract), `src/houndmind_ai/` (the tree it describes)
 
 The refactor replaced a 5–10 Hz loop in which every module wrote strings into one dictionary. The

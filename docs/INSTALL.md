@@ -1,7 +1,6 @@
 # HoundMind Install Guide (PiDog, Raspberry Pi 4 and 5)
 
 Status: **guide** — install, verify, and recover. Written for a fresh Raspberry Pi OS Bookworm image.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `README.md` (the one-liner), `docs/FEATURES_GUIDE.md` (what each module does)
 
 This guide installs HoundMind, the unified AI system for SunFounder PiDog. Simulation mode is no

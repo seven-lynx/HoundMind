@@ -2,7 +2,6 @@
 
 Status: **reference** — the four sensors, what a bad read looks like, and how much each read
 costs. Every value here is a vendor return, not a HoundMind abstraction.
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
 Pairs with: `PIDOG-MOTION.md` §8 (attribute list), `PATTERNS.md` §4 (validity discipline)
 

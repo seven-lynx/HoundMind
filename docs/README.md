@@ -1,7 +1,6 @@
 # HoundMind Documentation
 
 Status: **index** — the map of `docs/`. If a file is not listed here, it should not exist.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `README.md` (the front door), `ROADMAP.md` (what is planned)
 
 Ten documents plus one reference set, each with one job. Start at the row that matches what you
@@ -27,8 +26,8 @@ are doing; do not read the whole directory.
 
 ## The status field
 
-Every document opens with `Status:` and `Version:` on the two lines under its title. The status
-says who the file binds, which is what makes it safe to quote:
+Every document opens with a `Status:` line under its title. The status says who the file binds,
+which is what makes it safe to quote:
 
 | Status | Means | If it is wrong |
 |---|---|---|
@@ -40,8 +39,8 @@ says who the file binds, which is what makes it safe to quote:
 | `index` | This page. Navigation only, no facts of its own. | Add the missing row |
 | `historical` | A measurement at a fixed commit. **Append, never rewrite.** | Add an addendum section |
 
-`Version:` tracks `pyproject.toml` and `README.md`. All three change in the same commit, or none
-of them do.
+The `Release:` line in `README.md` tracks `pyproject.toml` and `CHANGELOG.md`. All three change in
+the same commit, or none of them do.
 
 ## Rules for this directory
 

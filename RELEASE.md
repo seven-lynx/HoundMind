@@ -1,6 +1,5 @@
 # HoundMind Release Checklist
 
-Version: v2026.01.18 • Author: 7Lynx
 
 This checklist provides a minimal, repeatable release process for the two editions (Pi 4, Pi 5).
 

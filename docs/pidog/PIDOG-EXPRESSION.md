@@ -2,7 +2,6 @@
 
 Status: **reference** — the LED board and the audio path: what the dog can show and say, and
 which vendor calls block.
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/pidog@cee4bff` (pidog 1.4.0), `sunfounder/robot-hat@4556bd8` (2.5.x)
 Pairs with: `ROBOTHAT.md` §9 (the `Music`/`Speaker` primitives), `PIDOG-ACTIONS.md` (presets that
 speak)

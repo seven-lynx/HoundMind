@@ -2,7 +2,6 @@
 
 Status: **guide** — how to run, tune and extend the runtime. The authoritative version of every
 default is `config/settings.jsonc`; this file explains it.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `docs/ARCHITECTURE.md` (why), `docs/FEATURES_GUIDE.md` (what each module does),
 `docs/PIDOG_PROGRAMMING_GUIDE.md` (the vendor library underneath)
 
