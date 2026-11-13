@@ -318,16 +318,14 @@ python -m tools.collect_support_bundle /tmp/support.zip
 ```
 
 The bundle carries `metadata.json` (timestamp, commit, trace id), everything in `logs/`, and
-`config/settings.jsonc`. The files it should contain:
+`config/settings.jsonc`. The files it should contain — all three are separate on purpose, and
+`docs/LOGGING.md` documents the paths and which module writes each:
 
 | File | Written by | Holds |
 |---|---|---|
 | `logs/houndmind.log` | `logging` | the runtime's own JSON lines, every level |
 | `logs/houndmind_events.jsonl` | `event_log` | the event snapshot, 5 MB cap then rotate to `.1` |
 | `logs/houndmind_decisions.jsonl` | `decision_log` | one record per tick: intent, source, vetoes, inputs |
-
-(`docs/LOGGING.md:11-13` still names `logs/events.jsonl`, which is not the file the runtime writes
-— #107.)
 
 ## 12. What this guide does not cover
 
