@@ -181,37 +181,20 @@ python -m tools.installer_verify  # recommended after `pip install -e .` or with
 
 ## Bench checklist (before calling a build done)
 
-Nothing here can be ticked from a workstation. Run it on the dog, on blocks, with clearance, and
-with the camera covered until the camera rows.
+Nothing on this list can be ticked from a workstation. [`docs/HARDWARE_TEST.md`](HARDWARE_TEST.md)
+is the procedure: six steps, each with the exact command, the output to expect and what a failure
+means, from the install verifier to the opt-in motion run.
 
-### Sensors
-- [ ] Ultrasonic distance reads are stable (no spikes at rest).
-- [ ] Touch sensor updates are reliable (debounce acceptable).
-- [ ] Sound detection and direction work in normal room noise.
-- [ ] IMU readings are stable; heading integration does not drift excessively.
+Two rules that hold whatever that document says:
 
-### Scanning and navigation
-- [ ] Three-way scan returns valid left/right/forward values.
-- [ ] Sweep scan covers its full range and returns the head to centre.
-- [ ] The scan interval matches settings and the tick does not stutter while a sweep runs.
-- [ ] Obstacle avoidance selects sensible turns; stuck recovery triggers and completes.
-- [ ] A clear-path streak reduces scan jitter.
+- Read-only first: `python -m tools.hardware_checkup --skip-motion`, then
+  `python -m tools.smoke_test`. Neither can move the dog — on a checkup, leaving `--skip-motion`
+  off *is* a motion run.
+- `--include-motion` only with clearance around the dog and a hand on the power.
 
-### Safety
-- [ ] `POST /api/v1/stop` stops the dog from a client, and a dropped connection does too.
-- [ ] Emergency stop triggers at the configured distance (with `settings.safety.enabled: true`).
-- [ ] Tilt protection triggers and its cooldown behaves.
-- [ ] The watchdog holds motion on stale sensors or scans and says so in `state.supervisor`.
-- [ ] No recovery poses the dog: recovery is stop-and-report by design.
-
-### Mapping and logging
-- [ ] Openings and safe paths appear in the event log.
-- [ ] Event log JSONL files are created and rotate at `event_log_max_mb`.
-
-### Tools
-- [ ] `python -m tools.hardware_checkup --skip-motion` passes its basic checks.
-- [ ] `python -m tools.smoke_test` completes with no errors. Add `--include-motion` only with
-      clearance around the dog and a hand on the power.
+What still has to be judged by a human, because no command here asserts it: obstacle avoidance
+selecting sensible turns, stuck recovery completing, the watchdog holding motion on stale sensors
+(`state.supervisor`), and the event log rotating at `event_log_max_mb`.
 
 ## Troubleshooting & Support Bundles
 

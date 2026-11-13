@@ -3,7 +3,7 @@
 Status: **index** — the map of `docs/`. If a file is not listed here, it should not exist.
 Pairs with: `README.md` (the front door), `ROADMAP.md` (what is planned)
 
-Ten documents plus one reference set, each with one job. Start at the row that matches what you
+Eleven documents plus one reference set, each with one job. Start at the row that matches what you
 are doing; do not read the whole directory.
 
 ---
@@ -13,6 +13,7 @@ are doing; do not read the whole directory.
 | I want to… | Read | Status |
 |---|---|---|
 | Install HoundMind on a Pi and get it running | [`INSTALL.md`](INSTALL.md) | guide |
+| Run the full hardware test on a dog, step by step | [`HARDWARE_TEST.md`](HARDWARE_TEST.md) | guide |
 | Know what a feature does and how to turn it off | [`FEATURES_GUIDE.md`](FEATURES_GUIDE.md) | reference |
 | Write code against the runtime (modules, context keys, config sections) | [`HOUNDMIND_PROGRAMMING_GUIDE.md`](HOUNDMIND_PROGRAMMING_GUIDE.md) | guide |
 | Drive the `pidog` library directly, with no HoundMind in the loop | [`PIDOG_PROGRAMMING_GUIDE.md`](PIDOG_PROGRAMMING_GUIDE.md) | guide |
@@ -21,7 +22,6 @@ are doing; do not read the whole directory.
 | Write the routine files the dog plays | [`ROUTINES.md`](ROUTINES.md) | **contract** |
 | Understand why the code is shaped this way | [`ARCHITECTURE.md`](ARCHITECTURE.md) | design |
 | Read the JSON logs or build a support bundle | [`LOGGING.md`](LOGGING.md) | runbook |
-| Check the dog on the bench before calling a build done | [`INSTALL.md`](INSTALL.md) § Bench checklist | guide |
 | Know what the project looked like before the 2026.11 refactor | [`BASELINE.md`](BASELINE.md) | **historical** |
 
 ## The status field
