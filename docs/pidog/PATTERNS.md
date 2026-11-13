@@ -60,8 +60,8 @@ The four rules this encodes:
    of this code that is safe to run by accident.
 
 Logging, not `print`: `pidog` itself prints to stdout, and mixing the two makes a support bundle
-unreadable. HoundMind's runtime uses `logging.getLogger(__name__)` throughout
-(`.clinerules/10-python.md`).
+unreadable. HoundMind's runtime uses `logging.getLogger(__name__)` per module with `%`-style lazy
+formatting, so a disabled log level costs nothing.
 
 ---
 
@@ -131,8 +131,9 @@ with typed intents coming in from everywhere else.
 - **`ActionFlow` idles with motion.** A started flow animates the dog every 2–6 s
   (`PIDOG-ACTIONS.md` §4.4).
 
-Anything you write that can move the dog defaults to dry and requires an explicit flag
-(`.clinerules/20-hardware.md`). The agent does not run it.
+Anything you write that can move the dog defaults to dry and requires an explicit flag. Nobody runs
+it for you: a motion path is opt-in, and a run needs a human who has looked at the dog and cleared the
+floor around it.
 
 
 ---
@@ -229,8 +230,8 @@ Everything this set found that will cost you an afternoon. Each row points at th
 
 ## 7. Porting vendor code into the HAL
 
-In HoundMind, `src/houndmind_ai/hal/vendor.py` is the **only** file allowed to import `pidog`
-(`.clinerules/20-hardware.md`). Everything above it sees a `DogHAL`.
+In HoundMind, `src/houndmind_ai/hal/vendor.py` is the **only** file allowed to import `pidog` — it
+and `optional/` are the two places a vendor import may appear. Everything above it sees a `DogHAL`.
 
 The procedure, in order:
 

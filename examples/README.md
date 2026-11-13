@@ -1,13 +1,19 @@
-PiDog Examples
-===============
+# PiDog Examples
 
-This folder contains beginner-friendly, safety-first examples for exploring
-the HoundMind runtime without moving hardware. The main entrypoint is
-`examples/pidog_programming_examples.py` and supports an interactive menu
-and a small CLI.
+Status: **guide** — the three runnable demos in `examples/`, what each proves, and how to start
+without moving the dog.
 
-Usage
------
+Two of the three run with no hardware at all. The third drives the dog, and says so before you run it.
+
+## The three demos
+
+| File | Hardware? | What it shows |
+|---|---|---|
+| `pidog_programming_examples.py` | no | The runtime with hardware modules disabled: behaviour, habituation, personality bias, module statuses. Interactive menu or one-shot CLI. |
+| `houndmind_mapping_demo.py` | no | A mapping snapshot built from a fixed grid, printed as a map. |
+| `sound_attention_demo.py` | **yes** | The dog turns its head toward a detected sound and signals attention on the LED strip. Moves servos. |
+
+## `pidog_programming_examples.py`
 
 Run the interactive menu:
 
@@ -15,13 +21,13 @@ Run the interactive menu:
 python examples/pidog_programming_examples.py
 ```
 
-List available examples (non-interactive):
+List the available examples (non-interactive):
 
 ```bash
 python examples/pidog_programming_examples.py --list
 ```
 
-Run all examples sequentially:
+Run all of them in sequence:
 
 ```bash
 python examples/pidog_programming_examples.py all
@@ -29,40 +35,54 @@ python examples/pidog_programming_examples.py all
 python examples/pidog_programming_examples.py a
 ```
 
-Run a single example by index or name (case-insensitive substring):
+Run one by index, or by a case-insensitive substring of its name:
 
 ```bash
 python examples/pidog_programming_examples.py 2
 python examples/pidog_programming_examples.py habituation
 ```
 
-Notes
------
+## `houndmind_mapping_demo.py`
 
-- Examples disable potentially dangerous hardware by default so they are
-  safe to run on a desktop. To enable motors/sensors for robot hardware,
-  review and edit your `config/settings.jsonc` or remove the safe-disable
-  calls in the example (do this only on the robot itself).
-- The examples are intended for learning how the runtime and modules
-  communicate via the `RuntimeContext`. Inspect printed `behavior_action`
-  and `module_statuses` to understand module outputs.
+```bash
+python examples/houndmind_mapping_demo.py
+```
 
-Contributing
-------------
+No hardware and no config: it feeds a fixed grid to the mapper and prints the result, which makes it
+the fastest way to see the map format before trusting it with a real scan.
 
-To add a new example, implement a function that takes no arguments and
-append a tuple to the `EXAMPLES` list in
+## `sound_attention_demo.py`
+
+```bash
+python examples/sound_attention_demo.py
+```
+
+This is the one that **moves the dog**. Put it on the ground, clear of anything within one body
+length, battery charged, with a hand near the power. If all you want is to read the code, the
+attention module is documented in `docs/FEATURES_GUIDE.md` §8.
+
+## Notes
+
+- The hardware-free examples disable potentially dangerous modules on purpose, so they are safe to
+  run on a workstation. To run one against the robot, review and edit `config/settings.jsonc` (or
+  remove the safe-disable calls in the example) — do that only on the robot itself.
+- The examples exist to show how modules communicate through `RuntimeContext`. Inspect the printed
+  `behavior_action` and `module_statuses` to see module outputs;
+  `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §4 is the key list.
+
+## Contributing an example
+
+Implement a function that takes no arguments and append a tuple to the `EXAMPLES` list in
 `examples/pidog_programming_examples.py`:
 
 ```py
 EXAMPLES.append(("My demo name", my_demo_function))
 ```
 
-Run tests locally (targeted) before pushing:
+Then run the tests that cover the runtime pieces you touched:
 
 ```bash
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-pytest -q tests/test_habituation.py tests/test_personality_bias.py
+python -m pytest -q tests/test_habituation.py tests/test_personality_bias.py
 ```
+
+An example that can move the dog must be opt-in, off by default, and must say so in its docstring.

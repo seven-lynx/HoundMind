@@ -12,6 +12,27 @@ test.
 
 ---
 
+## Contents
+
+1. [Quick start](#1-quick-start) — install, run, the six keys worth knowing first
+2. [Runtime model](#2-runtime-model) — the loop, the module lifecycle, intents
+3. [Modules overview](#3-modules-overview)
+4. [Context keys](#4-context-keys) — the contract every module reads and writes
+5. [Sensor data types](#5-sensor-data-types) — `SensorReading`, `ScanReading`, validity flags
+6. [Configuration sections](#6-configuration-sections)
+7. [Configuration examples](#7-configuration-examples)
+8. [Safety defaults and onboarding](#8-safety-defaults-and-onboarding)
+9. [Calibration workflow](#9-calibration-workflow) — moves servos, needs clearance
+10. [Logging and diagnostics](#10-logging-and-diagnostics)
+11. [Autonomy, attention and behaviour tuning](#11-autonomy-attention-and-behaviour-tuning)
+12. [Mapping and path planning](#12-mapping-and-path-planning)
+13. [On-device validation](#13-on-device-validation)
+14. [Extending the system](#14-extending-the-system) — writing a module
+15. [Pi4 profile and deferred work](#15-pi4-profile-and-deferred-work)
+16. [Developer commands](#16-developer-commands)
+
+---
+
 ## 1. Quick start
 
 ```bash
@@ -45,7 +66,7 @@ Edit `config/settings.jsonc`. The keys that change behaviour most per keystroke:
 
 | Key | Default | Effect |
 |---|---|---|
-| `loop.tick_hz` | `10` (`pi4`/`pi5`) | Decision-loop rate. Higher reacts faster and costs more CPU; the budget is `1/tick_hz`. |
+| `loop.tick_hz` | `5` base; `10` on the `pi4`/`pi5` profiles | Decision-loop rate. Higher reacts faster and costs more CPU; the budget is `1/tick_hz`. |
 | `sensors.poll_hz` | `10` | Sensor sampling rate, capped by `performance.sensor_poll_hz_max`. |
 | `navigation.scan_interval_s` | `0.3` | How often the sweep runs; bounded by `scan_interval_min_s` / `_max_s`. |
 | `behavior.idle_action`, `behavior.action_sets` | see config | What the dog does with no reason to do anything else. |
