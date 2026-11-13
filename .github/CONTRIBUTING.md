@@ -48,7 +48,9 @@ mypy src --ignore-missing-imports
 CI runs the same three checks on Python 3.11, then builds the sdist and the wheel. A fourth job,
 `Identity guard`, fails when a commit reaching this repository is authored by an account other than
 the project's own — the local hooks only inspect the unpushed range, so this is the check that sees a
-commit made elsewhere. A red run is fixed by changing the code, never by loosening the workflow.
+commit made elsewhere. All four are required on `main`, so a commit that arrives server-side and
+carries a foreign author leaves the gate red instead of landing quietly. A red run is fixed by
+changing the code, never by loosening the workflow.
 Fill in
 `.github/PULL_REQUEST_TEMPLATE.md`, and state the motion impact — `none`, `dry-run only`, or
 `commands servos`.
