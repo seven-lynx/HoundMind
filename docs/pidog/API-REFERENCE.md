@@ -2,7 +2,6 @@
 
 Status: **reference** — signature lookup. Behaviour, traps and examples live in the topic files;
 this page is the index of names.
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
 Pairs with: `INDEX.md` (task router)
 

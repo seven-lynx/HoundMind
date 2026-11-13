@@ -1,10 +1,9 @@
 # HoundMind Documentation
 
 Status: **index** — the map of `docs/`. If a file is not listed here, it should not exist.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `README.md` (the front door), `ROADMAP.md` (what is planned)
 
-Ten documents plus one reference set, each with one job. Start at the row that matches what you
+Eleven documents plus one reference set, each with one job. Start at the row that matches what you
 are doing; do not read the whole directory.
 
 ---
@@ -14,6 +13,7 @@ are doing; do not read the whole directory.
 | I want to… | Read | Status |
 |---|---|---|
 | Install HoundMind on a Pi and get it running | [`INSTALL.md`](INSTALL.md) | guide |
+| Run the full hardware test on a dog, step by step | [`HARDWARE_TEST.md`](HARDWARE_TEST.md) | guide |
 | Know what a feature does and how to turn it off | [`FEATURES_GUIDE.md`](FEATURES_GUIDE.md) | reference |
 | Write code against the runtime (modules, context keys, config sections) | [`HOUNDMIND_PROGRAMMING_GUIDE.md`](HOUNDMIND_PROGRAMMING_GUIDE.md) | guide |
 | Drive the `pidog` library directly, with no HoundMind in the loop | [`PIDOG_PROGRAMMING_GUIDE.md`](PIDOG_PROGRAMMING_GUIDE.md) | guide |
@@ -22,13 +22,12 @@ are doing; do not read the whole directory.
 | Write the routine files the dog plays | [`ROUTINES.md`](ROUTINES.md) | **contract** |
 | Understand why the code is shaped this way | [`ARCHITECTURE.md`](ARCHITECTURE.md) | design |
 | Read the JSON logs or build a support bundle | [`LOGGING.md`](LOGGING.md) | runbook |
-| Check the dog on the bench before calling a build done | [`INSTALL.md`](INSTALL.md) § Bench checklist | guide |
 | Know what the project looked like before the 2026.11 refactor | [`BASELINE.md`](BASELINE.md) | **historical** |
 
 ## The status field
 
-Every document opens with `Status:` and `Version:` on the two lines under its title. The status
-says who the file binds, which is what makes it safe to quote:
+Every document opens with a `Status:` line under its title. The status says who the file binds,
+which is what makes it safe to quote:
 
 | Status | Means | If it is wrong |
 |---|---|---|
@@ -40,8 +39,8 @@ says who the file binds, which is what makes it safe to quote:
 | `index` | This page. Navigation only, no facts of its own. | Add the missing row |
 | `historical` | A measurement at a fixed commit. **Append, never rewrite.** | Add an addendum section |
 
-`Version:` tracks `pyproject.toml` and `README.md`. All three change in the same commit, or none
-of them do.
+The `Release:` line in `README.md` tracks `pyproject.toml` and `CHANGELOG.md`. All three change in
+the same commit, or none of them do.
 
 ## Rules for this directory
 

@@ -2,7 +2,6 @@
 
 Status: **reference** — the `Pidog` object: what it starts, how a movement reaches a servo, and
 where the motion code is broken.
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
 Pairs with: `HARDWARE.md` §2–§3 (channel map, limits), `ROBOTHAT.md` §5 (speed model),
 `PIDOG-ACTIONS.md` (named actions)

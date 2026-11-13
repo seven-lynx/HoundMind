@@ -2,7 +2,6 @@
 
 Status: **reference** — physical layout, channel map, travel limits, power. Facts come from
 `pidog/pidog.py` (class constants) and `robot_hat/device.py` (pin and HAT tables).
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
 Pairs with: `INDEX.md` (router), `ROBOTHAT.md` (how to drive the channels)
 

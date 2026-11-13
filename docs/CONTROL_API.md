@@ -2,7 +2,6 @@
 
 Status: **contract** — the web app and the Android app code against this file. Additive changes
 only within `v1`; anything that removes or renames a field requires `v2` and a deprecation window.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `src/houndmind_ai/services/api.py` (the route table), `docs/FEATURES_GUIDE.md` §25
 
 Base URL: `http://<pi-ip>:8420`. There is **no mDNS** — the dog does not advertise itself, so the

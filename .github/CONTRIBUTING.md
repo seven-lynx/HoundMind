@@ -1,6 +1,5 @@
 # Contributing
 
-Version: v2026.01.18 • Author: 7Lynx
 
 Thanks for looking at HoundMind. This project drives a robot dog, so the rules below are short on
 purpose: they keep the history readable and the dog out of trouble.

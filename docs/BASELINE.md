@@ -1,7 +1,6 @@
 # Baseline — pre-resurrection state
 
 Status: **historical** — a measurement at one commit. Append to it; never rewrite a number in place.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `ROADMAP.md` (the findings it references), `docs/ARCHITECTURE.md` (what replaced it)
 
 Captured 2026-11-10 at commit `20f79a0` (tag `legacy-2026.01.18`).

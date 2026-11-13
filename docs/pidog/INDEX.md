@@ -2,7 +2,6 @@
 
 Status: **index** — the router for `docs/pidog/`. Navigation only; every fact lives in a
 numbered section of the file this page sends you to.
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/pidog@cee4bff` and `sunfounder/robot-hat@4556bd8` (branch
 `2.5.x`) — read from the source, not from the rendered docs site.
 Pairs with: `docs/PIDOG_PROGRAMMING_GUIDE.md` (the beginner tutorial — start there if you have

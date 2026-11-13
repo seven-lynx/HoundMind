@@ -2,7 +2,6 @@
 
 Status: **reference** — every class `Robot HAT` gives you, and the traps in each. This is the
 layer under `pidog`; understanding it is what turns "call the action name" into control.
-Version: v2026.01.18 • Author: 7Lynx
 Verified against: `sunfounder/robot-hat@4556bd8` (branch `2.5.x`)
 Pairs with: `HARDWARE.md` (pin map), `PIDOG-MOTION.md` (the layer above)
 

@@ -1,7 +1,6 @@
 # Logging Runbook
 
 Status: **runbook** — what to do once something has already gone wrong.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §10 (where logs come from),
 `docs/CONTROL_API.md` §2 (`/logs`, `/support-bundle`)
 
@@ -9,9 +8,19 @@ This document describes how to collect logs, common troubleshooting commands, an
 for parsing JSON logs produced by HoundMind.
 
 Paths
-- Primary log directory: `logs/`
-- Primary rotating log file: `logs/houndmind.log`
-- Event JSONL (if enabled): `logs/events.jsonl`
+
+- Primary log directory: `logs/` (`settings.logging.log_dir`, `config/settings.jsonc:1044`)
+- Runtime log: `logs/houndmind.log` — the `logging` module, every level
+  (`settings.logging.log_file_name`, `:1045`)
+- Event JSONL: `logs/houndmind_events.jsonl` — the `event_log` module, one snapshot per interval,
+  capped at `event_log_max_mb` (5) and then renamed to `.1`
+  (`settings.logging.event_log_path`, `:1059-1062`)
+- Decision JSONL: `logs/houndmind_decisions.jsonl` — the `decision_log` module, one record per tick
+  with intent, source, vetoes and inputs (`settings.logging.decision_log_path`, `:1071`)
+
+All three files are separate on purpose; which one you want depends on the question. The runtime log
+says what the process did, the event log says what the dog's state was every half second, and the
+decision log says why the tick chose what it chose.
 
 Collect a support bundle (recommended):
 

@@ -3,7 +3,6 @@
 Status: **contract** — the file format a user writes and the dog plays. A new optional key is an
 additive change; renaming a key, or making an optional one required, breaks every routine already on a
 device.
-Version: v2026.01.18 • Author: 7Lynx
 Pairs with: `docs/CONTROL_API.md` §3 (the routes that list and start one), `config/actions.jsonc` (the
 vocabulary a step may name), `src/houndmind_ai/kernel/routine.py` (the validator this file describes)
 
