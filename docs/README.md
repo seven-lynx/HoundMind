@@ -3,7 +3,7 @@
 Status: **index** — the map of `docs/`. If a file is not listed here, it should not exist.
 Pairs with: `README.md` (the front door), `ROADMAP.md` (what is planned)
 
-Eleven documents plus one reference set, each with one job. Start at the row that matches what you
+Eighteen documents plus one reference set, each with one job. Start at the row that matches what you
 are doing; do not read the whole directory.
 
 ---
@@ -12,17 +12,31 @@ are doing; do not read the whole directory.
 
 | I want to… | Read | Status |
 |---|---|---|
+| Go from a flashed SD card to a running dog, safely, in ten minutes | [`QUICKSTART.md`](QUICKSTART.md) | guide |
 | Install HoundMind on a Pi and get it running | [`INSTALL.md`](INSTALL.md) | guide |
 | Run the full hardware test on a dog, step by step | [`HARDWARE_TEST.md`](HARDWARE_TEST.md) | guide |
 | Know what a feature does and how to turn it off | [`FEATURES_GUIDE.md`](FEATURES_GUIDE.md) | reference |
 | Write code against the runtime (modules, context keys, config sections) | [`HOUNDMIND_PROGRAMMING_GUIDE.md`](HOUNDMIND_PROGRAMMING_GUIDE.md) | guide |
 | Drive the `pidog` library directly, with no HoundMind in the loop | [`PIDOG_PROGRAMMING_GUIDE.md`](PIDOG_PROGRAMMING_GUIDE.md) | guide |
-| Look up an exact `pidog` / `robot_hat` signature, pin, limit or trap | [`pidog/INDEX.md`](pidog/INDEX.md) | **reference** set |
 | Build a client against the REST/WebSocket API | [`CONTROL_API.md`](CONTROL_API.md) | **contract** |
 | Write the routine files the dog plays | [`ROUTINES.md`](ROUTINES.md) | **contract** |
 | Understand why the code is shaped this way | [`ARCHITECTURE.md`](ARCHITECTURE.md) | design |
+| Something is broken and I do not know which file owns it | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) | runbook |
 | Read the JSON logs or build a support bundle | [`LOGGING.md`](LOGGING.md) | runbook |
+| Know what the device exposes, or report a vulnerability | [`SECURITY.md`](SECURITY.md) | runbook |
 | Know what the project looked like before the 2026.11 refactor | [`BASELINE.md`](BASELINE.md) | **historical** |
+
+## Look-ups
+
+One question each. Open the row, read the table, close the file.
+
+| Question | Read |
+|---|---|
+| Which actions exist, what do they cost, which parameters do they take? | [`REPERTOIRE.md`](REPERTOIRE.md) |
+| What does this tool's flag do, and can it move the dog? | [`TOOLS.md`](TOOLS.md) |
+| What does this word mean? | [`GLOSSARY.md`](GLOSSARY.md) |
+| Pi 4 or Pi 5, which HAT, and what does the profile change? | [`BOARD.md`](BOARD.md) |
+| An exact `pidog` / `robot_hat` signature, pin, limit or trap | [`pidog/INDEX.md`](pidog/INDEX.md) — **reference set** |
 
 ## The status field
 
@@ -54,8 +68,11 @@ the same commit, or none of them do.
 4. **Facts come from the tree.** Every command, key and default in these files must be checkable:
    `config/settings.jsonc` for defaults, `src/houndmind_ai/services/api.py` for routes,
    `pyproject.toml` for the interpreter range.
-5. **Delete, do not deprecate.** A guide for a feature that no longer exists is a second source of
-   truth. The removals are recorded in `CHANGELOG.md`, which is where history belongs.
+5. **Delete, do not deprecate — with one bounded exception.** A guide for a feature that no longer
+   exists is a second source of truth, so removals are recorded in `CHANGELOG.md`. A removed feature
+   may keep a stub of a few lines in `FEATURES_GUIDE.md` naming what it was, what replaced it (a
+   table if a route moved) and the load-time error an old config now gets. It never documents keys as
+   if they still existed, and anything longer than that belongs in `CHANGELOG.md`.
 6. **`docs/pidog/` is one set with its own index.** It documents the two SunFounder libraries at
    API level, split so a reader opens one file and one section. A new file in that directory gets
    a row in its `INDEX.md` file map, not a row here — only the set's entry point is listed above.

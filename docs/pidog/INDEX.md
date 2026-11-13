@@ -131,4 +131,5 @@ left-hind shoulder, left-hind leg, right-hind shoulder, right-hind leg. Head is
   "Verified against" header on every file in the same change.
 - A behaviour discovered on the device is worth a sentence here — mark it as observed, with
   the Pi model. That is the only way this set gets better than the source.
-- `docs/README.md` lists this directory; a new file here needs a row there too.
+- `docs/README.md` lists this directory as one entry; a new file here needs a row in the file map
+  above, not a second row there.

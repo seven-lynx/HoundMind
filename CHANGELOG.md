@@ -9,6 +9,46 @@ Current Release: v2026.01.18
 
 ## [Unreleased]
 
+- **`docs/` audited end to end**, and seven documents added where a reader had nowhere to go:
+  `QUICKSTART.md` (flashed card to running dog, no motion), `REPERTOIRE.md` (all 43 actions with
+  class, parameters and buckets — 23 of the names appeared in no page before), `TOOLS.md` (the nine
+  device CLIs, their flags, and which can move the dog), `TROUBLESHOOTING.md` (one symptom table
+  instead of three competing ones), `GLOSSARY.md`, `SECURITY.md` (token, scopes, tickets, TLS,
+  exposure checklist, and how to report a vulnerability) and `BOARD.md` (Pi/HAT support, profile
+  resolution, and what each profile actually changes). `docs/README.md` gains a Look-ups table and
+  `README.md` gains rows for the hardware test, routines and the new pages.
+- **Corrected against the tree**: `settings.habituation.led_color` and `led_priority` were documented
+  but exist in no schema and no module — copying them was a load-time error. The vision inference
+  scheduler, `preprocessing.normalize` and `preprocessing.mean`/`std` were documented as on and
+  ImageNet-normalised while the file ships them off and identity. `loop.tick_hz` is `5` in the base
+  file and `10` only through the `pi4`/`pi5` profiles. The README feature table said Calibration was
+  enabled (it is `false`) and omitted Habituation and Energy & Emotion; `LOGGING.md` cited
+  `services/api.py:210` for `/support-bundle`; `ARCHITECTURE.md` §2 was missing six modules. The
+  habituation section now also records that the LED priority list cannot address its namespaced
+  request ([#78](https://github.com/seven-lynx/HoundMind/issues/78)).
+- **Motion safety in the front door**: `README.md` recommended `python -m tools.hardware_checkup`
+  first and mentioned `--skip-motion` second. Left off, that flag is a motion run — it stands the dog,
+  turns it both ways and sweeps its head. The read-only form is now the one shown.
+- **Rendering**: two reference pages had language-tagged fences inside open blocks
+  (`pidog/API-REFERENCE.md` §3 and `pidog/PIDOG-EXPRESSION.md` §2), which rendered their headings as
+  code; `INSTALL.md` had a prose line trapped inside a bash block; `LOGGING.md` had no headings at
+  all. Fences close, headings exist, and `LOGGING.md` says plainly that the decision JSONL is off by
+  default so nobody hunts for a file that is not written.
+- **Navigation**: a `## Contents` block on the six longest pages, anchor links in them, and the 249
+  `§` references are at least reachable through the page's own contents. `docs/pidog/PATTERNS.md` no
+  longer cites three gitignored `.clinerules/` files.
+- **`tests/test_docs_contract.py`** holds all of the above from here: a page must declare a `Status:`
+  header and appear in an index, its relative links must resolve, its fences must close, it must not
+  cite a local-only path, and every `settings.<section>.<field>` it names must exist in
+  `config/settings.jsonc` or the schema.
+- **Deleted `RELEASE.md`** (fixes #110). It listed the smoke test four times with three different paths
+  (two of them wrong), used `v0.1.0` as the tag example against a `vYYYY.MM.DD` scheme, and omitted
+  the three-file version bump and the changelog section. The release procedure lives in the phase plan
+  and `CHANGELOG.md`; a second, wrong copy is worse than none.
+- **Note:** `scripts/install_houndmind.sh` and `.ps1` still accept only `python3.10`/`3.11` and
+  prefer 3.10, while `installer_core.py` and `docs/INSTALL.md` support 3.11–3.13 — so a Trixie image
+  fails at the first command. Documented as a known defect in `docs/QUICKSTART.md` §4 and
+  `docs/TROUBLESHOOTING.md`, not fixed here: it is an installer change, not a doc change.
 - **`DELETE /api/v1/people/{id}`** (`admin`): forgets one person — the embeddings, the reference images
   and the trained model, not just the name, because an LBPH model built from images you deleted still
   recognises the person. A `404` on a second call, never a silent success; `503` when no identity module

@@ -13,6 +13,20 @@ file. A route that exists in code and not here — or here and not in code — f
 
 ---
 
+## Contents
+
+1. [Authentication](#1-authentication) — the token, scopes, pairing, camera tickets
+2. [Endpoints](#2-endpoints) — the full route table with scopes
+3. [Commands](#3-commands) — the vocabulary, the semantics, dry runs
+4. [State snapshot](#4-state-snapshot) — everything `GET /state` carries
+5. [WebSocket](#5-websocket) — the `hello` frame and the event stream
+6. [Errors](#6-errors) — status codes and the `error` body
+7. [Versioning and compatibility](#7-versioning-and-compatibility)
+8. [Places](#8-places)
+9. [People](#9-people)
+
+---
+
 ## 1. Authentication
 
 Two mechanisms, both bearer-style. Everything requires a token except `/meta`, `/health` and

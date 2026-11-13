@@ -147,6 +147,7 @@ UserButton()     .set_on_click(cb) .set_on_press(cb) .set_on_release(cb)
 
 utils.mapping(x, in_min, in_max, out_min, out_max)
 utils.run_command(cmd, user=None, group=None) -> (status, output)
+```
 
 ---
 

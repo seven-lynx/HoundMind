@@ -14,6 +14,42 @@ Section numbers are stable references — other files cite them. Append, do not 
 
 ---
 
+## Contents
+
+**Always on** — these run on a fresh install.
+
+- [§1 Core Runtime](#1-core-runtime) · [§2 HAL: sensors and motors](#2-hal--sensors--motors) ·
+  [§3 Perception](#3-perception) · [§4 Scanning](#4-scanning) ·
+  [§5 Navigation and obstacle avoidance](#5-navigation--obstacle-avoidance) · [§6 Mapping](#6-mapping)
+- [§7 Behavior](#7-behavior) — the biggest section: buckets, entry beats, cues, routines, personality
+- [§8 Attention](#8-attention) · [§14 Event logging](#14-event-logging) ·
+  [§15 LED manager](#15-led-manager) · [§26 Control plane](#26-control-plane--rest-websocket-camera-web-app) ·
+  [§27 Path planning](#27-path-planning-a-for-pi4) · [§28 Profiles](#28-profiles)
+
+**Off by default, opt-in** — nothing here is running until you enable it.
+
+- [§9 Safety](#9-safety) · [§10 Watchdog](#10-watchdog) · [§11 Sensor health](#11-sensor-health) ·
+  [§12 Health monitor](#12-health-monitor) · [§13 Balance](#13-balance) · [§16 Calibration](#16-calibration)
+- [§17 Vision (legacy vilib)](#17-vision-legacy-vilib) · [§18 Voice (legacy input)](#18-voice-legacy-input) ·
+  [§19 Voice Assistant (Pi4)](#19-voice-assistant-pi4) ·
+  [§20 Face recognition (Pi4)](#20-face-recognition-pi4) ·
+  [§21 Pi4 vision feed](#21-pi4-vision-feed-pi4) ·
+  [§21a Inference scheduler](#21a-vision-inference-scheduler-pi4) ·
+  [§21b Preprocessing](#21b-vision-preprocessing-pi4) ·
+  [§22 Semantic labeler](#22-semantic-labeler-pi4) · [§23 SLAM](#23-slam-pi4)
+
+**Removed, and how to migrate** — an old config that still names these fails to load.
+
+- [§24 Telemetry dashboard](#24-telemetry-dashboard--removed) ·
+  [§25 WiFi localization](#25-wifi-localization--removed)
+
+**Help**
+
+- [§29 How to disable any feature](#29-how-to-disable-any-feature) ·
+  [§30 Troubleshooting](#30-troubleshooting) · [`docs/README.md`](README.md) (the doc index)
+
+---
+
 ## 1) Core Runtime
 **What it does:** Runs the main loop and coordinates all modules.
 
@@ -346,13 +382,19 @@ When enabled, habituation reduces repeated reactions to identical stimuli (touch
 - `settings.habituation.window_s` (default: 1.0) — window (seconds) used to count repeated events
 - `settings.habituation.threshold` (default: 3) — number of events within `window_s` to trigger habituation
 - `settings.habituation.recovery_s` (default: 6.0) — quiet period (seconds) to reset habituation
-- `settings.habituation.led_color` (default: "yellow") — LED color to use when signaling habituation
-- `settings.habituation.led_priority` (default: 50) — LED request priority
 
 **LED & Telemetry:**
-- When a stimulus becomes habituated the runtime emits an LED request under the key `led_request:habituation:<stimulus>` (mode `blink`) and a telemetry snapshot under `telemetry:habituation:<stimulus>` containing timestamp, count, threshold, and recovery window. The LED manager will handle display according to priority rules.
+- When a stimulus becomes habituated the runtime publishes an LED request under
+  `led_request:habituation:<stimulus>` (mode `blink`) and a snapshot under
+  `telemetry:habituation:<stimulus>` carrying the timestamp, count, threshold and recovery window.
+- **Caveat:** the LED priority list (`settings.led.priority`) names `safety`, `navigation`,
+  `attention` and `emotion` only, so it cannot address this namespaced key — the request is
+  published, but nothing selects it for display yet
+  ([#78](https://github.com/seven-lynx/HoundMind/issues/78)).
 
-**Disable:** `modules.behavior.enabled = false`
+**Disable:** `settings.habituation.enabled = false`. Habituation is the one module with no
+`modules.habituation` entry in the shipped config — the runtime constructs it enabled and the
+`settings` flag is the switch.
 
 **Energy (internal state)**
 The runtime can maintain a lightweight `energy_level` that persists in the runtime context, decays over time, and increases briefly in response to stimuli (touch, sound). This is an optional internal state used by autonomy selection (play/rest bias) and can be enabled for more lifelike energy/mood dynamics.
@@ -685,32 +727,40 @@ python -m tools.camera_check --index 0 --save frame.jpg
 **What it does:** Runs vision model inference in a background thread for Pi4/5 hardware. Accepts preprocessed frames, schedules inference, and returns results asynchronously for downstream modules.
 
 **Enable:**
-- Enabled automatically when `modules.vision_pi4.enabled = true` and `settings.vision_pi4.inference_scheduler_enabled = true` (default: true).
+- Requires `modules.vision_pi4.enabled = true`. The scheduler itself ships **off**
+  (`settings.vision_pi4.inference_scheduler_enabled`, default `false`); turning it on with no model
+  wired reports `vision_inference_status: unconfigured` instead of starting a placeholder.
 
 **Configuration:**
-- `settings.vision_pi4.inference_scheduler_enabled`: Enable/disable scheduler (default: true)
-- `settings.vision_pi4.preprocessing`: Preprocessing config (see below)
+- `settings.vision_pi4.inference_scheduler_enabled`: run the worker on each frame (default: `false`)
+- `settings.vision_pi4.preprocessing`: frame preparation, applied only while the scheduler runs
 
 **Disable:** Set `settings.vision_pi4.inference_scheduler_enabled = false`
 
 **Notes:**
-- Results are published to `vision_inference_result` in context.
-- Replace the dummy inference function with your own model for custom tasks.
+- Results are published to `vision_inference_result`, and the worker's state to
+  `vision_inference_status` — one of `disabled`, `unconfigured`, `pending`, `ready`, `failed`.
+- There is no placeholder model. A real one is passed in as `inference_fn` when the module is
+  constructed; with nothing wired the scheduler stays off and says `unconfigured`.
 
 ## 21b) Vision Preprocessing (Pi4)
 **What it does:** Preprocesses camera frames before inference (resize, normalize, ROI selection). Hardware-friendly and configurable for Pi4/5 vision tasks.
 
 **Enable:**
-- Enabled automatically when `modules.vision_pi4.enabled = true`.
+- Runs inside the vision feed whenever `modules.vision_pi4.enabled = true`, and only while the
+  inference scheduler is on — at the scheduler's default (`false`) nothing is preprocessed.
 
 **Configuration:**
-- `settings.vision_pi4.preprocessing.resize`: Target size, e.g. `[224, 224]`
-- `settings.vision_pi4.preprocessing.normalize`: Enable normalization (default: true)
-- `settings.vision_pi4.preprocessing.roi`: Region of interest, e.g. `[x, y, w, h]`
-- `settings.vision_pi4.preprocessing.mean`: Mean for normalization (default: `[0.485, 0.456, 0.406]`)
-- `settings.vision_pi4.preprocessing.std`: Std for normalization (default: `[0.229, 0.224, 0.225]`)
+- `settings.vision_pi4.preprocessing.resize`: Target size, e.g. `[224, 224]` (default `[224, 224]`)
+- `settings.vision_pi4.preprocessing.normalize`: Enable normalization (default: `false`)
+- `settings.vision_pi4.preprocessing.roi`: Region of interest, e.g. `[x, y, w, h]` (default: `null`)
+- `settings.vision_pi4.preprocessing.mean`: Mean for normalization (default: `[0.0, 0.0, 0.0]`)
+- `settings.vision_pi4.preprocessing.std`: Std for normalization (default: `[1.0, 1.0, 1.0]`)
 
-**Disable:** Not recommended; preprocessing is lightweight and safe for all Pi4/5 vision tasks.
+Set `mean`/`std` to your model's values when you turn `normalize` on; the shipped `[0.0, …]` /
+`[1.0, …]` pair is the identity, not an ImageNet preset.
+
+**Disable:** Nothing to do — it is inert until the scheduler runs.
 
 ## 22) Semantic Labeler (Pi4)
 **What it does:** Adds object labels from camera frames (lite stub or OpenCV DNN).

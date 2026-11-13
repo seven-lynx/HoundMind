@@ -8,6 +8,24 @@ longer supported. PackMind and CanineCore are now a single system.
 
 **Preferred OS (recommended):** Raspberry Pi OS Bookworm (64-bit).
 
+## Contents
+
+- [Supported boards](#supported-boards) — Pi 4 and 5 only, and the HAT version rule
+- [Python](#python) — 3.11–3.13, and what refuses what
+- [Prerequisites](#prerequisites)
+- [Recommended: Guided Install (Beginner-Friendly)](#recommended-guided-install-beginner-friendly)
+- [Manual Install (Step-by-Step, Advanced)](#manual-install-step-by-step-advanced)
+- [Bench checklist (before calling a build done)](#bench-checklist-before-calling-a-build-done)
+- [Troubleshooting & Support Bundles](#troubleshooting--support-bundles)
+- [Run](#run)
+- [TLS for the control plane (optional)](#tls-for-the-control-plane-optional)
+- [Feature Guide](#feature-guide)
+- [Fallback: Run the Official PiDog Software](#fallback-run-the-official-pidog-software)
+- [Notes](#notes)
+- [PiDog & Dependency Installation (Official)](#pidog--dependency-installation-official)
+
+---
+
 ## Supported boards
 
 **Raspberry Pi 4 and Raspberry Pi 5 only.** Pi 3 support was dropped in the 2026.11 refactor: it is
@@ -106,9 +124,9 @@ PYTHON=python3.11 bash scripts/install_houndmind.sh --build-rtabmap --auto-syste
 ```bash
 python3.11 -m venv .venv
 . .venv/bin/activate
+```
 
 If your `python3` is already 3.11–3.13, `python3 -m venv .venv` is equivalent.
-```
 
 ### 2) Install PiDog system dependencies (Linux, Raspberry Pi OS Lite)
 

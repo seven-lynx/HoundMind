@@ -11,6 +11,23 @@ and it requires an explicit go-ahead (see §9).
 If a step fails, do not skip to the next one: the later steps use the sensor the earlier one
 proved, and a failure skipped once is a failure that comes back as a mystery later.
 
+## Contents
+
+1. [What this run proves — and what it does not](#1-what-this-run-proves--and-what-it-does-not)
+2. [Before you start](#2-before-you-start) — the checklist that makes the rest safe
+3. [The ladder at a glance](#3-the-ladder-at-a-glance) — all six steps in one table
+4. [Step 1 — Install sanity](#4-step-1--install-sanity)
+5. [Step 2 — Sensors, read-only](#5-step-2--sensors-read-only)
+6. [Step 3 — Loop and modules, still no motion](#6-step-3--loop-and-modules-still-no-motion)
+7. [Step 4 — The control plane, live](#7-step-4--the-control-plane-live)
+8. [Step 5 — Peripherals, only if you fitted them](#8-step-5--peripherals-only-if-you-fitted-them)
+9. [Step 6 — Motion, and only motion](#9-step-6--motion-and-only-motion)
+10. [When something fails](#10-when-something-fails)
+11. [Recording the run](#11-recording-the-run)
+12. [What this guide does not cover](#12-what-this-guide-does-not-cover)
+
+---
+
 ## 1. What this run proves — and what it does not
 
 | Step | Proves | Does **not** prove |

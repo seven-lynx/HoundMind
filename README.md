@@ -83,10 +83,15 @@ PYTHONPATH=src python -m houndmind_ai
 ```
 
 ## Hardware checkup
-- Run a minimal sensor + motion check on the PiDog hardware:
- - Run a minimal sensor + motion check on the PiDog hardware:
-  - `python -m tools.hardware_checkup` (recommended after `pip install -e .` or with `PYTHONPATH=src`)
-- Use `--skip-motion` to avoid any movement.
+Read-only first — `--skip-motion` is what makes the command safe to run anywhere:
+
+```bash
+python -m tools.hardware_checkup --skip-motion
+```
+
+Without that flag the tool stands the dog, turns it both ways and sweeps its head. Run the motion
+forms only with clearance around the dog and a hand near the power. `docs/HARDWARE_TEST.md` is the
+full six-step ladder, and it says what a pass looks like before you run each step.
 
 ## Automated smoke test
 - Run a non-motion smoke test (sensors + scan + mapping):
@@ -167,6 +172,8 @@ See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for every key and its defau
 | Build a client against the API | [docs/CONTROL_API.md](docs/CONTROL_API.md) |
 | Understand why the runtime is shaped this way | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Read the logs, or build a support bundle | [docs/LOGGING.md](docs/LOGGING.md) |
+| Run the hardware test ladder on the dog | [docs/HARDWARE_TEST.md](docs/HARDWARE_TEST.md) |
+| Write the routine files the dog plays | [docs/ROUTINES.md](docs/ROUTINES.md) |
 | Know what the code looked like before the refactor | [docs/BASELINE.md](docs/BASELINE.md) |
 
 ## Notes
@@ -207,12 +214,14 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Routines                       | Enabled     | `modules.routine_runner`              |
 | Places (go to \<place\>)         | Enabled     | `modules.place_navigator`; intents at priority 17, under `navigation` |
 | Attention                      | Enabled     |                                       |
+| Habituation                    | Enabled     | No `modules` entry; switch it off with `settings.habituation.enabled` |
+| Energy & Emotion               | Disabled    | Opt-in; `modules.energy_emotion`       |
 | Watchdog                       | Enabled     | Holds motion on stale data; restarts stopped modules with backoff |
 | Event Logging                  | Enabled     |                                       |
 | Decision Feed                  | Enabled     | Last 200 decisions behind `/decisions`; JSONL off by default |
 | Control Plane (REST/WS/web)    | Enabled     | Port 8420, token-gated; `modules.api`  |
 | LED Manager                    | Enabled     |                                       |
-| Calibration                    | Enabled     |                                       |
+| Calibration                    | Disabled    | Opt-in; writes servo offsets, moves the dog |
 | Safety                         | Disabled    | Opt-in for emergency stop/tilt        |
 | Health Monitor                 | Disabled    | Opt-in for CPU/mem/temp/throttling    |
 | Balance                        | Disabled    | Opt-in for IMU posture                |

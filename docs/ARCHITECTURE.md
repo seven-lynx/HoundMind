@@ -10,6 +10,20 @@ happens when something stops answering.
 
 ---
 
+## Contents
+
+1. [Layers](#1-layers) — who may touch hardware, and the dependency rule
+2. [Package layout](#2-package-layout) — the real tree
+3. [Concurrency model](#3-concurrency-model) — one loop thread, and who may block
+4. [Commands and events](#4-commands-and-events) — the typed vocabulary
+5. [The interlock (non-negotiable)](#5-the-interlock-non-negotiable)
+6. [Board profiles](#6-board-profiles)
+7. [Configuration](#7-configuration)
+8. [Failure and degradation](#8-failure-and-degradation)
+9. [Testing strategy](#9-testing-strategy)
+
+---
+
 ## 1. Layers
 
 ```
@@ -56,23 +70,25 @@ src/houndmind_ai/
   board/      detect.py
   core/       config.py  runtime.py  module.py  logging_setup.py
   kernel/     state.py  commands.py  intents.py  registry.py  scheduler.py  supervisor.py
-              config_schema.py  routine.py  routine_store.py
+              config_schema.py  actions.py  decisions.py  place.py  place_store.py
+              routine.py  routine_store.py
   hal/        iface.py  fake.py  vendor.py  module.py  sensors.py  motors.py
   act/        gateway.py  interlock.py
   safety/     supervisor.py  watchdog.py  balance.py  health_monitor.py  sensor_health.py
   navigation/ scanning.py  obstacle_avoidance.py  orientation.py  local_planner.py
+              place_navigator.py
   mapping/    mapper.py  path_planner.py
   behavior/   fsm.py  library.py  registry.py  attention.py  habituation.py  routine_runner.py
   perception/ fusion.py
   calibration/ servo_calibration.py  workflow.py
-  logging/    event_logger.py  led_manager.py
+  logging/    event_logger.py  decision_log.py  led_manager.py
   optional/   vision.py  vision_pi4.py  vision_preprocessing.py  vision_inference_scheduler.py
               face_recognition.py  semantic_labeler.py  slam_pi4.py  voice.py  energy_emotion.py
   services/   api.py  auth.py  camera.py  module.py  sessions.py  settings.py  state.py
-              stream.py  web/  (index.html, app.js, style.css)
-src/tools/    hardware_checkup.py  smoke_test.py  camera_check.py  collect_support_bundle.py
-              download_opencv_models.py  installer_verify.py  list_audio_devices.py
-              validate_rtabmap_adapter.py
+              stream.py  tls.py  web/  (index.html, app.js, style.css)
+src/tools/    camera_check.py  collect_support_bundle.py  download_opencv_models.py
+              hardware_checkup.py  installer_verify.py  list_audio_devices.py
+              replay_decisions.py  smoke_test.py  validate_rtabmap_adapter.py
 ```
 
 `board/` answers one question — which Raspberry Pi this is — and holds no policy of its own. There is

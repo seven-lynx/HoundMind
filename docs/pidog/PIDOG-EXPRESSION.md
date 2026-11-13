@@ -60,6 +60,7 @@ acknowledgement, so "set the LED then exit immediately" often shows nothing.
 
 ```python
 dog.rgb_strip.set_mode('monochromatic', 'green', brightness=0.4)   # calm, steady
+```
 
 ---
 

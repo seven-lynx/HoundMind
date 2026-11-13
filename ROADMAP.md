@@ -8,11 +8,15 @@
 - [x] All guides updated for unified system, no sim mode, and Pi OS Lite recommendation
 - [x] Changelog and README reflect all major changes
 - [x] Release QA checklist: tests, docs, tag, changelog, install validation
-- [ ] Expand troubleshooting checklist in `docs/INSTALL.md` (common errors + support bundle steps)
- - [ ] Improve and consolidate docs in `docs/` (API reference, programming guide, CONTRIBUTING.md, architecture overview)
+- [x] Expand troubleshooting checklist in `docs/INSTALL.md` (common errors + support bundle steps)
+- [x] Improve and consolidate docs in `docs/` (API reference, programming guide, CONTRIBUTING.md, architecture overview)
 - [x] Packaging & release automation: complete `pyproject.toml` metadata, automate builds, changelog generation, and release pipelines
 
 Purpose: Track completion for each module needed for the PiDog hardware-only build (Pi 4 and Pi 5 editions). Check items as they're implemented and verified on hardware.
+
+Last reconciled 2026-11-12 against `08e8db3`. A box is ticked only with a `file:line`, a test file
+or a commit behind it; an item that needs the dog stays open until its run is recorded, and an item
+whose feature was removed says so rather than disappearing.
 
 > **Historical sections.** The roadmap below was written when a Pi 3 was the target. Pi 3 support was
 > dropped in the 2026.11 refactor (it is why the loop used to run at 5 Hz and vision shipped off), and
@@ -24,7 +28,8 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Runtime loop + module lifecycle hardened (`core/runtime.py`)
 - [x] Config loading + validation (`core/config.py`)
 - [x] Module status/health reporting (`core/module.py`)
- - [ ] Provide a JSON Schema for `config/settings.jsonc` and runtime validation with clear errors and examples
+ - [x] Runtime validation of `config/settings.jsonc` with clear errors (`kernel/config_schema.py`)
+- [ ] Export that schema as a JSON Schema document for editors and tooling
 
 ## HAL (Hardware Abstraction Layer)
 - [x] Motor control integration (servo actions, head/tail) (`hal/motors.py`)
@@ -125,8 +130,8 @@ Purpose: Track completion for each module needed for the PiDog hardware-only bui
 - [x] Session summary report (events, obstacles, interactions)
 - [x] Global logging setup (console + rotating file)
 - [x] Status log toggle + interval control
- - [ ] Standardize structured JSON logging across modules (JSONL snapshots, consistent schema)
- - [ ] Add log rotation configuration and retention defaults (config-driven)
+ - [x] Standardize structured JSON logging across modules (JSONL snapshots, consistent schema)
+ - [x] Add log rotation configuration and retention defaults (config-driven)
  - [ ] Add telemetry hooks for optional remote metrics/telemetry export (explicit opt-in)
 
 ## Logging Tasks
@@ -140,9 +145,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
  - [ ] Implement log sampling and rate-limiting for high-frequency sensors and debug streams.
  - [x] Provide `scripts/logs_collect.sh` or `python -m tools.collect_support_bundle` to bundle logs, config, and a telemetry snapshot for support uploads.
  - [x] Add `docs/LOGGING.md` runbook with collection commands, jq examples, and common troubleshooting steps.
- - [ ] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
  - [x] Add unit tests verifying required log fields and that `logging_setup` responds to config/env overrides.
- - [ ] Surface `trace_id` in `RuntimeContext` and include it in telemetry snapshots to correlate logs + telemetry + support bundles.
  - [x] Surface `trace_id` in `RuntimeContext` and include it in telemetry snapshots to correlate logs + telemetry + support bundles.
 
 
@@ -157,9 +160,8 @@ The following checkable tasks cover robustness, observability, and supportabilit
 - [x] Health monitor module (CPU/mem/temp sampling)
 - [x] Scan throttling when health is degraded
 - [x] README usage + setup for Pi 3
- - [ ] Add CI pipeline (GitHub Actions) to run linting, tests, type checks, build, and packaging on PRs
  - [x] Add CI pipeline (GitHub Actions) to run linting, tests, type checks, build, and packaging on PRs
- - [ ] Add typing and static checks (`mypy`, `ruff`/`flake8`) and enforce in CI
+ - [x] Add typing and static checks (`mypy`, `ruff`/`flake8`) and enforce in CI
  - [ ] Pin and manage dependencies, add Dependabot config and guidance for `requirements-lite.txt`
  - [ ] Performance profiling harnesses for hot loops (navigation/scan processing) and document targets
 
@@ -185,14 +187,14 @@ The following checkable tasks cover robustness, observability, and supportabilit
 The following fixes are planned and prioritized. Each item should be implemented, documented, and validated on-device or via unit tests before being checked off.
 
 - [x] **Fix config numeric coercions (HIGH):** Ensure numeric config fields (for example `loop.max_cycles`) are coerced to the expected types to avoid runtime TypeError. File: src/houndmind_ai/core/config.py
-- **Clarify packaging and dependencies (HIGH):** Update `pyproject.toml` to declare core dependencies or document installer-only install flow. File: pyproject.toml
+- [x] **Clarify packaging and dependencies (HIGH):** Update `pyproject.toml` to declare core dependencies or document installer-only install flow. File: pyproject.toml
 - [x] **Remove/implement placeholder `build_default_modules` (MEDIUM):** Clean up or implement the placeholder in `src/houndmind_ai/core/runtime.py` to avoid duplicate module builders.
 - [x] **Harden JSONC parsing (MEDIUM):** Replace or harden the in-house `_load_jsonc` parser (consider `json5`/`commentjson`) in `src/houndmind_ai/core/config.py`.
 - [x] **Improve exception logging (MEDIUM):** Use `logger.exception` or include stack traces in broad `except Exception` blocks for actionable diagnostics. Files: core/runtime.py and module start/stop/tick handlers.
-- **Add CI and test automation (MEDIUM):** Add GitHub Actions CI to run tests/lint and keep test/dev dependencies in `requirements-dev.txt` or `pyproject.toml`.
+- [x] **Add CI and test automation (MEDIUM):** Add GitHub Actions CI to run tests/lint and keep test/dev dependencies in `requirements-dev.txt` or `pyproject.toml`.
 - [x] **Telemetry security hardening (LOW→MEDIUM):** Add config options to bind dashboard to `127.0.0.1` and document authentication/ACL guidance. **Superseded:** the dashboard module and its port-8092 server were removed; the control plane on 8420 is token-gated and is the only listener. See `docs/FEATURES_GUIDE.md` §24 and §26.
-- **Add unit tests for config & runtime edge cases (LOW):** Add tests for JSONC parsing, numeric coercion, and `max_cycles` loop behavior. Files: tests/
-- **Document installer expectations (LOW):** Clarify in README and `pyproject.toml` whether the package is installer-first or pip-installable by developers.
+- [x] **Add unit tests for config & runtime edge cases (LOW):** Add tests for JSONC parsing, numeric coercion, and `max_cycles` loop behavior. Files: tests/
+- [x] **Document installer expectations (LOW):** Clarify in README and `pyproject.toml` whether the package is installer-first or pip-installable by developers.
 
 
 ## Migration (CanineCore + PackMind)
@@ -367,7 +369,7 @@ The following fixes are planned and prioritized. Each item should be implemented
 - [x] Face recognition (match/re-id) and enrollment flow.
 - [ ] Add unit tests + sample assets for face recognition backends (opencv + face_recognition).
 - [ ] Multi-person tracking with re-identification across frames.
-- [ ] Privacy controls (local-only data, easy reset).
+- [x] Privacy controls (local-only data, easy reset) — embeddings stay under `~/.houndmind/face/` and `DELETE /api/v1/people/{id}` removes one (`08e8db3`). A "forget everyone in one call" reset is still missing.
 
 #### Mapping, SLAM & Localization
 - [ ] Full SLAM pipeline (visual/IMU fusion).
@@ -376,23 +378,23 @@ The following fixes are planned and prioritized. Each item should be implemented
 	- [x] Implement camera and IMU data pipeline for SLAM backend (buffering and timestamp pairing implemented in module).
 	- [x] Add configuration options for SLAM backend selection and tuning in `settings.slam_pi4`.
 	- [x] Implement pose output: publish `slam_pose` (x, y, yaw, confidence) and `slam_status` to context.
-	- [x] Add map output: expose map/trajectory data for visualization and debugging (map/trajectory now available via telemetry download endpoints).
+	- [x] Add map output: expose map/trajectory data for visualization and debugging. The telemetry download endpoints it named were removed with the dashboard; the data stays in the runtime context.
 	- [ ] Implement loop-closure detection and map optimization (if supported by backend).
 	- [x] Add fallback to stub mode if backend is unavailable or fails.
 	- [ ] Validate SLAM accuracy and robustness in real-world Pi4 tests (varied lighting, movement, and environments) — hardware validation pending.
 	- [ ] Validate RTAB-Map adapter on Pi4 hardware and adapt adapter calls to the installed Python bindings if needed.
 	- [x] Document SLAM usage, configuration, and troubleshooting in the features guide and programming guide (README + docs updated with RTAB-Map notes).
 	- [x] Add unit and scenario tests for SLAM integration and pose/map outputs (basic tests added; more scenarios recommended).
-	- [x] Expose SLAM status and map in the telemetry dashboard for live monitoring (download endpoints + snapshot keys added).
+	- [ ] Expose SLAM status and map over the control plane for live monitoring. **Superseded:** the telemetry dashboard and its `/download_slam_*` endpoints were removed; `docs/CONTROL_API.md:115` says the SLAM map download is a runtime-context command, not an HTTP route.
 	- [ ] Add simulated camera+IMU tests to CI to catch adapter regressions before hardware runs.
 - [ ] Sensor-fusion localization (IMU + vision + distance).
-- [ ] Global pathfinding (A* or similar) across mapped spaces.
-- [ ] Path planning hooks + planner integration in runtime.
+- [x] Global pathfinding (A* or similar) across mapped spaces — `mapping/path_planner.py` (`astar`), `tests/test_path_planning.py`.
+- [x] Path planning hooks + planner integration in runtime — `mapping/path_planner.py::default_path_planning_hook`.
 - [ ] Loop-closure handling and map optimization.
 
 #### Semantic Understanding
 - [x] Object/obstacle semantic labeling (vision-based).
-- [ ] Provide default model assets + download helper for semantic labeler (OpenCV DNN).
+- [x] Provide default model assets + download helper for semantic labeler (OpenCV DNN) — `src/tools/download_opencv_models.py`.
 - [ ] Add unit tests for semantic labeler output schema and thresholds.
 - [ ] Semantic zones (e.g., “kitchen”, “charging area”).
 - [ ] Behavior hooks triggered by semantic labels.
@@ -457,8 +459,8 @@ The following fixes are planned and prioritized. Each item should be implemented
 		- [ ] Provide JSONC script examples in `config/actions.jsonc`.
 		- [ ] Add playback and interruptable semantics in `behavior/library.py`.
 		- [ ] Tests: `tests/test_behavior_scripts.py`.
-	- [ ] Ensure chest LED always reflects the current behavior/safety/emotion state (clear priority rules).
-		- [ ] Define LED priority mapping and unit tests `tests/test_led_priority.py`.
+	- [x] Ensure chest LED always reflects the current behavior/safety/emotion state (clear priority rules) — `logging/led_manager.py::DEFAULT_PRIORITY`.
+		- [x] Define LED priority mapping and unit tests — `tests/test_led_manager.py` (the plan's `test_led_priority.py` name was not used).
 
 #### Safety & Control
 - [ ] Dynamic balance service with active IMU corrections.
@@ -466,23 +468,23 @@ The following fixes are planned and prioritized. Each item should be implemented
 - [ ] Safety gating for aggressive motions when uncertain.
 
 #### Telemetry & UI
-- [x] Telemetry server + dashboard (device status, map, logs).
+- [x] Telemetry server + dashboard (device status, map, logs). **Superseded:** the dashboard module and its port-8092 server were removed; the control plane on 8420 is the only listener (`docs/FEATURES_GUIDE.md` §24 and §26).
 - [ ] Live map/scan/event visualization.
 - [ ] On-device debug UI for tuning thresholds.
-- [ ] Implement in-browser SLAM map/trajectory overlay (canvas/WebGL) consuming `/download_slam_map` and `/download_slam_trajectory`.
-- [ ] Add telemetry authentication/ACL options for remote access and mobile UI control.
+- [ ] Implement in-browser SLAM map/trajectory overlay (canvas/WebGL) consuming `slam_pose` from the control plane (the `/download_slam_map` and `/download_slam_trajectory` endpoints were removed with the dashboard).
+- [x] Add telemetry authentication/ACL options for remote access and mobile UI control — token-gated control plane with a scope per route, plus opt-in TLS (`a386154`; `docs/CONTROL_API.md` §1, §7).
 - [ ] Add a lightweight mobile debug view (last pose, recent events, map status).
 
 #### Installer & Packaging (Pi4)
 - [x] Pi4 installer preset (full dependencies).
 - [ ] Optional GPU acceleration toggles.
-- [ ] Post-install validation suite (vision/audio/mapping).
-- [ ] Add an optional `full` extras group in `pyproject.toml` to simplify full-feature installs.
+- [x] Post-install validation suite (vision/audio/mapping) — `src/tools/installer_verify.py`, `src/tools/hardware_checkup.py`, `src/tools/smoke_test.py`.
+- [x] Add an optional `full` extras group in `pyproject.toml` to simplify full-feature installs — `pyproject.toml:26`.
 
 #### Tests & Validation
 - [ ] Pi4 hardware validation checklist.
 - [ ] End-to-end scenario tests (vision + mapping + behavior).
-- [ ] Add a post-install `scripts/smoke_check.sh` for sensors/logs/telemetry sanity.
+- [x] Add a post-install smoke check for sensors/logs/telemetry sanity — shipped as `python -m tools.smoke_test`, not a shell script.
 - [ ] Add CI fixtures for vision inference + SLAM (simulated frames/IMU) to validate adapters
 - [ ] Add CI smoke tests for optional modules (face recognition, semantic labeling, telemetry endpoints).
 
