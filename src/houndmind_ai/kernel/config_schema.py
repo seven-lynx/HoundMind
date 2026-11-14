@@ -36,6 +36,7 @@ __all__ = [
     "Section",
     "StrSpec",
     "validate_config_tree",
+    "validate_settings_section",
 ]
 
 
@@ -1118,4 +1119,21 @@ def validate_config_tree(raw: Any) -> list[Problem]:
     raise :class:`ConfigError` so the process stops before it can move a servo.
     """
     _, problems = _TOP.validate(raw, "config")
+    return problems
+
+
+def validate_settings_section(name: str, table: Any) -> list[Problem]:
+    """Validate one `settings.<name>` table against the spec that section is loaded against.
+
+    The control plane's live-config route uses this so an HTTP write is refused by the same specs
+    that refuse a config file, instead of storing a string in a numeric key and wedging whichever
+    module reads it on every tick (#123). A section that is not in `_SETTINGS_SECTIONS` is accepted
+    unvalidated, exactly as it is in a file.
+    """
+    spec = _SETTINGS_SECTIONS.get(name)
+    if spec is None:
+        return []
+    if not isinstance(table, dict):
+        return [Problem(f"config.settings.{name}", f"expected a table, got {table!r}")]
+    _, problems = spec.validate(table, f"config.settings.{name}")
     return problems

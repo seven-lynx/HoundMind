@@ -246,6 +246,10 @@ Current Release: v2026.01.18
   config section it shipped with.
 
 ### Changed
+- `PATCH /api/v1/config` says what it does: every response now carries `persisted: false`, and
+  §2 of the contract states that the change is process-local and that a restart reloads
+  `config/settings.jsonc`. An operator who edited `navigation.safe_distance_cm` from a phone and
+  restarted the service used to find the old value back with nothing having warned them (#128).
 - `/state` carries four blocks it had the data for and never published: `safety` (`active`,
   `emergency_stop`), `nav.heading_calibrated`, `health.high_water`, and `perf` — the loop's
   `tick_hz_actual`, `tick_ms`, `tick_overrun_ms` and `loop_delay_ms`, which `core/runtime.py` was
@@ -282,6 +286,13 @@ Current Release: v2026.01.18
 
 
 ### Fixed
+- `PATCH /api/v1/config` stored any value for a live key without running the schema, so
+  `{"led.brightness": "high"}` answered `200` and then made `led_manager.tick` raise on every tick
+  for the life of the process — the module reported `failed` and no restart cleared it, because the
+  bad value stayed in the settings dict (#123). The write is validated against the same section spec
+  a config file is loaded against (`validate_settings_section`), a refusal is a `400` carrying
+  `invalid[].problems[]` and stores nothing, and `led_manager` reads its brightness through
+  `_safe_float` so a hand-edited file cannot do it either.
 - A navigation retreat ran once per command and outside the interlock: `obstacle_avoidance` wrote
   `navigation_followup` and nothing retracted it, so `hal_motors` re-ran the same backward-and-turn
   after **every** later command, inline on the 5 Hz loop (the closed-loop turn waits up to

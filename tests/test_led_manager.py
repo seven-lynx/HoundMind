@@ -340,3 +340,17 @@ def test_the_cooldown_still_dedupes_the_same_request() -> None:
 
     assert len(rgb_calls(ctx)) == 1
 
+
+def test_a_non_numeric_brightness_does_not_fail_the_module() -> None:
+    """Defence in depth behind the schema check on `PATCH /config` (#123).
+
+    A live write used to be able to store a string here; the route refuses it now, and this keeps a
+    hand-edited config from turning one bad value into a module that fails on every tick.
+    """
+    module, ctx = build(led_settings(brightness="high"))
+    ctx.set("led_request:safety", {"mode": "emergency"})
+
+    module.tick(ctx)
+
+    assert rgb_calls(ctx)[0]["brightness"] == 0.7
+

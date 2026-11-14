@@ -119,9 +119,17 @@ and `config` into browser history and access logs (`#18`).
 | `GET` | `/api/v1/support-bundle` | `admin` | zip: meta, state, modules, redacted config, audit, sessions |
 
 `PATCH /config` writes only `behavior.action_cooldown_s`, `led.brightness`,
-`motors.min_action_interval_s` and `navigation.safe_distance_cm` (`services/api.py:62`), each re-read
+`motors.min_action_interval_s` and `navigation.safe_distance_cm` (`services/api.py:70`), each re-read
 every tick by its module. Any other key is refused with the live list in the body, because a config
 write that changes nothing is the bug this API exists to avoid.
+
+A value the config **file** would have rejected is refused too: the write is checked against the same
+section schema (`kernel/config_schema.py::validate_settings_section`), so a `400` carries
+`invalid: [{key, problems: [{path, message, hint}]}]` and nothing is stored. A value that got through
+would otherwise fail the module that reads it on every tick, which is a worse version of the same bug.
+
+The change is applied **in memory only**. Every response carries `persisted: false`, and a restart
+reloads `config/settings.jsonc` — so a live edit is a session-scoped override, not a new default.
 
 **Reserved, not implemented in v1:** `POST /api/v1/calibration/run` (it moves the dog, so it needs a
 physical confirmation on the device first) and `POST /api/v1/update`. There is no route for face

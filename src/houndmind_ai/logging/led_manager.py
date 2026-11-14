@@ -187,7 +187,9 @@ class LedManagerModule(Module):
         params: dict[str, Any] = {
             "style": str(mode_name),
             "color": str(color),
-            "brightness": float(settings.get("brightness", 0.7)),
+            # `_safe_float` rather than `float`: a live config write could store a non-number in a
+            # numeric key, and a raise here would fail this module on every tick (#123).
+            "brightness": _safe_float(settings.get("brightness", 0.7), 0.7),
         }
         bps = _request_bps(request, settings, source)
         if bps is not None:
