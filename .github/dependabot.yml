@@ -1,0 +1,12 @@
+# Action pins age silently until a GitHub runtime deprecation forces the bump, and the first signal
+# is an annotation on a run already broken by it (#138). Dependabot proposes them weekly, grouped so
+# the bumps arrive as one reviewable pull request instead of one per action.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]

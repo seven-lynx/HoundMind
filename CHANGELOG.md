@@ -8,6 +8,13 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **Action pins are proposed instead of discovered** (#138): `.github/workflows/ci.yml` is the only
+  workflow and its `uses:` pins were maintained by hand, so nothing proposed a bump until a GitHub
+  runtime deprecation broke a run - the annotation on the broken run was the first signal. New
+  `.github/dependabot.yml` asks for weekly, grouped `github-actions` updates, and `identity_guard`
+  now passes for a `dependabot[bot]` pull request on `pull_request` events only: those commits cannot
+  match a human account, so without the exemption no bump pull request could merge the required
+  check. Every human commit stays gated, and `.github/CONTRIBUTING.md` states the exemption.
 - **Section 4 of the programming guide now holds the keys modules actually use** (#115): 30 context
   keys were set in the tree and absent from the table every module author reads, among them
   `battery_voltage` (three consumers), `sensor_service`, `energy_level`/`energy_speed_hint`,

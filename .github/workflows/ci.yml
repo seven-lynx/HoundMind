@@ -105,6 +105,7 @@ jobs:
       - name: Every commit is authored by the sanctioned account
         env:
           EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.sha }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
@@ -115,6 +116,15 @@ jobs:
           # wrong git config, and history keeps it. The local hooks only see the unpushed
           # range, so a commit created server-side is invisible to them - this is the gate
           # that does see it.
+          #
+          # Dependabot is the one exception, and only on `pull_request`: its commits are authored by
+          # `dependabot[bot]`, which no human account can match, so this required check would fail
+          # every bump pull request and none could ever merge (#138). Human commits stay gated, and a
+          # Dependabot pull request still needs an approved run, exactly like a fork pull request.
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$ACTOR" = "dependabot[bot]" ]; then
+            echo "ok: dependabot-authored pull request; the sanctioned-account rule does not apply"
+            exit 0
+          fi
           accepted='53497955\+seven-lynx@users\.noreply\.github\.com|j\.s\.coleman00@gmail\.com|developer@roamtheweb\.app'
           if [ "$EVENT_NAME" = "pull_request" ]; then
             base="$PR_BASE"
