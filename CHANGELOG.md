@@ -277,6 +277,10 @@ Current Release: v2026.01.18
 
 
 ### Fixed
+- `runtime_tick` was whitelisted into every JSON record (`core/logging_setup.py:15`) and published
+  by nobody — the loop set `tick_ts` and never the tick index, so no production line could be matched
+  to a tick while three log tests asserted the field by injecting it themselves (#126). The loop sets
+  it beside `tick_ts` now, and `docs/LOGGING.md` lists the four fields every record carries.
 - `behavior.autonomy_modes` never left `idle`: `_select_autonomy_mode` handed the mode names to a
   registry keyed by `<mode>_behavior`, so `pick_weighted` found no item, returned `None`, and the
   fallback won on every tick — `patrol`, `explore` and `interact` were unreachable through autonomy,

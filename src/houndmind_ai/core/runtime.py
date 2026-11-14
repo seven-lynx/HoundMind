@@ -201,6 +201,9 @@ class HoundMindRuntime:
             while True:
                 start = time.time()
                 self.context.set("tick_ts", start)
+                # `CONTEXT_FIELDS` whitelists this into every JSON record, and it was the one field
+                # only a test ever set — so no production line could be matched to a tick (#126).
+                self.context.set("runtime_tick", cycles)
                 self.tick()
                 elapsed = time.time() - start
                 settings = self.config.settings or {}
