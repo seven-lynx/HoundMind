@@ -268,6 +268,9 @@
       "enable_touch": true,
       "enable_sound": true,
       "enable_imu": true,
+      // Pack voltage reads the ADC on the bus the servos share, so it is polled slower than the
+      // rest of the snapshot: the last good value is reported in between (0 = every poll).
+      "battery_poll_s": 2.0,
       // Ultrasonic sampling.
       "distance_samples": 3,
       "distance_sample_delay_s": 0.03,
@@ -600,10 +603,6 @@
       // Navigation decision logging.
       "log_decision_enabled": true,
       "log_decision_raw_angles": false,
-      // Lightweight local planner (uses mapping.best_path as a short-range hint)
-      "planner_enabled": true,
-      "planner_min_confidence": 0.6,
-      "planner_max_age_s": 2.0,
       // Stuck detection (movement magnitude) and avoidance strategy.
       "stuck_time_window_s": 5.0,
       "stuck_movement_threshold": 1500.0,
@@ -635,7 +634,10 @@
       // Turn speeds (should be faster than walk speeds).
       "speed_turn_slow": 100,
       "speed_turn_normal": 200,
-      "speed_turn_fast": 220
+      "speed_turn_fast": 220,
+      // How long a navigation retreat stays worth running. It describes the step that just
+      // happened, so a stale one is dropped instead of executed late on a dead observation.
+      "followup_ttl_s": 1.0
     },
     // =====================================================================
     // ORIENTATION (IMU heading integration)
@@ -661,8 +663,6 @@
     "mapping": {
       // Enable mapping module (safe to keep on by default).
       "enabled": true,
-      // Future hook for optional path planning.
-      "path_planning_enabled": true,
       // Max samples to keep in memory.
       "sample_history_max": 500,
       // Max age for samples in seconds (0 = keep forever).

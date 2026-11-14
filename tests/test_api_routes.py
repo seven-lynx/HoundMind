@@ -250,6 +250,45 @@ def test_a_live_config_write_rejects_keys_that_are_not_live(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_a_live_config_write_must_match_the_schema(tmp_path) -> None:
+    """A string in a numeric key answered 200 and then failed its module on every tick (#123)."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        plane.context.set("settings", {"led": {"brightness": 0.7}})
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/config", headers=headers, json={"led.brightness": "high"}
+            )
+            body = await response.json()
+
+        assert response.status == 400, body
+        assert body["invalid"][0]["key"] == "led.brightness"
+        assert body["invalid"][0]["problems"][0]["path"] == "config.settings.led.brightness"
+        assert plane.context.get("settings")["led"]["brightness"] == 0.7
+
+    asyncio.run(scenario())
+
+
+def test_a_live_config_write_says_it_is_not_persisted(tmp_path) -> None:
+    """The change lives in this process only: a restart reloads `config/settings.jsonc` (#128)."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        plane.context.set("settings", {"led": {"brightness": 0.7}})
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/config", headers=headers, json={"led.brightness": 0.4}
+            )
+            body = await response.json()
+
+        assert response.status == 200, body
+        assert body["persisted"] is False
+        assert plane.context.get("settings")["led"]["brightness"] == 0.4
+
+    asyncio.run(scenario())
+
+
 def test_pairing_end_to_end(tmp_path) -> None:
     """A code from `pair/open` buys exactly one token, with the documented scopes."""
     async def scenario() -> None:

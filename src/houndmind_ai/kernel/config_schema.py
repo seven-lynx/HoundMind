@@ -36,6 +36,7 @@ __all__ = [
     "Section",
     "StrSpec",
     "validate_config_tree",
+    "validate_settings_section",
 ]
 
 
@@ -279,6 +280,8 @@ _SENSORS = Section(
         "enable_touch": Bool(),
         "enable_sound": Bool(),
         "enable_imu": Bool(),
+        # Pack voltage is an ADC read on the bus the servos share, so it has its own cadence.
+        "battery_poll_s": _NON_NEGATIVE,
         "distance_samples": IntSpec(minimum=1),
         "distance_sample_delay_s": _NON_NEGATIVE,
         "distance_use_median": Bool(),
@@ -507,7 +510,7 @@ _ATTENTION = Section(
     }
 )
 
-# `navigation/scanning.py`, `navigation/obstacle_avoidance.py`, `navigation/local_planner.py`.
+# `navigation/scanning.py`, `navigation/obstacle_avoidance.py`.
 # The largest section, and the one where a typo costs the most: the scan and avoidance knobs
 # are the difference between "walks past the sofa" and "walks into it". Choices are the names
 # `obstacle_avoidance.py` branches on (`scan_mode`, `avoidance_strategies`,
@@ -569,9 +572,6 @@ _NAVIGATION = Section(
         "slam_nav_min_confidence": _ALPHA,
         "log_decision_enabled": Bool(),
         "log_decision_raw_angles": Bool(),
-        "planner_enabled": Bool(),
-        "planner_min_confidence": _ALPHA,
-        "planner_max_age_s": _POSITIVE,
         "stuck_time_window_s": _POSITIVE,
         "stuck_movement_threshold": _POSITIVE,
         "stuck_min_samples": IntSpec(minimum=1),
@@ -598,7 +598,6 @@ _NAVIGATION = Section(
 _MAPPING = Section(
     fields={
         "enabled": Bool(),
-        "path_planning_enabled": Bool(),
         "sample_history_max": IntSpec(minimum=1),
         "sample_max_age_s": _NON_NEGATIVE,
         "home_map_enabled": Bool(),
@@ -630,6 +629,9 @@ _MOVEMENT = Section(
         "speed_turn_slow": _SERVO_SPEED,
         "speed_turn_normal": _SERVO_SPEED,
         "speed_turn_fast": _SERVO_SPEED,
+        # How long a navigation followup stays worth running (`hal/motors.py`). It describes the step
+        # that just happened, so a stale one is dropped rather than executed late.
+        "followup_ttl_s": _NON_NEGATIVE,
     }
 )
 
@@ -1113,4 +1115,21 @@ def validate_config_tree(raw: Any) -> list[Problem]:
     raise :class:`ConfigError` so the process stops before it can move a servo.
     """
     _, problems = _TOP.validate(raw, "config")
+    return problems
+
+
+def validate_settings_section(name: str, table: Any) -> list[Problem]:
+    """Validate one `settings.<name>` table against the spec that section is loaded against.
+
+    The control plane's live-config route uses this so an HTTP write is refused by the same specs
+    that refuse a config file, instead of storing a string in a numeric key and wedging whichever
+    module reads it on every tick (#123). A section that is not in `_SETTINGS_SECTIONS` is accepted
+    unvalidated, exactly as it is in a file.
+    """
+    spec = _SETTINGS_SECTIONS.get(name)
+    if spec is None:
+        return []
+    if not isinstance(table, dict):
+        return [Problem(f"config.settings.{name}", f"expected a table, got {table!r}")]
+    _, problems = spec.validate(table, f"config.settings.{name}")
     return problems

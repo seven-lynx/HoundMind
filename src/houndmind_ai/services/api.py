@@ -38,7 +38,7 @@ from houndmind_ai.kernel.commands import (
     Verdict,
     canonical_action,
 )
-from houndmind_ai.kernel.config_schema import Problem
+from houndmind_ai.kernel.config_schema import Problem, validate_settings_section
 from houndmind_ai.kernel.decisions import DecisionRing
 from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.kernel.routine_store import StoreReport
@@ -917,6 +917,7 @@ async def _config_patch(request: web.Request) -> web.Response:
 
     applied: dict[str, object] = {}
     rejected: list[str] = []
+    invalid: list[dict[str, object]] = []
     for key, value in body.items():
         dotted = str(key)
         if dotted not in LIVE_CONFIG_KEYS:
@@ -930,8 +931,34 @@ async def _config_patch(request: web.Request) -> web.Response:
         # Shallow copy, so a reader on another thread never sees a half-applied table.
         updated = dict(table)
         updated[leaf] = value
+        # The same specs the file is loaded against. Without this a client can store a string in a
+        # numeric key, get a 200, and wedge the module that reads it on every tick afterwards (#123).
+        problems = validate_settings_section(section, updated)
+        if problems:
+            invalid.append(
+                {
+                    "key": dotted,
+                    "problems": [
+                        {"path": problem.path, "message": problem.message, "hint": problem.hint}
+                        for problem in problems
+                    ],
+                }
+            )
+            continue
         settings[section] = updated
         applied[dotted] = value
+
+    if invalid:
+        return web.json_response(
+            {
+                "error": "bad_request",
+                "detail": "these values do not match the schema the config file is loaded against",
+                "invalid": invalid,
+                "live_keys": list(LIVE_CONFIG_KEYS),
+                "persisted": False,
+            },
+            status=400,
+        )
 
     if rejected:
         return web.json_response(
@@ -940,10 +967,15 @@ async def _config_patch(request: web.Request) -> web.Response:
                 "detail": "these keys cannot be changed live",
                 "rejected": rejected,
                 "live_keys": list(LIVE_CONFIG_KEYS),
+                "persisted": False,
             },
             status=400,
         )
-    return web.json_response({"applied": applied, "live_keys": list(LIVE_CONFIG_KEYS)})
+    # `persisted` is explicit because it is not true: the change lives in this process only, and a
+    # restart reloads `config/settings.jsonc` (#128).
+    return web.json_response(
+        {"applied": applied, "live_keys": list(LIVE_CONFIG_KEYS), "persisted": False}
+    )
 
 
 async def _calibration(request: web.Request) -> web.Response:

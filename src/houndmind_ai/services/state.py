@@ -36,7 +36,11 @@ def _mode(context) -> str:
 def _sensors(context) -> dict[str, object]:
     reading = context.get("sensor_reading")
     tilt = _table(context.get("tilt_warning"))
-    battery = _number(context.get("battery_voltage"))
+    # Same precedence as `act/gateway.py::_snapshot`: the reading the HAL filled wins, and the
+    # context key covers a producer that is not the sensor module (#119).
+    battery = _number(getattr(reading, "battery_v", None))
+    if battery is None:
+        battery = _number(context.get("battery_voltage"))
 
     pitch = _number(tilt.get("pitch"))
     roll = _number(tilt.get("roll"))
@@ -74,6 +78,20 @@ def _actuators(context, now: float) -> dict[str, object]:
     }
 
 
+def _safety(context) -> dict[str, object]:
+    """Whether the safety module is overriding right now.
+
+    `tilt_latched` stays in `actuators`, where the contract already puts it; this answers the
+    narrower question a client could not ask before (#125): did safety fire, and is the e-stop set.
+    Both flags are false while `modules.safety` is disabled, which is the shipped default — that is
+    the module not running, not the dog reporting itself safe.
+    """
+    return {
+        "active": bool(context.get("safety_active", False)),
+        "emergency_stop": bool(context.get("emergency_stop_active", False)),
+    }
+
+
 def build_supervisor(context) -> dict[str, object]:
     """What the watchdog is doing: holding motion, and what it has restarted or given up on."""
     hold = _table(context.get("watchdog_hold"))
@@ -98,6 +116,10 @@ def _nav(context) -> dict[str, object]:
     return {
         "decision": decision_name,
         "confidence": _number(decision.get("confidence")),
+        # A heading corrected by the gyro bias and one that never was look identical in
+        # `decision`, so the client has no way to tell a drifting turn from a calibrated one
+        # unless this says so (#125).
+        "heading_calibrated": bool(context.get("orientation_calibration_ok", False)),
     }
 
 
@@ -109,12 +131,38 @@ def build_health(context) -> dict[str, object]:
     if load is not None and cores:
         cpu_pct = max(0.0, min(100.0, (load / cores) * 100.0))
     degraded = bool(context.get("health_degraded", status.get("degraded", False)))
+    high_water: dict[str, float] = {}
+    for key, raw in _table(context.get("health_high_water")).items():
+        value = _number(raw)
+        if value is not None:
+            high_water[str(key)] = value
     return {
         "status": "degraded" if degraded else "ok",
         "cpu_pct": cpu_pct,
         "temp_c": _number(status.get("temp_c")),
         "mem_used_pct": _number(status.get("mem_used_pct")),
         "reasons": list(status.get("degraded_reasons") or []),
+        # Session peaks, which is what a support bundle wants: an average hides the thermal spike
+        # that throttled vision. Empty while `modules.health` is disabled, the shipped default.
+        "high_water": high_water,
+    }
+
+
+def _perf(context) -> dict[str, object]:
+    """The loop against its budget, in the units `/modules` already reports for one module.
+
+    `core/runtime.py` publishes this every tick and nothing read it, so the one number that answers
+    "is the Pi overrunning?" was visible only as an occasional warning line (#124). `tick_ms` is the
+    EMA of the tick duration, not the worst one, and a missing record stays `null` rather than
+    becoming a plausible zero.
+    """
+    perf = _table(context.get("runtime_performance"))
+    return {
+        "tick_hz_target": _number(perf.get("tick_hz_target")),
+        "tick_hz_actual": _number(perf.get("tick_hz_actual")),
+        "tick_ms": _millis(perf.get("tick_duration_avg_s")),
+        "tick_overrun_ms": _millis(perf.get("tick_overrun_s")),
+        "loop_delay_ms": _millis(perf.get("loop_delay_s")),
     }
 
 
@@ -193,12 +241,14 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "mode": _mode(context),
         "sensors": _sensors(context),
         "actuators": _actuators(context, clock),
+        "safety": _safety(context),
         "nav": _nav(context),
         "decision": _decision(context),
         "routines": _routines(context),
         "health": build_health(context),
         "supervisor": build_supervisor(context),
         "modules": counts,
+        "perf": _perf(context),
     }
 
 

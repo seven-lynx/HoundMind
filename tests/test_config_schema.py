@@ -217,7 +217,9 @@ def test_a_cue_volume_is_a_percentage() -> None:
 BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("api", "port", 0),
     ("sensors", "poll_hz", "often"),
+    ("sensors", "battery_poll_s", -1),
     ("motors", "min_action_interval_s", "soon"),
+    ("movement", "followup_ttl_s", -1),
     ("sensor_health", "enabled", "yes"),
     ("watchdog", "max_restarts", "many"),
     ("watchdog", "module_timeout_s", None),

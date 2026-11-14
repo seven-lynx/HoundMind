@@ -83,16 +83,6 @@ class MappingModule(Module):
             except Exception:  # noqa: BLE001
                 logger.debug("Grid ingestion failed", exc_info=True)
 
-        # Optional path-planning hook (future expansion).
-        if settings.get("path_planning_enabled", False):
-            hook = context.get("path_planning_hook")
-            if callable(hook):
-                try:
-                    plan = hook(mapping_state, sample, settings)
-                    context.set("path_planning", plan)
-                except Exception:  # noqa: BLE001
-                    logger.debug("Path planning hook failed", exc_info=True)
-
         # Persist a home map snapshot on a configured interval.
         save_interval = settings.get("home_map_save_interval_s", 30)
         now = time.time()

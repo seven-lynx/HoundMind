@@ -302,12 +302,8 @@ Important: `pidog` is **not** available on PyPI, so it will never install via `p
 
 For more details, see the [official PiDog repo](https://github.com/sunfounder/pidog) and [official docs](https://docs.sunfounder.com/projects/pidog/en/latest/).
 
-## Path Planning (A* for Pi4)
-HoundMind now supports grid-based path planning using the A* algorithm on Pi4. When enabled in `config/settings.jsonc`, the mapping module will plan a path from the current cell to a specified goal using the current map. The planned path is available in the runtime context for navigation and debugging.
-
-- Enable with `"path_planning_enabled": true` in the mapping section of your config.
-- Set a goal with `"goal": [x, y]`.
-- The planned path will be available in the context as `path_planning`.
+## Path Planning (A* helper)
+`houndmind_ai.mapping.path_planner.astar` is a small, dependency-free A* over a grid of `0` (free) and `1` (obstacle). It is a **library function, not a wired feature**: nothing in the runtime calls it, because a route needs a position estimate the dog does not have ([#121](https://github.com/seven-lynx/HoundMind/issues/121)). Walking to a goal is `place_navigator` — teach a place, then ask for it (`docs/CONTROL_API.md` §8).
 
 Example grid and output:
 ```python

@@ -25,9 +25,7 @@ from houndmind_ai.kernel.registry import Capability, ModuleRegistry
 from houndmind_ai.logging.decision_log import DecisionLogModule
 from houndmind_ai.logging.event_logger import EventLoggerModule
 from houndmind_ai.logging.led_manager import LedManagerModule
-from houndmind_ai.mapping import default_path_planning_hook
 from houndmind_ai.mapping.mapper import MappingModule
-from houndmind_ai.navigation.local_planner import LocalPlannerModule
 from houndmind_ai.navigation.obstacle_avoidance import ObstacleAvoidanceModule
 from houndmind_ai.navigation.orientation import OrientationModule
 from houndmind_ai.navigation.place_navigator import PlaceNavigatorModule
@@ -84,7 +82,6 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(OrientationModule("orientation", **cfg("orientation")), [Capability.NAVIGATION])
     registry.register(CalibrationModule("calibration", **cfg("calibration")), [Capability.CALIBRATION])
     registry.register(MappingModule("mapping", **cfg("mapping")), [Capability.MAPPING])
-    registry.register(LocalPlannerModule("local_planner", **cfg("navigation")), [Capability.NAVIGATION])
     registry.register(ObstacleAvoidanceModule("navigation", **cfg("navigation")), [Capability.NAVIGATION])
     registry.register(BehaviorModule("behavior", **cfg("behavior")), [Capability.BEHAVIOUR])
     registry.register(HabituationModule("habituation", **cfg("habituation")), [Capability.BEHAVIOUR])
@@ -187,11 +184,6 @@ def main() -> None:
         config.profile,
     )
     context_filter.set_context_source(runtime.context.get)
-
-    # Register path planning hook for Pi4 if enabled
-    mapping_settings = (config.settings or {}).get("mapping", {})
-    if mapping_settings.get("path_planning_enabled", False):
-        runtime.context.set("path_planning_hook", default_path_planning_hook)
 
     runtime.run()
 

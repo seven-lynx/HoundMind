@@ -75,8 +75,7 @@ src/houndmind_ai/
   hal/        iface.py  fake.py  vendor.py  module.py  sensors.py  motors.py
   act/        gateway.py  interlock.py
   safety/     supervisor.py  watchdog.py  balance.py  health_monitor.py  sensor_health.py
-  navigation/ scanning.py  obstacle_avoidance.py  orientation.py  local_planner.py
-              place_navigator.py
+  navigation/ scanning.py  obstacle_avoidance.py  orientation.py  place_navigator.py
   mapping/    mapper.py  path_planner.py
   behavior/   fsm.py  library.py  registry.py  attention.py  habituation.py  routine_runner.py
   perception/ fusion.py

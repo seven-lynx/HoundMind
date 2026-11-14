@@ -246,6 +246,15 @@ Current Release: v2026.01.18
   config section it shipped with.
 
 ### Changed
+- `PATCH /api/v1/config` says what it does: every response now carries `persisted: false`, and
+  §2 of the contract states that the change is process-local and that a restart reloads
+  `config/settings.jsonc`. An operator who edited `navigation.safe_distance_cm` from a phone and
+  restarted the service used to find the old value back with nothing having warned them (#128).
+- `/state` carries four blocks it had the data for and never published: `safety` (`active`,
+  `emergency_stop`), `nav.heading_calibrated`, `health.high_water`, and `perf` — the loop's
+  `tick_hz_actual`, `tick_ms`, `tick_overrun_ms` and `loop_delay_ms`, which `core/runtime.py` was
+  computing every tick and dropping on the floor (#124, #125). The dashboard gains a Loop readout
+  and `docs/CONTROL_API.md` §4 documents all four, including which are `null` before the first tick.
 - Idle is no longer a constant: `behavior/library.py` draws from the whole bucket with a recency weight
   instead of returning `idle_actions[0]` nineteen times in twenty (#37). Three knobs set it —
   `behavior.action_reuse_cooldown_s` (ships `20`: how long an action stays out of its bucket before it
@@ -277,10 +286,39 @@ Current Release: v2026.01.18
 
 
 ### Fixed
+- `PATCH /api/v1/config` stored any value for a live key without running the schema, so
+  `{"led.brightness": "high"}` answered `200` and then made `led_manager.tick` raise on every tick
+  for the life of the process — the module reported `failed` and no restart cleared it, because the
+  bad value stayed in the settings dict (#123). The write is validated against the same section spec
+  a config file is loaded against (`validate_settings_section`), a refusal is a `400` carrying
+  `invalid[].problems[]` and stores nothing, and `led_manager` reads its brightness through
+  `_safe_float` so a hand-edited file cannot do it either.
+- A navigation retreat ran once per command and outside the interlock: `obstacle_avoidance` wrote
+  `navigation_followup` and nothing retracted it, so `hal_motors` re-ran the same backward-and-turn
+  after **every** later command, inline on the 5 Hz loop (the closed-loop turn waits up to
+  `orientation.turn_timeout_s`) and past the gateway, the command TTL and every interlock veto
+  (#120). The key is retracted as soon as the followup has been handed over, a payload older than
+  `movement.followup_ttl_s` (ships `1.0`) is dropped instead of run late, and the sequence travels
+  with its step on the motor worker. Routing retreats through the intent board so the interlock
+  judges each step is the remaining half, tracked on #26.
+- The battery feed was empty end to end: `PidogHAL.read` never filled `SensorSnapshot.battery_v`,
+  `SensorReading` had no field to carry it, and nothing published `battery_voltage`, so the
+  interlock's low-voltage veto (6.4 V) and the `battery` section of `behavior` were both unreachable
+  on hardware while `ARCHITECTURE`, `CONTROL_API` and `FEATURES_GUIDE` all promised them (#119).
+  `hal/vendor.py` reads `Pidog.get_battery_voltage` on its own cadence (`sensors.battery_poll_s`,
+  ships `2.0`; the read is an ADC transaction on the servo bus), the value survives to `/state` and
+  to both consumers, and a reading outside 3-60 V is reported as **no reading** rather than a flat
+  pack, so a disconnected sense line cannot veto every motion for the life of the process.
+  `battery_percent` stays unpublished: nothing measures state of charge.
 - `runtime_tick` was whitelisted into every JSON record (`core/logging_setup.py:15`) and published
   by nobody — the loop set `tick_ts` and never the tick index, so no production line could be matched
   to a tick while three log tests asserted the field by injecting it themselves (#126). The loop sets
   it beside `tick_ts` now, and `docs/LOGGING.md` lists the four fields every record carries.
+- The `requirements*.txt` mirrors had drifted from the extras they mirror: `requirements.txt` was
+  missing `pyttsx3` and `vosk`, so an install that followed it got a voice stack that could neither
+  speak nor listen, and `requirements-dev.txt` carried a bare `ruff` against the exact pin
+  `pyproject.toml` keeps on purpose (#127). `tests/test_dependency_mirrors.py` compares both mirrors
+  with `pyproject.toml`, so the next drift fails CI instead of a device install.
 - `behavior.autonomy_modes` never left `idle`: `_select_autonomy_mode` handed the mode names to a
   registry keyed by `<mode>_behavior`, so `pick_weighted` found no item, returned `None`, and the
   fallback won on every tick — `patrol`, `explore` and `interact` were unreachable through autonomy,
@@ -386,6 +424,22 @@ Current Release: v2026.01.18
   disagrees with, instead of leaving the contradiction silent.
 
 ### Removed
+- `navigation/local_planner.py` and its three `navigation.*` keys. The module published `local_plan`
+  and `mapping_recommendation` and nothing read either; what it computed — `mapping_openings.best_path`
+  above a confidence floor, turned into a left/right hint — `obstacle_avoidance._apply_mapping_bias`
+  already does on the same data, with a cooldown, a weight and a consumer (#122). It shipped enabled,
+  had no test, and carried an unused `_safe_int`, so `/modules` reported a running component that
+  produced nothing. Goal-directed walking is `place_navigator`; short-range steering is the avoidance
+  module.
+- The A* path-planning hook, and the two keys that were supposed to feed it.
+  `default_path_planning_hook` read `mapping_state["grid_map"]`, `mapping_state["current_cell"]` and
+  `settings["goal"]`; the mapper writes `grid` (a cell map, not a 2-D array), nothing in the tree
+  estimates a position, and `goal` was never in the schema — so the hook returned
+  `{"path": [], "success": false}` on every tick, its `path_planning` output had no consumer, and
+  following `README`/`FEATURES_GUIDE` to set `goal` made the runtime exit at load (#121).
+  `path_planning_enabled`, `path_planning_hook`, the `path_planning` context key and the hook are
+  gone; `mapping/path_planner.py::astar` stays as a documented library helper with its own tests, and
+  goal-directed walking remains `place_navigator`.
 - `docs/api_reference.md`, `docs/QUICK_START_PROGRAMMING.md` and `docs/voice_setup_instructions.md`.
   Their content moved into `HOUNDMIND_PROGRAMMING_GUIDE.md` (§4–§6, §1, §14), `FEATURES_GUIDE.md`
   (§17) and `PIDOG_PROGRAMMING_GUIDE.md` (vendor method reference). Four documents described the same

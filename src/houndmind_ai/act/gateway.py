@@ -344,7 +344,6 @@ class MotionGatewayModule(Module):
         """Best-effort snapshot from the context keys the runtime already publishes."""
         reading = context.get("sensor_reading")
         tilt = context.get("tilt_warning")
-        battery = context.get("battery_voltage")
 
         pitch = roll = None
         imu_valid = False
@@ -353,7 +352,12 @@ class MotionGatewayModule(Module):
             roll = _opt_float(tilt.get("roll"))
             imu_valid = pitch is not None and roll is not None
 
-        battery_v = _opt_float(battery)
+        # The reading carries the pack voltage `hal/vendor.py` just measured; the context key is the
+        # fallback for a producer that is not the sensor module (a test, or a build that polls the
+        # pack itself). Neither source can report "valid" without a value (#119).
+        battery_v = _opt_float(getattr(reading, "battery_v", None))
+        if battery_v is None:
+            battery_v = _opt_float(context.get("battery_voltage"))
         return SensorSnapshot(
             ts=as_float(getattr(reading, "timestamp", None), 0.0),
             distance_cm=_opt_float(getattr(reading, "distance_cm", None)),

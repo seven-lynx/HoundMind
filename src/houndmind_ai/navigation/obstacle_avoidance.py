@@ -266,6 +266,8 @@ class ObstacleAvoidanceModule(Module):
         if nav_led is not None:
             self._set_nav_led(context, nav_led)
         if nav_followup is not None:
+            # The consumer (`hal/motors.py`) retracts this once it has run or gone stale, so a
+            # producer that stops writing does not leave a retreat armed for the next command.
             context.set("navigation_followup", nav_followup)
         if emit_decision is not None:
             self._emit_navigation_decision(context, settings, *emit_decision)
@@ -379,6 +381,7 @@ class ObstacleAvoidanceModule(Module):
             context.set(
                 "navigation_followup",
                 {
+                    "timestamp": now,
                     "type": "retreat_turn",
                     "backup_steps": backup_steps,
                     "direction": retreat_turn_direction,
@@ -799,6 +802,7 @@ class ObstacleAvoidanceModule(Module):
             context.set(
                 "navigation_followup",
                 {
+                    "timestamp": now,
                     "type": "retreat_turn",
                     "backup_steps": int(settings.get("backup_steps", 2)),
                     "direction": "auto",
@@ -809,6 +813,7 @@ class ObstacleAvoidanceModule(Module):
             context.set(
                 "navigation_followup",
                 {
+                    "timestamp": now,
                     "type": "sequence",
                     "actions": ["turn right", "turn left", "forward"],
                 },
@@ -818,6 +823,7 @@ class ObstacleAvoidanceModule(Module):
             context.set(
                 "navigation_followup",
                 {
+                    "timestamp": now,
                     "type": "sequence",
                     "actions": ["backward", "turn left", "turn right"],
                 },

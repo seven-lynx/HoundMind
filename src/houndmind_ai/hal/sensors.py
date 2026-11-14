@@ -57,6 +57,11 @@ class SensorReading:
     touch_valid: bool
     sound_valid: bool
     imu_valid: bool
+    # Defaulted so every existing construction still builds: the battery feed is optional, and a
+    # reading that does not carry one must not claim 0 V (`hal/fake.py` has modelled the fields
+    # since the fake was written; nothing on a real dog filled them until #119).
+    battery_v: float | None = None
+    battery_valid: bool = False
 
     @staticmethod
     def from_snapshot(snapshot: SensorSnapshot) -> SensorReading:
@@ -73,6 +78,8 @@ class SensorReading:
             touch_valid=snapshot.touch_valid,
             sound_valid=snapshot.sound_valid,
             imu_valid=snapshot.imu_valid,
+            battery_v=snapshot.battery_v,
+            battery_valid=snapshot.battery_valid,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -88,6 +95,8 @@ class SensorReading:
             "touch_valid": self.touch_valid,
             "sound_valid": self.sound_valid,
             "imu_valid": self.imu_valid,
+            "battery_v": self.battery_v,
+            "battery_valid": self.battery_valid,
         }
 class SensorService:
     """Polls a `DogHAL` on a thread and hands each reading to its subscribers.
@@ -223,6 +232,11 @@ class SensorModule(Module):
         now = self._clock()
         context.set("sensor_reading", reading)
         context.set("sensors", reading.to_dict())
+        # One producer for the key the interlock and `behavior/fsm.py` both threshold on. Published
+        # only while it is valid, so a feed that drops out leaves the last good value in place rather
+        # than overwriting it with a None the two consumers would have to special-case (#119).
+        if reading.battery_valid and reading.battery_v is not None:
+            context.set("battery_voltage", reading.battery_v)
         context.set("sensor_history", self.service.history() if self.service else [])
         context.set(
             "sensor_health",
@@ -233,5 +247,6 @@ class SensorModule(Module):
                 "touch_valid": reading.touch_valid,
                 "sound_valid": reading.sound_valid,
                 "imu_valid": reading.imu_valid,
+                "battery_valid": reading.battery_valid,
             },
         )
