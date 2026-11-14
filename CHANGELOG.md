@@ -7,6 +7,17 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **Vilib no longer serves the camera on a port of its own** (#15): `optional/vision.py` called
+  `Vilib.display(local=False, web=True)`, which asked the vendor library - not this repository - to
+  run an HTTP stream on the Pi 3 path, outside the token gate, outside the audit trail and outside
+  the interlock. A grep for `BaseHTTPRequestHandler` could never find it, because the listener lives
+  in `vilib`. The argument is now `web=False`: the module republishes `Vilib.img` as `vision_frame`,
+  which is what `services/camera.py` reads, so the stream had no consumer here. `local` stays
+  `False` - a preview window needs a display a headless runtime does not have, and the capture
+  thread `camera_start` owns does not depend on it. `tests/test_no_legacy_http.py` gains a
+  source-level guard for the one surface an AST scan cannot reach. What `vilib` does with
+  `web=False` is unobservable from the workstation; confirming it on the Pi belongs to the #26
+  checklist.
 - **The control plane says where it is** (#38): nothing advertised the device, so every client needed
   a hand-entered IP that DHCP could change on the next lease. `services/discovery.py` publishes one
   mDNS record - `houndmind._houndmind._tcp.local`, a `_houndmind._tcp` service with the host, the

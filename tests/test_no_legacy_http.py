@@ -52,6 +52,23 @@ def test_no_module_imports_the_stdlib_http_server() -> None:
     assert offenders == [], f"stdlib HTTP servers are back: {offenders}"
 
 
+def test_no_module_asks_a_vendor_viewfinder_to_serve_http() -> None:
+    """The one listener a `BaseHTTPRequestHandler` grep cannot find (#15).
+
+    `optional/vision.py` runs on the Pi 3 path, where `vilib` owns the camera. Its
+    `display(web=True)` argument made *Vilib* serve the feed on a port of its own — outside the
+    token gate and outside this repository, so the AST scan above was structurally blind to it.
+    A source check is the only guard available: the vendor package is not installed in CI.
+    """
+    offenders: list[str] = []
+    for path in _source_files():
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            code = line.split("#", 1)[0]
+            if "display(" in code and "web=True" in code.replace(" ", ""):
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{number}")
+    assert offenders == [], f"a vendor viewfinder is serving HTTP again: {offenders}"
+
+
 def test_the_shipped_config_has_no_per_module_http_block() -> None:
     raw = json5.loads(default_config_path().read_text(encoding="utf-8"))
     settings = raw["settings"]

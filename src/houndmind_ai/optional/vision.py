@@ -37,7 +37,14 @@ class VisionModule(Module):
             return
         self.available = True
         Vilib.camera_start(vflip=False, hflip=False)
-        Vilib.display(local=False, web=True)
+        # No stream and no preview (#15). `web=True` asks Vilib to serve the camera on its own
+        # port, outside this repo's token gate, its audit trail and its interlock - a fifth
+        # listener that a grep for `BaseHTTPRequestHandler` cannot see because it lives in the
+        # vendor package. The port had no consumer here either: this module republishes
+        # `Vilib.img` as `vision_frame`, which is what `services/camera.py` reads. `local=True`
+        # is not the alternative: a preview window needs a display a headless runtime does not
+        # have, and the capture thread `camera_start` owns does not depend on it.
+        Vilib.display(local=False, web=False)
         # `vision_status` is the key the programming guide documents for a camera module. `frames`
         # says whether this build can feed a detector at all, which is the part a consumer needs:
         # `vision_frame` is published from `tick`.
