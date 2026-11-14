@@ -218,6 +218,28 @@ def test_a_second_start_while_one_is_running_is_refused(tmp_path: Path) -> None:
         rig.close()
 
 
+def test_a_run_is_stamped_from_the_loop_clock(tmp_path: Path) -> None:
+    """`started_at` shares the snapshot's clock, so `ts - started_at` is the elapsed time (#73).
+
+    Epoch seconds here would put a client's "running for 12 s" in the region of 1.7 billion: the
+    snapshot's `ts` is monotonic, and subtracting one from the other is the only thing a client
+    does with the field.
+    """
+    write_routine(tmp_path, "calm", [{"action": "sit"}, {"action": "stand"}])
+    rig = Rig(tmp_path)
+    try:
+        before = time.monotonic()
+        rig.run("calm")
+        run = rig.state()
+
+        assert run.started_at >= before
+        assert run.started_at <= time.monotonic()
+        # Not epoch seconds: a wall clock reading is decades away from the boot clock.
+        assert abs(run.started_at - time.time()) > 60
+    finally:
+        rig.close()
+
+
 # ------------------------------------------------------- the store and the settings
 
 

@@ -72,6 +72,10 @@ class RoutineRun:
 
     `index` is the step currently published (0-based); a finished run has `index == total`, so a
     client renders "step 3 of 5" without guessing from the state word.
+
+    `started_at` is on the loop's monotonic clock, not epoch seconds: the snapshot's `ts` is
+    monotonic too, so `ts - started_at` is the elapsed time and no client has to know which of the
+    two it is holding (#73). It is a duration, never a wall-clock moment to display.
     """
 
     routine_id: str
@@ -176,7 +180,7 @@ class RoutineRunnerModule(Module):
             name=routine.name or routine.id,
             total=len(routine.steps),
             dry_run=bool(request.get("dry_run", False)),
-            started_at=time.time(),
+            started_at=time.monotonic(),
         )
         self._phase = _PUBLISH
         logger.info(

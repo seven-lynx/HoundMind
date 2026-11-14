@@ -275,7 +275,7 @@ refused is listed with the reason instead of being hidden.
   },
   "current": { "id": "morning_greeting", "name": "Morning greeting", "index": 1, "total": 2,
                "state": "running", "dry_run": false, "action": "sit", "veto": null,
-               "detail": null, "started_at": 1762771200.31 }
+               "detail": null, "started_at": 4212.3 }
 }
 ```
 
@@ -341,7 +341,7 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
   "routines": {
     "id": "morning_greeting", "name": "Morning greeting", "index": 1, "total": 3,
     "state": "running", "dry_run": false, "action": "sit", "veto": null, "detail": null,
-    "started_at": 1762771200.31
+    "started_at": 4212.3
   },
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "temp_c": 61.4, "mem_used_pct": 51.0 } },
   "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [] },
@@ -368,8 +368,8 @@ cadences over the same object.
 `stopped` or `refused`; a refused run keeps the `veto` and `detail` that ended it, so a client shows
 "stopped at step 2: obstacle" instead of an unexplained halt. It is rewritten every tick while the run
 is live, whereas the WS `routine` event ([§5](#5-websocket)) fires only when the run *moves*: a new step, a new state,
-or a new veto. `started_at` is epoch seconds from the device's wall clock, not the monotonic `ts` —
-it is a timestamp to display, not one to compare against this stream.
+or a new veto. `started_at` is on the same monotonic clock as `ts`, so `ts - started_at` is how long
+the run has been going - a duration, not a wall-clock moment to display.
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
 `navigation`, `routine`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode

@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A routine run is stamped from the loop's clock** (#73): `RoutineRun.started_at` came from
+  `time.time()` while everything a client compares it against is monotonic - the snapshot's `ts` is
+  the loop clock - so `ts - started_at` produced a number in the region of 1.7 billion. The runner
+  now stamps `time.monotonic()`, which makes the subtraction correct and removes the caveat
+  `docs/CONTROL_API.md` §4 had to carry: `started_at` is a duration, not a wall-clock moment.
+  `tests/test_routine_runner.py` asserts the stamp sits between two `time.monotonic()` readings and
+  is decades away from the wall clock.
 - **`nav.confidence` is a number the navigator measured** (#51): `services/state.py` read a
   `confidence` key the producer never wrote, so the field was `null` on every tick on every profile
   - indistinguishable from a build that does not report confidence at all, and it made the
