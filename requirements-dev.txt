@@ -1,4 +1,6 @@
-ruff
+# ruff is pinned exactly, matching `pyproject.toml`'s `dev` extra: the lint result must not
+# depend on which version PyPI served that morning. Bump both in one commit.
+ruff==0.17.4
 pytest
 mypy
 pytest-cov

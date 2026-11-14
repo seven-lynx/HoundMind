@@ -281,6 +281,11 @@ Current Release: v2026.01.18
   by nobody — the loop set `tick_ts` and never the tick index, so no production line could be matched
   to a tick while three log tests asserted the field by injecting it themselves (#126). The loop sets
   it beside `tick_ts` now, and `docs/LOGGING.md` lists the four fields every record carries.
+- The `requirements*.txt` mirrors had drifted from the extras they mirror: `requirements.txt` was
+  missing `pyttsx3` and `vosk`, so an install that followed it got a voice stack that could neither
+  speak nor listen, and `requirements-dev.txt` carried a bare `ruff` against the exact pin
+  `pyproject.toml` keeps on purpose (#127). `tests/test_dependency_mirrors.py` compares both mirrors
+  with `pyproject.toml`, so the next drift fails CI instead of a device install.
 - `behavior.autonomy_modes` never left `idle`: `_select_autonomy_mode` handed the mode names to a
   registry keyed by `<mode>_behavior`, so `pick_weighted` found no item, returned `None`, and the
   fallback won on every tick — `patrol`, `explore` and `interact` were unreachable through autonomy,

@@ -19,6 +19,10 @@ face_recognition
 SpeechRecognition
 pyaudio
 sounddevice
+# Carried by the `full` extra and dropped by this mirror until #127: without them a voice
+# configuration imports cleanly and then can neither speak (pyttsx3) nor listen (vosk).
+pyttsx3
+vosk
 
 # SLAM (RTAB-Map)
 # Note: rtabmap-py may need to be built from source on Pi4. See scripts/install_rtabmap_pi4.md for instructions.
