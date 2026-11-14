@@ -315,9 +315,9 @@ dog enters the state.
 - `behavior.cue_volume` (0–100, ships `60`) sets the volume, and `quiet_mode` suppresses the cue
   outright; the beat still plays.
 - `behavior.cue_sounds` lists the twelve effects a stock PiDog ships
-  (`docs/pidog/PIDOG-EXPRESSION.md`). It is **advisory**: a name outside it is warned about once and
-  still played, because a build may ship its own files. A name the *vendor* cannot find is a
-  different matter, and the HAL reports it once per name at `WARNING` — `Sound '…' not found in the
+  (`docs/pidog/PIDOG-EXPRESSION.md`). It documents a stock build; nothing validates a cue against it,
+  so a custom build's own effects play without a complaint. The question worth asking is whether the
+  file exists, and the HAL answers it — once per name, at `WARNING`: `Sound '…' not found in the
   vendor's sounds directory` ([#81](https://github.com/seven-lynx/HoundMind/issues/81)).
 - Audio never blocks the loop: `hal.sound` queues onto the HAL's audio thread.
 

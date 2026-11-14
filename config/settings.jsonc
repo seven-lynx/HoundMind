@@ -764,8 +764,9 @@
       //
       // `sound` is a cue, not an action: it rides the command the entry already publishes, so a
       // locomotion state can announce itself without giving up its step, and the beat is never
-      // delayed. It is suppressed while `quiet_mode` is active. `cue_sounds` below is advisory — a
-      // name missing from it is warned about once and still played.
+      // delayed. It is suppressed while `quiet_mode` is active. `cue_sounds` below documents a stock
+      // build; a cue outside it plays without a complaint, and the HAL reports a sound the vendor
+      // cannot find - once, in its own words. That is the only warning worth reading.
       "state_expressions": {
         "idle": { "action": "relax neck" },
         "alert": { "action": "head_up_down", "sound": "single_bark_1" },
@@ -776,8 +777,9 @@
       // Volume for the entry cues, 0-100. Quieter than the HAL's own 70: an entry should not
       // startle the room.
       "cue_volume": 60,
-      // The effects a stock PiDog ships (`docs/pidog/PIDOG-EXPRESSION.md`). Advisory only: a build
-      // with its own files may name them, and a name outside this list is warned about once.
+      // The effects a stock PiDog ships (`docs/pidog/PIDOG-EXPRESSION.md`). Documentation of a stock
+      // build, not a whitelist: a custom build may ship its own and no module warns about a cue that
+      // is missing from this list. Whether the file exists at all is the HAL's question.
       "cue_sounds": [
         "angry",
         "confused_1",
