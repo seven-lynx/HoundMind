@@ -120,3 +120,69 @@ def test_the_snapshot_carries_the_running_routine() -> None:
 def test_no_routine_yet_is_null_not_an_empty_run() -> None:
     """`null` is "nothing has been played"; an empty object would be a run with no steps."""
     assert build_state(RuntimeContext(), now=0.0)["routines"] is None
+
+
+def test_the_snapshot_carries_the_loop_budget() -> None:
+    """`runtime_performance` was published every tick and read by nothing (#124)."""
+    context = RuntimeContext()
+    context.set(
+        "runtime_performance",
+        {
+            "tick_hz_target": 5,
+            "tick_hz_actual": 4.8,
+            "tick_duration_s": 0.04,
+            "tick_duration_avg_s": 0.0412,
+            "tick_overrun_s": 0.0,
+            "loop_delay_s": 0.2,
+        },
+    )
+
+    perf = build_state(context, now=0.0)["perf"]
+
+    assert perf["tick_hz_target"] == 5.0
+    assert perf["tick_ms"] == 41.2
+    assert perf["tick_overrun_ms"] == 0.0
+    assert perf["loop_delay_ms"] == 200.0
+
+
+def test_no_performance_record_is_null_not_zero() -> None:
+    """Before the loop's first tick there is no measurement, and 0 ms would claim a free loop."""
+    assert build_state(RuntimeContext(), now=0.0)["perf"] == {
+        "tick_hz_target": None,
+        "tick_hz_actual": None,
+        "tick_ms": None,
+        "tick_overrun_ms": None,
+        "loop_delay_ms": None,
+    }
+
+
+def test_the_safety_block_says_whether_safety_is_overriding() -> None:
+    context = RuntimeContext()
+
+    assert build_state(context, now=0.0)["safety"] == {"active": False, "emergency_stop": False}
+
+    context.set("safety_active", True)
+    context.set("emergency_stop_active", True)
+
+    assert build_state(context, now=0.0)["safety"] == {"active": True, "emergency_stop": True}
+
+
+def test_nav_reports_whether_the_heading_was_calibrated() -> None:
+    """A calibrated heading and a drifting one look the same in `decision` (#125)."""
+    context = RuntimeContext()
+
+    assert build_state(context, now=0.0)["nav"]["heading_calibrated"] is False
+
+    context.set("orientation_calibration_ok", True)
+
+    assert build_state(context, now=0.0)["nav"]["heading_calibrated"] is True
+
+
+def test_health_reports_the_session_high_water_marks() -> None:
+    context = RuntimeContext()
+    context.set("health_high_water", {"temp_c": 71.5, "gpu_temp_c": 68.0, "junk": "n/a"})
+
+    high_water = build_state(context, now=0.0)["health"]["high_water"]
+
+    assert high_water == {"temp_c": 71.5, "gpu_temp_c": 68.0}
+    assert build_state(RuntimeContext(), now=0.0)["health"]["high_water"] == {}
