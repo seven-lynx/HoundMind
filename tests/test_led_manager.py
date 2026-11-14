@@ -87,8 +87,8 @@ def rgb_calls(ctx: DummyContext) -> list[dict[str, Any]]:
 
 # What each source looks like on the strip under `full_settings()`: the mode its producer writes, then
 # the (style, colour) pair that identifies the winner in the HAL call. Four producers, four shapes
-# (`safety/supervisor.py:102`, `navigation/obstacle_avoidance.py:839`, `behavior/attention.py:96`,
-# `optional/energy_emotion.py:88`) — kept real rather than a bare `{"mode": ...}` so the precedence
+# (`safety/supervisor.py:99`, `navigation/obstacle_avoidance.py:842`, `behavior/attention.py:91`,
+# `optional/energy_emotion.py:83`) — kept real rather than a bare `{"mode": ...}` so the precedence
 # tests exercise the requests the loop actually publishes.
 _SOURCES: dict[str, tuple[str, str, str]] = {
     "safety": ("emergency", "boom", "red"),
@@ -96,11 +96,6 @@ _SOURCES: dict[str, tuple[str, str, str]] = {
     "attention": ("listen", "listen", "cyan"),
     "emotion": ("happy", "breath", "violet"),
 }
-
-# The int each producer stamps on its request from its own section's `led_priority`. The manager
-# never reads it — the list order decides — which is why the tests below pass it and still expect
-# the order to win.
-_PRODUCER_PRIORITY = {"safety": 80, "navigation": 50, "attention": 60, "emotion": 40}
 
 
 def full_settings() -> dict[str, Any]:
@@ -117,11 +112,7 @@ def full_settings() -> dict[str, Any]:
 
 def publish(ctx: DummyContext, source: str, until_ts: float | None = None) -> None:
     mode = _SOURCES[source][0]
-    request: dict[str, Any] = {
-        "timestamp": 0.0,
-        "mode": mode,
-        "priority": _PRODUCER_PRIORITY[source],
-    }
+    request: dict[str, Any] = {"timestamp": 0.0, "mode": mode}
     if until_ts is not None:
         request["until_ts"] = until_ts
     ctx.set(f"led_request:{source}", request)

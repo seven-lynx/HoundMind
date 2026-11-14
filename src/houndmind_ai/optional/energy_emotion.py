@@ -85,6 +85,5 @@ class EnergyEmotionModule(Module):
             {
                 "timestamp": now,
                 "mode": emotion_state,
-                "priority": int(emotion_cfg.get("led_priority", 40)),
             },
         )

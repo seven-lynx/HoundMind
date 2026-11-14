@@ -99,7 +99,6 @@ class SafetyModule(Module):
                         {
                             "timestamp": now,
                             "mode": "tilt",
-                            "priority": int(settings.get("led_priority", 80)),
                         },
                     )
                     self._apply_override_priority(context)
@@ -130,7 +129,6 @@ class SafetyModule(Module):
                 {
                     "timestamp": now,
                     "mode": "emergency",
-                    "priority": int(settings.get("led_priority", 80)),
                 },
             )
             self._apply_override_priority(context)

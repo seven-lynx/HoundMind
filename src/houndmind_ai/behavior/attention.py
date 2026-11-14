@@ -93,7 +93,6 @@ class AttentionModule(Module):
             {
                 "timestamp": now,
                 "mode": "listen",
-                "priority": int(settings.get("led_priority", 60)),
             },
         )
 

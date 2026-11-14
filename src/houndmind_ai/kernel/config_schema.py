@@ -266,7 +266,6 @@ _ALPHA = FloatSpec(minimum=0.0, maximum=1.0, exclusive_minimum=True)
 _NON_NEGATIVE = FloatSpec(minimum=0.0)
 _POSITIVE = FloatSpec(minimum=0.0, exclusive_minimum=True)
 _SERVO_SPEED = IntSpec(minimum=0, maximum=255)
-_PRIORITY = IntSpec(minimum=0, maximum=100)
 _NAMES = ListOf(StrSpec())
 _NULLABLE_STR = StrSpec(allow_none=True)
 
@@ -373,7 +372,6 @@ _SAFETY = Section(
         "tilt_threshold_deg": _POSITIVE,
         "tilt_action": StrSpec(),
         "tilt_cooldown_s": _NON_NEGATIVE,
-        "led_priority": _PRIORITY,
         "override_priority": ListOf(
             StrSpec(choices=("safety", "watchdog", "navigation", "place", "behavior"))
         ),
@@ -506,7 +504,6 @@ _ATTENTION = Section(
         "head_turn_speed": _SERVO_SPEED,
         "respect_scanning": Bool(),
         "scan_block_s": _NON_NEGATIVE,
-        "led_priority": _PRIORITY,
     }
 )
 
@@ -586,7 +583,6 @@ _NAVIGATION = Section(
         "gentle_recovery_stuck_count": IntSpec(minimum=1),
         "gentle_recovery_cooldown_s": _NON_NEGATIVE,
         "led_enabled": Bool(),
-        "led_priority": _PRIORITY,
         "led_patrol_color": StrSpec(),
         "led_turn_color": StrSpec(),
         "led_obstacle_color": StrSpec(),
@@ -747,7 +743,6 @@ _ENERGY = Section(
 _EMOTION = Section(
     fields={
         "led_enabled": Bool(),
-        "led_priority": _PRIORITY,
         "led_cooldown_s": _NON_NEGATIVE,
         "led_colors": MapOf(StrSpec()),
     }
