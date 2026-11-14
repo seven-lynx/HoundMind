@@ -34,7 +34,7 @@ houndmind = "houndmind_ai.main:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 # Explicit, because `tools` lives beside the main package and a silent omission here means
-# `python -m tools.houndmind_doctor` fails on an installed copy (finding B-08).
+# `python -m tools.hardware_checkup` fails on an installed copy (finding B-08, #23).
 include = ["houndmind_ai*", "tools*"]
 
 [tool.setuptools.package-data]

@@ -613,6 +613,11 @@ through the HAL (`DogHAL.read_offsets`) and written through `DogHAL.apply_offset
 and merged over the values already on the dog — nothing here invents an offset, and saving one does
 not move the dog. Keys are the joint names in `hal/iface.py::SERVO_GROUPS`.
 
+The read half runs from a config request or from `POST /api/v1/calibration/run`
+([`CONTROL_API.md` §10](CONTROL_API.md#10-calibration)), which can only dispatch the four read-only
+requests. The write half is the device CLI: `python -m tools.calibrate_servos` prints the trim,
+`--set joint=deg` prints what it would write, and only `--apply` saves it.
+
 **Disable:** `modules.calibration.enabled = false`
 
 ---
@@ -917,7 +922,7 @@ as specified in `docs/CONTROL_API.md`:
 | Places | `GET`/`POST`/`DELETE /api/v1/places`, `POST /places/{id}/go` | `state:read` / `config` / `move` |
 | People | `GET /api/v1/people`, `DELETE /api/v1/people/{id}` | `admin` — ids and names only, never an embedding |
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
-| Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration` | `config` |
+| Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration`, `POST /calibration/run` | `config` |
 | History | `GET /api/v1/history` | `state:read` |
 | Diagnostics | `GET /api/v1/logs`, `/support-bundle` | `admin` |
 | Web app | `GET /` and `/static/*` | same origin, token in the browser |
@@ -984,9 +989,11 @@ mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed.
 **Disable:** `modules.api.enabled = false` removes the network surface entirely — the dog still
 runs, and nothing listens. That is the right setting for a dog that should never be reachable.
 
-**Not in v1:** TLS (documented gap, Phase 6), remote access beyond the LAN, accounts,
-`POST /api/v1/calibration/run` (it moves the dog, so it needs a physical confirmation on the
-device first).
+**Not in v1:** remote access beyond the LAN and accounts. `POST /api/v1/calibration/run` is
+implemented and is **read-only**: it dispatches the four calibration requests that read, never one
+that writes an offset, so it needs no physical confirmation. A calibration that moves the dog stays
+a device action (`python -m tools.calibrate_servos --apply`,
+[`CONTROL_API.md` §10](CONTROL_API.md#10-calibration)).
 
 ---
 

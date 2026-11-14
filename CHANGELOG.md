@@ -7,6 +7,30 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **`POST /api/v1/calibration/run` exists, and it cannot move the dog** (#17): the route was
+  reserved rather than stubbed because a remote calibration that sweeps every servo is the most
+  dangerous call in the product. Calibration in this tree only reads - servo trim, wall-follow
+  distance error, the clearest scan angle, pose confidence - so the route is that read half: scope
+  `config`, an allow-list of those four requests (`services/api.py::CALIBRATION_REQUESTS`), `400`
+  for anything else and `503` when the runtime does not answer within a second. The safety is
+  structural, not ceremonial: there is nothing for a physical confirmation to confirm, and a
+  prompt that guards nothing teaches the operator to approve it reflexively. A calibration that
+  *does* move servos needs its own route and its own arming step; it cannot dispatch through this
+  one. `CalibrationModule` now dedupes on `(request, id)`, so the same reading can be asked for
+  twice instead of being a silent no-op for the life of the process, and
+  `tests/test_api_routes.py` proves a run leaves `FakeDogHAL.offsets_applied` empty. Writing a trim
+  stays a device action (`python -m tools.calibrate_servos --apply`). `docs/CONTROL_API.md` §10,
+  `docs/FEATURES_GUIDE.md` §16/§26 and the CHANGELOG follow.
+- **No document promises a `houndmind doctor` command** (#23): it never existed, and two places
+  still named it. The `pyproject.toml` packaging comment cited it as the B-08 example (it now cites
+  `python -m tools.hardware_checkup`, which is the case that actually exercises the `tools*`
+  include), and the support bundle's own `README.txt` told the user it "adds file logs (Phase 6)" -
+  inside the zip a user is asked to attach to a bug report. That README now says what the bundle
+  carries and where file logs actually are (`GET /api/v1/logs`, or
+  `python -m tools.collect_support_bundle` on the device), and `tests/test_api_routes.py` asserts it
+  stops naming the phantom. Fixed in the same sweep because it is the same class of claim and was
+  contradicted by the very page it sat on: `FEATURES_GUIDE.md` §26 listed TLS under "not in v1"
+  while §26 documents it and `services/tls.py` ships it.
 - **Vilib no longer serves the camera on a port of its own** (#15): `optional/vision.py` called
   `Vilib.display(local=False, web=True)`, which asked the vendor library - not this repository - to
   run an HTTP stream on the Pi 3 path, outside the token gate, outside the audit trail and outside

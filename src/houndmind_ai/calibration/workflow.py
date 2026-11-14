@@ -27,18 +27,34 @@ class CalibrationModule(Module):
         self, name: str = "calibration", enabled: bool = True, required: bool = False
     ) -> None:
         super().__init__(name, enabled=enabled, required=required)
-        self._last_request: str | None = None
+        self._last_request: tuple[str, str | None] | None = None
+
+    @staticmethod
+    def _split_request(raw: object) -> tuple[str, str | None]:
+        """`"servo_zero"` from a config, or `{"request": ..., "id": ...}` from the API (#17).
+
+        The id exists because the guard below would otherwise make a second, identical API call a
+        silent no-op for the life of the process: the comparison is on what was asked for, and two
+        runs of the same read are two requests.
+        """
+        if isinstance(raw, dict):
+            name = raw.get("request")
+            identifier = raw.get("id")
+            return str(name or ""), None if identifier is None else str(identifier)
+        return str(raw), None
 
     def tick(self, context) -> None:
         settings = (context.get("settings") or {}).get("calibration", {})
-        request = context.get("calibration_request") or settings.get("request")
+        raw = context.get("calibration_request") or settings.get("request")
+        if not raw:
+            return
+        request, request_id = self._split_request(raw)
         if not request:
             return
-        request = str(request)
         # Avoid re-running the same request every tick.
-        if request == self._last_request:
+        if (request, request_id) == self._last_request:
             return
-        self._last_request = request
+        self._last_request = (request, request_id)
 
         if request == "servo_zero":
             result = self._calibrate_servo_zero(context)
@@ -50,6 +66,7 @@ class CalibrationModule(Module):
             result = self._calibrate_landmark_align(context, settings)
         else:
             result = {"timestamp": time.time(), "request": request, "status": "unknown"}
+        result["request_id"] = request_id
 
         context.set("calibration_result", result)
         self._persist_result(result, settings)

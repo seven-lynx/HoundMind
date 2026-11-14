@@ -16,6 +16,9 @@ from pathlib import Path
 
 from aiohttp.test_utils import TestClient, TestServer
 
+from houndmind_ai.calibration.workflow import CalibrationModule
+from houndmind_ai.hal.fake import FakeDogHAL
+from houndmind_ai.hal.iface import LEG_SERVO_NAMES
 from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.services import api as api_module
 from houndmind_ai.services.api import API_PREFIX, HANDLER_SCOPE, ROUTES, ControlPlane, create_app
@@ -419,8 +422,9 @@ def test_the_support_bundle_carries_state_and_no_secret(tmp_path) -> None:
     """The bundle is the maintainer's whole view of the device; it must not carry credentials.
 
     This used to be covered through the telemetry dashboard, which bundled via
-    `tools.collect_support_bundle`. That module is gone with the rest of the legacy servers, so
-    the assertion moves to `ControlPlane.support_bundle`, which is the one that ships.
+    `tools.collect_support_bundle`. The dashboard is gone with the rest of the legacy servers and
+    the route now ships `ControlPlane.support_bundle`; the device-side collector is still in
+    `src/tools/` and is what the bundle's README points at for file logs (#23).
     """
     async def scenario() -> None:
         plane = make_plane(tmp_path)
@@ -439,10 +443,106 @@ def test_the_support_bundle_carries_state_and_no_secret(tmp_path) -> None:
             names = set(archive.namelist())
             config = json.loads(archive.read("config.json"))
             modules = json.loads(archive.read("modules.json"))
+            readme = archive.read("README.txt").decode("utf-8")
 
         assert {"meta.json", "state.json", "modules.json", "config.json"} <= names
         assert config["api"]["token_path"] == "***"
         assert "modules" in modules
+        # The README ships inside the zip a user attaches to a bug report, so it must name a
+        # command that exists: it used to promise `houndmind doctor`, which never did (#23).
+        assert "houndmind doctor" not in readme
+        assert "tools.collect_support_bundle" in readme
+        assert "/api/v1/logs" in readme
+
+    asyncio.run(scenario())
+
+
+def test_the_calibration_run_route_is_read_only(tmp_path) -> None:
+    """The route #17 reserved never became a servo sweep: it reads, and proves it (#17).
+
+    `FakeDogHAL` records every `apply_offsets` call, so "the trim was read and not written" is an
+    assertion rather than a comment.
+    """
+
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        hal = FakeDogHAL()
+        hal.set_offsets({name: 1.0 for name in LEG_SERVO_NAMES})
+        plane.context.set("hal", hal)
+        plane.context.set(
+            "settings",
+            {"calibration": {"persist_path": str(tmp_path / "calibration.json")}},
+        )
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        module = CalibrationModule("calibration")
+
+        async def tick_once() -> None:
+            # The runtime ticks the module on its own thread; the test stands in for one tick.
+            await asyncio.sleep(0.02)
+            module.tick(plane.context)
+
+        async with TestClient(TestServer(create_app(plane))) as client:
+            ticker = asyncio.create_task(tick_once())
+            response = await client.post(
+                f"{API_PREFIX}/calibration/run",
+                json={"request": "servo_zero"},
+                headers=headers,
+            )
+            await ticker
+            body = await response.json()
+
+        assert response.status == 202
+        assert body["request"] == "servo_zero"
+        assert body["result"]["status"] == "ok"
+        assert body["result"]["servo_zero_offsets"] == hal.read_offsets()
+        assert hal.offsets_applied == [], "the run route must never write an offset"
+
+    asyncio.run(scenario())
+
+
+def test_the_calibration_run_route_refuses_anything_that_is_not_a_read(tmp_path) -> None:
+    """The allow-list is the safety property: an unknown name is refused before anything runs."""
+
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/calibration/run",
+                json={"request": "sweep_every_servo"},
+                headers=headers,
+            )
+            body = await response.json()
+
+        assert response.status == 400
+        assert body["error"] == "unknown_request"
+        assert "servo_zero" in body["requests"]
+        assert "sweep_every_servo" not in body["requests"]
+        assert plane.context.get("calibration_request") is None, "nothing was asked to run"
+        assert plane.context.get("calibration_result") is None
+
+    asyncio.run(scenario())
+
+
+def test_a_calibration_run_with_no_ticking_runtime_is_a_503(tmp_path, monkeypatch) -> None:
+    # The real wait is one second; the assertion is about the answer, not about how long it takes.
+    monkeypatch.setattr(api_module, "_CALIBRATION_ACK_TIMEOUT_S", 0.05)
+
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        plane.context.set("calibration_result", None)
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/calibration/run",
+                json={"request": "servo_zero"},
+                headers=headers,
+            )
+            body = await response.json()
+
+        assert response.status == 503
+        assert body["error"] == "unavailable"
+        assert body["request_id"]
 
     asyncio.run(scenario())
 

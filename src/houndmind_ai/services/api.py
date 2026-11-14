@@ -18,6 +18,7 @@ import asyncio
 import io
 import json
 import logging
+import secrets
 import threading
 import time
 import zipfile
@@ -86,6 +87,21 @@ _DEFAULT_TTL_MS = 300
 # enough for the normal case and short enough that a plane with no runner in it answers promptly.
 # A timeout is not a refusal: the request is still queued, and the POST keeps its old `202`.
 _ROUTINE_ACK_TIMEOUT_S = 0.5
+
+# The calibration requests this route will run. Every one of them reads: servo trim, a distance
+# error, a scan angle, a pose confidence. The list is the safety property - a calibration that
+# moves servos is not on it, so `POST /calibration/run` cannot dispatch one (#17).
+CALIBRATION_REQUESTS: tuple[str, ...] = (
+    "servo_zero",
+    "wall_follow",
+    "corner_seek",
+    "landmark_align",
+)
+
+# How long a run waits for the module's answer. The loop ticks at 5 Hz, so this is five ticks -
+# enough for a HAL read on a slow card, short enough that a plane with no calibration module in it
+# answers with a `503` instead of hanging.
+_CALIBRATION_ACK_TIMEOUT_S = 1.0
 
 
 class ControlPlane:
@@ -260,7 +276,9 @@ class ControlPlane:
                 "HoundMind support bundle.\n"
                 "meta/state/modules/config/audit/sessions are snapshots taken when the bundle\n"
                 "was requested. config.json is redacted: no token or password is included.\n"
-                "File logs are not here yet; `houndmind doctor` adds them (Phase 6).\n",
+                "File logs are not in this bundle. For them, read GET /api/v1/logs (scope\n"
+                "admin), or run `python -m tools.collect_support_bundle` on the device, which\n"
+                "zips logs/ alongside the files it collects.\n",
             )
         return buffer.getvalue()
 
@@ -1027,6 +1045,60 @@ async def _calibration(request: web.Request) -> web.Response:
     )
 
 
+async def _calibration_run(request: web.Request) -> web.Response:
+    """Run one read-only calibration request and return what it measured (#17).
+
+    This route exists to *not* be the footgun the contract reserved for. Calibration as it exists
+    in this tree reads: servo trim (`hal.read_offsets`), the distance error against a wall-follow
+    target, the best angle of the last scan, and the pose confidence. Nothing here writes an
+    offset or publishes a motion intent, so there is nothing for a physical confirmation to
+    confirm — and a prompt that guards nothing teaches the operator to approve it reflexively.
+
+    The safety is structural rather than ceremonial: `CALIBRATION_REQUESTS` is an allow-list, and a
+    request outside it is refused before anything is put on the context. A future calibration that
+    does move servos must be a separate route with its own, deliberately designed arming step,
+    because it will not dispatch through this one.
+    """
+    plane = _plane(request)
+    body = await _json_body(request)
+    name = str(body.get("request") or "").strip()
+    if name not in CALIBRATION_REQUESTS:
+        return web.json_response(
+            {
+                "error": "unknown_request",
+                "detail": f"'{name}' is not a calibration request this route runs",
+                "requests": list(CALIBRATION_REQUESTS),
+            },
+            status=400,
+        )
+
+    # The id is what makes a second identical POST run again: `CalibrationModule` compares what it
+    # was asked for, and it must not treat "read the trim again" as the same request it already
+    # answered (#17).
+    request_id = secrets.token_hex(4)
+    plane.context.set("calibration_request", {"request": name, "id": request_id})
+
+    # The loop ticks the module on its own thread at the configured rate, so this waits rather than
+    # executing anything: polling keeps the event loop free for telemetry, which is the same reason
+    # `_routine_run` waits on an executor.
+    deadline = plane.now() + _CALIBRATION_ACK_TIMEOUT_S
+    while plane.now() < deadline:
+        result = plane.context.get("calibration_result")
+        if isinstance(result, dict) and result.get("request_id") == request_id:
+            return web.json_response(
+                {"request": name, "request_id": request_id, "result": result}, status=202
+            )
+        await asyncio.sleep(0.02)
+    return web.json_response(
+        {
+            "error": "unavailable",
+            "detail": "no module answered the calibration request; is the runtime ticking?",
+            "request_id": request_id,
+        },
+        status=503,
+    )
+
+
 async def _history(request: web.Request) -> web.Response:
     limit = request.query.get("limit", "50")
     try:
@@ -1347,6 +1419,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/config", "config", _config_get),
     ("PATCH", "/config", "config", _config_patch),
     ("GET", "/calibration", "config", _calibration),
+    ("POST", "/calibration/run", "config", _calibration_run),
     ("GET", "/history", "state:read", _history),
     ("GET", "/logs", "admin", _logs),
     ("GET", "/support-bundle", "admin", _support_bundle),
