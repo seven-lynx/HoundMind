@@ -45,8 +45,9 @@ does not answer it, the last column names the document that will.
 
 | What you see | Means | Do |
 |---|---|---|
-| `distance_cm: None` in a checkup | the read failed | check the HAT is seated and I2C is on (`sudo raspi-config`), then `python -m tools.hardware_checkup --skip-motion` |
-| `distance_cm: -1.0` on a healthy dog | the vendor's ultrasonic cache has no sample yet | re-run the step; the first read after boot is always `-1.0` ([#108](https://github.com/seven-lynx/HoundMind/issues/108)) |
+| `distance_cm: None` in a checkup | no reading: the sensor failed, or the vendor's ultrasonic cache has no sample yet | check the HAT is seated and I2C is on (`sudo raspi-config`), then re-run `python -m tools.hardware_checkup --skip-motion`; the first read after boot is usually the "no sample yet" case ([#108](https://github.com/seven-lynx/HoundMind/issues/108)) |
+| `[checkup] valid:` shows `False` for a sensor | that sensor did not answer, whatever its value line printed | branch on the flag, not the number — a `None` and a `False` are the same sentence |
+| a checkup prints `[checkup] pidog unavailable` and exits 2 | the vendor package is not in this venv | `docs/INSTALL.md` §3 — `pidog` is cloned, not on PyPI |
 | a checkup exits 0 but every sensor printed `None` | the exit code is not a pass for this tool | read the output ([#109](https://github.com/seven-lynx/HoundMind/issues/109)) |
 | `*_valid: false` in `GET /state` | validity flags are published regardless of the badge module | branch on the flag before the value — a number with `valid: false` is not a measurement |
 | readings that stop updating | the sensor thread stalled, or the watchdog is holding motion | `GET /state` → `watchdog_hold`; see `docs/FEATURES_GUIDE.md` §10 |

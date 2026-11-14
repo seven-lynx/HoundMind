@@ -191,6 +191,32 @@ def test_no_vendor_wheel_is_imported_at_module_scope() -> None:
     assert not offenders, "module-scope vendor imports: " + "; ".join(offenders)
 
 
+def test_pidog_is_imported_only_behind_the_hal() -> None:
+    """#11: a tool that builds its own `Pidog()` is a second constructor the HAL cannot own.
+
+    The module-scope check above cannot see this defect - `tools/hardware_checkup.py` imported the
+    vendor inside `main()` - so this walks every import in every file under `src/`, function bodies
+    included, and holds `pidog` to the two places allowed to have it: the adapter that owns the dog
+    and the optional voice module that uses it for TTS.
+    """
+    allowed = {
+        ("pidog", "houndmind_ai/hal/vendor.py"),
+        ("pidog", "houndmind_ai/optional/voice.py"),
+    }
+    offenders = []
+    root = _package_root().parent
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            for name in _imported_names(node):
+                if name == "pidog" and (name, rel) not in allowed:
+                    offenders.append(f"{rel}:{node.lineno} imports {name}")
+    assert not offenders, "pidog outside the HAL: " + "; ".join(offenders)
+
+
 def test_constructing_the_runtime_imports_no_hardware_or_identity_wheels() -> None:
     """The dynamic half: whatever the syntax says, the process must not end up with dlib loaded."""
     from houndmind_ai.main import build_modules
