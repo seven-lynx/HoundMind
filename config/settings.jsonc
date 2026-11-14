@@ -638,7 +638,10 @@
       // Turn speeds (should be faster than walk speeds).
       "speed_turn_slow": 100,
       "speed_turn_normal": 200,
-      "speed_turn_fast": 220
+      "speed_turn_fast": 220,
+      // How long a navigation retreat stays worth running. It describes the step that just
+      // happened, so a stale one is dropped instead of executed late on a dead observation.
+      "followup_ttl_s": 1.0
     },
     // =====================================================================
     // ORIENTATION (IMU heading integration)

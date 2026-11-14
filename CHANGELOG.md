@@ -282,6 +282,14 @@ Current Release: v2026.01.18
 
 
 ### Fixed
+- A navigation retreat ran once per command and outside the interlock: `obstacle_avoidance` wrote
+  `navigation_followup` and nothing retracted it, so `hal_motors` re-ran the same backward-and-turn
+  after **every** later command, inline on the 5 Hz loop (the closed-loop turn waits up to
+  `orientation.turn_timeout_s`) and past the gateway, the command TTL and every interlock veto
+  (#120). The key is retracted as soon as the followup has been handed over, a payload older than
+  `movement.followup_ttl_s` (ships `1.0`) is dropped instead of run late, and the sequence travels
+  with its step on the motor worker. Routing retreats through the intent board so the interlock
+  judges each step is the remaining half, tracked on #26.
 - The battery feed was empty end to end: `PidogHAL.read` never filled `SensorSnapshot.battery_v`,
   `SensorReading` had no field to carry it, and nothing published `battery_voltage`, so the
   interlock's low-voltage veto (6.4 V) and the `battery` section of `behavior` were both unreachable

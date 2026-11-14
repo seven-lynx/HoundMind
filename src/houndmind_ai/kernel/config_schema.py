@@ -632,6 +632,9 @@ _MOVEMENT = Section(
         "speed_turn_slow": _SERVO_SPEED,
         "speed_turn_normal": _SERVO_SPEED,
         "speed_turn_fast": _SERVO_SPEED,
+        # How long a navigation followup stays worth running (`hal/motors.py`). It describes the step
+        # that just happened, so a stale one is dropped rather than executed late.
+        "followup_ttl_s": _NON_NEGATIVE,
     }
 )
 
