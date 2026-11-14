@@ -93,10 +93,19 @@ _PARAM_ACTIONS = frozenset(
     }
 )
 
+# The vendor's generic knobs, honoured by `hal/vendor.py::_direct` for *any* servo action: how many
+# cycles, how fast, and whether to block until the pose has finished. A step whose parameters are a
+# subset of these is forwarded whatever its action, which is what makes a `stand {wait: true}` or a
+# `wag tail {steps: 6}` reach the HAL without this module keeping a second copy of the catalog's
+# `params` lists — the drift that produced #69. The catalog is still the authority on which actions
+# may name them; the validator refuses anything it does not declare.
+_GENERIC_PARAM_KEYS = frozenset({"speed", "steps", "wait"})
+
 # The subset that can block. A parameterised step takes `hal/vendor.py::_direct`, which holds the
 # servo bus and, with `wait`, keeps it until the gait finishes; one head sweep can own that bus for
-# seconds. Those calls leave the tick and run on the module's own worker. A bare `forward` still
-# goes straight through: the vendor queues it and returns.
+# seconds. Those calls leave the tick and run on the module's own worker, and since #69 that covers
+# any action asking to wait, not only the five gaits. A bare `forward` still goes straight through:
+# the vendor queues it and returns.
 _LOCOMOTION_ACTIONS = frozenset({"forward", "backward", "turn_left", "turn_right", "trot"})
 
 
@@ -219,10 +228,13 @@ class MotorModule(Module):
                 direction = "left" if action == "turn_left" else "right"
                 self._schedule_head_follow(context, direction)
 
-            # Execute action; optionally follow with a retreat/turn sequence. The actions whose
-            # params are the whole command get them; everything else stays fire-and-forget.
+            # Execute action; optionally follow with a retreat/turn sequence. A step carries its
+            # parameters when the action's vocabulary is the whole command (`_PARAM_ACTIONS`) or
+            # when every key is one of the vendor's generic knobs, which `_direct` honours for any
+            # action. Everything else stays fire-and-forget with an empty payload.
             payload: dict[str, Any] = {}
-            if action in _PARAM_ACTIONS:
+            forwarded = set(params) - {"cue"} if isinstance(params, dict) else set()
+            if action in _PARAM_ACTIONS or forwarded <= _GENERIC_PARAM_KEYS:
                 raw_params = params
                 payload = dict(raw_params) if isinstance(raw_params, dict) else {}
                 # The cue is this repo's annotation, not the vendor's parameter: it was played
@@ -237,7 +249,11 @@ class MotorModule(Module):
             # is taken before the step runs and the key is retracted after it has been handed over,
             # which is what stops a followup from being re-run by every later command (#120).
             followup = self._followup_job(context)
-            if action in _LOCOMOTION_ACTIONS and payload:
+            # A step that asked to wait blocks until the pose is done, so it belongs on the worker
+            # whatever its class: a routine that says `stand {wait: true}` must not return to the
+            # next step while the dog is still standing up (#69).
+            blocking = action in _LOCOMOTION_ACTIONS or bool(payload.get("wait"))
+            if blocking and payload:
                 if not self._dispatch_off_tick(action, payload, then=followup):
                     # Nothing was consumed, so the followup stays in the context for the retry.
                     return
@@ -306,7 +322,7 @@ class MotorModule(Module):
         if worker.busy:
             self.deferred += 1
             if self.deferred == 1:
-                logger.info("Locomotion step %s deferred: the motor worker is busy", action)
+                logger.info("Step %s deferred: the motor worker is busy", action)
             return False
         worker.submit("step", lambda: self._run_step(hal, action, payload, then))
         self.deferred = 0

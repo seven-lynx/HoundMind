@@ -39,10 +39,10 @@ A path that points at a file is treated the same way. One file is capped at 256 
   "name": "Morning greeting",
   "allow_locomotion": false,
   "steps": [
-    { "action": "sit" },
-    { "action": "head", "params": { "yaw": 20, "pitch": 5 } },
     { "action": "sound", "params": { "name": "woohoo" } },
-    { "action": "wag_tail" }
+    { "action": "stand", "params": { "wait": true } },
+    { "action": "stretch", "params": { "wait": true } },
+    { "action": "wag_tail", "params": { "steps": 6 } }
   ]
 }
 ```
@@ -64,13 +64,17 @@ the nearest one.
 | Key | Required | Rule |
 |---|---|---|
 | `action` | yes | An action from `GET /api/v1/repertoire`. Case and spacing do not matter: `turn left`, `turn_left` and `Turn Left` are one action. |
-| `params` | no | A table of scalars — string, number or boolean. A key is legal only if the catalog declares it for that action, so `{ "action": "sit", "params": { "wait": 1 } }` is refused: `sit` declares no parameters. |
+| `params` | no | A table of scalars — string, number or boolean. A key is legal only if the catalog declares it for that action, so `{ "action": "sit", "params": { "speed": 50 } }` is refused: `sit` declares `wait` and nothing else. |
 
 `params` are what the action's catalog entry reads: `{ "action": "forward", "params": { "speed": 0.5,
 "steps": 3 } }` walks three cycles at half speed, `{ "action": "head", "params": { "yaw": 20 } }` turns
 the head, and `{ "action": "speak", "params": { "text": "Good morning" } }` says a line. The
 authoritative list of names and parameters is `GET /api/v1/repertoire`; `config/actions.jsonc` is the
 same table in file form.
+
+Two parameters mean the same thing wherever the catalog declares them: `wait: true` holds the run
+until the action has finished, and `steps` repeats it. A `wait` step runs on the motor worker, so a
+slow stand-up never stalls the loop and the next step cannot start before the dog is on its feet.
 
 
 ### `allow_locomotion`

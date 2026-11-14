@@ -92,6 +92,7 @@ def rgb_calls(ctx: DummyContext) -> list[dict[str, Any]]:
 # tests exercise the requests the loop actually publishes.
 _SOURCES: dict[str, tuple[str, str, str]] = {
     "safety": ("emergency", "boom", "red"),
+    "health": ("health", "breath", "yellow"),
     "navigation": ("patrol", "breath", "green"),
     "attention": ("listen", "listen", "cyan"),
     "emotion": ("happy", "breath", "violet"),
@@ -104,6 +105,7 @@ def full_settings() -> dict[str, Any]:
         priority=list(DEFAULT_PRIORITY),
         attention_color="cyan",
         attention_mode="listen",
+        health_mode="breath",
         emotion_mode="breath",
     )
     settings["emotion"] = {"led_colors": {"happy": "violet"}}
@@ -111,8 +113,12 @@ def full_settings() -> dict[str, Any]:
 
 
 def publish(ctx: DummyContext, source: str, until_ts: float | None = None) -> None:
-    mode = _SOURCES[source][0]
+    mode, _style, color = _SOURCES[source]
     request: dict[str, Any] = {"timestamp": 0.0, "mode": mode}
+    if source == "health":
+        # The one source whose colour rides the request rather than a settings key: only the module
+        # that read the sensors knows which one it is (`safety/sensor_health.py`).
+        request["color"] = color
     if until_ts is not None:
         request["until_ts"] = until_ts
     ctx.set(f"led_request:{source}", request)
@@ -155,9 +161,13 @@ def test_led_manager_priority_selection():
     assert calls[-1]["color"] == "red"
 
 def test_the_default_order_puts_safety_first() -> None:
-    """§15's guarantee is the shipped list's, so pin the list, not only what the selector does with it."""
+    """§15's guarantee is the shipped list's, so pin the list, not only what the selector does with it.
+
+    `health` is second: sensor health ships disabled (#78), so the slot only bites on a device that
+    turns that module on, and when it does, a failing sensor outranks navigation and an expression.
+    """
     assert DEFAULT_PRIORITY[0] == "safety"
-    assert list(DEFAULT_PRIORITY) == ["safety", "navigation", "attention", "emotion"]
+    assert list(DEFAULT_PRIORITY) == ["safety", "health", "navigation", "attention", "emotion"]
 
 
 @pytest.mark.parametrize(("winner", "loser"), list(zip(DEFAULT_PRIORITY, DEFAULT_PRIORITY[1:])))

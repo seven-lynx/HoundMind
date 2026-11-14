@@ -4,7 +4,7 @@
     {
       "action": "sit",
       "params": {
-        "wait": 1
+        "speed": 50
       }
     }
   ]

@@ -34,13 +34,12 @@ def shipped() -> Repertoire:
 
 
 def greeting(**overrides) -> dict:
-    """The canon's morning greeting (§8.1), with the parameters today's catalog declares.
+    """The canon's morning greeting (§8.1), now that both halves of it are real.
 
-    §8.1 writes `stand {wait: true}`, `stretch {wait: true}` and `wag_tail {steps: 6}`. None of the
-    three is declared in `config/actions.jsonc`, and `hal/motors.py` hands parameters to the HAL for
-    `_PARAM_ACTIONS` only — locomotion since P2 R4, posture nowhere yet — so a `wait` on `stand` is
-    dropped in silence. The validator refuses what the gateway would ignore, so the example is
-    written here with the parameters that reach the HAL today; the posture half is **#69**.
+    §8.1 writes `stand {wait: true}`, `stretch {wait: true}` and `wag_tail {steps: 6}`. Since #69
+    `config/actions.jsonc` declares `wait` for the posture and expression classes (and `steps` for
+    `wag tail`), and `hal/motors.py` forwards those three generic keys for any action, so the
+    format's own reference example validates against the catalog the device ships.
     """
     document = {
         "id": "morning_greeting",
@@ -49,9 +48,9 @@ def greeting(**overrides) -> dict:
         "allow_locomotion": False,
         "steps": [
             {"action": "sound", "params": {"name": "woohoo", "volume": 80}},
-            {"action": "stand"},
-            {"action": "stretch"},
-            {"action": "wag_tail"},
+            {"action": "stand", "params": {"wait": True}},
+            {"action": "stretch", "params": {"wait": True}},
+            {"action": "wag_tail", "params": {"steps": 6}},
             {"action": "rgb", "params": {"style": "breath", "color": "green", "bps": 2.0}},
             {"action": "speak", "params": {"text": "Good morning!", "volume": 70}},
         ],
@@ -71,14 +70,14 @@ def test_the_worked_example_validates_against_the_shipped_repertoire() -> None:
 def test_a_parameter_the_catalog_does_not_declare_is_refused() -> None:
     """The catalog is the authority on what an action reads, not the vendor library.
 
-    `hal/vendor.py:385-404` honours `wait` for any servo action, but `hal/motors.py` forwards
-    parameters for `_PARAM_ACTIONS` only, and posture is not in that set yet (#69), so this routine
-    would wait for nothing. Refused until the gateway carries it.
+    `hal/vendor.py::_direct` honours `speed` for any servo action, but `config/actions.jsonc`
+    declares only `wait` for a posture (#69), so a `speed` on `sit` would be a number nothing
+    carries. The validator refuses what the HAL path would ignore.
     """
     problems = check_routine(
-        greeting(steps=[{"action": "sit", "params": {"wait": True}}]), shipped()
+        greeting(steps=[{"action": "sit", "params": {"speed": 50}}]), shipped()
     )
-    assert any("does not read 'wait'" in str(problem) for problem in problems)
+    assert any("does not read 'speed'" in str(problem) for problem in problems)
 
 
 def test_parameters_come_from_the_loaded_catalog_not_from_the_builtin_floor() -> None:
@@ -236,9 +235,9 @@ def test_a_parsed_routine_round_trips() -> None:
     assert again == routine
     assert routine.to_dict()["steps"] == [
         {"action": "sound", "params": {"name": "woohoo", "volume": 80}},
-        {"action": "stand", "params": {}},
-        {"action": "stretch", "params": {}},
-        {"action": "wag_tail", "params": {}},
+        {"action": "stand", "params": {"wait": True}},
+        {"action": "stretch", "params": {"wait": True}},
+        {"action": "wag_tail", "params": {"steps": 6}},
         {"action": "rgb", "params": {"style": "breath", "color": "green", "bps": 2.0}},
         {"action": "speak", "params": {"text": "Good morning!", "volume": 70}},
     ]

@@ -63,3 +63,80 @@ def test_sensor_health_led_and_log(monkeypatch):
     module.tick(ctx)
     # Just check that no exceptions and context was updated
     assert True
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+
+class ReadingContext:
+    """A context that hands the module one sensor reading and records what it writes."""
+
+    def __init__(self, reading: SensorReading) -> None:
+        self.reading = reading
+        self.data: dict = {"settings": {"sensor_health": {"enabled": True}}}
+
+    def get(self, key, default=None):
+        if key == "sensor_reading":
+            return self.reading
+        return self.data.get(key, default)
+
+    def set(self, key, value):
+        self.data[key] = value
+
+
+def reading(now: float, *, valid: bool) -> SensorReading:
+    return SensorReading(
+        distance_cm=100,
+        touch="N",
+        sound_detected=False,
+        sound_direction=None,
+        acc=None,
+        gyro=None,
+        timestamp=now,
+        distance_valid=valid,
+        touch_valid=True,
+        sound_valid=True,
+        imu_valid=valid,
+    )
+
+
+def test_a_health_colour_is_a_live_request(monkeypatch) -> None:
+    """The request the selector can now reach carries a deadline, and it is refreshed (#78)."""
+    clock = Clock()
+    monkeypatch.setattr("houndmind_ai.safety.sensor_health.time.time", lambda: clock.now)
+    monkeypatch.setattr("houndmind_ai.safety.sensor_health.time.monotonic", lambda: clock.now)
+
+    context = ReadingContext(reading(clock.now, valid=False))
+    module = SensorHealthModule("sensor_health", enabled=True)
+
+    module.tick(context)
+    first = context.get("led_request:health")
+    assert first is not None
+    assert first["mode"] == "health"
+    assert first["until_ts"] > clock.now
+
+    # Next tick, still unhappy: the same slot is rewritten with a later deadline. Without that the
+    # request would expire while the sensor is still broken.
+    clock.now += 1.0
+    context.reading = reading(clock.now, valid=False)
+    module.tick(context)
+    assert context.get("led_request:health")["until_ts"] > first["until_ts"]
+
+
+def test_recovering_clears_the_health_request(monkeypatch) -> None:
+    """A reachable health source must not own the strip after the sensors are healthy again."""
+    clock = Clock()
+    monkeypatch.setattr("houndmind_ai.safety.sensor_health.time.time", lambda: clock.now)
+    monkeypatch.setattr("houndmind_ai.safety.sensor_health.time.monotonic", lambda: clock.now)
+
+    context = ReadingContext(reading(clock.now, valid=False))
+    module = SensorHealthModule("sensor_health", enabled=True)
+    module.tick(context)
+    assert context.get("led_request:health") is not None
+
+    context.reading = reading(clock.now, valid=True)
+    module.tick(context)
+
+    assert context.get("led_request:health") is None

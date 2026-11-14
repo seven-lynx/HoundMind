@@ -110,7 +110,7 @@ class ObstacleAvoidanceModule(Module):
         nav_turn = None
         nav_led = None
         nav_followup = None
-        emit_decision = None
+        emit_decision: tuple[str, float, bool, float | None] | None = None
         stuck_recovery = None
         # ...existing code...
 
@@ -130,7 +130,9 @@ class ObstacleAvoidanceModule(Module):
                     nav_action = "forward"
                     nav_led = "patrol"
                     self._clear_path_streak += 1
-                    emit_decision = ("forward", 0.0, True)
+                    # Nothing measured a confidence on this path: a clear-path streak is "the last
+                    # N scans agreed", not a probability of one scan being right (#51).
+                    emit_decision = ("forward", 0.0, True, None)
             else:
                 scan_result = self._scan_open_space(context, settings, now)
                 if scan_result is None:
@@ -143,12 +145,13 @@ class ObstacleAvoidanceModule(Module):
                         self._last_scan_ts = now
                         nav_action = safe_action
                 else:
-                    direction, score, confirmed = scan_result
+                    direction, score, confirmed, confidence = scan_result
                     logger.info(
-                        "Navigation scan: dir=%s score=%.1f confirmed=%s",
+                        "Navigation scan: dir=%s score=%.1f confirmed=%s confidence=%s",
                         direction,
                         score,
                         confirmed,
+                        confidence,
                     )
                     low_confidence_cooldown = _safe_float(
                         settings.get("low_confidence_cooldown_s", 0.8), 0.8
@@ -256,7 +259,7 @@ class ObstacleAvoidanceModule(Module):
                                 nav_action = "forward"
                                 nav_led = "patrol"
                                 self._clear_path_streak += 1
-                            emit_decision = (direction, score, confirmed)
+                            emit_decision = (direction, score, confirmed, confidence)
 
         # Set all context state at the end
         if nav_action is not None:
@@ -309,7 +312,9 @@ class ObstacleAvoidanceModule(Module):
                 self._publish(context, "forward")
                 self._set_nav_led(context, "patrol")
                 self._clear_path_streak += 1
-                self._emit_navigation_decision(context, settings, "forward", 0.0, True)
+                self._emit_navigation_decision(
+                    context, settings, "forward", 0.0, True, None
+                )
                 return
 
         scan_result = self._scan_open_space(context, settings, now)
@@ -324,12 +329,13 @@ class ObstacleAvoidanceModule(Module):
             self._publish(context, safe_action)
             return
 
-        direction, score, confirmed = scan_result
+        direction, score, confirmed, confidence = scan_result
         logger.info(
-            "Navigation scan: dir=%s score=%.1f confirmed=%s",
+            "Navigation scan: dir=%s score=%.1f confirmed=%s confidence=%s",
             direction,
             score,
             confirmed,
+            confidence,
         )
 
         low_confidence_cooldown = _safe_float(
@@ -453,11 +459,13 @@ class ObstacleAvoidanceModule(Module):
             self._set_nav_led(context, "patrol")
             self._clear_path_streak += 1
 
-        self._emit_navigation_decision(context, settings, direction, score, confirmed)
+        self._emit_navigation_decision(
+            context, settings, direction, score, confirmed, confidence
+        )
 
     def _scan_open_space(
         self, context, settings, now: float
-    ) -> tuple[str, float, bool] | None:
+    ) -> tuple[str, float, bool, float | None] | None:
         """Select a direction using the latest scan data.
 
         Returns (direction, score, confirmed) where direction is left/right/forward.
@@ -497,7 +505,7 @@ class ObstacleAvoidanceModule(Module):
             logger.warning("On-demand scan processing failed: %s", exc)
             return None
 
-    def _process_scan(self, reading, settings) -> tuple[str, float, bool] | None:
+    def _process_scan(self, reading, settings) -> tuple[str, float, bool, float | None] | None:
         yaw_max = _safe_int(settings.get("scan_yaw_max_deg", 60), 60)
         ema_alpha = _safe_float(settings.get("baseline_ema", 0.25), 0.25)
         min_gap_width_deg = _safe_int(settings.get("min_gap_width_deg", 30), 30)
@@ -551,16 +559,33 @@ class ObstacleAvoidanceModule(Module):
         counts = Counter(self._confirm_votes)
         confirm_count = counts.get(direction, 0)
         confirmed = confirm_count >= confirm_threshold
+        # What the confirm window actually measured: the share of votes that agreed on this
+        # direction. `score` is the scan's ranking value and stays that; mapping one onto the other
+        # would have invented a probability (#51).
+        confidence: float | None = None
         if confirm_window > 0:
             confidence = confirm_count / confirm_window
             if confidence < turn_confidence_min:
                 confirmed = False
 
-        return direction, score, confirmed
+        return direction, score, confirmed, confidence
 
     def _emit_navigation_decision(
-        self, context, settings, direction: str, score: float, confirmed: bool
+        self,
+        context,
+        settings,
+        direction: str,
+        score: float,
+        confirmed: bool,
+        confidence: float | None = None,
     ) -> None:
+        """Publish this tick's decision, including the confidence only a scan can measure.
+
+        `confidence` is `None` on the paths that decided without a scan (a clear-path streak), and
+        the two readers - `services/state.py::_nav` and `act/gateway.py::_record` - already treat a
+        missing number as unknown rather than zero. Passing `None` through is what makes "the
+        navigator did not measure one" distinguishable from "this build never reports it" (#51).
+        """
         if not settings.get("log_decision_enabled", True):
             return
         now = time.time()
@@ -569,6 +594,7 @@ class ObstacleAvoidanceModule(Module):
             "direction": direction,
             "score": score,
             "confirmed": confirmed,
+            "confidence": confidence,
             "clear_path_streak": self._clear_path_streak,
             "low_confidence_retries": self._low_confidence_retries,
         }

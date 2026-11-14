@@ -7,6 +7,62 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The LED strip has a `health` source, and the dead writes around it are gone** (#78, #163):
+  `safety/sensor_health.py` published `led_request:health` into a source no configuration could
+  name, and `behavior/habituation.py` published `led_request:habituation:<stimulus>` — a key family
+  the selector's per-source walk can never address — plus a `telemetry:habituation:<stimulus>`
+  snapshot nothing read. `health` is now a real source: in the schema's choices, in the shipped
+  default order second after `safety`, with `settings.led.health_mode` choosing its effect. The
+  module ships disabled, so the default only bites once a user turns it on — and when they do, the
+  request carries a monotonic `until_ts` refreshed every tick while a sensor is unhappy and cleared
+  when it recovers, so a reachable health colour cannot hold the strip after the problem is gone.
+  Habituation keeps one output, `habituation:<stimulus>:habituated`, which `behavior/attention.py`
+  reads. `docs/FEATURES_GUIDE.md` §7 and §15, `tests/test_led_manager.py`,
+  `tests/test_sensor_health.py` (2 new cases) and `tests/test_habituation_multi.py` follow.
+- **`wait` and `steps` reach the HAL on a posture or expression step** (#69): `config/actions.jsonc`
+  declared no parameters for either class, and `hal/motors.py` forwarded a payload only for its
+  `_PARAM_ACTIONS` set, so `{"action": "stand", "params": {"wait": true}}` was refused by the
+  validator - and would have been dropped in silence had it got through. The canon's own worked
+  example (section 8.1: `stand {wait: true}`, `stretch {wait: true}`, `wag_tail {steps: 6}`) could
+  not be written down at all. Both halves now exist: the catalog declares `wait` for posture and
+  expression (plus `steps` on `wag tail`), and the motor module forwards any step whose parameters
+  are a subset of the three vendor knobs `speed`/`steps`/`wait`, which `hal/vendor.py::_direct`
+  honours for every servo action - so the module keeps no second copy of the catalog to drift
+  away from. A step that asks to wait now runs on the motor worker, because blocking on a pose is
+  exactly what that worker is for. `tests/test_motor_params.py` (4 cases) plus
+  `tests/test_routine.py`, the routine fixtures and `docs/ROUTINES.md` follow the change.
+- **A refused routine start is the POST's own `409`** (#72): `POST /api/v1/routines/{id}/run`
+  answered `202` before the runner ever saw the request, and the runner wrote its refusal into a
+  `routine_rejection` context key nothing read - so a start it declined left the client holding an
+  acceptance it could not cancel. The request now carries a `threading.Event` and a `refusal` slot;
+  the runner answers on the request and the route waits for it in an executor (the same reason
+  `submit()` waits that way), returning `409` with the runner's reason. `routine_rejection` is gone,
+  and `services/api.py` covers the wait with a 0.5 s bound, which is two ticks of the shipped loop.
+  `docs/CONTROL_API.md` §3 states both answers; `tests/test_api_routines.py` adds the refused start
+  and the unanswered one, `tests/test_routine_runner.py` reads the answer off the request.
+- **A routine run is stamped from the loop's clock** (#73): `RoutineRun.started_at` came from
+  `time.time()` while everything a client compares it against is monotonic - the snapshot's `ts` is
+  the loop clock - so `ts - started_at` produced a number in the region of 1.7 billion. The runner
+  now stamps `time.monotonic()`, which makes the subtraction correct and removes the caveat
+  `docs/CONTROL_API.md` §4 had to carry: `started_at` is a duration, not a wall-clock moment.
+  `tests/test_routine_runner.py` asserts the stamp sits between two `time.monotonic()` readings and
+  is decades away from the wall clock.
+- **`nav.confidence` is a number the navigator measured** (#51): `services/state.py` read a
+  `confidence` key the producer never wrote, so the field was `null` on every tick on every profile
+  - indistinguishable from a build that does not report confidence at all, and it made the
+  `confidence` field of the decision record (#44) permanently null too. `navigation/obstacle_avoidance.py`
+  already computed the share of its confirm window that agreed on a direction and then dropped it;
+  the value now travels with the decision, is `null` only on the paths that decided without a scan,
+  and stays distinct from `score` (a ranking value, not a probability). `docs/CONTROL_API.md` §4
+  documents the two fields; `tests/test_navigation_confidence.py` (6 cases) pins the measurement and
+  both `null` cases.
+- **The unused `publish_event_threadsafe` is gone** (#53): `services/stream.py` grew a second
+  publish entry point for "another thread (the decision loop)" and never called it - a search of
+  `src/`, `tests/` and `docs/` found the definition and nothing else. Left in place it documented
+  an intent the code does not have, and read as the safe choice for a module `tick`, which runs on
+  the decision thread and would have interleaved with the pump's own writes. The pump is now the
+  one stated publish path (`docs/CONTROL_API.md` §5), the dead `_loop` attribute went with it, and
+  the `decision` event of #44 already ships that way.
 - **An injected `IntentBoard` is no longer replaced** (#58): `act/gateway.py` chose its board with
   `board or IntentBoard(...)`, and `IntentBoard` defines `__len__` - so a caller that passed a
   freshly built, still-empty board had it silently discarded and went on publishing into one

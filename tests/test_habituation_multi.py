@@ -51,11 +51,12 @@ def test_habituation_multiple_stimuli_and_thresholds(monkeypatch):
     module.tick(ctx)
     assert ctx.get("habituation:touch:habituated") is True
 
-    # Verify LED request and telemetry snapshot exist for sound and touch
-    assert ctx.get("led_request:habituation:sound") is not None
-    assert ctx.get("telemetry:habituation:sound") is not None
-    assert ctx.get("led_request:habituation:touch") is not None
-    assert ctx.get("telemetry:habituation:touch") is not None
+    # Nothing else is published: the flag is the whole output. The LED request and the
+    # `telemetry:` snapshot this module used to write had no reader (#78, #163).
+    assert ctx.get("led_request:habituation:sound") is None
+    assert ctx.get("telemetry:habituation:sound") is None
+    assert ctx.get("led_request:habituation:touch") is None
+    assert ctx.get("telemetry:habituation:touch") is None
 
     # Advance beyond recovery and ensure flags clear
     t["now"] += 3.0

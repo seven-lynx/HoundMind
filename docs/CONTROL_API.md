@@ -275,7 +275,7 @@ refused is listed with the reason instead of being hidden.
   },
   "current": { "id": "morning_greeting", "name": "Morning greeting", "index": 1, "total": 2,
                "state": "running", "dry_run": false, "action": "sit", "veto": null,
-               "detail": null, "started_at": 1762771200.31 }
+               "detail": null, "started_at": 4212.3 }
 }
 ```
 
@@ -295,10 +295,16 @@ refused is listed with the reason instead of being hidden.
 { "accepted": true, "id": "morning_greeting", "dry_run": false, "steps": 2 }
 ```
 
+The route waits up to half a second for the runner's own answer before it replies, so a start the
+runner declines comes back as the `409` below rather than a `202` a client has no way to retract. A
+request that has not been looked at yet — no runner ticking, or a loop slower than the wait — keeps
+the `202`, because a queued request is not a refused one.
+
 - **`400`** — `dry_run` was not a real boolean (`"true"` is refused, never coerced).
 - **`404`** — no routine by that id was loaded; `suggestion` carries the closest name.
-- **`409`** — a run is in progress, or a request is already queued for the next tick; `current` is
-  the run that blocked it.
+- **`409`** — a run is in progress, a request is already queued for the next tick, or the runner
+  declined this start; `detail` carries the runner's own reason and `current` is the run that
+  blocked it, or `null`.
 - **`503`** — no routine runner is loaded.
 
 Every step is published as a `routine` intent, so each one passes the mode gate and the interlock;
@@ -341,7 +347,7 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
   "routines": {
     "id": "morning_greeting", "name": "Morning greeting", "index": 1, "total": 3,
     "state": "running", "dry_run": false, "action": "sit", "veto": null, "detail": null,
-    "started_at": 1762771200.31
+    "started_at": 4212.3
   },
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "temp_c": 61.4, "mem_used_pct": 51.0 } },
   "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [] },
@@ -368,8 +374,8 @@ cadences over the same object.
 `stopped` or `refused`; a refused run keeps the `veto` and `detail` that ended it, so a client shows
 "stopped at step 2: obstacle" instead of an unexplained halt. It is rewritten every tick while the run
 is live, whereas the WS `routine` event ([§5](#5-websocket)) fires only when the run *moves*: a new step, a new state,
-or a new veto. `started_at` is epoch seconds from the device's wall clock, not the monotonic `ts` —
-it is a timestamp to display, not one to compare against this stream.
+or a new veto. `started_at` is on the same monotonic clock as `ts`, so `ts - started_at` is how long
+the run has been going - a duration, not a wall-clock moment to display.
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
 `navigation`, `routine`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode
@@ -385,6 +391,12 @@ dog reporting itself safe, and a client must not render the two the same way.
 `nav.heading_calibrated` says whether the gyro bias was measured this run
 (`navigation/orientation.py`). A turn made on a calibrated heading and one made on a drifting heading
 look identical in `nav.decision`, so a client that shows heading quality needs the flag.
+
+`nav.confidence` is the share of the navigator's confirm window that voted for the direction it
+picked — the one number the scan actually measures. It is `null` when the tick decided without a
+scan (a clear-path streak, for instance), and it is never derived from `score`: a scan score ranks
+one opening against another and is not a probability, so a client that wants "how sure is it" reads
+this field and a client that wants "how good is the gap" reads the decision's `score`.
 
 `health.high_water` is the session's peak for each health signal (`temp_c`, `gpu_temp_c`, `load_1m`,
 `mem_used_pct`), which is what a support bundle wants: the average hides the thermal spike that
@@ -443,6 +455,12 @@ Server frames:
 
 Client frames: `{"type": "hello", "token": "..."}` then `{"type": "ping"}`. Anything else is an
 `error` with code `bad_request`.
+
+Every frame comes from one place. The hub's own pump runs on the aiohttp loop and calls
+`publish_event` (`services/stream.py`) when something it watches has changed: a module that has
+something to say writes it into the context, and the pump is what turns that into a frame. There
+is no second, thread-agnostic entry point to choose between, so a producer never has to reason
+about which thread it is on.
 
 The only event names the server publishes today are `mode_changed`, `command_accepted`,
 `command_vetoed`, `command_expired`, `pairing_window_open`, `decision` and `routine`. The last two

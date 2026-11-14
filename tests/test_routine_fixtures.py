@@ -33,7 +33,7 @@ EXPECTED_FILES = 20
 # stem -> (the path the validator reports, a substring of the message it must carry)
 REFUSED = {
     "invalid_unknown_action": ("routine.steps[0].action", "is not in the repertoire"),
-    "invalid_undeclared_param": ("routine.steps[0].params.wait", "does not read 'wait'"),
+    "invalid_undeclared_param": ("routine.steps[0].params.speed", "does not read 'speed'"),
     "invalid_param_not_scalar": ("routine.steps[0].params.yaw", "got list"),
     "invalid_locomotion_without_optin": ("routine.steps[0].action", "allow_locomotion"),
     "invalid_optin_not_bool": ("routine.allow_locomotion", "expected true or false"),
