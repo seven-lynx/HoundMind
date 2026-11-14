@@ -73,6 +73,24 @@ def drop(context, source: Source = Source.NAVIGATION) -> None:
     context.get("intent_board").retract(source)
 
 
+def test_an_injected_board_is_the_one_every_producer_sees() -> None:
+    """Identity, not equality: a caller that kept its own reference must reach the same board.
+
+    `IntentBoard` defines `__len__`, so an empty one is falsy and `board or IntentBoard(...)`
+    silently substituted a second board. A test that only asserts on the ring cannot see that
+    (#58); this one holds the reference the way a replay harness does.
+    """
+    board = IntentBoard()
+    gateway = MotionGatewayModule("motion_gateway", interlock=Interlock(), board=board)
+    context = RuntimeContext()
+    gateway.start(context)
+
+    assert context.get("intent_board") is board
+    board.publish("forward", Source.NAVIGATION)
+    gateway.tick(context)
+    assert context.get("motion_command")["action"] == "forward"
+
+
 def reading(distance_cm: float | None, valid: bool = True) -> SensorReading:
     return SensorReading(
         distance_cm=distance_cm,
