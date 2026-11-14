@@ -603,10 +603,6 @@
       // Navigation decision logging.
       "log_decision_enabled": true,
       "log_decision_raw_angles": false,
-      // Lightweight local planner (uses mapping.best_path as a short-range hint)
-      "planner_enabled": true,
-      "planner_min_confidence": 0.6,
-      "planner_max_age_s": 2.0,
       // Stuck detection (movement magnitude) and avoidance strategy.
       "stuck_time_window_s": 5.0,
       "stuck_movement_threshold": 1500.0,

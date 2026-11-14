@@ -510,7 +510,7 @@ _ATTENTION = Section(
     }
 )
 
-# `navigation/scanning.py`, `navigation/obstacle_avoidance.py`, `navigation/local_planner.py`.
+# `navigation/scanning.py`, `navigation/obstacle_avoidance.py`.
 # The largest section, and the one where a typo costs the most: the scan and avoidance knobs
 # are the difference between "walks past the sofa" and "walks into it". Choices are the names
 # `obstacle_avoidance.py` branches on (`scan_mode`, `avoidance_strategies`,
@@ -572,9 +572,6 @@ _NAVIGATION = Section(
         "slam_nav_min_confidence": _ALPHA,
         "log_decision_enabled": Bool(),
         "log_decision_raw_angles": Bool(),
-        "planner_enabled": Bool(),
-        "planner_min_confidence": _ALPHA,
-        "planner_max_age_s": _POSITIVE,
         "stuck_time_window_s": _POSITIVE,
         "stuck_movement_threshold": _POSITIVE,
         "stuck_min_samples": IntSpec(minimum=1),

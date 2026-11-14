@@ -424,6 +424,13 @@ Current Release: v2026.01.18
   disagrees with, instead of leaving the contradiction silent.
 
 ### Removed
+- `navigation/local_planner.py` and its three `navigation.*` keys. The module published `local_plan`
+  and `mapping_recommendation` and nothing read either; what it computed — `mapping_openings.best_path`
+  above a confidence floor, turned into a left/right hint — `obstacle_avoidance._apply_mapping_bias`
+  already does on the same data, with a cooldown, a weight and a consumer (#122). It shipped enabled,
+  had no test, and carried an unused `_safe_int`, so `/modules` reported a running component that
+  produced nothing. Goal-directed walking is `place_navigator`; short-range steering is the avoidance
+  module.
 - The A* path-planning hook, and the two keys that were supposed to feed it.
   `default_path_planning_hook` read `mapping_state["grid_map"]`, `mapping_state["current_cell"]` and
   `settings["goal"]`; the mapper writes `grid` (a cell map, not a 2-D array), nothing in the tree
