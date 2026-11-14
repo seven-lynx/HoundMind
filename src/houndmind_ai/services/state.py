@@ -36,7 +36,11 @@ def _mode(context) -> str:
 def _sensors(context) -> dict[str, object]:
     reading = context.get("sensor_reading")
     tilt = _table(context.get("tilt_warning"))
-    battery = _number(context.get("battery_voltage"))
+    # Same precedence as `act/gateway.py::_snapshot`: the reading the HAL filled wins, and the
+    # context key covers a producer that is not the sensor module (#119).
+    battery = _number(getattr(reading, "battery_v", None))
+    if battery is None:
+        battery = _number(context.get("battery_voltage"))
 
     pitch = _number(tilt.get("pitch"))
     roll = _number(tilt.get("roll"))

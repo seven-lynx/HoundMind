@@ -282,6 +282,15 @@ Current Release: v2026.01.18
 
 
 ### Fixed
+- The battery feed was empty end to end: `PidogHAL.read` never filled `SensorSnapshot.battery_v`,
+  `SensorReading` had no field to carry it, and nothing published `battery_voltage`, so the
+  interlock's low-voltage veto (6.4 V) and the `battery` section of `behavior` were both unreachable
+  on hardware while `ARCHITECTURE`, `CONTROL_API` and `FEATURES_GUIDE` all promised them (#119).
+  `hal/vendor.py` reads `Pidog.get_battery_voltage` on its own cadence (`sensors.battery_poll_s`,
+  ships `2.0`; the read is an ADC transaction on the servo bus), the value survives to `/state` and
+  to both consumers, and a reading outside 3-60 V is reported as **no reading** rather than a flat
+  pack, so a disconnected sense line cannot veto every motion for the life of the process.
+  `battery_percent` stays unpublished: nothing measures state of charge.
 - `runtime_tick` was whitelisted into every JSON record (`core/logging_setup.py:15`) and published
   by nobody — the loop set `tick_ts` and never the tick index, so no production line could be matched
   to a tick while three log tests asserted the field by injecting it themselves (#126). The loop sets

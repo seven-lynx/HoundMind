@@ -89,6 +89,13 @@ indistinguishable from every surface, because `sound()` returns `None` either wa
 `sensor_history` and `sensor_health`. The multi-sample distance, debounce, EMA and IMU low-pass
 live in the HAL, next to the reads they belong to.
 
+It also publishes `battery_voltage`, which is the key the interlock's low-voltage veto and the
+`battery` section of `behavior` both read. The pack is an ADC read on the bus the servos share, so
+it is polled at `sensors.battery_poll_s` (ships `2.0`; `0` = every poll) and the last good value is
+reported in between. A reading outside 3-60 V is treated as **no reading**, not as a flat pack: a
+sense line that is not connected reads near 0 V, and a veto on that would freeze the dog for good.
+Nothing measures the pack's state of charge, so `battery_percent` is never published.
+
 **Disable:** `modules.hal_sensors.enabled = false`
 
 ### Motors (`modules.hal_motors`)

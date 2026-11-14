@@ -24,6 +24,7 @@ import logging
 import queue
 import threading
 import time
+import warnings
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
@@ -108,6 +109,11 @@ class PidogHAL:
         self._ema_distance: float | None = None
         self._acc_lpf: tuple[float, float, float] | None = None
         self._gyro_lpf: tuple[float, float, float] | None = None
+        # The pack voltage is an ADC read on the bus the servos share, so it runs on its own slower
+        # cadence (`sensors.battery_poll_s`) and the last good value is what gets reported in
+        # between. `None` means "no reading", never "0 V", which would look like a flat pack.
+        self._battery_v: float | None = None
+        self._battery_ts = 0.0
 
     # ------------------------------------------------------------------ setup
 
@@ -152,6 +158,7 @@ class PidogHAL:
             touch, touch_valid = self._read_touch(dog, now)
             sound_detected, sound_direction, sound_valid = self._read_sound(dog)
             acc, gyro, imu_valid = self._read_imu(dog)
+            battery_v, battery_valid = self._read_battery(dog, now)
 
         return SensorSnapshot(
             ts=now,
@@ -165,6 +172,8 @@ class PidogHAL:
             acc=acc,
             gyro=gyro,
             imu_valid=imu_valid,
+            battery_v=battery_v,
+            battery_valid=battery_valid,
         )
 
     def sample_distance(self, samples: int, between_reads_s: float) -> float | None:
@@ -276,6 +285,39 @@ class PidogHAL:
             logger.debug("Sound direction read failed", exc_info=True)
             return detected, None, False
         return detected, direction, True
+
+    def _read_battery(self, dog: Any, now: float) -> tuple[float | None, bool]:
+        """Pack voltage, cached for `sensors.battery_poll_s`.
+
+        Three decisions live here. The read is an ADC transaction on the bus the servos share, so it
+        runs slower than the snapshot and the last good value is what gets reported in between. A
+        value outside 3-60 V is a sense line that is not there (a floating input reads near 0), not a
+        flat pack, so it is reported invalid rather than refusing every motion for the session. And
+        the vendor's `Pidog.get_battery_voltage` forwards to a deprecated `robot_hat` shim that warns
+        on every call, so the warning is suppressed here instead of flooding the log at poll rate.
+        """
+        poll_s = max(0.0, _safe_float(self._sensor_cfg.get("battery_poll_s", 2.0), 2.0))
+        if self._battery_v is not None and poll_s > 0 and (now - self._battery_ts) < poll_s:
+            return self._battery_v, True
+        reader = getattr(dog, "get_battery_voltage", None)
+        if not callable(reader):
+            return None, False
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                volts = as_float(reader(), -1.0)
+        except Exception:  # noqa: BLE001 - one failed ADC read is not a broken dog
+            logger.debug("Battery read failed", exc_info=True)
+            return self._battery_v, False
+        # The timestamp moves on every completed read, so a dead feed is polled at the same slow
+        # cadence as a live one instead of being retried every tick.
+        self._battery_ts = now
+        if not 3.0 <= volts <= 60.0:
+            logger.debug("Battery reading %.2f V is out of range; reporting no reading", volts)
+            self._battery_v = None
+            return None, False
+        self._battery_v = volts
+        return volts, True
 
     def _read_imu(
         self, dog: Any

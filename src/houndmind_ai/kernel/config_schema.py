@@ -279,6 +279,8 @@ _SENSORS = Section(
         "enable_touch": Bool(),
         "enable_sound": Bool(),
         "enable_imu": Bool(),
+        # Pack voltage is an ADC read on the bus the servos share, so it has its own cadence.
+        "battery_poll_s": _NON_NEGATIVE,
         "distance_samples": IntSpec(minimum=1),
         "distance_sample_delay_s": _NON_NEGATIVE,
         "distance_use_median": Bool(),

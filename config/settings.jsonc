@@ -268,6 +268,9 @@
       "enable_touch": true,
       "enable_sound": true,
       "enable_imu": true,
+      // Pack voltage reads the ADC on the bus the servos share, so it is polled slower than the
+      // rest of the snapshot: the last good value is reported in between (0 = every poll).
+      "battery_poll_s": 2.0,
       // Ultrasonic sampling.
       "distance_samples": 3,
       "distance_sample_delay_s": 0.03,
