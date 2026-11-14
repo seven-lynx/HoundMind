@@ -8,6 +8,12 @@ Base URL: `http://<pi-ip>:8420`. There is **no mDNS** — the dog does not adver
 address is whatever `hostname -I` reports on the device. Everything under `/api/v1` is JSON;
 `GET /` serves the web app that ships inside the package.
 
+**The web app's assets are versioned at serve time.** `GET /` rewrites each `/static/...` URL to carry
+`?v=<package version>`, and `/static/` answers `Cache-Control: no-cache`. A returning browser
+revalidates instead of assuming its copy is current, so an upgrade cannot leave yesterday's `app.js`
+in front of today's API — the failure that made a camera pane report "enable a vision module" when the
+real cause was a stale request shape (#102). Treat the asset URLs as opaque: read them from `GET /`.
+
 The route table in [§2](#2-endpoints) is asserted against the code by `tests/test_api_routes.py`, which parses this
 file. A route that exists in code and not here — or here and not in code — fails CI.
 

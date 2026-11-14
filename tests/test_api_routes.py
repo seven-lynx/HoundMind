@@ -17,6 +17,7 @@ from pathlib import Path
 from aiohttp.test_utils import TestClient, TestServer
 
 from houndmind_ai.kernel.commands import CommandBus
+from houndmind_ai.services import api as api_module
 from houndmind_ai.services.api import API_PREFIX, ROUTES, ControlPlane, create_app
 from houndmind_ai.services.auth import PAIRING_SCOPES
 from houndmind_ai.services.settings import ApiSettings
@@ -409,3 +410,31 @@ def test_the_support_bundle_carries_state_and_no_secret(tmp_path) -> None:
         assert "modules" in modules
 
     asyncio.run(scenario())
+
+
+def test_the_web_app_serves_versioned_assets_and_revalidates(tmp_path, monkeypatch) -> None:
+    """An upgrade has to reach a browser that has been here before (#102).
+
+    The version is stamped into the asset URL as `GET /` is served, so the copy a browser kept is a
+    different URL after an upgrade; `no-cache` is the belt that makes even an unversioned request ask
+    the server. `_asset_version` is patched because a working tree has no installed distribution
+    metadata — the fallback the helper documents, and the reason a test may not read it live.
+    """
+
+    async def scenario() -> tuple[int, str, int, str]:
+        plane = make_plane(tmp_path)
+        monkeypatch.setattr(api_module, "_asset_version", lambda: "9.9.9")
+        async with TestClient(TestServer(create_app(plane))) as client:
+            index = await client.get("/")
+            html = await index.text()
+            script = await client.get("/static/app.js")
+            cache = script.headers.get("Cache-Control", "")
+            return index.status, html, script.status, cache
+
+    status, html, script_status, cache = asyncio.run(scenario())
+
+    assert status == 200
+    assert "/static/app.js?v=9.9.9" in html, "the script URL must carry the version"
+    assert "/static/style.css?v=9.9.9" in html, "the stylesheet URL must carry the version"
+    assert script_status == 200
+    assert "no-cache" in cache, f"assets must revalidate, got Cache-Control={cache!r}"

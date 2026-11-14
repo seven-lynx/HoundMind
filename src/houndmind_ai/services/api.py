@@ -22,6 +22,7 @@ import time
 import zipfile
 from collections.abc import Callable
 from difflib import get_close_matches
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
@@ -1085,14 +1086,53 @@ async def _support_bundle(request: web.Request) -> web.Response:
     )
 
 
-async def _index(request: web.Request) -> web.StreamResponse:
+# ------------------------------------------------------------------ the web app (#102)
+
+# `index.html` asks for `?v=__VERSION__`; `_index` substitutes the package version at serve time, so
+# an upgrade changes the asset URL and a returning browser cannot keep running the copy it has.
+_ASSET_VERSION_PLACEHOLDER = "__VERSION__"
+_STATIC_PREFIX = "/static/"
+
+
+def _asset_version() -> str:
+    """The installed package version, or `""` in a working tree with no distribution metadata.
+
+    `pytest` runs against `PYTHONPATH=src`, where `houndmind` is not installed, so an empty answer is
+    the normal one on a workstation. Empty means the bare path — the behaviour before this existed —
+    rather than a broken URL.
+    """
+    try:
+        return metadata.version("houndmind")
+    except metadata.PackageNotFoundError:
+        return ""
+
+
+async def _index(request: web.Request) -> web.Response:
     index = _plane(request).static_root / "index.html"
+    missing = {"error": "not_found", "detail": "the web app is not bundled with this build"}
     if not index.is_file():
-        return web.json_response(
-            {"error": "not_found", "detail": "the web app is not bundled with this build"},
-            status=404,
-        )
-    return web.FileResponse(index)
+        return web.json_response(missing, status=404)
+    try:
+        html = index.read_text(encoding="utf-8")
+    except OSError:
+        return web.json_response(missing, status=404)
+    return web.Response(
+        text=html.replace(_ASSET_VERSION_PLACEHOLDER, _asset_version()),
+        content_type="text/html",
+    )
+
+
+async def _static_cache_headers(request: web.Request, response: web.StreamResponse) -> None:
+    """`no-cache` on the web app's assets: revalidate, do not silently reuse (#102).
+
+    `add_static` sends `Last-Modified`/`ETag` and no `Cache-Control`, which lets a browser apply
+    heuristic freshness and keep an `app.js` from an older release. Revalidation costs one
+    conditional request and removes the failure mode this bug was: stale JavaScript that does not
+    break loudly but reports a confident, wrong cause. `setdefault`, so a handler with its own
+    answer keeps it.
+    """
+    if request.path.startswith(_STATIC_PREFIX):
+        response.headers.setdefault("Cache-Control", "no-cache")
 
 
 # ------------------------------------------------------------------ people (P4 PL6)
@@ -1254,7 +1294,10 @@ def create_app(plane: ControlPlane) -> web.Application:
     if plane.static_root.is_dir():
         # `add_static` refuses to serve outside the directory it was given, so the web app
         # cannot be used to read `/etc/shadow` by asking for `../../etc/shadow`.
-        router.add_static("/static/", plane.static_root, show_index=False)
+        router.add_static(_STATIC_PREFIX, plane.static_root, show_index=False)
+    # One hook for the whole app: the assets are the only surface where a stale copy is a wrong
+    # diagnosis rather than a slow load.
+    app.on_response_prepare.append(_static_cache_headers)
 
     app.on_startup.append(_on_startup)
     app.on_cleanup.append(_on_cleanup)
