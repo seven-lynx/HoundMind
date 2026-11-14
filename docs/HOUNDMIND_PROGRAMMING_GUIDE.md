@@ -313,11 +313,11 @@ the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py
 |---|---|
 | `calibration_request`, `calibration_result` | `str`, `dict` ([§9](#9-calibration-workflow)) |
 | `localization_confidence` | `float` |
-| `vision_frame`, `vision_frame_jpeg` | array, `bytes` |
+| `vision_frame`, `vision_frame_jpeg` | array, `bytes` — the Pi 4/5 feed (`optional/vision_pi4.py`) or the Pi 3 one (`optional/vision.py`), stamped by `vision_frame_ts` |
 | `face_recognition_command` | `dict` |
 | `voice_text`, `voice_command` | `str` |
 | `slam_map_data`, `slam_trajectory` | `dict` |
-| `vision_status`, `vision_inference_status`, `vision_inference_result` | `dict` — `optional/vision_pi4.py`'s readiness (`{status, backend}`), the scheduler's state (`{state}`) and its latest answer |
+| `vision_status`, `vision_inference_status`, `vision_inference_result` | `dict` — camera readiness from `optional/vision_pi4.py` or `optional/vision.py` (`{status, backend, frames}`; `frames: false` with a `reason` when the build cannot produce one), the scheduler's state (`{state}`) and its latest answer |
 | `vision_frame_interval_override_s` | `float \| None` — the health monitor asking vision to slow down |
 | `face_recognition_status`, `semantic_status`, `slam_status` | `dict` — `{status, backend}` from each optional module, published by the module itself |
 | `slam_pose` | `dict \| None` — the pose SLAM published last |

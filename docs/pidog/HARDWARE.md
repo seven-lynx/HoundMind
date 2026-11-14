@@ -297,7 +297,9 @@ traffic — performance evidence from one model does not transfer (`pi-performan
 ## 8. What this file does not cover
 
 - The camera and the `vilib`/`picamera2` stack — HoundMind wraps it in
-  `src/houndmind_ai/optional/vision_pi4.py`, and it is not part of `pidog`.
+  `src/houndmind_ai/optional/vision_pi4.py` (Pi 4/5) and `src/houndmind_ai/optional/vision.py`
+  (Pi 3, which republishes the frame the `Vilib.img` attribute already holds), and it is not part of
+  `pidog`.
 - The I2S speaker wiring (`i2samp.sh`) — an install-time step, see `docs/INSTALL.md`.
 - Anything you must measure rather than read: real step length, how much the body sags under
   load, whether a 20 g servo buzzes at a given angle. Those are device experiments.

@@ -7,6 +7,19 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The Pi 3 vision path publishes frames** (#98): `optional/vision.py` started Vilib, published
+  `{"status": "ready"}` and stopped there, so `vision_frame` stayed `None` and every detector behind
+  it - `face_recognition`, `semantic_labeler`, and the occupancy `perception` derives from faces - was
+  blind for the whole run while both modules reported healthy. The module now republishes the frame
+  `Vilib.img` already holds as `vision_frame` + `vision_frame_ts`, once per new frame, which is the
+  same contract `vision_pi4.py` publishes, so a consumer cannot tell the paths apart and occupancy can
+  still age a frozen camera. `vision_status` becomes `{status, backend, frames}` for both paths; a
+  build whose Vilib exposes no frame answers `frames: false` with a `reason` and keeps acting as a
+  viewfinder instead of claiming to feed detectors. New `tests/test_optional_vision.py` (4 cases,
+  `vilib` stood in through `sys.modules`), `docs/FEATURES_GUIDE.md` sections 17 and 20, and the
+  context-key table in `docs/HOUNDMIND_PROGRAMMING_GUIDE.md`. `Vilib.img` is upstream behaviour read
+  from SunFounder's own examples, not a device observation: the Pi 3 run is still the evidence this
+  needs.
 - **A face can be enrolled over the API** (#103): `GET /api/v1/people` reported a roster that nothing
   a client could reach could populate - enrolment existed only as a runtime-context command, so the
   one admin-scoped surface in the API could be read and never actioned. New `POST /api/v1/people`
