@@ -7,6 +7,18 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **`wait` and `steps` reach the HAL on a posture or expression step** (#69): `config/actions.jsonc`
+  declared no parameters for either class, and `hal/motors.py` forwarded a payload only for its
+  `_PARAM_ACTIONS` set, so `{"action": "stand", "params": {"wait": true}}` was refused by the
+  validator - and would have been dropped in silence had it got through. The canon's own worked
+  example (section 8.1: `stand {wait: true}`, `stretch {wait: true}`, `wag_tail {steps: 6}`) could
+  not be written down at all. Both halves now exist: the catalog declares `wait` for posture and
+  expression (plus `steps` on `wag tail`), and the motor module forwards any step whose parameters
+  are a subset of the three vendor knobs `speed`/`steps`/`wait`, which `hal/vendor.py::_direct`
+  honours for every servo action - so the module keeps no second copy of the catalog to drift
+  away from. A step that asks to wait now runs on the motor worker, because blocking on a pose is
+  exactly what that worker is for. `tests/test_motor_params.py` (4 cases) plus
+  `tests/test_routine.py`, the routine fixtures and `docs/ROUTINES.md` follow the change.
 - **A refused routine start is the POST's own `409`** (#72): `POST /api/v1/routines/{id}/run`
   answered `202` before the runner ever saw the request, and the runner wrote its refusal into a
   `routine_rejection` context key nothing read - so a start it declined left the client holding an
