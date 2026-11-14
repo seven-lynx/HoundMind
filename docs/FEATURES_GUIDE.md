@@ -588,7 +588,14 @@ not move the dog. Keys are the joint names in `hal/iface.py::SERVO_GROUPS`.
 ---
 
 ## 17) Vision (legacy vilib)
-**What it does:** Uses Vilib for camera output and preview.
+**What it does:** Uses Vilib for camera output and preview, and republishes the frame Vilib already
+holds as `vision_frame` + `vision_frame_ts` — the same two keys [§21](#21-pi4-vision-feed-pi4) publishes,
+so a detector does not care which camera path is running. One publish per new frame, not per tick: a
+frozen camera has to look frozen to occupancy.
+
+**What it publishes:** `vision_status = {"status": "ready", "backend": "vilib", "frames": true}`. On a
+build whose Vilib exposes no frame the same key answers `frames: false` with a `reason`, once, and the
+module stays a viewfinder rather than claiming to feed detectors.
 
 **Disable:** `modules.vision.enabled = false`
 
@@ -679,10 +686,10 @@ The next tick enrolls against the newest `vision_frame` (it requires exactly one
 The legacy port-8088 server is gone: `/status` is now `GET /api/v1/modules`, the roster of enrolled
 people is `GET /api/v1/people`, and `python -m tools.face_recognition_cli` was deleted with the port.
 
-**It needs a frame, and only [§21](#21-pi4-vision-feed-pi4) publishes one.** `vision_frame` comes from
-`modules.vision_pi4`, so this detector is Pi 4/5-only: the Pi 3 `modules.vision` path starts Vilib
-and publishes no `vision_frame` at all (#98), which means the detector finds nothing to look at and
-publishes nothing — not "nobody there".
+**It needs a frame, and two modules publish one.** `vision_frame` comes from
+[§21](#21-pi4-vision-feed-pi4) on a Pi 4/5 or from [§17](#17-vision-legacy-vilib) on a Pi 3, and both
+stamp `vision_frame_ts`, so the detector has something to look at on either board. With neither
+running it publishes nothing at all — not "nobody there".
 
 **What it publishes.** `faces` = `{timestamp, backend, detected}`. `timestamp` is the **frame's own
 capture time** (`vision_frame_ts` from [§21](#21-pi4-vision-feed-pi4)), falling back to the tick only when a producer does not
