@@ -9,11 +9,28 @@ import argparse
 import sys
 from pathlib import Path
 
+# The range `pyproject.toml` declares: 3.11 is Bookworm, 3.13 is Trixie, and 3.10 is
+# end-of-life. Mirrored from `scripts/installer_core.py::is_supported_python` rather than
+# imported - `scripts/` is not a package and the installer runs before HoundMind is installed -
+# and `tests/test_python_support.py` holds the copies equal. A verifier that accepts an
+# interpreter the package refuses certifies an environment its next `pip install` rejects (#111).
+PYTHON_FLOOR: tuple[int, int] = (3, 11)
+PYTHON_CEILING_EXCLUSIVE: tuple[int, int] = (3, 14)
 
-def check_python(min_major=3, min_minor=10):
-    maj, mino = sys.version_info.major, sys.version_info.minor
-    ok = (maj > min_major) or (maj == min_major and mino >= min_minor)
-    print(f"Python: {maj}.{mino} -> {'OK' if ok else 'TOO OLD'}")
+
+def is_supported_python(version: tuple[int, int]) -> bool:
+    """The declared range, as an answer instead of a floor."""
+    major, minor = version
+    return major == PYTHON_FLOOR[0] and PYTHON_FLOOR[1] <= minor < PYTHON_CEILING_EXCLUSIVE[1]
+
+
+def check_python() -> bool:
+    major, minor = sys.version_info.major, sys.version_info.minor
+    ok = is_supported_python((major, minor))
+    print(
+        f"Python: {major}.{minor} -> {'OK' if ok else 'UNSUPPORTED'} "
+        f"(supported: {PYTHON_FLOOR[0]}.{PYTHON_FLOOR[1]}-{PYTHON_CEILING_EXCLUSIVE[0]}.{PYTHON_CEILING_EXCLUSIVE[1] - 1})"
+    )
     return ok
 
 
@@ -63,14 +80,7 @@ def main():
     repo_root = Path(__file__).resolve().parents[2]
     req = repo_root / ("requirements.txt" if args.preset == "full" else "requirements-lite.txt")
     print("HoundMind installer verification")
-    py_ok = check_python(3, 10)
-    # Warn if running on newer Python where wheels may be missing (Trixie, etc.)
-    if sys.version_info >= (3, 12):
-        print(
-            f"Warning: Detected Python {sys.version_info.major}.{sys.version_info.minor} — "
-            "heavy packages may lack prebuilt wheels on this runtime. "
-            "If installation fails, prefer Raspberry Pi OS Bookworm (Python 3.11) or use --preset lite."
-        )
+    py_ok = check_python()
     req_ok = check_requirements(req)
     pidog_ok = check_import("pidog")
     houndmind_ok = check_import("houndmind_ai")

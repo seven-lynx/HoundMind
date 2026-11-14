@@ -65,12 +65,9 @@ source .venv/bin/activate
 - [ ] HoundMind installed into that venv (`python -m pip install -e .`), so `python -m tools.<name>`
       resolves. From a bare checkout the form is `PYTHONPATH=src python -m tools.<name>`.
 
-**Two things that will bite you.**
+**One thing that will bite you.**
 
-1. **A tool exiting 0 is not a pass.** `tools.hardware_checkup` returns 0 even when every sensor
-   failed — the failure shows up as a printed `None` and a `False` on its `[checkup] valid:` line,
-   not as an exit code (#109). Read the output; do not trust `echo $?`.
-2. **The first distance reading can be `None` on a healthy dog.** The vendor caches the ultrasonic
+1. **The first distance reading can be `None` on a healthy dog.** The vendor caches the ultrasonic
    sample and the cache holds a `-1.0` placeholder until the sensor thread has taken one
    (`docs/pidog/PIDOG-SENSORS.md:46-49`). The HAL rejects anything outside
    `sensors.distance_min_cm`..`distance_max_cm`, so the placeholder reaches the checkup as `None`
@@ -81,7 +78,7 @@ source .venv/bin/activate
 | # | Step | Command | Motion? | Time | Pass looks like |
 |---|---|---|---|---|---|
 | 1 | Install sanity | `python -m tools.installer_verify` | no | ~10 s | `Installer check: OK` |
-| 2 | Sensors | `python -m tools.hardware_checkup --skip-motion` | no | ~5 s | five readings, no `None`, `valid:` all `True` |
+| 2 | Sensors | `python -m tools.hardware_checkup --skip-motion` | no | ~5 s | five readings, no `None`, `valid:` all `True`, exit 0 |
 | 3 | Loop | `python -m tools.smoke_test` | no | ~5 s | `[smoke] PASS` |
 | 4 | Control plane | `python -m houndmind_ai`, then `GET /state` | no | ~2 min | `*_valid: true` |
 | 5 | Peripherals | `tools.camera_check`, `tools.list_audio_devices` | no | ~1 min | index found, frame saved |
@@ -98,7 +95,7 @@ longer than this):
 
 ```
 HoundMind installer verification
-Python: 3.11 -> OK
+Python: 3.11 -> OK (supported: 3.11-3.13)
 json5: OK
 aiohttp: OK
 ...
@@ -115,7 +112,7 @@ Installer check: OK
 | `houndmind_ai: MISSING` | this venv does not have the package | `python -m pip install -e .` |
 | `Requirements file not found` | you are not in the repo root | `cd` to the repo and re-run |
 | `Installer check: FAILED` | exactly one line above is `MISSING` | fix that line, not the others |
-| `Python: 3.14 -> OK` | the verifier's floor is 3.10 (#111); the package needs 3.11–3.13 | rebuild the venv on 3.11 |
+| `Python: 3.10 -> UNSUPPORTED` | the interpreter is outside the range `pyproject.toml` declares | rebuild the venv on 3.11–3.13 |
 
 ## 5. Step 2 — Sensors, read-only
 

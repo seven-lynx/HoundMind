@@ -2,8 +2,8 @@
 
 Hardware comes from :class:`~houndmind_ai.hal.iface.DogHAL` - `PidogHAL` on a dog, a fake in a
 test - so the checkup reads the conditioned snapshot the runtime reads instead of opening a
-`Pidog()` of its own (#11). The exit code is still 0 whether a sensor answered or not (#109), so
-the `[checkup] valid:` line is the verdict.
+`Pidog()` of its own (#11). The exit code is the verdict (#109): 0 when every sensor answered, 1
+when one did not, 2 when no dog could be opened at all.
 """
 
 from __future__ import annotations
@@ -68,15 +68,41 @@ def describe(snapshot: SensorSnapshot) -> list[str]:
     ]
 
 
-def run_checkup(hal: DogHAL, skip_motion: bool, pause: float) -> None:
-    """Read every sensor once; command the motion sequence only when motion is allowed."""
+def _no_reading(snapshot: SensorSnapshot) -> list[str]:
+    """The sensors that did not answer, named as the `[checkup] valid:` line names them.
+
+    A quiet room is not a failure: `sound` answered and heard nothing, which is
+    `sound_valid=True` with `sound_detected=False`.
+    """
+    flags = (
+        ("distance", snapshot.distance_valid),
+        ("touch", snapshot.touch_valid),
+        ("sound", snapshot.sound_valid),
+        ("imu", snapshot.imu_valid),
+    )
+    return [name for name, valid in flags if not valid]
+
+
+def run_checkup(hal: DogHAL, skip_motion: bool, pause: float) -> bool:
+    """Read every sensor once; command the motion sequence only when motion is allowed.
+
+    Returns True when every sensor answered. A failed motion step is reported on stderr and does
+    not change that answer: the sensors are what the exit code is about (#109).
+    """
     print("[checkup] Reading sensors...")
-    for line in describe(hal.read()):
+    snapshot = hal.read()
+    for line in describe(snapshot):
         print(line)
+
+    missing = _no_reading(snapshot)
+    if missing:
+        print(f"[checkup] no reading from: {', '.join(missing)}")
+    else:
+        print("[checkup] sensors: all answered")
 
     if skip_motion:
         print("[checkup] Motion skipped.")
-        return
+        return not missing
 
     print("[checkup] Running minimal motion...")
     delay = max(0.0, pause)
@@ -87,6 +113,7 @@ def run_checkup(hal: DogHAL, skip_motion: bool, pause: float) -> None:
             print(f"[checkup] step {name} failed: {exc}", file=sys.stderr)
         time.sleep(delay)
     print("[checkup] Done.")
+    return not missing
 
 
 def _load_settings(path: str | None) -> dict[str, Any]:
@@ -135,7 +162,7 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
         hal = vendor_hal
 
     try:
-        run_checkup(hal, args.skip_motion, args.pause)
+        sensors_ok = run_checkup(hal, args.skip_motion, args.pause)
     finally:
         # Only a HAL this tool opened is the tool's to close; an injected fake belongs to its test.
         if owned:
@@ -143,7 +170,7 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
                 hal.close()
             except Exception:  # noqa: BLE001 - nothing left to recover at exit
                 print("[checkup] close failed", file=sys.stderr)
-    return 0
+    return 0 if sensors_ok else 1
 
 
 if __name__ == "__main__":

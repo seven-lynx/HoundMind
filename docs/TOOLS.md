@@ -63,8 +63,9 @@ python -m tools.installer_verify --preset full
 | `--preset {lite,full}` | which requirement set to check; `lite` by default |
 
 Prints one line per package, ending in `Installer check: OK` and exit 0 — or `FAILED` with the single
-`MISSING` line to fix. Its Python floor is 3.10, *lower* than the package's, so a
-`Python: 3.14 -> OK` line is not permission to run on 3.14 (`docs/HARDWARE_TEST.md` §4).
+`MISSING` line to fix. Its Python check is the range `pyproject.toml` declares, 3.11 to 3.13, so
+`Python: 3.10 -> UNSUPPORTED` is a failure rather than a note: the next `pip install` would refuse
+that interpreter (#111).
 
 ## 4. `hardware_checkup`
 
@@ -81,13 +82,19 @@ python -m tools.hardware_checkup --skip-motion   # the only form that is safe by
 | `--pause <seconds>` | pause between steps (default `0.6`) |
 | `--config <path>` | settings file other than `config/settings.jsonc`; its `sensors` block is what the HAL conditions readings with |
 
-The last reading line is `[checkup] valid:` (`distance=… touch=… sound=… imu=…`) — a sensor that did
-not answer prints `None` for its value and `False` there, while a quiet room legitimately prints
+The reading lines end in `[checkup] valid:` (`distance=… touch=… sound=… imu=…`) and one verdict line:
+`sensors: all answered`, or `no reading from: <names>`. A sensor that did not answer prints `None` for
+its value and `False` in `valid:`, while a quiet room legitimately prints
 `sound: detected=False dir=None`.
 
-Exit code 0 does **not** mean the sensors passed — a dead sensor prints `None` and still exits 0
-([#109](https://github.com/seven-lynx/HoundMind/issues/109)). The only non-zero code is `2`, when the
-vendor package is missing and no dog could be opened at all.
+| Exit | Meaning |
+|---|---|
+| `0` | every sensor answered |
+| `1` | at least one sensor did not answer — the `no reading from:` line names it ([#109](https://github.com/seven-lynx/HoundMind/issues/109)) |
+| `2` | no dog could be opened: the vendor package is missing, or the HAL failed to start |
+
+A motion step that fails is printed to stderr and does not change the code: the sensors are what this
+exit status answers for.
 
 ## 5. `smoke_test`
 

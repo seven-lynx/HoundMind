@@ -610,19 +610,10 @@ def main() -> int:
         if code != 0:
             print("RTAB-Map build/install failed; SLAM support may be unavailable.")
 
-    # The verifier script historically lived in `tools/`, but in the current
-    # layout it may be under `src/tools/`. Search known locations and run
-    # the verifier if present; otherwise skip verification gracefully.
-    verifier_candidates = [
-        repo_root / "tools" / "installer_verify.py",
-        repo_root / "src" / "tools" / "installer_verify.py",
-    ]
-    verifier = None
-    for p in verifier_candidates:
-        if p.exists():
-            verifier = p
-            break
-    if verifier is None:
+    # The verifier lives beside the other device CLIs in `src/tools/`; the root `tools/` package
+    # it used to sit in was removed, so that candidate was a path nothing could ever create.
+    verifier = repo_root / "src" / "tools" / "installer_verify.py"
+    if not verifier.exists():
         print("Installer verifier not found; skipping verification step.")
         return 0
     return run([str(python), str(verifier), "--preset", preset])
