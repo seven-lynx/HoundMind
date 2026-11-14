@@ -2,7 +2,8 @@
 
 Status: **runbook** — symptom to cause to command. Start here when something is wrong and you do not
 yet know which document owns it.
-Pairs with: `docs/LOGGING.md` (logs and support bundles), `docs/INSTALL.md` §Troubleshooting (install
+Pairs with: `docs/LOGGING.md` (logs and support bundles),
+`docs/INSTALL.md` [§Troubleshooting](INSTALL.md#troubleshooting--support-bundles) (install
 failures), `docs/HARDWARE_TEST.md` [§10](HARDWARE_TEST.md#10-when-something-fails) (a step failed mid-ladder)
 
 Each row gives three things: what you saw, what it usually means, and what to run next. If the command
@@ -64,7 +65,7 @@ does not answer it, the last column names the document that will.
 | `409` with `veto: "low_voltage"` | the battery is below the floor | charge it — a sagging battery under load is how a servo cooks |
 | commands accepted, nothing moves | `hal_motors` or `motion_gateway` is disabled | check both under `modules` in `config/settings.jsonc` |
 | servos jitter or buzz | speed too high for the load, or offsets were overwritten | lower `speed`, reduce `steps`, verify the offsets (`docs/HOUNDMIND_PROGRAMMING_GUIDE.md` [§9](HOUNDMIND_PROGRAMMING_GUIDE.md#9-calibration-workflow)) |
-| a routine stops halfway with `state: refused` | a step was vetoed and the run ended rather than skipping it | `veto` names the reason (`docs/ROUTINES.md` §"How it plays") |
+| a routine stops halfway with `state: refused` | a step was vetoed and the run ended rather than skipping it | `veto` names the reason (`docs/ROUTINES.md` [§"How it plays"](ROUTINES.md#how-it-plays)) |
 
 ## 5. Control plane
 

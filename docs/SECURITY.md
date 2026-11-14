@@ -1,7 +1,8 @@
 # Security and Exposure
 
 Status: **runbook** — what the device exposes, what protects it, and what to do before it leaves a lab.
-Pairs with: `docs/CONTROL_API.md` [§1](CONTROL_API.md#1-authentication) (the auth contract), `docs/INSTALL.md` §TLS, `docs/LOGGING.md`
+Pairs with: `docs/CONTROL_API.md` [§1](CONTROL_API.md#1-authentication) (the auth contract),
+`docs/INSTALL.md` [§TLS](INSTALL.md#tls-for-the-control-plane-optional), `docs/LOGGING.md`
 (what a support bundle may contain)
 
 HoundMind listens on **one port** and holds **one secret**. Everything below is about those two facts
@@ -92,7 +93,8 @@ Plaintext HTTP is the default: the token, every command and every frame cross th
 }
 ```
 
-The plane then serves HTTPS with a generated self-signed certificate. `docs/INSTALL.md` §TLS has the
+The plane then serves HTTPS with a generated self-signed certificate.
+`docs/INSTALL.md` [§TLS](INSTALL.md#tls-for-the-control-plane-optional) has the
 trust steps for a client (`--cacert ~/.houndmind/tls/cert.pem`). Self-signed means a client must either
 trust that file or pin it — there is no CA behind it and no domain name.
 

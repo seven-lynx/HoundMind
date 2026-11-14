@@ -156,7 +156,7 @@ python -m tools.collect_support_bundle /tmp/support.zip
 Writes a zip holding `metadata.json` (timestamp, git commit, trace id), every file in `logs/` (long
 ones as `.tail.txt`) and `config/settings.jsonc`. This is the shell-side bundle; the network-side one
 is `GET /api/v1/support-bundle`, which carries live state instead of log files
-(`docs/LOGGING.md` §"Support bundle contents").
+(`docs/LOGGING.md` [§"Support bundle contents"](LOGGING.md#support-bundle-contents)).
 
 ## 9. `replay_decisions`
 

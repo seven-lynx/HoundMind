@@ -116,7 +116,8 @@ These are not in any bucket. They exist for a client or a routine that wants the
 | `yaw`, `pitch`, `roll` | number | degrees | Head or chassis, per the action. |
 
 A parameter that the action does not declare is **refused**, not ignored: `{"action": "sit", "params":
-{"wait": 1}}` fails because `sit` declares no parameters (`docs/ROUTINES.md` §"A step").
+{"wait": 1}}` fails because `sit` declares no parameters (`docs/ROUTINES.md`
+[§"A step"](ROUTINES.md#a-step)).
 
 ## 7. Buckets
 
