@@ -7,6 +7,15 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **`nav.confidence` is a number the navigator measured** (#51): `services/state.py` read a
+  `confidence` key the producer never wrote, so the field was `null` on every tick on every profile
+  - indistinguishable from a build that does not report confidence at all, and it made the
+  `confidence` field of the decision record (#44) permanently null too. `navigation/obstacle_avoidance.py`
+  already computed the share of its confirm window that agreed on a direction and then dropped it;
+  the value now travels with the decision, is `null` only on the paths that decided without a scan,
+  and stays distinct from `score` (a ranking value, not a probability). `docs/CONTROL_API.md` §4
+  documents the two fields; `tests/test_navigation_confidence.py` (6 cases) pins the measurement and
+  both `null` cases.
 - **The unused `publish_event_threadsafe` is gone** (#53): `services/stream.py` grew a second
   publish entry point for "another thread (the decision loop)" and never called it - a search of
   `src/`, `tests/` and `docs/` found the definition and nothing else. Left in place it documented

@@ -20,9 +20,12 @@ def make_settings(stuck_count=3, cooldown=8.0, speed=80):
     }
 
 def test_gentle_recovery_triggers_and_clears(monkeypatch):
-    # Patch _scan_open_space to always return a valid scan result (direction, score, confirmed)
+    # Patch _scan_open_space to always return a valid scan result
+    # (direction, score, confirmed, confidence)
     module = ObstacleAvoidanceModule("test")
-    monkeypatch.setattr(module, "_scan_open_space", lambda ctx, s, n: ("forward", 1.0, True))
+    monkeypatch.setattr(
+        module, "_scan_open_space", lambda ctx, s, n: ("forward", 1.0, True, 1.0)
+    )
     context = DummyContext()
     context["settings"] = make_settings()
     # Patch _check_stuck to always return True

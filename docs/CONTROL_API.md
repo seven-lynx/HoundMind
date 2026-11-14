@@ -386,6 +386,12 @@ dog reporting itself safe, and a client must not render the two the same way.
 (`navigation/orientation.py`). A turn made on a calibrated heading and one made on a drifting heading
 look identical in `nav.decision`, so a client that shows heading quality needs the flag.
 
+`nav.confidence` is the share of the navigator's confirm window that voted for the direction it
+picked — the one number the scan actually measures. It is `null` when the tick decided without a
+scan (a clear-path streak, for instance), and it is never derived from `score`: a scan score ranks
+one opening against another and is not a probability, so a client that wants "how sure is it" reads
+this field and a client that wants "how good is the gap" reads the decision's `score`.
+
 `health.high_water` is the session's peak for each health signal (`temp_c`, `gpu_temp_c`, `load_1m`,
 `mem_used_pct`), which is what a support bundle wants: the average hides the thermal spike that
 throttled vision. It is `{}` while `modules.health` is disabled.
