@@ -22,10 +22,11 @@ returns on carpet — this set says so instead of guessing. Treat unmarked state
 "the source says", and anything about a physical outcome as a hypothesis until it is observed
 on the Pi.
 
-Version warning: this documents `robot-hat` **2.5.x**. `docs/INSTALL.md` currently clones
-`robot-hat` **v2.0**, whose `robot_hat` package exposes a different, smaller surface. If
-`from robot_hat import Servo` fails or a signature here does not match the installed file, check
-`pip show robot-hat` before trusting this set — and see `ROBOTHAT.md` §1.3.
+Version warning: this documents `robot-hat` **2.5.x**, which is what the installer and
+`docs/INSTALL.md` clone. An install made before that default changed (`-b v2.0`) has a different,
+smaller `robot_hat`: `from robot_hat import device` fails, and `robot_hat.__version__` reads 2.0.
+If a signature here does not match the installed file, check `pip show robot-hat` before trusting
+this set - and see `ROBOTHAT.md` §1.3.
 
 ---
 

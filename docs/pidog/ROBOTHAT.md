@@ -52,9 +52,10 @@ pip show robot-hat
 ```
 
 `2.5.x` added `Config`, `device.Devices`, `Speaker`, the TTS wrappers, `UserButton`, `LED`, and
-moved `reset_mcu`/`get_battery_voltage`/`set_pin`/`enable_speaker` into `device`. The `v2.0`
-tree this repo's install guide still clones lacks most of that, so a guide-following reader on a
-`v2.0` install will find `from robot_hat import device` failing. Fix the install, not the code.
+moved `reset_mcu`/`get_battery_voltage`/`set_pin`/`enable_speaker` into `device`. An install made
+with `-b v2.0` - the default before #114 - lacks most of that, so `from robot_hat import device`
+fails. The installer and `docs/INSTALL.md` clone `2.5.x` now; on an older install, re-clone the
+branch rather than working around the missing names.
 
 ---
 

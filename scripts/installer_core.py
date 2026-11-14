@@ -18,6 +18,16 @@ from pathlib import Path
 # Named so a Pi 3 owner has somewhere to go. Kept in step with the last tag that shipped Pi 3.
 LAST_PI3_RELEASE = "v2026.01.18"
 
+# Every page in `docs/pidog/` is verified against `robot-hat` 2.5.x, and 2.5.x is what `pidog` was
+# written for: the v2.0 tree lacks `robot_hat.device` and most of the classes the reference set
+# documents, so that default installed an environment this project does not describe (#114).
+ROBOT_HAT_BRANCH = "2.5.x"
+
+# What `pidog/pidog.py` imports from `robot_hat`. Installing the tree is not the same as having a
+# usable one - `robot_hat/__init__.py` exposes these only when its own sub-dependencies are
+# importable - so the installer probes the surface the first action needs (#114).
+ROBOT_HAT_PROBE = "from robot_hat import Robot, Pin, Ultrasonic, utils, Music, I2C"
+
 
 def run(cmd: list[str]) -> int:
     print("+", " ".join(cmd))
@@ -344,7 +354,7 @@ def main() -> int:
     parser.add_argument(
         "--robot-hat-repo", default="https://github.com/sunfounder/robot-hat.git"
     )
-    parser.add_argument("--robot-hat-branch", default="v2.0")
+    parser.add_argument("--robot-hat-branch", default=ROBOT_HAT_BRANCH)
     parser.add_argument(
         "--vilib-repo", default="https://github.com/sunfounder/vilib.git"
     )
@@ -564,6 +574,20 @@ def main() -> int:
                 code = run([str(pip), "install", str(robot_hat_path)])
                 if code != 0:
                     return code
+
+                # Installed is not the same as usable: `robot_hat/__init__.py` exposes the classes
+                # `pidog` imports only when smbus2, lgpio, pyaudio and pygame are importable, and a
+                # pre-2.5 tree never exposes `robot_hat.device`. Failing here names the missing
+                # piece, instead of leaving a dog that cannot stand until the first action fails
+                # (#114).
+                code = run([str(python), "-c", ROBOT_HAT_PROBE])
+                if code != 0:
+                    print(
+                        "robot-hat installed, but `pidog` would not be able to import it: check "
+                        "that smbus2, lgpio, pyaudio and pygame are in this venv, and that the "
+                        f"cloned branch is {ROBOT_HAT_BRANCH} rather than v2.0."
+                    )
+                    return 2
 
                 vilib_path = cache_root / "vilib"
                 code = clone_or_update(args.vilib_repo, vilib_path, args.vilib_branch)

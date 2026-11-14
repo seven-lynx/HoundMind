@@ -8,6 +8,18 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **The install path matches the range and the vendor set it documents** (#113, #114): both wrappers
+  accepted only `python3.10`/`python3.11` and preferred the 3.10 that `pip` refuses, so the first
+  command in the guide exited 2 on Trixie (3.13) and silently chose 3.10 on a machine that had both.
+  They now probe `python3.13`, `python3.12`, `python3.11` in that order, validate a `PYTHON` override
+  against the same range, and use it for the venv-mismatch check too. `--robot-hat-branch` defaults
+  to `2.5.x` instead of `v2.0` - every page in `docs/pidog/` is verified against 2.5.x, and the v2.0
+  tree has no `robot_hat.device` - and the installer probes `from robot_hat import Robot, Pin,
+  Ultrasonic, utils, Music, I2C` after installing it, failing with the missing sub-dependency named
+  instead of leaving a dog that cannot stand until the first action fails. `docs/INSTALL.md` clones
+  `2.5.x` in both places, `docs/pidog/INDEX.md` and `ROBOTHAT.md` describe a pre-2.5 install instead
+  of a guide that contradicts itself, and the `QUICKSTART.md`/`TROUBLESHOOTING.md` notes about the
+  wrapper are gone.
 - **A device tool's exit code can be trusted** (#109, #111): `tools.hardware_checkup` returned 0
   whether a sensor answered or not, so a scripted verify, a gate and the bench checklist all read a
   dead ultrasonic as a pass. It now exits 1 when any of the four sensors did not answer, prints
