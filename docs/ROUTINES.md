@@ -24,7 +24,7 @@ Two rules carry the design:
 |---|---|
 | Directory | `settings.routines.dir`, `~/.houndmind/routines` by default. `~` is expanded at startup. |
 | One file per routine | any `*.json`. The name is a **label**, not the identity: `greeting.json` may declare `"id": "morning_greeting"`. |
-| When it is read | once, when the runtime starts. A file added or edited since then appears after a restart. |
+| When it is read | once, when the runtime starts. A file added or edited since then appears after a restart (`docs/INSTALL.md` [§Run](INSTALL.md#run)). |
 | Who writes | you. The dog never creates, edits or deletes anything in this directory. |
 
 A missing directory is an empty list, not an error — a fresh install has no routines and still boots.

@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **How to stop and restart the runtime is documented** (#76): `docs/INSTALL.md` §Run showed two ways
+  to start HoundMind and nothing about stopping it, while `docs/ROUTINES.md` told a user that a
+  routine file edited since boot "appears after a restart" — and no document said how. With no
+  service unit in the tree, `sudo systemctl restart houndmind` had nothing to restart. The section
+  now carries a stop/restart table: `Ctrl-C`, start again, the health route to prove it is alive,
+  where the device token lives and how to use it, the port, and one explicit line that no unit
+  ships yet and why that is a decision rather than an omission. The routines doc links to it.
 - **The LED strip has a `health` source, and the dead writes around it are gone** (#78, #163):
   `safety/sensor_health.py` published `led_request:health` into a source no configuration could
   name, and `behavior/habituation.py` published `led_request:habituation:<stimulus>` — a key family
