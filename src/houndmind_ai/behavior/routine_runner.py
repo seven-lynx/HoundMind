@@ -66,6 +66,17 @@ def _safe_dir(context) -> str:
     return raw if isinstance(raw, str) and raw.strip() else DEFAULT_ROUTINES_DIR
 
 
+def _ack(request: dict) -> None:
+    """Wake whoever asked for this run, once the answer is on the request.
+
+    A request with no `ack` came from a producer that does not wait for one - a test, a script, a
+    module that only wants the refusal recorded - so there is nobody to wake (#72).
+    """
+    ack = request.get("ack")
+    if ack is not None:
+        ack.set()
+
+
 @dataclass(frozen=True)
 class RoutineRun:
     """One run's public state: what is playing, at which step, and how it ended.
@@ -146,15 +157,21 @@ class RoutineRunnerModule(Module):
         request = context.get("routine_request")
         if isinstance(request, dict):
             context.set("routine_request", None)
-            self._accept(context, request)
+            self._accept(request)
 
         run = self.run
         if run is not None and run.state == RUNNING:
             self._advance(context)
         context.set("routine_run", self.run)
 
-    def _accept(self, context, request: dict) -> None:
-        """Take one `routine_request`, or say why not. One run at a time, by design."""
+    def _accept(self, request: dict) -> None:
+        """Take one `routine_request`, or say why not. One run at a time, by design.
+
+        The answer goes back on the request itself — `refusal` with the reason, then the ack — so a
+        start the runner cannot honour becomes the control plane's own `409` instead of a `202` a
+        client has no way to retract (#72). Answering the request rather than a context key is also
+        what keeps two starts from reading each other's refusal.
+        """
         routine_id = request.get("id")
         reason: str | None = None
         routine: Routine | None = None
@@ -169,10 +186,9 @@ class RoutineRunnerModule(Module):
             if routine is None:
                 reason = f"no routine named '{routine_id}' was loaded"
         if reason is not None or routine is None:
+            request["refusal"] = reason or "the routine is missing"
             logger.info("Routine request refused: %s", reason or "the routine is missing")
-            context.set(
-                "routine_rejection", {"id": routine_id, "reason": reason or "not loaded"}
-            )
+            _ack(request)
             return
 
         self.run = RoutineRun(
@@ -189,6 +205,7 @@ class RoutineRunnerModule(Module):
             len(routine.steps),
             ", dry run" if self.run.dry_run else "",
         )
+        _ack(request)
 
     def _advance(self, context) -> None:
         run = self.run

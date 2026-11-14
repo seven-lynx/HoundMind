@@ -7,6 +7,15 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A refused routine start is the POST's own `409`** (#72): `POST /api/v1/routines/{id}/run`
+  answered `202` before the runner ever saw the request, and the runner wrote its refusal into a
+  `routine_rejection` context key nothing read - so a start it declined left the client holding an
+  acceptance it could not cancel. The request now carries a `threading.Event` and a `refusal` slot;
+  the runner answers on the request and the route waits for it in an executor (the same reason
+  `submit()` waits that way), returning `409` with the runner's reason. `routine_rejection` is gone,
+  and `services/api.py` covers the wait with a 0.5 s bound, which is two ticks of the shipped loop.
+  `docs/CONTROL_API.md` §3 states both answers; `tests/test_api_routines.py` adds the refused start
+  and the unanswered one, `tests/test_routine_runner.py` reads the answer off the request.
 - **A routine run is stamped from the loop's clock** (#73): `RoutineRun.started_at` came from
   `time.time()` while everything a client compares it against is monotonic - the snapshot's `ts` is
   the loop clock - so `ts - started_at` produced a number in the region of 1.7 billion. The runner

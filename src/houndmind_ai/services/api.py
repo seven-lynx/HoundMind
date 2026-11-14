@@ -18,6 +18,7 @@ import asyncio
 import io
 import json
 import logging
+import threading
 import time
 import zipfile
 from collections.abc import Callable
@@ -79,6 +80,12 @@ LIVE_CONFIG_KEYS: tuple[str, ...] = (
 # The deadline for a command that does not carry one. The deadman is a safety feature; a client
 # does not get to opt out of it by omitting the field.
 _DEFAULT_TTL_MS = 300
+
+# How long a routine start waits for the runner's answer. The runner reads the request on the
+# decision thread, at the loop rate (200 ms at the shipped 5 Hz), so half a second is two ticks -
+# enough for the normal case and short enough that a plane with no runner in it answers promptly.
+# A timeout is not a refusal: the request is still queued, and the POST keeps its old `202`.
+_ROUTINE_ACK_TIMEOUT_S = 0.5
 
 
 class ControlPlane:
@@ -708,7 +715,27 @@ async def _routine_run(request: web.Request) -> web.Response:
             status=409,
         )
 
-    plane.context.set("routine_request", {"id": routine.id, "dry_run": dry_run})
+    # The runner reads this on the decision thread and fills in the answer, so the wait below is an
+    # executor wait for the same reason `submit()` is one: blocking the aiohttp loop would freeze
+    # telemetry for every other client. `ack` and `refusal` are the two-way door the request needs;
+    # a plain dict stays JSON-shaped for everything else that reads the key.
+    ack = threading.Event()
+    start_request: dict[str, object] = {
+        "id": routine.id,
+        "dry_run": dry_run,
+        "ack": ack,
+    }
+    plane.context.set("routine_request", start_request)
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, ack.wait, _ROUTINE_ACK_TIMEOUT_S)
+    refusal = start_request.get("refusal")
+    if isinstance(refusal, str) and refusal:
+        # The runner looked at the request and said no, so this is the POST's own answer rather
+        # than a `202` a client has no way to retract (#72).
+        return web.json_response(
+            {"error": "conflict", "detail": refusal, "current": _routine_state(plane)},
+            status=409,
+        )
     return web.json_response(
         {"accepted": True, "id": routine.id, "dry_run": dry_run, "steps": len(routine.steps)},
         status=202,

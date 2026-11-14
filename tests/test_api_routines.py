@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
+import time
 from pathlib import Path
 
 from aiohttp.test_utils import TestClient, TestServer
@@ -146,7 +148,11 @@ def test_a_run_is_accepted_and_queued_for_the_runner(tmp_path) -> None:
 
         assert response.status == 202
         assert body == {"accepted": True, "id": "calm", "dry_run": False, "steps": 2}
-        assert plane.context.get("routine_request") == {"id": "calm", "dry_run": False}
+        request = plane.context.get("routine_request")
+        assert request["id"] == "calm"
+        assert request["dry_run"] is False
+        # The runner's answer travels back through the request itself (#72).
+        assert request["ack"] is not None
 
     asyncio.run(scenario())
 
@@ -162,7 +168,7 @@ def test_a_dry_run_is_carried_to_the_runner(tmp_path) -> None:
 
         assert response.status == 202
         assert body["dry_run"] is True
-        assert plane.context.get("routine_request") == {"id": "calm", "dry_run": True}
+        assert plane.context.get("routine_request")["dry_run"] is True
 
     asyncio.run(scenario())
 
@@ -176,7 +182,7 @@ def test_an_absent_body_means_not_dry(tmp_path) -> None:
             response = await client.post(f"{API_PREFIX}/routines/calm/run", headers=auth(plane))
 
         assert response.status == 202
-        assert plane.context.get("routine_request") == {"id": "calm", "dry_run": False}
+        assert plane.context.get("routine_request")["dry_run"] is False
 
     asyncio.run(scenario())
 
@@ -231,6 +237,61 @@ def test_a_second_run_while_one_is_running_is_a_conflict(tmp_path) -> None:
         assert body["error"] == "conflict"
         assert body["current"]["id"] == "calm"
         assert plane.context.get("routine_request") is None
+
+    asyncio.run(scenario())
+
+
+def test_a_start_the_runner_declines_is_the_posts_own_409(tmp_path) -> None:
+    """A refusal the runner made reaches the client that asked, not a `202` it cannot retract.
+
+    The route's own pre-checks cover every reason the runner could refuse for, so the only way to
+    reach this branch on a device is a difference between what the route saw and what the runner
+    saw (#72). A thread standing in for the decision loop is what proves the answer travels back.
+    """
+
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, {"calm": CALM})
+
+        def answer_refusal() -> None:
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline:
+                request = plane.context.get("routine_request")
+                if isinstance(request, dict):
+                    request["refusal"] = "no routine named 'calm' was loaded"
+                    request["ack"].set()
+                    return
+                time.sleep(0.005)
+
+        runner = threading.Thread(target=answer_refusal, daemon=True)
+        runner.start()
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/routines/calm/run", headers=auth(plane)
+            )
+            body = await response.json()
+        runner.join(timeout=2.0)
+
+        assert response.status == 409
+        assert body["error"] == "conflict"
+        assert "was loaded" in body["detail"]
+
+    asyncio.run(scenario())
+
+
+def test_a_start_nobody_answers_stays_a_202(tmp_path) -> None:
+    """No runner in the harness means no answer, and a queued request is still a `202`."""
+
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, {"calm": CALM})
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/routines/calm/run", headers=auth(plane)
+            )
+            body = await response.json()
+
+        assert response.status == 202
+        assert body["accepted"] is True
+        assert body["steps"] == len(CALM)
 
     asyncio.run(scenario())
 

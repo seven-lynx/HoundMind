@@ -295,10 +295,16 @@ refused is listed with the reason instead of being hidden.
 { "accepted": true, "id": "morning_greeting", "dry_run": false, "steps": 2 }
 ```
 
+The route waits up to half a second for the runner's own answer before it replies, so a start the
+runner declines comes back as the `409` below rather than a `202` a client has no way to retract. A
+request that has not been looked at yet — no runner ticking, or a loop slower than the wait — keeps
+the `202`, because a queued request is not a refused one.
+
 - **`400`** — `dry_run` was not a real boolean (`"true"` is refused, never coerced).
 - **`404`** — no routine by that id was loaded; `suggestion` carries the closest name.
-- **`409`** — a run is in progress, or a request is already queued for the next tick; `current` is
-  the run that blocked it.
+- **`409`** — a run is in progress, a request is already queued for the next tick, or the runner
+  declined this start; `detail` carries the runner's own reason and `current` is the run that
+  blocked it, or `null`.
 - **`503`** — no routine runner is loaded.
 
 Every step is published as a `routine` intent, so each one passes the mode gate and the interlock;

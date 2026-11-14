@@ -89,9 +89,12 @@ class Rig:
             self.motors.tick(self.context)
             self.runner.tick(self.context)
 
-    def run(self, routine_id: str, **request: Any) -> None:
-        self.context.set("routine_request", {"id": routine_id, **request})
+    def run(self, routine_id: str, **request: Any) -> dict:
+        """Queue one start and tick once, returning the request the runner answered (#72)."""
+        body: dict = {"id": routine_id, **request}
+        self.context.set("routine_request", body)
         self.tick(1)
+        return body
 
     def drain(self, timeout: float = 2.0) -> None:
         """Wait for the motor worker, which is where a parameterised step runs."""
@@ -195,11 +198,11 @@ def test_a_stop_request_ends_the_run_and_clears_the_board(tmp_path: Path) -> Non
 def test_an_unknown_routine_is_refused_by_name(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
     try:
-        rig.run("nope")
-        rejection = rig.context.get("routine_rejection")
+        request = rig.run("nope")
 
         assert rig.state() is None
-        assert "'nope'" in rejection["reason"]
+        assert "'nope'" in request["refusal"]
+        assert rig.context.get("routine_rejection") is None
     finally:
         rig.close()
 
@@ -209,10 +212,9 @@ def test_a_second_start_while_one_is_running_is_refused(tmp_path: Path) -> None:
     rig = Rig(tmp_path)
     try:
         rig.run("calm")
-        rig.run("calm")
-        rejection = rig.context.get("routine_rejection")
+        request = rig.run("calm")
 
-        assert "still running" in rejection["reason"]
+        assert "still running" in request["refusal"]
         assert rig.state().routine_id == "calm"
     finally:
         rig.close()
