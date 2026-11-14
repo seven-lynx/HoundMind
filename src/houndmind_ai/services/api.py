@@ -218,6 +218,10 @@ class ControlPlane:
             "scheme": "https" if self.settings.tls_enabled else "http",
             "device_id": self.context.get("device_id") or device.get("device_id"),
             "board": self.context.get("board"),
+            # The device tree's own words, verbatim. A `board` of `unknown` says the detection
+            # failed and nothing more, so this is the only way a support bundle can show what the
+            # hardware actually called itself (#32).
+            "board_model": self.context.get("board_model"),
             "profile": self.context.get("profile"),
             "uptime_s": max(0.0, self._clock() - self._started_at),
             "capabilities": self._capabilities(),

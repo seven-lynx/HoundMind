@@ -98,7 +98,7 @@ what stops the guard from looking redundant (`#39`).
 
 | Method | Path | Scope | Purpose |
 |---|---|---|---|
-| `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `scheme`, `device_id`, `board`, `profile`, `uptime_s`, `capabilities` |
+| `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `scheme`, `device_id`, `board`, `board_model`, `profile`, `uptime_s`, `capabilities` |
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
