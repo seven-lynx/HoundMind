@@ -172,7 +172,14 @@ class WatchdogModule(Module):
             monitor=settings.get("monitor_modules") or None,
         )
         self._last_report = report
-        context.set("watchdog_status", {**report.as_dict(), "timestamp": now})
+        context.set(
+            "watchdog_status",
+            {
+                **report.as_dict(),
+                "exempt": self._exempt(ignore, statuses),
+                "timestamp": now,
+            },
+        )
 
         if report.restart:
             # The runtime owns restarting modules; a watchdog that reaches into hardware itself
@@ -181,6 +188,31 @@ class WatchdogModule(Module):
             logger.warning("Watchdog restart requested: %s", ", ".join(report.restart))
         for name in report.failed:
             logger.error("Watchdog gave up on %s: %s", name, report.reasons.get(name, "unknown"))
+
+    def _exempt(self, ignored: set[str], statuses: dict) -> dict[str, str]:
+        """The modules this watchdog will not restart, and why - one map, published every tick.
+
+        The shipped `ignore_modules` exempts `api`, and the consequence was a blind spot with no
+        symptom: a wedged control plane is invisible, because the API is the only way anyone sees
+        the dog at all. Naming the exemption keeps "exempt on purpose" distinct from "healthy"
+        for any client that is still connected (#25).
+
+        Only modules that are enabled *and* started are named: one that is off was never a
+        candidate, so calling it exempt would invent a decision the watchdog did not make.
+        """
+        exempt: dict[str, str] = {}
+        for name in sorted(ignored):
+            status = statuses.get(name)
+            if not isinstance(status, dict):
+                continue
+            if not status.get("enabled", True) or not status.get("started", False):
+                continue
+            exempt[name] = (
+                "the watchdog itself"
+                if name == self.name
+                else "exempt by settings.watchdog.ignore_modules"
+            )
+        return exempt
 
     def stop(self, context) -> None:
         board = context.get("intent_board")

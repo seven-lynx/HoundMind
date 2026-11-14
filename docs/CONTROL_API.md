@@ -355,7 +355,7 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "started_at": 4212.3
   },
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "temp_c": 61.4, "mem_used_pct": 51.0 } },
-  "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [] },
+  "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [], "exempt": { "api": "exempt by settings.watchdog.ignore_modules" } },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 },
   "perf": { "tick_hz_target": 5, "tick_hz_actual": 4.98, "tick_ms": 41.2, "tick_overrun_ms": 0.0, "loop_delay_ms": 200.0 }
 }
@@ -416,6 +416,12 @@ Every field is `null` before the loop's first tick, because `0` would read as a 
 `supervisor` is the watchdog's own state: whether it is holding motion (`holding` + `reason`, which is
 `null` or a staleness reason), which modules it asked the runtime to restart, and which it has given
 up on. `holding: true` never means the dog was posed — recovery is stop-and-report.
+
+`exempt` names the modules the watchdog is configured never to restart, with the reason, so
+"exempt on purpose" is distinguishable from "healthy". The shipped `settings.watchdog.ignore_modules`
+exempts `api`, because restarting the control plane re-binds the port and drops every WebSocket
+client mid-request; the cost of that choice is that a wedged API cannot be restarted by anything,
+and this field is how it stays visible (`#25`).
 
 **Validity flags are mandatory and clients must honour them.** `distance_cm: 42.5` with
 `distance_valid: false` means "no measurement" — render "—", never "42 cm". This is the one rule in

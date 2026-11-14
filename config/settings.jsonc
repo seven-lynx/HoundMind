@@ -1018,6 +1018,9 @@
       // Modules to monitor (empty = every enabled, started module).
       "monitor_modules": [],
       // Modules never to restart. The watchdog adds itself, so it cannot restart itself.
+      // `api` is exempt on purpose: a restart re-binds the port and drops every client. The
+      // exemption is reported in /state `supervisor.exempt`, so it stays visible rather than
+      // silently reading as healthy (#25).
       "ignore_modules": ["api"],
       // Base delay before another restart of the same module (seconds).
       "restart_cooldown_s": 1.0,

@@ -233,6 +233,39 @@ def test_the_watchdog_never_restarts_itself() -> None:
     assert context.get("restart_modules") is None
 
 
+def test_an_ignored_module_is_reported_as_exempt_not_as_healthy() -> None:
+    """`api` ships exempt, so a wedged control plane must still be visible in `/state` (#25).
+
+    It is never restarted - a restart drops every connected client - but silence about it would
+    make "exempt on purpose" indistinguishable from "healthy".
+    """
+    settings = {"watchdog": {**SETTINGS["watchdog"], "ignore_modules": ["api"]}}
+    module, context, board = build(settings)
+    context.set("sensor_reading", reading())
+    context.set("scan_reading", scan())
+    context.set("module_statuses", {"api": status(last_heartbeat_ts=time.time() - 60.0)})
+
+    module.tick(context)
+
+    assert context.get("restart_modules") is None
+    assert context.get("watchdog_status")["exempt"] == {
+        "api": "exempt by settings.watchdog.ignore_modules"
+    }
+
+
+def test_a_disabled_module_is_not_called_exempt() -> None:
+    """An exemption is a decision the watchdog made; a module that is off was never a candidate."""
+    settings = {"watchdog": {**SETTINGS["watchdog"], "ignore_modules": ["api"]}}
+    module, context, board = build(settings)
+    context.set("sensor_reading", reading())
+    context.set("scan_reading", scan())
+    context.set("module_statuses", {"api": status(enabled=False, started=False)})
+
+    module.tick(context)
+
+    assert context.get("watchdog_status")["exempt"] == {}
+
+
 def test_a_disabled_watchdog_does_nothing() -> None:
     settings = {"watchdog": {**SETTINGS["watchdog"], "enabled": False}}
     module, context, board = build(settings)

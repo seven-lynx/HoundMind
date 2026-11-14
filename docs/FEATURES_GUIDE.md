@@ -495,6 +495,14 @@ earns a fresh budget.
 The scan staleness window is the larger of `scan_timeout_s` and 1.5× the measured scan duration,
 because a sweep takes seconds and a fixed sub-second window called a healthy scan stale.
 
+**The control plane is exempt, and says so.** `ignore_modules` ships as `["api"]`: restarting the
+control plane re-binds the port and drops every connected client, and a restart triggered by a
+heartbeat lag looks to a phone exactly like the dog going offline. The cost of that choice is a
+blind spot, because the API is the only way anyone sees the dog - so `/state` reports the exemption
+in `supervisor.exempt` with its reason. A wedged control plane therefore reads as `exempt`, never
+as healthy, and an operator with a client still connected can see it. Anything else in
+`ignore_modules` is reported the same way.
+
 **Default:** Enabled (it does nothing unless the dog is asked to move on stale data).
 
 **Disable:** `modules.watchdog.enabled = false`

@@ -93,14 +93,20 @@ def _safety(context) -> dict[str, object]:
 
 
 def build_supervisor(context) -> dict[str, object]:
-    """What the watchdog is doing: holding motion, and what it has restarted or given up on."""
+    """What the watchdog is doing: holding motion, what it restarted, and what it will not touch."""
     hold = _table(context.get("watchdog_hold"))
     status = _table(context.get("watchdog_status"))
+    # A module the watchdog is configured not to restart. `api` ships exempt, and without this
+    # "the control plane is wedged" reads exactly like "the control plane is healthy" (#25).
+    exempt = {
+        str(name): str(reason) for name, reason in _table(status.get("exempt")).items()
+    }
     return {
         "holding": bool(hold),
         "reason": hold.get("reason"),
         "restarts": list(status.get("restart") or []),
         "failed": list(status.get("failed") or []),
+        "exempt": exempt,
     }
 
 

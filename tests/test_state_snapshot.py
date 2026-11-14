@@ -52,7 +52,26 @@ def test_displaced_counts_the_intents_that_lost() -> None:
 def test_the_supervisor_block_is_quiet_by_default() -> None:
     supervisor = build_state(RuntimeContext(), now=0.0)["supervisor"]
 
-    assert supervisor == {"holding": False, "reason": None, "restarts": [], "failed": []}
+    assert supervisor == {
+        "holding": False,
+        "reason": None,
+        "restarts": [],
+        "failed": [],
+        "exempt": {},
+    }
+
+
+def test_the_supervisor_block_names_the_modules_it_will_not_restart() -> None:
+    """`api` ships exempt, so "no API" must be distinguishable from "API healthy" (#25)."""
+    context = RuntimeContext()
+    context.set(
+        "watchdog_status",
+        {"restart": [], "failed": [], "exempt": {"api": "exempt by settings.watchdog.ignore_modules"}},
+    )
+
+    assert build_state(context, now=0.0)["supervisor"]["exempt"] == {
+        "api": "exempt by settings.watchdog.ignore_modules"
+    }
 
 
 def test_the_supervisor_block_reports_a_hold_and_a_restart() -> None:
