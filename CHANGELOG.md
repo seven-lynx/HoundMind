@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **One owner for the cue warning** (#90): the FSM warned about every entry cue missing from the
+  advisory `behavior.cue_sounds` list and played it anyway, which was the only signal available when
+  it was written. Once the HAL learned to name a sound the vendor cannot find, that second opinion
+  became the weaker of two: a custom build with its own effects got a `WARNING` on a healthy device,
+  and a genuine typo was reported twice in two wordings. The FSM check is gone - it could only guess -
+  and the HAL's report stands alone. `behavior.cue_sounds` stays as documentation of a stock build,
+  `config/settings.jsonc` and the schema comment say so, and
+  `tests/test_behavior_lifelike.py` now asserts the silence.
 - **The Pi 3 vision path publishes frames** (#98): `optional/vision.py` started Vilib, published
   `{"status": "ready"}` and stopped there, so `vision_frame` stayed `None` and every detector behind
   it - `face_recognition`, `semantic_labeler`, and the occupancy `perception` derives from faces - was

@@ -222,7 +222,13 @@ def test_a_cue_rides_a_locomotion_command_without_displacing_it(monkeypatch):
     assert command.params == {"cue": {"name": "pant", "volume": 60}}
 
 
-def test_a_cue_outside_the_advisory_list_is_warned_once_and_still_played(caplog):
+def test_a_cue_outside_the_stock_list_plays_without_a_complaint(caplog):
+    """#90: a custom build's own effects are not a defect, and the HAL owns the real question.
+
+    The second opinion lived here and fired on healthy builds, which is how a warning channel stops
+    being read. `hal/vendor.py::_warn_missing_sound` is now the only reporter of a sound that cannot
+    play.
+    """
     mod = BehaviorModule("behavior", enabled=True)
     settings = {
         "state_expressions": {"alert": {"sound": "custom_woof"}},
@@ -233,8 +239,7 @@ def test_a_cue_outside_the_advisory_list_is_warned_once_and_still_played(caplog)
         second = mod._entry_cue(settings, BehaviorState.ALERT, False)
 
     assert first == second == {"name": "custom_woof", "volume": 60}
-    warnings = [r for r in caplog.records if "custom_woof" in r.getMessage()]
-    assert len(warnings) == 1, "the advisory list is a hint, warned once per name"
+    assert [r for r in caplog.records if "custom_woof" in r.getMessage()] == []
 
 
 def test_the_cue_volume_is_defaulted_and_clamped():

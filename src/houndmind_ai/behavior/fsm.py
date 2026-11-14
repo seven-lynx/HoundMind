@@ -72,8 +72,6 @@ class BehaviorModule(Module):
         # Entry beats that were refused, so a typo in `behavior.state_expressions` is one warning
         # rather than one per transition.
         self._warned_beats: set[str] = set()
-        # Cue names outside the advisory `behavior.cue_sounds` list, warned about once each.
-        self._warned_cues: set[str] = set()
         # habituation tracking: counts and last timestamp per stimulus type
         self._stim_counts: dict[str, int] = {}
         self._stim_last_ts: dict[str, float] = {}
@@ -553,15 +551,15 @@ class BehaviorModule(Module):
 
         A cue is a transition marker, not an action: it is attached to whatever the entry already
         publishes, so a state with no beat (a locomotion state) still gets one, and nothing waits a
-        tick for it. Two things can stop it:
+        tick for it. `quiet_mode_active` is the one thing that stops it — a dog told to be quiet does
+        not announce itself. The gate lives here rather than in the HAL because it is a behaviour
+        decision, and the timer that owns it is the runtime's (`core/runtime.py:147`).
 
-        - `quiet_mode_active` — a dog told to be quiet does not announce itself. The gate lives here
-          rather than in the HAL because it is a behaviour decision, and the timer that owns it is
-          the runtime's (`core/runtime.py:147`).
-        - a name outside the advisory `behavior.cue_sounds` list. That list is a hint, not a
-          whitelist: a build with its own effects may use them, so the mismatch is warned once per
-          name and the cue still plays. Whether the vendor actually has the file is a separate
-          question, and the HAL answers it (`hal/vendor.py::_warn_missing_sound`, #81).
+        Whether the build *has* the sound is not this module's question. `behavior.cue_sounds` names
+        a stock build's effects and nothing more; the HAL answers what is actually on disk
+        (`hal/vendor.py::_warn_missing_sound`, #81), and it is the only thing that can. A second
+        check here warned about a healthy custom build's own effects and reported a genuine typo
+        twice in two wordings (#90).
         """
         table = settings.get("state_expressions")
         if not isinstance(table, dict):
@@ -576,16 +574,6 @@ class BehaviorModule(Module):
             return None
 
         name = sound.strip()
-        available = settings.get("cue_sounds")
-        if isinstance(available, list) and available and name not in available:
-            if name not in self._warned_cues:
-                self._warned_cues.add(name)
-                logger.warning(
-                    "Entry cue %r for state %s is not in behavior.cue_sounds; playing it anyway",
-                    name,
-                    state.value,
-                )
-
         try:
             volume = int(settings.get("cue_volume", _CUE_VOLUME_DEFAULT))
         except (TypeError, ValueError):
