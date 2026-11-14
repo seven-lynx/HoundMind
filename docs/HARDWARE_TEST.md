@@ -3,10 +3,10 @@
 Status: **guide** — the bench procedure from "it installed" to "the dog works". Every command here
 runs on the dog, in order, and each step says what a pass looks like before you run it.
 Pairs with: `docs/INSTALL.md` (install first — this guide assumes it is done), `docs/LOGGING.md`
-(when a step fails), `docs/CONTROL_API.md` §4 (the snapshot read in step 4)
+(when a step fails), `docs/CONTROL_API.md` [§4](CONTROL_API.md#4-state-snapshot) (the snapshot read in step 4)
 
 Six steps. Steps 1–5 are read-only and cannot move the dog. **Step 6 is the only one that can**,
-and it requires an explicit go-ahead (see §9).
+and it requires an explicit go-ahead (see [§9](#9-step-6--motion-and-only-motion)).
 
 If a step fails, do not skip to the next one: the later steps use the sensor the earlier one
 proved, and a failure skipped once is a failure that comes back as a mystery later.
@@ -82,7 +82,7 @@ source .venv/bin/activate
 | 3 | Loop | `python -m tools.smoke_test` | no | ~5 s | `[smoke] PASS` |
 | 4 | Control plane | `python -m houndmind_ai`, then `GET /state` | no | ~2 min | `*_valid: true` |
 | 5 | Peripherals | `tools.camera_check`, `tools.list_audio_devices` | no | ~1 min | index found, frame saved |
-| 6 | Motion | §9 — **only with clearance and a yes** | **yes** | ~1 min | a gait you watched |
+| 6 | Motion | [§9](#9-step-6--motion-and-only-motion) — **only with clearance and a yes** | **yes** | ~1 min | a gait you watched |
 
 ## 4. Step 1 — Install sanity
 
@@ -108,7 +108,7 @@ Installer check: OK
 
 | What you see | Means | Do |
 |---|---|---|
-| `pidog: MISSING` | the SunFounder libraries are not in this venv | `docs/INSTALL.md` §3 — they are cloned, not on PyPI |
+| `pidog: MISSING` | the SunFounder libraries are not in this venv | `docs/INSTALL.md` [§3](INSTALL.md#3-install-sunfounder-pidog-libraries-into-the-same-python-environment) — they are cloned, not on PyPI |
 | `houndmind_ai: MISSING` | this venv does not have the package | `python -m pip install -e .` |
 | `Requirements file not found` | you are not in the repo root | `cd` to the repo and re-run |
 | `Installer check: FAILED` | exactly one line above is `MISSING` | fix that line, not the others |
@@ -308,7 +308,7 @@ Find the symptom, take the next step — not a different one.
 | Symptom | Most likely | Do this first |
 |---|---|---|
 | Every line in step 2 is `None` and every flag on `valid:` is `False` | the vendor layer did not load, so nothing reached the bus | `python -c "import pidog"`, then check `logs/houndmind.log`; a Pi with I2C disabled fails exactly like this (`sudo raspi-config` → Interface → I2C) |
-| `[checkup] pidog unavailable` and exit code 2 | the vendor package is not in this venv | `docs/INSTALL.md` §3 — `pidog` is cloned, not on PyPI |
+| `[checkup] pidog unavailable` and exit code 2 | the vendor package is not in this venv | `docs/INSTALL.md` [§3](INSTALL.md#3-install-sunfounder-pidog-libraries-into-the-same-python-environment) — `pidog` is cloned, not on PyPI |
 | `distance_cm: None`, everything else green | no sample yet (re-run, #108) or no echo from a soft or angled surface | re-run step 2 against a hard flat surface at arm's length before suspecting the transducer |
 | Step 2 passes, `sensor_reading: MISSING` in step 3 | the tool and the HAL read through different paths | the `hal`/`hal_sensors` module is `disabled` with a reason — `/api/v1/modules` or the log names it |
 | `[smoke] FAIL` only on `scan_latest` | `scanning` produced no reading | `/api/v1/modules` names a disabled reason; step 6 tells you whether the head moves at all |
@@ -356,7 +356,7 @@ The bundle carries `metadata.json` (timestamp, commit, trace id), everything in 
   part of a bench test.
 - **`houndmind doctor` does not exist** (#23). If a document elsewhere points you at it, the
   commands above are what it meant.
-- **Motion quality is a judgement**, not a measurement. §9's checklist is the closest thing to
+- **Motion quality is a judgement**, not a measurement. [§9](#9-step-6--motion-and-only-motion)'s checklist is the closest thing to
   a pass criterion this project has, and it needs you watching.
 - **Run one thing at a time.** `tools.hardware_checkup` opens its own `PidogHAL`, which is a
   `Pidog()` in a second process (#11), so it and `python -m houndmind_ai` must never be up at the

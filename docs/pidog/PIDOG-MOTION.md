@@ -3,11 +3,11 @@
 Status: **reference** — the `Pidog` object: what it starts, how a movement reaches a servo, and
 where the motion code is broken.
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
-Pairs with: `HARDWARE.md` §2–§3 (channel map, limits), `ROBOTHAT.md` §5 (speed model),
+Pairs with: `HARDWARE.md` [§2](HARDWARE.md#2-servo-channels-and-pins)–[§3](HARDWARE.md#3-limits-speeds-and-geometry) (channel map, limits), `ROBOTHAT.md` [§5](ROBOTHAT.md#5-servo-and-how-robot-turns-a-number-into-motion) (speed model),
 `PIDOG-ACTIONS.md` (named actions)
 
-Sections: §1 construction · §2 threads · §3 lifecycle · §4 leg/head/tail movement ·
-§5 waiting and cancelling · §6 body pose and kinematics · §7 known defects · §8 sensor
+Sections: [§1](#1-construction) construction · [§2](#2-the-threads-you-now-own) threads · [§3](#3-lifecycle) lifecycle · [§4](#4-moving-a-part) leg/head/tail movement ·
+[§5](#5-waiting-cancelling-polling) waiting and cancelling · [§6](#6-body-pose-and-kinematics) body pose and kinematics · [§7](#7-known-defects-in-the-motion-path) known defects · [§8](#8-sensor-attributes-on-the-dog-object) sensor
 attributes
 
 ---
@@ -34,7 +34,7 @@ The constructor does a great deal, in this order:
 3. Builds three `Robot` objects (`legs`, `head`, `tail`) against
    `~/.config/pidog/pidog.conf`. The legs are initialised in the order
    `[0, 2, 4, 6, 1, 3, 5, 7]` — shoulders before knees, to keep the current spike down.
-4. Sets `max_dps` per group (`HARDWARE.md` §3.2) and creates per-part action buffers and locks.
+4. Sets `max_dps` per group (`HARDWARE.md` [§3.2](HARDWARE.md#32-speed-constants-degrees-per-second)) and creates per-part action buffers and locks.
 5. Builds the sensors: `Sh3001`, `RGBStrip(addr=0x74, nums=11)`, `DualTouch('D2','D3')`,
    `SoundDirection()`, `Music()`.
 6. Starts five action threads plus the ultrasonic worker thread.
@@ -62,11 +62,11 @@ construct one on a desk without clearance.
 | tail | `tail_thread` | pop one angle frame, move | same |
 | rgb | `rgb_strip_thread` | `rgb_strip.show()` forever | continuous |
 | imu | `imu_thread` | read SH3001, apply offsets, compute pitch/roll | 20 Hz (`sleep 0.05`) |
-| sensory | `sensory_thread` | read ultrasonic into `distance` | `sleep 0.01` between reads; real cadence is bounded by the sensor (see `PIDOG-SENSORS.md` §5) |
+| sensory | `sensory_thread` | read ultrasonic into `distance` | `sleep 0.01` between reads; real cadence is bounded by the sensor (see `PIDOG-SENSORS.md` [§5](PIDOG-SENSORS.md#5-what-a-read-costs)) |
 
 All are daemon threads created in the constructor. Everything is shared mutable state with a
 lock per buffer — which is workable but means **you must not call movement methods from several
-threads at once**; the lock protects the list, not the sequence (`PATTERNS.md` §2).
+threads at once**; the lock protects the list, not the sequence (`PATTERNS.md` [§2](PATTERNS.md#2-concurrency)).
 
 Two consequences:
 
@@ -213,7 +213,7 @@ dog.do_action('sit', step_count=1, speed=70, pitch_comp=0)
 
 Looks the name up in the action dictionary, then pushes `step_count` copies of every frame into
 the right buffer (legs, head or tail). Details and the full name list are in
-`PIDOG-ACTIONS.md` §2–§3.
+`PIDOG-ACTIONS.md` [§2](PIDOG-ACTIONS.md#2-pidogdo_action-and-actiondict)–[§3](PIDOG-ACTIONS.md#3-the-catalogue).
 
 ---
 
@@ -329,7 +329,7 @@ what the action dictionary uses.
 ### 7.3 There is no `read_touch`, `read_sound_direction` or `read_imu`
 
 Sensor access is by **attribute**: `dog.dual_touch.read()`, `dog.ears.read()`, `dog.accData`,
-`dog.gyroData`, `dog.pitch`, `dog.roll`. See §8.
+`dog.gyroData`, `dog.pitch`, `dog.roll`. See [§8](#8-sensor-attributes-on-the-dog-object).
 
 ### 7.4 `read_distance()` returns −1.0 until the sensor has been read once
 

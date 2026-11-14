@@ -8,6 +8,18 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **Documentation sections are links** (#116): `§N` references were plain text, so a reader had to
+  find a numbered section by eye and `docs/README.md`'s promise of one index meant less than it
+  looked. 272 of them are anchors now - in-page `[§4](#4-context-keys)` and cross-page
+  `[§6](pidog/HARDWARE.md#6-what-lives-on-disk)` - each resolved from its own sentence: a bare `§N`
+  means the page it is on, a page named on the line (before or after the number) wins, and the
+  heading must exist or the reference is left as text. New `tests/test_docs_anchors.py` holds every
+  `#anchor` in `docs/` to a heading. It immediately found five links that were already broken and
+  they are fixed here: `FEATURES_GUIDE.md` §27 (its heading had been renamed), the three
+  `PIDOG_PROGRAMMING_GUIDE.md` contents links (emoji headings, so the hand-written slugs missed),
+  and `QUICKSTART.md` §4. Left alone on purpose, and stated rather than guessed: references that
+  name a section by title (`§TLS`, `§profiles`), the ones inside code spans or fences, and
+  `CONTROL_API.md`'s "(design §6.4)", which points at a design document that is not in `docs/`.
 - **Servo trim has a step of our own** (#142): the only way to *save* a trim was the vendor's
   interactive curses script - outside the HAL, outside the interlock, outside any test - while
   `POST /api/v1/calibration/run` stayed reserved. New `python -m tools.calibrate_servos` prints the

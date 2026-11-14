@@ -5,8 +5,8 @@ every quirk this set has found.
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
 Pairs with: `INDEX.md` (router), `src/houndmind_ai/hal/vendor.py` (the port of all of this)
 
-Sections: §1 a safe script · §2 concurrency · §3 motion safety · §4 sensor validity ·
-§5 quirk index · §6 units cheat sheet · §7 porting into the HAL · §8 testing without hardware
+Sections: [§1](#1-a-script-that-will-not-wedge-the-bus) a safe script · [§2](#2-concurrency) concurrency · [§3](#3-motion-safety) motion safety · [§4](#4-sensor-validity) sensor validity ·
+[§5](#5-quirk-index) quirk index · [§6](#6-units-cheat-sheet) units cheat sheet · [§7](#7-porting-vendor-code-into-the-hal) porting into the HAL · [§8](#8-testing-without-hardware) testing without hardware
 
 ---
 
@@ -73,7 +73,7 @@ threads, with per-buffer locks that protect the lists and nothing else.
 ### 2.1 What is already concurrent
 
 `legs_thread`, `head_thread`, `tail_thread`, `rgb_strip_thread`, `imu_thread` and `sensory_thread`
-start in the constructor and run until `close()` (`PIDOG-MOTION.md` §2). Your code is a seventh
+start in the constructor and run until `close()` (`PIDOG-MOTION.md` [§2](PIDOG-MOTION.md#2-the-threads-you-now-own)). Your code is a seventh
 writer.
 
 ### 2.2 The rules
@@ -129,7 +129,7 @@ with typed intents coming in from everywhere else.
 - **A buffer is unbounded.** `legs_move(frames * 100)` is 10 000 frames of motion with no trim
   except `legs_stop()`.
 - **`ActionFlow` idles with motion.** A started flow animates the dog every 2–6 s
-  (`PIDOG-ACTIONS.md` §4.4).
+  (`PIDOG-ACTIONS.md` [§4.4](PIDOG-ACTIONS.md#44-the-idle-animation-is-motion)).
 
 Anything you write that can move the dog defaults to dry and requires an explicit flag. Nobody runs
 it for you: a motion path is opt-in, and a run needs a human who has looked at the dog and cleared the
@@ -151,7 +151,7 @@ else:
     distance_cm, valid = reading, True
 ```
 
-1. **Sentinel before value.** `PIDOG-SENSORS.md` §6.1 lists them per sensor. `-1`, `-2` and
+1. **Sentinel before value.** `PIDOG-SENSORS.md` [§6.1](PIDOG-SENSORS.md#61-sentinels-per-sensor) lists them per sensor. `-1`, `-2` and
    `False` are all "no data", and all of them will happily flow into arithmetic.
 2. **Freeze is not freshness.** `accData`, `pitch`, `roll` and `distance` keep their last value
    when their thread dies. Stamp what you act on.
@@ -171,38 +171,38 @@ Everything this set found that will cost you an afternoon. Each row points at th
 
 | Quirk | Where |
 |---|---|
-| A missing `smbus2`/`lgpio`/`pyaudio`/`pygame` disables every `robot_hat` import | `ROBOTHAT.md` §1.2 |
-| I2C failures return `False` instead of raising | `ROBOTHAT.md` §6.1 |
-| PWM channels share a timer, so `freq()` on one changes another | `ROBOTHAT.md` §4.2 |
-| `Servo.angle()` clamps to ±90 silently | `ROBOTHAT.md` §5.1 |
-| `speed` is a duration, and saturates against `max_dps` | `ROBOTHAT.md` §5.3 |
-| `Robot.do_action` needs a `move_list` nobody fills | `ROBOTHAT.md` §11.5 |
-| `device.set_led()` never drives the pin | `ROBOTHAT.md` §11.2 |
-| `Pin.value()` flips the pin to input when read | `ROBOTHAT.md` §11.3 |
-| `active_state` is accepted and dropped | `ROBOTHAT.md` §11.4 |
-| `import pidog` silences all warnings process-wide | `ROBOTHAT.md` §11.1 |
-| `Pidog.speak` shells out to `sudo killall pulseaudio` | `PIDOG-EXPRESSION.md` §2.3 |
-| Sound files are found in `~/pidog/sounds`, not in site-packages | `PIDOG-EXPRESSION.md` §2.1 |
-| The LED thread never sleeps and shares the bus | `PIDOG-EXPRESSION.md` §5 |
-| `head_move` blends roll and pitch as yaw approaches ±90° | `PIDOG-MOTION.md` §4.1 |
-| Queued frames run at the *latest* speed, not the speed at queue time | `PIDOG-MOTION.md` §4.4 |
-| "Done" means the buffer is empty, not that the servo arrived | `PIDOG-MOTION.md` §5 |
-| `set_angle()` raises `AttributeError` on every call | `PIDOG-MOTION.md` §7.1 |
-| `pose2coords()` needs `set_legs()` first | `PIDOG-MOTION.md` §7.2 |
-| `read_distance()` is −1.0 until the sensor thread samples | `PIDOG-MOTION.md` §7.4 |
-| A misspelled action name is silent | `PIDOG-MOTION.md` §7.5 |
-| `dog.touch` is never updated | `PIDOG-MOTION.md` §8 |
-| `ActionDict` iterates empty; the catalogue is properties | `PIDOG-ACTIONS.md` §2 |
-| `actions_dict.set_height()` has no effect | `PIDOG-ACTIONS.md` §2 |
-| `ActionFlow.stop()` can hang on an empty queue | `PIDOG-ACTIONS.md` §6 |
-| The `"stop"` operation does nothing | `PIDOG-ACTIONS.md` §6 |
-| An idle `ActionFlow` moves the dog by itself | `PIDOG-ACTIONS.md` §4.4 |
-| Two IMU calibrations exist and apply to different outputs | `PIDOG-SENSORS.md` §4.5 |
-| `sh3001_getimudata` raises `TypeError` on a failed read | `PIDOG-SENSORS.md` §4.1 |
-| `pitch`/`roll` use `atan`, so they saturate near vertical | `PIDOG-SENSORS.md` §4.3 |
-| Calibration files resolve from `SUDO_USER`, so sudo sees a different file | `HARDWARE.md` §6 |
-| The GPIO chip number moves across Pi 5 kernels | `HARDWARE.md` §7.2 |
-| Multiplying `brightness` above 1 asks for values past 255 | `PIDOG-EXPRESSION.md` §1.3 |
+| A missing `smbus2`/`lgpio`/`pyaudio`/`pygame` disables every `robot_hat` import | `ROBOTHAT.md` [§1.2](ROBOTHAT.md#12-a-missing-wheel-disables-all-of-it-quietly) |
+| I2C failures return `False` instead of raising | `ROBOTHAT.md` [§6.1](ROBOTHAT.md#61-the-retry-wrapper-swallows-failures) |
+| PWM channels share a timer, so `freq()` on one changes another | `ROBOTHAT.md` [§4.2](ROBOTHAT.md#42-what-is-shared-and-what-breaks) |
+| `Servo.angle()` clamps to ±90 silently | `ROBOTHAT.md` [§5.1](ROBOTHAT.md#51-servo) |
+| `speed` is a duration, and saturates against `max_dps` | `ROBOTHAT.md` [§5.3](ROBOTHAT.md#53-the-speed-model--read-this-before-tuning-a-gait) |
+| `Robot.do_action` needs a `move_list` nobody fills | `ROBOTHAT.md` [§11.5](ROBOTHAT.md#115-robotdo_action-needs-a-move_list-you-must-fill) |
+| `device.set_led()` never drives the pin | `ROBOTHAT.md` [§11.2](ROBOTHAT.md#112-deviceset_led-is-a-no-op) |
+| `Pin.value()` flips the pin to input when read | `ROBOTHAT.md` [§11.3](ROBOTHAT.md#113-pinvalue-flips-direction) |
+| `active_state` is accepted and dropped | `ROBOTHAT.md` [§11.4](ROBOTHAT.md#114-active_state-is-accepted-and-dropped) |
+| `import pidog` silences all warnings process-wide | `ROBOTHAT.md` [§11.1](ROBOTHAT.md#111-deprecated-shims-still-in-the-import-path) |
+| `Pidog.speak` shells out to `sudo killall pulseaudio` | `PIDOG-EXPRESSION.md` [§2.3](PIDOG-EXPRESSION.md#23-every-speak-shells-out-to-sudo) |
+| Sound files are found in `~/pidog/sounds`, not in site-packages | `PIDOG-EXPRESSION.md` [§2.1](PIDOG-EXPRESSION.md#21-name-resolution) |
+| The LED thread never sleeps and shares the bus | `PIDOG-EXPRESSION.md` [§5](PIDOG-EXPRESSION.md#5-quirks) |
+| `head_move` blends roll and pitch as yaw approaches ±90° | `PIDOG-MOTION.md` [§4.1](PIDOG-MOTION.md#41-head_move--yawrollpitch-and-the-cross-mix) |
+| Queued frames run at the *latest* speed, not the speed at queue time | `PIDOG-MOTION.md` [§4.4](PIDOG-MOTION.md#44-speed-is-per-part-not-per-frame--the-queue-gotcha) |
+| "Done" means the buffer is empty, not that the servo arrived | `PIDOG-MOTION.md` [§5](PIDOG-MOTION.md#5-waiting-cancelling-polling) |
+| `set_angle()` raises `AttributeError` on every call | `PIDOG-MOTION.md` [§7.1](PIDOG-MOTION.md#71-set_angle-is-unusable) |
+| `pose2coords()` needs `set_legs()` first | `PIDOG-MOTION.md` [§7.2](PIDOG-MOTION.md#72-pose2coords-needs-set_legs-first) |
+| `read_distance()` is −1.0 until the sensor thread samples | `PIDOG-MOTION.md` [§7.4](PIDOG-MOTION.md#74-read_distance-returns-10-until-the-sensor-has-been-read-once) |
+| A misspelled action name is silent | `PIDOG-MOTION.md` [§7.5](PIDOG-MOTION.md#75-a-typo-in-an-action-name-is-silent) |
+| `dog.touch` is never updated | `PIDOG-MOTION.md` [§8](PIDOG-MOTION.md#8-sensor-attributes-on-the-dog-object) |
+| `ActionDict` iterates empty; the catalogue is properties | `PIDOG-ACTIONS.md` [§2](PIDOG-ACTIONS.md#2-pidogdo_action-and-actiondict) |
+| `actions_dict.set_height()` has no effect | `PIDOG-ACTIONS.md` [§2](PIDOG-ACTIONS.md#2-pidogdo_action-and-actiondict) |
+| `ActionFlow.stop()` can hang on an empty queue | `PIDOG-ACTIONS.md` [§6](PIDOG-ACTIONS.md#6-hazards) |
+| The `"stop"` operation does nothing | `PIDOG-ACTIONS.md` [§6](PIDOG-ACTIONS.md#6-hazards) |
+| An idle `ActionFlow` moves the dog by itself | `PIDOG-ACTIONS.md` [§4.4](PIDOG-ACTIONS.md#44-the-idle-animation-is-motion) |
+| Two IMU calibrations exist and apply to different outputs | `PIDOG-SENSORS.md` [§4.5](PIDOG-SENSORS.md#45-two-calibration-systems--know-which-one-you-are-writing) |
+| `sh3001_getimudata` raises `TypeError` on a failed read | `PIDOG-SENSORS.md` [§4.1](PIDOG-SENSORS.md#41-raw-values) |
+| `pitch`/`roll` use `atan`, so they saturate near vertical | `PIDOG-SENSORS.md` [§4.3](PIDOG-SENSORS.md#43-dogpitch-and-dogroll) |
+| Calibration files resolve from `SUDO_USER`, so sudo sees a different file | `HARDWARE.md` [§6](HARDWARE.md#6-what-lives-on-disk) |
+| The GPIO chip number moves across Pi 5 kernels | `HARDWARE.md` [§7.2](HARDWARE.md#72-the-gpio-chip-number-moves) |
+| Multiplying `brightness` above 1 asks for values past 255 | `PIDOG-EXPRESSION.md` [§1.3](PIDOG-EXPRESSION.md#13-the-two-rate-knobs) |
 
 ---
 
@@ -213,7 +213,7 @@ Everything this set found that will cost you an afternoon. Each row points at th
 | `Servo.angle()` | degrees | −90…90 | yes, silently |
 | head `[yaw, roll, pitch]` | degrees | ±90 / ±70 / −45…30 | yes, in the thread |
 | leg angles | degrees | −90…90 per servo | yes |
-| `speed` | 0–100 (a duration, see §5.3 of `ROBOTHAT.md`) | 0–100 | yes, in `servo_move` |
+| `speed` | 0–100 (a duration, see [§5.3](ROBOTHAT.md#53-the-speed-model--read-this-before-tuning-a-gait) of `ROBOTHAT.md`) | 0–100 | yes, in `servo_move` |
 | `bpm` | beats per minute | positive | no |
 | foot position | mm, `(y, z)` from the shoulder | reachable set | geometry clamps |
 | body pose | mm / degrees | — | no |
@@ -242,7 +242,7 @@ The procedure, in order:
 3. **Guard with `hasattr`.** The vendor's surface moves between builds:
    `if hasattr(dog, "head_move"): …` (`hal/vendor.py:408`).
 4. **Take the bus lock.** `self._bus` guards every call that reaches a device, because the vendor
-   has no lock of its own (`ROBOTHAT.md` §6.2).
+   has no lock of its own (`ROBOTHAT.md` [§6.2](ROBOTHAT.md#62-one-bus-one-writer)).
 5. **Return a dataclass with a validity flag**, never a bare value and never `None` where `0` is
    meaningful (`hal/iface.py::SensorSnapshot`).
 6. **Do not block the tick.** No `wait_all_done()`, no `speak_block()`, no `sound_play()` on the

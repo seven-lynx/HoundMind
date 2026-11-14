@@ -105,7 +105,7 @@ HoundMind runs a fixed-tick loop. Each tick reads sensors, fuses them into perce
 scanning/navigation/behavior, and finally emits at most one motion command.
 
 - **`RuntimeContext`** — the dict-like object every module reads and writes. Keys are contracts;
-  §4 is the list.
+  [§4](#4-context-keys) is the list.
 - **`Module` lifecycle** — `start(context)`, `tick(context)`, `stop(context)`. A module that cannot
   start calls `self.disable(reason)` and stops; it does not raise unless it was registered
   `required=True`.
@@ -144,7 +144,7 @@ class ExampleModule(Module):
 ```
 
 That skeleton is the whole contract: no `sleep`, no file I/O, no vendor import, and a validity check
-before the value. Registration is manual — §14.
+before the value. Registration is manual — [§14](#14-extending-the-system).
 
 ---
 
@@ -231,9 +231,9 @@ The keys a module may rely on. Anything not here is private and may change.
 | Key | Type |
 |---|---|
 | `hal` | `DogHAL \| None` — the only path to hardware |
-| `sensor_reading` | `SensorReading` (§5) |
+| `sensor_reading` | `SensorReading` ([§5](#5-sensor-data-types)) |
 | `sensors`, `sensor_history`, `sensor_health` | `dict` |
-| `scan_reading` | `ScanReading` (§5) |
+| `scan_reading` | `ScanReading` ([§5](#5-sensor-data-types)) |
 | `scan_latest`, `scan_quality`, `scan_history` | `dict` |
 | `scan_duration_s` | `float` — measured sweep length |
 | `perception` | `dict` — `obstacle`, `touch`, `sound`, `sound_direction`, `distance`, `occupancy`, `occupancy_valid`, `occupancy_frames` |
@@ -311,7 +311,7 @@ the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py
 
 | Key | Type |
 |---|---|
-| `calibration_request`, `calibration_result` | `str`, `dict` (§9) |
+| `calibration_request`, `calibration_result` | `str`, `dict` ([§9](#9-calibration-workflow)) |
 | `localization_confidence` | `float` |
 | `vision_frame`, `vision_frame_jpeg` | array, `bytes` |
 | `face_recognition_command` | `dict` |
@@ -395,12 +395,12 @@ everything you tune lives under `settings`:
 | `safety` | emergency distance, tilt thresholds |
 | `watchdog` | staleness timeouts, `restart_cooldown_s`, `restart_backoff_factor`, `max_restarts` |
 | `balance` | IMU compensation gains |
-| `calibration` | servo offsets, `request`, persistence (§9) |
+| `calibration` | servo offsets, `request`, persistence ([§9](#9-calibration-workflow)) |
 | `logging` | console/file/JSONL, rotation, trace id |
 | `led` | LED priority and colours |
 | `performance` | safe mode, `sensor_poll_hz_max` |
 | `battery`, `quiet_mode` | voltage thresholds, quiet hours |
-| `api` | control plane (`docs/CONTROL_API.md` §2) |
+| `api` | control plane (`docs/CONTROL_API.md` [§2](CONTROL_API.md#2-endpoints)) |
 | `vision_pi4`, `voice_assistant`, `face_recognition`, `semantic_labeler`, `slam_pi4` | Pi4 optional modules |
 
 Validation is strict: an unknown key, a wrong type, or a value outside its documented range is a
@@ -504,7 +504,7 @@ zeros. Saving a trim is not a move; the dog takes the new offsets on its next mo
 
 The vendor's interactive step is `examples/0_calibration.py` in the `pidog` package (keys `1`-`8`
 for the legs, `9`/`0`/`-` for yaw/roll/pitch, `=` for the tail). HoundMind's own step is
-non-interactive — `python -m tools.calibrate_servos` (`docs/TOOLS.md` §12): it prints this table with
+non-interactive — `python -m tools.calibrate_servos` (`docs/TOOLS.md` [§12](TOOLS.md#12-calibrate_servos)): it prints this table with
 the values the dog has loaded, takes `--set joint=deg` and writes only with `--apply`. Both write the
 same vendor file, so use one of them, not both in one session.
 
@@ -583,7 +583,7 @@ which actions the dog picks — motion-adjacent, not a display-only module.
 - `mapping/path_planner.py::astar` is a library helper over a grid, with **no caller in the runtime**:
   the hook and the `path_planning` key were retired because a route needs a position estimate this
   stack does not have (#121). The example below is the whole feature surface. Goal-directed walking
-  is `navigation/place_navigator.py` (`docs/CONTROL_API.md` §8).
+  is `navigation/place_navigator.py` (`docs/CONTROL_API.md` [§8](CONTROL_API.md#8-places)).
 
 ```python
 from houndmind_ai.mapping.path_planner import astar
@@ -630,7 +630,7 @@ To add a module:
    however correct it is.
 4. Add its config section to `kernel/config_schema.py` **and** a commented default to
    `config/settings.jsonc`. An unregistered key is a load error, so this step is not optional.
-5. Document it: `docs/FEATURES_GUIDE.md` (what it does, how to disable) and §4 of this file if it
+5. Document it: `docs/FEATURES_GUIDE.md` (what it does, how to disable) and [§4](FEATURES_GUIDE.md#4-scanning) of this file if it
    publishes a context key.
 6. Test it against `FakeDogHAL`, with no dog attached.
 
@@ -663,7 +663,7 @@ when an optional import fails.
 
 `profile: "pi5"` (or `pi4`) permits the heavy modules; it does not enable them. Each one is still
 `enabled: false` in the shipped config, and each needs its own install step
-(`docs/FEATURES_GUIDE.md` §19–23, and `scripts/install_rtabmap_pi4.md` for RTAB-Map).
+(`docs/FEATURES_GUIDE.md` [§19](FEATURES_GUIDE.md#19-voice-assistant-pi4)–23, and `scripts/install_rtabmap_pi4.md` for RTAB-Map).
 
 The one-line version: if it needs `numpy` and a camera, it is not something to switch on before the
 board has been measured. Nothing in this list has been measured on a Pi 5 yet, which is why `pi5`

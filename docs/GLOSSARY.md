@@ -24,7 +24,7 @@ points at, that file is the one with the bug.
 |---|---|
 | **module** | One runtime component with `start`/`tick`/`stop`, registered in `main.build_registry`. Missing from that list means it never runs. |
 | **tick** | One pass of the loop: read sensors, fuse, decide, emit at most one motion command. `loop.tick_hz` is how many per second. |
-| **context** | The `RuntimeContext` dict every module reads and writes. Its keys are a contract — `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §4. |
+| **context** | The `RuntimeContext` dict every module reads and writes. Its keys are a contract — `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` [§4](HOUNDMIND_PROGRAMMING_GUIDE.md#4-context-keys). |
 | **capability** | A tag a module registers with (`SAFETY`, `MOTION`, `VISION`, …) so the registry can answer "is there anything that does X". |
 | **profile** | The board profile (`pi4`, `pi5`), resolved from the device tree when `profile` is `auto`. |
 | **decision record** | One tick's answer to "what won, what was refused and why" (`kernel/decisions.py`), behind `/decisions`. |

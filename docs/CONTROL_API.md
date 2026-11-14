@@ -2,13 +2,13 @@
 
 Status: **contract** — the web app and the Android app code against this file. Additive changes
 only within `v1`; anything that removes or renames a field requires `v2` and a deprecation window.
-Pairs with: `src/houndmind_ai/services/api.py` (the route table), `docs/FEATURES_GUIDE.md` §25
+Pairs with: `src/houndmind_ai/services/api.py` (the route table), `docs/FEATURES_GUIDE.md` [§25](FEATURES_GUIDE.md#25-wifi-localization--removed)
 
 Base URL: `http://<pi-ip>:8420`. There is **no mDNS** — the dog does not advertise itself, so the
 address is whatever `hostname -I` reports on the device. Everything under `/api/v1` is JSON;
 `GET /` serves the web app that ships inside the package.
 
-The route table in §2 is asserted against the code by `tests/test_api_routes.py`, which parses this
+The route table in [§2](#2-endpoints) is asserted against the code by `tests/test_api_routes.py`, which parses this
 file. A route that exists in code and not here — or here and not in code — fails CI.
 
 ---
@@ -89,26 +89,26 @@ and `config` into browser history and access logs (`#18`).
 |---|---|---|---|
 | `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `scheme`, `device_id`, `board`, `profile`, `uptime_s`, `capabilities` |
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
-| `GET` | `/api/v1/state` | `state:read` | full state snapshot (see §4) |
+| `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
-| `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params (§3) |
-| `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress (§3) |
-| `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress (§8) |
-| `GET` | `/api/v1/people` | `admin` | enrolled people: ids and names only, never an embedding (§9) |
-| `DELETE` | `/api/v1/people/{id}` | `admin` | forget one person: the embedding and every reference face go, not just the name (§9) |
-| `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first (§4); 503 when the feed is not running |
-| `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream (§5) |
+| `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |
+| `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
+| `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress ([§8](#8-places)) |
+| `GET` | `/api/v1/people` | `admin` | enrolled people: ids and names only, never an embedding ([§9](#9-people)) |
+| `DELETE` | `/api/v1/people/{id}` | `admin` | forget one person: the embedding and every reference face go, not just the name ([§9](#9-people)) |
+| `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first ([§4](#4-state-snapshot)); 503 when the feed is not running |
+| `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream ([§5](#5-websocket)) |
 | `GET` | `/api/v1/camera/stream` | `state:read` (`?ticket=`) | MJPEG, multipart/x-mixed-replace |
 | `GET` | `/api/v1/camera/snapshot` | `state:read` (`?ticket=`) | single JPEG |
 | `POST` | `/api/v1/camera/ticket` | `state:read` | mint a single-use camera ticket: `{ticket, expires_in}` |
 | `POST` | `/api/v1/pair` | none | exchange a pairing code for a client token |
 | `POST` | `/api/v1/pair/open` | `admin` | open a pairing window; returns the 6-digit code |
-| `POST` | `/api/v1/command` | `move` | issue a command (§3) |
+| `POST` | `/api/v1/command` | `move` | issue a command ([§3](#3-commands)) |
 | `POST` | `/api/v1/stop` | `move` | unconditional stop; never vetoed, never queued, and it ends a running routine |
-| `POST` | `/api/v1/routines/{id}/run` | `move` | start one routine; optional `{"dry_run": true}` (§3) |
-| `POST` | `/api/v1/places` | `config` | create one place; a refused body is `400` with `problems[]` (§8) |
-| `DELETE` | `/api/v1/places/{id}` | `config` | forget one place by id or name; a second call is `404` (§8) |
-| `POST` | `/api/v1/places/{id}/go` | `move` | ask the dog to walk to one place; optional `{"at_anchor": true}` (§8) |
+| `POST` | `/api/v1/routines/{id}/run` | `move` | start one routine; optional `{"dry_run": true}` ([§3](#3-commands)) |
+| `POST` | `/api/v1/places` | `config` | create one place; a refused body is `400` with `problems[]` ([§8](#8-places)) |
+| `DELETE` | `/api/v1/places/{id}` | `config` | forget one place by id or name; a second call is `404` ([§8](#8-places)) |
+| `POST` | `/api/v1/places/{id}/go` | `move` | ask the dog to walk to one place; optional `{"at_anchor": true}` ([§8](#8-places)) |
 | `GET` | `/api/v1/mode` | `state:read` | current mode |
 | `POST` | `/api/v1/mode` | `move` | switch `idle` \| `patrol` \| `manual` \| `rest` |
 | `GET` | `/api/v1/config` | `config` | effective config, secrets redacted |
@@ -207,7 +207,7 @@ Three rules the table implies, and a client should not have to discover:
    with the action named. `stop` is never vetoed, in any mode, from any class.
 
 A `409` carries the reason, so a client shows `veto` rather than guessing: `veto: "unknown_action"`,
-`"expired"`, `"tilt"`, `"low_voltage"`, `"obstacle"` or `"mode"` (§4 documents the state snapshot
+`"expired"`, `"tilt"`, `"low_voltage"`, `"obstacle"` or `"mode"` ([§4](#4-state-snapshot) documents the state snapshot
 the same refusals appear in).
 
 `GET /api/v1/repertoire` is the honest menu: every action *this* device can run, so a client renders
@@ -248,7 +248,7 @@ is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus `camera`, `p
 ### Routines
 
 A routine is a JSON file of steps the runner loaded at boot — one file per routine, from
-`settings.routines.dir` (`FEATURES_GUIDE.md` §7). These routes expose what the dog **loaded**, not
+`settings.routines.dir` (`FEATURES_GUIDE.md` [§7](FEATURES_GUIDE.md#7-behavior)). These routes expose what the dog **loaded**, not
 what is on disk right now: a file added since boot appears after a restart, and a file the validator
 refused is listed with the reason instead of being hidden.
 
@@ -353,14 +353,14 @@ same stream, never to wall time. Device identity and version live in `GET /meta`
 the mode policy dropped or a higher rank displaced; `inputs` carries the readings the decision used,
 **with their validity flags**. It is `null` until the gateway's first tick. `confidence` is `null` —
 never `0.0` — when nothing measured it. A client that diffs on `ts` sees one new record per tick; the
-WS `decision` event (§5) fires only when the *choice* changes, so treat the two as different
+WS `decision` event ([§5](#5-websocket)) fires only when the *choice* changes, so treat the two as different
 cadences over the same object.
 
 `routines` is the run the runner is playing — the **same object** `GET /api/v1/routines` returns as
 `current` — or `null` before the first run and after a restart. `state` is `running`, `done`,
 `stopped` or `refused`; a refused run keeps the `veto` and `detail` that ended it, so a client shows
 "stopped at step 2: obstacle" instead of an unexplained halt. It is rewritten every tick while the run
-is live, whereas the WS `routine` event (§5) fires only when the run *moves*: a new step, a new state,
+is live, whereas the WS `routine` event ([§5](#5-websocket)) fires only when the run *moves*: a new step, a new state,
 or a new veto. `started_at` is epoch seconds from the device's wall clock, not the monotonic `ts` —
 it is a timestamp to display, not one to compare against this stream.
 
@@ -429,7 +429,7 @@ Server frames:
 | `type` | Payload | When |
 |---|---|---|
 | `welcome` | `data`: `scopes`, `device`, `session` | once, after a successful `hello` |
-| `state` | `data`: the §4 snapshot | `api.state_hz` (default 10 Hz) |
+| `state` | `data`: the [§4](#4-state-snapshot) snapshot | `api.state_hz` (default 10 Hz) |
 | `event` | `data`: `{ "name", "data", "ts" }` | on transition |
 | `pong` | `ts` | in reply to a client `ping` |
 | `error` | `error` (code), `detail` (optional) | on a rejected message, or `superseded` |
@@ -439,10 +439,10 @@ Client frames: `{"type": "hello", "token": "..."}` then `{"type": "ping"}`. Anyt
 
 The only event names the server publishes today are `mode_changed`, `command_accepted`,
 `command_vetoed`, `command_expired`, `pairing_window_open`, `decision` and `routine`. The last two
-carry the §4 `decision` and `routines` blocks and are sent only when the object changes — a new
+carry the [§4](#4-state-snapshot) `decision` and `routines` blocks and are sent only when the object changes — a new
 winner, a new refusal, a new mode or state for the decision; a new step, a new state or a new veto for
 a routine — never on every tick, because this channel is never dropped and a client that falls behind
-it is disconnected. A command's *outcome* is the synchronous reply to `POST /command` (§3) — there is
+it is disconnected. A command's *outcome* is the synchronous reply to `POST /command` ([§3](#3-commands)) — there is
 no separate `command_ack` frame; the events are the broadcast, not the acknowledgement. Clients must
 tolerate an unknown `name` and ignore it.
 
@@ -491,7 +491,7 @@ display verbatim — it must never contain a path, a token, or a stack trace.
   the point of the change (`#18`), so it is not kept behind a flag.
 - Enum values are additive: a client must handle an unknown `mode` or module `state` by displaying it
   read-only rather than crashing.
-- `docs/CONTROL_API.md` is the source of truth. `tests/test_api_routes.py` parses §2 and compares it
+- `docs/CONTROL_API.md` is the source of truth. `tests/test_api_routes.py` parses [§2](#2-endpoints) and compares it
   to the route table in `services/api.py`, so a route that exists in one and not the other fails CI.
   Change both, in the same commit.
 
@@ -509,7 +509,7 @@ other route takes. Nothing infers a place from a scan, and `DELETE` is the only 
 | `DELETE /api/v1/places/{id}` | none — the path segment may be an id **or** a name | `200 {"removed": {...}}` · `404` + `suggestion` · `503` |
 | `POST /api/v1/places/{id}/go` | `{"at_anchor": true}` — optional, see below | `202 {"accepted", "id", "name", "at_anchor"}` · `404` · `409` · `503` |
 
-`400` bodies carry `problems[]` in the `{path, message, hint}` shape §2's config validator already
+`400` bodies carry `problems[]` in the `{path, message, hint}` shape [§2](#2-endpoints)'s config validator already
 uses, so a client shows them without translating: a duplicate name, a heading the format does not
 allow, a name with no characters usable in an id (`"///"` slugs to `""`), or the catalogue limit.
 
@@ -601,7 +601,7 @@ That sentence also promises the thumbnail is removed; nothing in this build gene
 exists and what is tested is the embedding and the reference images — thumbnails would be a separate
 feature, not a claim this route can honour today.
 
-**Enrolment is not a route.** It is still a runtime command (§20 of `docs/FEATURES_GUIDE.md`), so a
+**Enrolment is not a route.** It is still a runtime command ([§20](FEATURES_GUIDE.md#20-face-recognition-pi4) of `docs/FEATURES_GUIDE.md`), so a
 client cannot add a person yet; this route is what a client reads after someone has
 ([#103](https://github.com/seven-lynx/HoundMind/issues/103)).
 

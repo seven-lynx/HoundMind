@@ -6,14 +6,14 @@ Pairs with: `docs/INSTALL.md` (the long version, and every failure path), `docs/
 (the full six-step bench ladder this page abbreviates), `docs/LOGGING.md` (when something fails)
 
 Everything here is read-only: **no command on this page moves the dog.** The first motion run is
-`docs/HARDWARE_TEST.md` §9, and it is deliberately not on this page.
+`docs/HARDWARE_TEST.md` [§9](HARDWARE_TEST.md#9-step-6--motion-and-only-motion), and it is deliberately not on this page.
 
 ## Contents
 
 1. [What you need](#1-what-you-need)
 2. [The six commands](#2-the-six-commands)
 3. [What a pass looks like](#3-what-a-pass-looks-like)
-4. [Three things that will bite you](#4-three-things-that-will-bite-you)
+4. [One thing that will bite you](#4-one-thing-that-will-bite-you)
 5. [Where to go next](#5-where-to-go-next)
 
 ---
@@ -82,9 +82,9 @@ the servo bus closes. Do not kill a moving dog with `kill -9`.
 | Next step | Read |
 |---|---|
 | Move the dog for the first time, safely and in order | [`HARDWARE_TEST.md`](HARDWARE_TEST.md) |
-| Know what each feature does, and how to turn it off | [`FEATURES_GUIDE.md`](FEATURES_GUIDE.md) — start at §29 |
-| Open the web app, pair a phone | [`CONTROL_API.md`](CONTROL_API.md) §1 |
+| Know what each feature does, and how to turn it off | [`FEATURES_GUIDE.md`](FEATURES_GUIDE.md) — start at [§29](FEATURES_GUIDE.md#29-how-to-disable-any-feature) |
+| Open the web app, pair a phone | [`CONTROL_API.md`](CONTROL_API.md) [§1](CONTROL_API.md#1-authentication) |
 | Teach the dog a routine | [`ROUTINES.md`](ROUTINES.md) |
-| Write a module | [`HOUNDMIND_PROGRAMMING_GUIDE.md`](HOUNDMIND_PROGRAMMING_GUIDE.md) §2, §14 |
+| Write a module | [`HOUNDMIND_PROGRAMMING_GUIDE.md`](HOUNDMIND_PROGRAMMING_GUIDE.md) [§2](HOUNDMIND_PROGRAMMING_GUIDE.md#2-runtime-model), [§14](HOUNDMIND_PROGRAMMING_GUIDE.md#14-extending-the-system) |
 | Something is broken | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) |
 | A term you do not recognise | [`GLOSSARY.md`](GLOSSARY.md) |

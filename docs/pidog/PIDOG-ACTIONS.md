@@ -3,10 +3,10 @@
 Status: **reference** — the built-in action catalogue and the `ActionFlow` runner. This is the
 layer most example scripts actually use.
 Verified against: `sunfounder/pidog@cee4bff`
-Pairs with: `PIDOG-MOTION.md` §4 (what a frame is), `PIDOG-EXPRESSION.md` (sound the actions use)
+Pairs with: `PIDOG-MOTION.md` [§4](PIDOG-MOTION.md#4-moving-a-part) (what a frame is), `PIDOG-EXPRESSION.md` (sound the actions use)
 
-Sections: §1 three kinds of "action" · §2 `Pidog.do_action` · §3 the catalogue ·
-§4 `ActionFlow` · §5 writing your own routine · §6 hazards
+Sections: [§1](#1-three-things-are-called-an-action) three kinds of "action" · [§2](#2-pidogdo_action-and-actiondict) `Pidog.do_action` · [§3](#3-the-catalogue) the catalogue ·
+[§4](#4-actionflow--the-background-runner) `ActionFlow` · [§5](#5-writing-your-own-routine) writing your own routine · [§6](#6-hazards) hazards
 
 ---
 
@@ -119,7 +119,7 @@ left at 1.
 | `doze_off` | 200 | front legs settle in a loop, hind legs follow (4 frames per step) |
 
 Everything else that looks like a trick — handshake, high five, howling, scratch — is **not** an
-action name. It is a function in `preset_actions.py` driven by `ActionFlow` (§4).
+action name. It is a function in `preset_actions.py` driven by `ActionFlow` ([§4](#4-actionflow--the-background-runner)).
 
 ---
 
@@ -145,7 +145,7 @@ dog.close()
 
 | State | Behaviour |
 |---|---|
-| `STANDBY` | every 2–6 s runs a random idle action (§4.4) |
+| `STANDBY` | every 2–6 s runs a random idle action ([§4.4](#44-the-idle-animation-is-motion)) |
 | `THINK` | does nothing at all, on purpose — a pause between behaviours |
 | `ACTIONS` | drains the queue, one action at a time, 0.5 s apart |
 | `ACTIONS_DONE` | defined and never used |
@@ -273,10 +273,10 @@ callable by string.
 
 | Need | Use |
 |---|---|
-| Repeatable motion you can reason about | direct buffers (§5.1) |
-| Sound, head and legs choreographed together | a preset-style function (§5.2) |
-| A queue of named behaviours with postures | `ActionFlow` (§4) |
-| Anything the runtime should supervise | `hal/vendor.py`, not a script — `PATTERNS.md` §7 |
+| Repeatable motion you can reason about | direct buffers ([§5.1](#51-frames-in-frames-out-precise-silent)) |
+| Sound, head and legs choreographed together | a preset-style function ([§5.2](#52-a-function-that-owns-the-dog-for-a-moment-expressive)) |
+| A queue of named behaviours with postures | `ActionFlow` ([§4](#4-actionflow--the-background-runner)) |
+| Anything the runtime should supervise | `hal/vendor.py`, not a script — `PATTERNS.md` [§7](PATTERNS.md#7-porting-vendor-code-into-the-hal) |
 
 ---
 
@@ -290,7 +290,7 @@ callable by string.
    nothing — it does not clear a buffer or halt motion. To stop, call `dog.body_stop()`.
 4. **Names are not interchangeable.** `'wag_tail'` (Pidog) vs `'wag tail'` (ActionFlow). A wrong
    spelling is silently ignored by both.
-5. **Idle motion.** A started flow animates the dog every few seconds (§4.4).
+5. **Idle motion.** A started flow animates the dog every few seconds ([§4.4](#44-the-idle-animation-is-motion)).
 6. **Errors are swallowed and printed.** `run()` wraps everything in `try/except Exception` and
    prints `action error: …` — your code cannot see the failure, only the console can.
 

@@ -5,8 +5,8 @@ layer under `pidog`; understanding it is what turns "call the action name" into 
 Verified against: `sunfounder/robot-hat@4556bd8` (branch `2.5.x`)
 Pairs with: `HARDWARE.md` (pin map), `PIDOG-MOTION.md` (the layer above)
 
-Sections: §1 imports · §2 `Pin` · §3 `ADC` · §4 `PWM` · §5 `Servo` and `Robot` ·
-§6 `I2C` · §7 motors · §8 `device` · §9 audio · §10 storage and utils · §11 quirks
+Sections: [§1](#1-imports-and-what-gates-them) imports · [§2](#2-pin--gpio) `Pin` · [§3](#3-adc--analogue-input) `ADC` · [§4](#4-pwm--and-the-shared-timer-rule) `PWM` · [§5](#5-servo-and-how-robot-turns-a-number-into-motion) `Servo` and `Robot` ·
+[§6](#6-i2c--and-why-a-failed-read-is-not-an-exception) `I2C` · [§7](#7-motors-the-hats-wheel-driver-not-the-legs) motors · [§8](#8-device--what-the-hat-itself-can-do) `device` · [§9](#9-audio-music-speaker-tts) audio · [§10](#10-storage-and-small-utilities) storage and utils · [§11](#11-layer-quirks-worth-memorising) quirks
 
 ---
 
@@ -223,7 +223,7 @@ Robot(pin_list, db=config_file, name=None, init_angles=None, init_order=None)
 | Argument | Purpose |
 |---|---|
 | `pin_list` | PWM channels, in the order the angle lists will use |
-| `db` | calibration file (see `HARDWARE.md` §6) |
+| `db` | calibration file (see `HARDWARE.md` [§6](HARDWARE.md#6-what-lives-on-disk)) |
 | `name` | prefix of the offset key: `legs_servo_offset_list` |
 | `init_angles` | starting angles, one per pin; must match the count or `ValueError` |
 | `init_order` | order to move them in on startup, with 0.15 s between |
@@ -323,7 +323,7 @@ if raw is False or any(b is False for b in raw):
 ```
 
 This is the single most important correctness rule in the layer, and it is why HoundMind's
-`SensorSnapshot` carries validity flags next to every value (`PATTERNS.md` §4).
+`SensorSnapshot` carries validity flags next to every value (`PATTERNS.md` [§4](PATTERNS.md#4-sensor-validity)).
 
 ### 6.2 One bus, one writer
 
@@ -331,7 +331,7 @@ Each `Servo`, `PWM`, `ADC`, `Sh3001` and `RGBStrip` constructs its own `SMBus(1)
 `robot_hat` serialises them. Two threads writing at once interleave their transactions, and the
 retry wrapper turns the resulting `OSError` into silence. If your program has more than one
 thread touching hardware, take a lock around every call that reaches a device
-(`PATTERNS.md` §2).
+(`PATTERNS.md` [§2](PATTERNS.md#2-concurrency)).
 
 ---
 
@@ -377,8 +377,8 @@ from robot_hat import device
 | `enable_speaker()` / `disable_speaker()` | drives the revision's speaker-enable pin, then plays 0.5 s of silence to charge the amp |
 | `set_pin(pin, value)` | drives a GPIO through the `pinctrl`/`raspi-gpio` command line |
 | `get_usr_btn()` | `True` while the HAT button is held (`Pin('USER') == 0`) |
-| `set_led(state)` / `get_led()` | HAT user LED — **`set_led` does not work in 2.5.x**, see §11.2 |
-| `Devices()` | the revision detector described in `HARDWARE.md` §7.1 |
+| `set_led(state)` / `get_led()` | HAT user LED — **`set_led` does not work in 2.5.x**, see [§11.2](#112-deviceset_led-is-a-no-op) |
+| `Devices()` | the revision detector described in `HARDWARE.md` [§7.1](HARDWARE.md#71-revision-detection) |
 
 `reset_mcu()` is the recovery move for a wedged MCU: if every PWM write starts raising `OSError`
 or the servos stop responding, that line is what revives the board without a power cycle.
@@ -397,7 +397,7 @@ led.blink_loop(times=1, delay=0.1, pause=0); led.blink_stop(); led.close()
 ```
 
 This is the *HAT's* single LED — the dog's chest board is `RGBStrip`
-(`PIDOG-EXPRESSION.md` §1), a different device on a different bus.
+(`PIDOG-EXPRESSION.md` [§1](PIDOG-EXPRESSION.md#1-the-led-board)), a different device on a different bus.
 
 ### 8.2 `UserButton`
 
@@ -463,7 +463,7 @@ tts = Espeak()
 Each class is a thin wrapper over `sunfounder_voice_assistant.tts` that enables the speaker in
 its constructor. The package is optional; `pip install sunfounder-voice-assistant` is its own
 install, and the engines behind it (`espeak`, `pico2wave`, piper models, API keys) are separate
-again. HoundMind does not depend on this path — `Pidog.speak()` (`PIDOG-EXPRESSION.md` §2.2) is
+again. HoundMind does not depend on this path — `Pidog.speak()` (`PIDOG-EXPRESSION.md` [§2.2](PIDOG-EXPRESSION.md#22-the-effects-that-ship)) is
 the vendor's own sound-file player, and `optional/voice.py` is HoundMind's own stack.
 
 ---
@@ -523,7 +523,7 @@ warnings.filterwarnings("ignore")   # pidog/pidog.py, module scope
 
 That is a process-wide side effect: **your** warnings disappear too as soon as you
 `import pidog`. If you need warnings during debugging, re-arm them after the import
-(`PATTERNS.md` §5).
+(`PATTERNS.md` [§5](PATTERNS.md#5-quirk-index)).
 
 ### 11.2 `device.set_led()` is a no-op
 
@@ -549,7 +549,7 @@ not build on the argument.
 
 `Robot.move_list = {}` by default and nothing populates it. Calling `robot.do_action('x')`
 raises `KeyError`. The dog's named actions come from `Pidog.do_action`
-(`PIDOG-ACTIONS.md` §2), a completely different method that reads `ActionDict`.
+(`PIDOG-ACTIONS.md` [§2](PIDOG-ACTIONS.md#2-pidogdo_action-and-actiondict)), a completely different method that reads `ActionDict`.
 
 ### 11.6 Everything is untyped
 

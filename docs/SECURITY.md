@@ -1,7 +1,7 @@
 # Security and Exposure
 
 Status: **runbook** — what the device exposes, what protects it, and what to do before it leaves a lab.
-Pairs with: `docs/CONTROL_API.md` §1 (the auth contract), `docs/INSTALL.md` §TLS, `docs/LOGGING.md`
+Pairs with: `docs/CONTROL_API.md` [§1](CONTROL_API.md#1-authentication) (the auth contract), `docs/INSTALL.md` §TLS, `docs/LOGGING.md`
 (what a support bundle may contain)
 
 HoundMind listens on **one port** and holds **one secret**. Everything below is about those two facts
@@ -30,7 +30,7 @@ and the places they leak.
 - `settings.api.host` ships as `0.0.0.0`: the device is reachable from the LAN *by design*, and the
   token is the boundary. There is no cloud relay and no remote access from outside the LAN.
 - Video is the one place a credential travels in a URL, and it is a single-use 60-second ticket rather
-  than the device token (§6).
+  than the device token ([§6](#6-camera-tickets)).
 
 ## 2. The device token
 
@@ -51,7 +51,7 @@ and the places they leak.
 | `GET /api/v1/health` | Liveness only: `{"status":"ok"}`. No detail to leak. |
 | `POST /api/v1/pair` | The exchange that *produces* a token; protected by the pairing code instead. |
 | `GET /api/v1/events` | The WebSocket authenticates in its own first `hello` frame. |
-| `GET /api/v1/camera/stream`, `/camera/snapshot` | An `<img>` tag cannot send a header. Protected by a ticket (§6). |
+| `GET /api/v1/camera/stream`, `/camera/snapshot` | An `<img>` tag cannot send a header. Protected by a ticket ([§6](#6-camera-tickets)). |
 
 Everything else needs a token, and `tests/test_api_routes.py` fails if a new route ships without a
 scope. A new listener is not covered by any of this — it needs its own auth story before it merges.
@@ -65,7 +65,7 @@ scope. A new listener is not covered by any of this — it needs its own auth st
 | `config` | read config, patch the four live keys, read calibration, write places | an admin client |
 | `admin` | logs, support bundle, pairing window, people roster and forget | the owner's device token |
 
-Scope is declared per route in `ROUTES`, so the table in `docs/CONTROL_API.md` §2 and the code cannot
+Scope is declared per route in `ROUTES`, so the table in `docs/CONTROL_API.md` [§2](CONTROL_API.md#2-endpoints) and the code cannot
 drift apart without a test failing.
 
 ## 5. Pairing
@@ -100,7 +100,7 @@ trust that file or pin it — there is no CA behind it and no domain name.
 
 | Where | What | Rule |
 |---|---|---|
-| `~/.houndmind/face/` | face embeddings and reference images | biometric. Copy none of it off the device; delete it if the dog changes hands (`docs/FEATURES_GUIDE.md` §20). |
+| `~/.houndmind/face/` | face embeddings and reference images | biometric. Copy none of it off the device; delete it if the dog changes hands (`docs/FEATURES_GUIDE.md` [§20](FEATURES_GUIDE.md#20-face-recognition-pi4)). |
 | `~/.houndmind/places.json`, `routines/` | room names, household routines | personal. No bundle includes them, but event logs can name them. |
 | `config/settings.jsonc` | WiFi credentials | never commit it with a real passphrase; never paste it into an issue. |
 | `logs/` | whatever the runtime printed | review before sharing; strip anything identifying. |

@@ -272,7 +272,7 @@ python -m houndmind_ai
 ## TLS for the control plane (optional)
 
 The control plane serves **plaintext HTTP** by default: the device token, every command and every
-camera frame cross the LAN in the clear (`docs/CONTROL_API.md` §1 names what that exposes and the
+camera frame cross the LAN in the clear (`docs/CONTROL_API.md` [§1](CONTROL_API.md#1-authentication) names what that exposes and the
 workarounds). Turning TLS on is one setting:
 
 ```jsonc

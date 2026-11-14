@@ -3,10 +3,10 @@
 Status: **reference** — the four sensors, what a bad read looks like, and how much each read
 costs. Every value here is a vendor return, not a HoundMind abstraction.
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
-Pairs with: `PIDOG-MOTION.md` §8 (attribute list), `PATTERNS.md` §4 (validity discipline)
+Pairs with: `PIDOG-MOTION.md` [§8](PIDOG-MOTION.md#8-sensor-attributes-on-the-dog-object) (attribute list), `PATTERNS.md` [§4](PATTERNS.md#4-sensor-validity) (validity discipline)
 
-Sections: §1 ultrasonic · §2 dual touch · §3 sound direction · §4 IMU · §5 timing and cost ·
-§6 validity rules
+Sections: [§1](#1-ultrasonic-ranging) ultrasonic · [§2](#2-dual-touch) dual touch · [§3](#3-sound-direction) sound direction · [§4](#4-the-imu-sh3001) IMU · [§5](#5-what-a-read-costs) timing and cost ·
+[§6](#6-validity-rules) validity rules
 
 ---
 
@@ -88,7 +88,7 @@ Both pins are inputs with pull-ups and read active-low.
 A 200 ms poll will miss a light tap; the pads are only debounced by the polling interval, there is
 no interrupt path.
 
-`dog.touch` exists but is never updated — read `dog.dual_touch.read()` (`PIDOG-MOTION.md` §8).
+`dog.touch` exists but is never updated — read `dog.dual_touch.read()` (`PIDOG-MOTION.md` [§8](PIDOG-MOTION.md#8-sensor-attributes-on-the-dog-object)).
 
 ---
 
@@ -130,7 +130,7 @@ if dog.ears.isdetected():
 ## 4. The IMU (SH3001)
 
 I2C address `0x36`, six axes, configured at ±2 g and ±2000 °/s by `sh3001_init`. Two independent
-calibrations exist and they are easy to confuse (§4.5).
+calibrations exist and they are easy to confuse ([§4.5](#45-two-calibration-systems--know-which-one-you-are-writing)).
 
 ### 4.1 Raw values
 

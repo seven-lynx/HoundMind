@@ -1,8 +1,8 @@
 # Logging Runbook
 
 Status: **runbook** — what to do once something has already gone wrong.
-Pairs with: `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §10 (where logs come from),
-`docs/CONTROL_API.md` §2 (`/logs`, `/support-bundle`)
+Pairs with: `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` [§10](HOUNDMIND_PROGRAMMING_GUIDE.md#10-logging-and-diagnostics) (where logs come from),
+`docs/CONTROL_API.md` [§2](CONTROL_API.md#2-endpoints) (`/logs`, `/support-bundle`)
 
 How to collect logs, the commands that answer the usual questions, and `jq` recipes for the JSON
 lines HoundMind writes. Start at **Paths** if you only need to find a file.
@@ -98,7 +98,7 @@ process logged.
 - `config/settings.jsonc` — the runtime config as it was
 
 **Over the network** — `GET /api/v1/support-bundle`, `admin` scope. The route table is
-`src/houndmind_ai/services/api.py::ROUTES` and `docs/CONTROL_API.md` §2 lists the scopes. No log
+`src/houndmind_ai/services/api.py::ROUTES` and `docs/CONTROL_API.md` [§2](CONTROL_API.md#2-endpoints) lists the scopes. No log
 files; this is the one to ask a user for when you cannot reach the device yourself.
 
 - `meta.json`, `state.json`, `modules.json` — identity, the live snapshot, module status

@@ -5,7 +5,7 @@ this page is the index of names.
 Verified against: `sunfounder/pidog@cee4bff`, `sunfounder/robot-hat@4556bd8` (2.5.x)
 Pairs with: `INDEX.md` (task router)
 
-Sections: §1 provenance · §2 `robot_hat` · §3 `pidog` · §4 refreshing this set
+Sections: [§1](#1-provenance-and-licence) provenance · [§2](#2-robot_hat) `robot_hat` · [§3](#3-pidog) `pidog` · [§4](#4-refreshing-this-set) refreshing this set
 
 ---
 
