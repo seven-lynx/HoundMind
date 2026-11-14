@@ -444,6 +444,12 @@ Server frames:
 Client frames: `{"type": "hello", "token": "..."}` then `{"type": "ping"}`. Anything else is an
 `error` with code `bad_request`.
 
+Every frame comes from one place. The hub's own pump runs on the aiohttp loop and calls
+`publish_event` (`services/stream.py`) when something it watches has changed: a module that has
+something to say writes it into the context, and the pump is what turns that into a frame. There
+is no second, thread-agnostic entry point to choose between, so a producer never has to reason
+about which thread it is on.
+
 The only event names the server publishes today are `mode_changed`, `command_accepted`,
 `command_vetoed`, `command_expired`, `pairing_window_open`, `decision` and `routine`. The last two
 carry the [§4](#4-state-snapshot) `decision` and `routines` blocks and are sent only when the object changes — a new

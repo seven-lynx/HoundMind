@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The unused `publish_event_threadsafe` is gone** (#53): `services/stream.py` grew a second
+  publish entry point for "another thread (the decision loop)" and never called it - a search of
+  `src/`, `tests/` and `docs/` found the definition and nothing else. Left in place it documented
+  an intent the code does not have, and read as the safe choice for a module `tick`, which runs on
+  the decision thread and would have interleaved with the pump's own writes. The pump is now the
+  one stated publish path (`docs/CONTROL_API.md` §5), the dead `_loop` attribute went with it, and
+  the `decision` event of #44 already ships that way.
 - **An injected `IntentBoard` is no longer replaced** (#58): `act/gateway.py` chose its board with
   `board or IntentBoard(...)`, and `IntentBoard` defines `__len__` - so a caller that passed a
   freshly built, still-empty board had it silently discarded and went on publishing into one

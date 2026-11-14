@@ -98,13 +98,11 @@ class EventHub:
         self._subs: set[_Subscriber] = set()
         self._tasks: set[asyncio.Task[None]] = set()
         self._pump: asyncio.Task[None] | None = None
-        self._loop: asyncio.AbstractEventLoop | None = None
         self._quiet: set[str] = set()
 
     # ---- lifecycle ---------------------------------------------------------
 
     async def start(self) -> None:
-        self._loop = asyncio.get_running_loop()
         if self._pump is None:
             self._pump = asyncio.create_task(self._pump_states(), name="houndmind-state-pump")
 
@@ -160,21 +158,22 @@ class EventHub:
             await asyncio.sleep(interval)
 
     def publish_event(self, name: str, data: dict[str, object] | None = None) -> None:
-        """Queue an event for every subscriber. Safe to call from the event loop."""
+        """Queue an event for every subscriber. Safe to call from the event loop only.
+
+        One publish path on purpose (#53). Every event this control plane sends is raised here, by
+        the state pump, which runs on the aiohttp loop: a module that has something to say writes
+        it into the context and the pump broadcasts the change. There was a second, threadsafe
+        entry point once; it never had a caller, and an unused helper labelled "threadsafe" reads
+        as the safe choice for a decision-loop producer. A producer that needs a frame puts a
+        value in the context and lets the pump see it.
+
+        """
         frame: dict[str, object] = {
             "type": "event",
             "data": {"name": name, "data": data or {}, "ts": self._clock()},
         }
         for sub in list(self._subs):
             self._offer(sub, frame)
-
-    def publish_event_threadsafe(self, name: str, data: dict[str, object] | None = None) -> None:
-        """Queue an event from another thread (the decision loop)."""
-        loop = self._loop
-        if loop is None or loop.is_closed():
-            return
-        with contextlib.suppress(RuntimeError):
-            loop.call_soon_threadsafe(self.publish_event, name, data)
 
     def _offer(self, sub: _Subscriber, frame: dict[str, object]) -> None:
         try:
