@@ -234,7 +234,9 @@ The following fixes are planned and prioritized. Each item should be implemented
 - [x] Session summary report
 
 ### Pi 3 — Priority (lightweight, Pi3-friendly) — **superseded, see the note at the top**
-- [x] Lightweight local planner: use `mapping.safe_paths` and `mapping.best_path` as short-range planning hints for navigation (no global A*). 
+- [x] Short-range steering from `mapping.safe_paths` / `mapping.best_path`, as the mapping bias in
+  `obstacle_avoidance._apply_mapping_bias` (no global A*). The standalone `local_planner` module that
+  was meant to carry this was retired: it was unread, and the bias already did the work (#122). 
 - [x] Minimal sensor-fusion localization: anchor-based pose hints using IMU + distance samples (keep CPU/lightweight).
 - [x] Tilt/pose warning: simple dynamic that logs IMU tilt and sets `safety_action` when thresholds exceeded (no continuous correction).
 - [x] Robust voice fallback: ensure voice subsystem disables gracefully when mic/audio unavailable and logs reason.

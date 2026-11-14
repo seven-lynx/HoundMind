@@ -100,9 +100,11 @@ def _places_settings(context) -> Mapping[str, Any]:
 def heading_error(target_deg: float, current_deg: float) -> float:
     """The shortest signed turn from `current_deg` to `target_deg`, in [-180, 180).
 
-    Positive reads as "turn right" because that is the convention the tree already uses
-    (`navigation/local_planner.py:63-67` reads a positive yaw the same way). Which way a positive
-    gyro yaw actually turns a PiDog is a device question, and PL7 answers it.
+    Positive reads as "turn right" because that is the convention the rest of the tree uses: the
+    mapper records a scan yaw with 0 = forward and positive = left (`mapping/mapper.py:175-181`), and
+    `obstacle_avoidance._apply_mapping_bias` turns right on a positive yaw for the same reason
+    (`navigation/obstacle_avoidance.py:633`). Which way a positive gyro yaw actually turns a PiDog is
+    a device question, and PL7 answers it.
     """
     return (target_deg - current_deg + 180.0) % 360.0 - 180.0
 

@@ -179,7 +179,7 @@ What to expect from each package, and what to watch when it misbehaves.
 - `navigation/obstacle_avoidance.py` — turn choice, no-go memory, stuck recovery. Tune
   `navigation.turn_cooldown_s` to stop oscillation.
 - `navigation/orientation.py` — gyro-Z heading integration into `current_heading`.
-- `navigation/local_planner.py` — `local_plan`, `mapping_recommendation`.
+- `navigation/place_navigator.py` — walks to a taught place (one `Source.PLACE` intent per cycle).
 - `mapping/mapper.py` — openings, safe paths, optional home-map snapshots.
 - `behavior/` — FSM, action library, registry, attention and habituation. Actions come from
   `config/actions.jsonc`.
