@@ -17,6 +17,10 @@ This is the reference point every later phase is measured against. Do not edit i
 | Tooling | throwaway `.venv-dev` (gitignored): `pytest 9.2.0`, `ruff 0.17.4`, `mypy`, `json5` |
 | CI interpreter | **3.11** (`.github/workflows/ci.yml:15`) |
 
+Line numbers above point at commit `20f79a0`; `.github/workflows/ci.yml` has gained a
+`concurrency:` block since, so open the pinned commit rather than the current tree for those
+two citations.
+
 **Caveat that applies to every number below:** the package declares
 `requires-python = ">=3.10,<3.12"`, so Python 3.14 is outside its own supported range. The
 results are therefore *tooling evidence*, not *compatibility evidence*. Nothing here was
