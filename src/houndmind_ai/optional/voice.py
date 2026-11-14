@@ -31,8 +31,9 @@ class VoiceModule(Module):
     - stt.enabled: bool
     - stt.backend: auto|vosk|speech_recognition
     - stt.vosk_model_path: path to VOSK model directory (optional)
-    - tts.enabled: bool
-    - tts.backend: auto|pyttsx3|pidog
+    - tts.enabled: bool (false = never speak)
+    - tts.backend: auto|pyttsx3|pidog, where `auto` tries pidog first and then pyttsx3
+      while a named backend disables the other path
     """
 
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
@@ -168,36 +169,50 @@ class VoiceModule(Module):
                 else:
                     resp = None
                 if isinstance(resp, str) and resp.strip():
-                    self._speak(resp)
+                    self._speak(resp, context)
                 else:
                     # default fallback: echo
-                    self._speak(f"I heard: {text}")
+                    self._speak(f"I heard: {text}", context)
         except Exception:
             logger.exception("Failed handling utterance")
 
-    def _speak(self, text: str) -> None:
-        # Try pidog speak first
-        try:
-            if self._pidog is not None and hasattr(self._pidog, "speak"):
-                try:
-                    self._pidog.speak(text)
-                    return
-                except Exception:
-                    logger.exception("pidog.speak failed")
-        except Exception:
-            logger.exception("pidog TTS check failed")
+    def _speak(self, text: str, context) -> None:
+        """Speak `text` with the engine `settings.voice_assistant.tts` selects.
 
-        # Try pyttsx3
-        try:
-            if self._tts_engine is None:
-                import pyttsx3
-
-                self._tts_engine = pyttsx3.init()
-            self._tts_engine.say(text)
-            self._tts_engine.runAndWait()
+        `enabled: false` is a no-op. `backend: auto` keeps the historical order - the vendor
+        voice first, pyttsx3 second - while a named backend disables the other path, so a
+        missing PiDog speaker cannot turn into an unexpected local voice.
+        """
+        settings = (context.get("settings") or {}).get("voice_assistant", {})
+        tts_cfg = settings.get("tts", {}) or {}
+        if not tts_cfg.get("enabled", True):
+            logger.debug("TTS disabled by settings; dropping utterance")
             return
-        except Exception:
-            logger.exception("pyttsx3 TTS failed")
+
+        backend = tts_cfg.get("backend", "auto")
+
+        if backend in ("auto", "pidog"):
+            try:
+                if self._pidog is not None and hasattr(self._pidog, "speak"):
+                    try:
+                        self._pidog.speak(text)
+                        return
+                    except Exception:
+                        logger.exception("pidog.speak failed")
+            except Exception:
+                logger.exception("pidog TTS check failed")
+
+        if backend in ("auto", "pyttsx3"):
+            try:
+                if self._tts_engine is None:
+                    import pyttsx3
+
+                    self._tts_engine = pyttsx3.init()
+                self._tts_engine.say(text)
+                self._tts_engine.runAndWait()
+                return
+            except Exception:
+                logger.exception("pyttsx3 TTS failed")
 
         logger.info("TTS not available to speak: %s", text)
 

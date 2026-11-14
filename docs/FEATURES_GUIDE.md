@@ -631,6 +631,13 @@ crash the runtime.
 - Provide `voice_text` or `voice_command` in runtime context.
 - The module maps phrases to actions using `settings.voice_assistant.command_map`.
 
+**Speech output.** The TTS table is honoured, not decorative: `settings.voice_assistant.tts.enabled`
+(ships `false`) is the switch - while it is off the module maps commands and answers questions
+silently. `settings.voice_assistant.tts.backend` picks the voice: `auto` tries the PiDog speaker
+first and falls back to `pyttsx3`, `pidog` uses only the vendor voice, and `pyttsx3` uses only the
+local engine. A named backend never borrows the other one, so a missing vendor speaker is a dropped
+answer rather than an unexpected voice. A config with no `tts` table keeps the `auto` order.
+
 **Enable:**
 - `modules.voice.enabled = true`
 - `settings.voice_assistant.enabled = true`
