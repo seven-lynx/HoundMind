@@ -68,7 +68,7 @@ the servo bus closes. Do not kill a moving dog with `kill -9`.
 | 5 | `Board pi4 (…), profile pi4` and one log line per module as it starts |
 | 6 | JSON with `"tick"`, `"modules"`, and `distance_valid` / `imu_valid` flags |
 
-## 4. Two things that will bite you
+## 4. One thing that will bite you
 
 1. **The first distance reading can be `None` on a healthy dog.** The vendor caches the ultrasonic
    sample and the cache starts at `-1.0` until the sensor thread has taken one, which the HAL reports
@@ -76,13 +76,6 @@ the servo bus closes. Do not kill a moving dog with `kill -9`.
    ([#108](https://github.com/seven-lynx/HoundMind/issues/108)). Re-run step 3 before concluding the
    sensor is dead; `[checkup] no reading from:` plus exit 1 name the sensor that really did not
    answer ([#109](https://github.com/seven-lynx/HoundMind/issues/109)).
-2. **The installer wrapper is stricter than the docs.** `scripts/install_houndmind.sh` currently
-   accepts only `python3.10` and `python3.11` and prefers the 3.10 it should refuse, while
-   `installer_core.py` and `docs/INSTALL.md` support 3.11–3.13. On Trixie (3.13) step 1 stops with
-   "Python 3.10 or 3.11 is required"
-   ([#113](https://github.com/seven-lynx/HoundMind/issues/113)). Workaround: name the interpreter —
-   `PYTHON=python3.11 bash scripts/install_houndmind.sh` — or use Bookworm, which ships 3.11. The
-   wrapper is the defect, not your Pi.
 
 ## 5. Where to go next
 

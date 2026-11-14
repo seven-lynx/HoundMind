@@ -27,7 +27,8 @@ does not answer it, the last column names the document that will.
 | `ModuleNotFoundError: No module named 'pidog'` | the SunFounder libraries are not in this venv | install them into the **same** environment (`docs/INSTALL.md` §3) — they are not on PyPI |
 | `ModuleNotFoundError: No module named 'tools'` | the package is not installed, so `-m tools.x` cannot resolve | `python -m pip install -e .`, or prefix with `PYTHONPATH=src` |
 | `ERROR: Could not find a version that satisfies the requirement pidog` | same cause as the first row | never `pip install pidog`; it does not exist on PyPI |
-| `Python 3.10 or 3.11 is required` from the installer | the wrapper's own gate is stricter than the supported range ([#113](https://github.com/seven-lynx/HoundMind/issues/113)) | `PYTHON=python3.11 bash scripts/install_houndmind.sh`, or use Bookworm (3.11) |
+| `python -m tools.installer_verify` prints `Python: 3.10 -> UNSUPPORTED`, or the installer exits 2 naming 3.11-3.13 | the interpreter is outside the range `pyproject.toml` declares | install 3.11-3.13 (Bookworm ships 3.11) or name one with `PYTHON=python3.13 bash scripts/install_houndmind.sh` |
+| `from robot_hat import device` fails, or the installer exits 2 saying `robot_hat` is not importable | the cloned `robot-hat` is older than 2.5.x, or its own sub-dependencies are missing | re-clone `2.5.x`; the installer probes `Robot, Pin, Ultrasonic, utils, Music, I2C` and names what is missing (`docs/pidog/ROBOTHAT.md` §1.3) |
 | `pip` refuses the package on 3.10, or a `wheel`/`gcc`/`dlib` build fails | interpreter too old, or no wheel for this OS | Bookworm 64-bit (3.11), or `--preset lite` if you do not need the heavy stack |
 
 ## 2. Start-up

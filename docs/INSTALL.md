@@ -158,7 +158,7 @@ Notes:
 ### 3) Install SunFounder PiDog libraries into the same Python environment
 
 ```bash
-git clone -b v2.0 https://github.com/sunfounder/robot-hat.git
+git clone -b 2.5.x https://github.com/sunfounder/robot-hat.git   # 2.5.x: docs/pidog/ is verified against it
 python -m pip install ./robot-hat
 
 git clone -b picamera2 https://github.com/sunfounder/vilib.git
@@ -334,7 +334,7 @@ To use HoundMind with SunFounder PiDog hardware, install the following dependenc
 2. **Install robot-hat library:**
    ```sh
    cd ~/
-   git clone -b v2.0 https://github.com/sunfounder/robot-hat.git
+   git clone -b 2.5.x https://github.com/sunfounder/robot-hat.git
    cd robot-hat
    sudo python3 setup.py install
    ```

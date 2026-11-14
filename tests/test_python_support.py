@@ -64,6 +64,36 @@ def test_both_copies_answer_for_what_pyproject_declares(version: tuple[int, int]
     assert _installer_core().is_supported_python(version) is expected
 
 
+WRAPPERS = [ROOT / "scripts" / "install_houndmind.sh", ROOT / "scripts" / "install_houndmind.ps1"]
+
+
+@pytest.mark.parametrize("wrapper", WRAPPERS, ids=lambda path: path.name)
+def test_the_wrappers_probe_the_declared_range_newest_first(wrapper: Path) -> None:
+    """The wrapper is step 1 of the install guide, and it used to refuse 3.12 and 3.13 (#113).
+
+    The probe order is load-bearing too: a Pi with both 3.10 and 3.11 on PATH was silently given the
+    3.10, and the `pip install -e .` that followed was refused.
+    """
+    text = wrapper.read_text(encoding="utf-8")
+    # A comment may explain why 3.10 is refused; the code may not accept it.
+    assert "python3.10" not in text
+    assert "'3.10'" not in text, "the PowerShell accept-list still carries 3.10"
+    assert "3.10)" not in text, "a shell case arm still accepts 3.10"
+    assert re.findall(r"python3\.(1[0-9])", text)[:3] == ["13", "12", "11"]
+
+
+def test_the_installer_clones_the_robot_hat_the_reference_set_documents() -> None:
+    """`docs/pidog/` is verified against 2.5.x; a `v2.0` default installed a tree it does not describe."""
+    assert _installer_core().ROBOT_HAT_BRANCH == "2.5.x"
+
+
+def test_the_installer_probes_the_robot_hat_surface_pidog_imports() -> None:
+    """Installed is not usable: `robot_hat/__init__.py` gates the names `pidog` imports (#114)."""
+    probe = _installer_core().ROBOT_HAT_PROBE
+    for name in ("Robot", "Pin", "Ultrasonic", "utils", "Music", "I2C"):
+        assert name in probe
+
+
 def test_310_is_refused_and_311_through_313_are_not() -> None:
     """The defect in one line: the verifier said `Python: 3.10 -> OK` and pip then refused it."""
     assert is_supported_python((3, 10)) is False

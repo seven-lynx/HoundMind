@@ -3,29 +3,47 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# Prefer a Python interpreter that matches supported versions.
-# Order: env $PYTHON, python3.10, python3.11
+# Python 3.11-3.13 is what `pyproject.toml` declares and `installer_core.py` enforces: Bookworm
+# ships 3.11, Trixie 3.13, and 3.10 is end-of-life where pip refuses the package. The newest
+# probe wins, so a 3.10 that happens to be first on PATH is never chosen (#113).
+supported_python() {
+	local version
+	version="$("${1}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+	case "${version}" in
+		3.11|3.12|3.13) return 0 ;;
+	esac
+	return 1
+}
+
+# Order: env $PYTHON, then the newest python3 the image has.
 if [ -n "${PYTHON:-}" ]; then
 	PYTHON_BIN="${PYTHON}"
 	if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
-		echo "PYTHON='${PYTHON_BIN}' not found on PATH. Install Python 3.10 or 3.11, or set PYTHON to a valid interpreter."
+		echo "PYTHON='${PYTHON_BIN}' not found on PATH. Install Python 3.11-3.13, or set PYTHON to a valid interpreter."
 		exit 2
 	fi
-elif command -v python3.10 >/dev/null 2>&1; then
-	PYTHON_BIN=python3.10
-elif command -v python3.11 >/dev/null 2>&1; then
-	PYTHON_BIN=python3.11
+	if ! supported_python "${PYTHON_BIN}"; then
+		echo "PYTHON='${PYTHON_BIN}' is not 3.11-3.13. HoundMind supports 3.11-3.13 (Bookworm ships 3.11)."
+		exit 2
+	fi
 else
-	echo "Python 3.10 or 3.11 is required. Install one and re-run the installer."
-	exit 2
+	for candidate in python3.13 python3.12 python3.11; do
+		if command -v "${candidate}" >/dev/null 2>&1; then
+			PYTHON_BIN="${candidate}"
+			break
+		fi
+	done
+	if [ -z "${PYTHON_BIN:-}" ]; then
+		echo "Python 3.11-3.13 is required. Install one and re-run the installer."
+		exit 2
+	fi
 fi
 
 # If an existing venv uses an unsupported Python, force recreation.
 AUTO_FORCE_RECREATE=0
 VENV_PY="${ROOT_DIR}/.venv/bin/python"
 if [ -x "${VENV_PY}" ]; then
-	ver="$(${VENV_PY} -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
-	if [ -z "${ver}" ] || { [ "${ver}" != "3.10" ] && [ "${ver}" != "3.11" ]; }; then
+	if ! supported_python "${VENV_PY}"; then
 		AUTO_FORCE_RECREATE=1
 	fi
 fi
