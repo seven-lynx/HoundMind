@@ -103,6 +103,11 @@ Nothing measures the pack's state of charge, so `battery_percent` is never publi
 the interlock, plus the action cooldown, quiet mode, retreat/turn followups and the closed-loop
 turn that reads the heading between steps. It performs no vendor call of its own.
 
+A retreat (`navigation_followup`, written by `obstacle_avoidance`) runs **once**, behind the step it
+belongs to, on the module's worker rather than the decision loop. It is retracted as soon as it has
+been handed over, and one older than `movement.followup_ttl_s` (ships `1.0`) is dropped instead of
+executed late: a retreat describes the step that just happened, so a stale one is a wrong step.
+
 **Disable:** `modules.hal_motors.enabled = false`
 
 ---

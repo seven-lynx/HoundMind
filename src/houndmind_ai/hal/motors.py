@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 from houndmind_ai.core.module import Module
@@ -231,12 +232,23 @@ class MotorModule(Module):
                     # The API answers 202 before the head arrives; blocking here would let a
                     # cosmetic command set the loop's cadence (P3-2).
                     payload["wait"] = False
+            # A retreat the navigation layer asked for travels with the step: both run on the worker,
+            # in that order, so the closed-loop turn behind a retreat cannot hold the tick. The job
+            # is taken before the step runs and the key is retracted after it has been handed over,
+            # which is what stops a followup from being re-run by every later command (#120).
+            followup = self._followup_job(context)
             if action in _LOCOMOTION_ACTIONS and payload:
-                if not self._dispatch_off_tick(action, payload):
+                if not self._dispatch_off_tick(action, payload, then=followup):
+                    # Nothing was consumed, so the followup stays in the context for the retry.
                     return
             else:
                 self.hal.action(action, payload)
-            self._apply_followup(context)
+                if followup is not None and not self._queue_followup(followup):
+                    followup = None
+            # Retract whatever was there: it was either handed to the worker above or dropped as
+            # stale. A followup describes a step that has already happened, so it must not outlive it.
+            if context.get("navigation_followup") is not None:
+                context.set("navigation_followup", None)
             self.last_action = action
             self.last_params = params_key
             self.last_action_ts = now
@@ -276,11 +288,16 @@ class MotorModule(Module):
         except Exception:  # noqa: BLE001 - a cue is cosmetic and must never fail a step
             logger.warning("Cue %r failed to play", name, exc_info=True)
 
-    def _dispatch_off_tick(self, action: str, payload: dict[str, Any]) -> bool:
+    def _dispatch_off_tick(
+        self, action: str, payload: dict[str, Any], then: Callable[[], None] | None = None
+    ) -> bool:
         """Run one blocking step on this module's worker. False means "retry next tick".
 
         A refusal is not a drop: `motion_command` stays in the context, so the tick after the
         worker frees is this step, not whichever step a producer has moved on to.
+
+        `then` is work that belongs behind the step (a navigation retreat). It runs in the same job,
+        after the action, so the two stay in order and neither occupies the decision loop.
         """
         worker = self.worker
         hal = self.hal
@@ -291,31 +308,70 @@ class MotorModule(Module):
             if self.deferred == 1:
                 logger.info("Locomotion step %s deferred: the motor worker is busy", action)
             return False
-        worker.submit("step", lambda: hal.action(action, payload))
+        worker.submit("step", lambda: self._run_step(hal, action, payload, then))
         self.deferred = 0
         return True
 
-    def _apply_followup(self, context) -> None:
-        """Retreat or sequence the navigation layer asked for, queued behind the action."""
-        if self.hal is None:
-            return
+    @staticmethod
+    def _run_step(
+        hal: DogHAL,
+        action: str,
+        payload: dict[str, Any],
+        then: Callable[[], None] | None,
+    ) -> None:
+        """One step, then whatever trails it. The worker runs this, never the decision loop."""
+        hal.action(action, payload)
+        if then is not None:
+            then()
+
+    def _followup_job(self, context) -> Callable[[], None] | None:
+        """The retreat the navigation layer asked for, as a runnable job, or None.
+
+        Two rules the old inline path did not have (#120). The payload is retracted once it has been
+        handed over, because a followup describes the step that just happened: nothing cleared the
+        key before, so every later command re-ran a stale retreat. And one older than
+        `movement.followup_ttl_s` is dropped instead of run late, so a producer that wedged cannot
+        make the dog retreat on an observation it no longer has.
+        """
         followup = context.get("navigation_followup")
         if not isinstance(followup, dict):
+            return None
+        settings = context.get("settings") or {}
+        max_age = _safe_float((settings.get("movement") or {}).get("followup_ttl_s", 1.0), 1.0)
+        issued = followup.get("timestamp")
+        if max_age > 0 and isinstance(issued, (int, float)):
+            age = time.time() - float(issued)
+            if age > max_age:
+                logger.debug("Dropping a %.1f s old navigation followup", age)
+                return None
+        # The context entry is replaced by the producer next tick, so the job owns its own copy.
+        payload = dict(followup)
+        return lambda: self._run_followup(context, payload)
+
+    def _queue_followup(self, job: Callable[[], None]) -> bool:
+        """Hand a followup to the worker when the action it trails did not go there itself."""
+        worker = self.worker
+        if worker is None:
+            return False
+        return worker.submit("followup", job)
+
+    def _run_followup(self, context, followup: dict) -> None:
+        """The retreat itself: the backward steps, then the turn. Runs on the motor worker."""
+        hal = self.hal
+        if hal is None:
             return
         if followup.get("type") == "retreat_turn":
             backup_steps = _safe_int(followup.get("backup_steps", 2), 2)
             direction = str(followup.get("direction", "auto"))
             if direction == "auto":
                 direction = "left"
-            self.hal.action("backward", {})
-            # Re-queue backward steps for a stronger retreat.
-            for _ in range(max(0, backup_steps - 1)):
-                self.hal.action("backward", {})
+            for _ in range(max(1, backup_steps)):
+                hal.action("backward", {})
             self._enqueue_turn(context, direction, steps=backup_steps)
         elif followup.get("type") == "sequence":
             for entry in followup.get("actions", []):
                 if isinstance(entry, str):
-                    self.hal.action(_canonical(entry), {})
+                    hal.action(_canonical(entry), {})
 
     def _enqueue_turn(self, context, direction: str, steps: int = 1) -> None:
         if self.hal is None:
