@@ -24,7 +24,7 @@ Section numbers are stable references — other files cite them. Append, do not 
 - [§7 Behavior](#7-behavior) — the biggest section: buckets, entry beats, cues, routines, personality
 - [§8 Attention](#8-attention) · [§14 Event logging](#14-event-logging) ·
   [§15 LED manager](#15-led-manager) · [§26 Control plane](#26-control-plane--rest-websocket-camera-web-app) ·
-  [§27 Path planning](#27-path-planning-a-for-pi4) · [§28 Profiles](#28-profiles)
+  [§27 Path planning (A*)](#27-path-planning-a-helper) · [§28 Profiles](#28-profiles)
 
 **Off by default, opt-in** — nothing here is running until you enable it.
 
@@ -139,7 +139,7 @@ is not a claim about a person.
 occupancy is always unknown and the bias below does nothing. Turning presence on is a config change
 with its own install cost, not a consequence of the update.
 
-**Social bias** (`settings.behavior`, §7): while occupancy is valid and true, the `interact` weight in
+**Social bias** (`settings.behavior`, [§7](#7-behavior)): while occupancy is valid and true, the `interact` weight in
 the autonomy draw is multiplied by `social_bias_peak` beside `personality.sociability`, and it decays
 over `social_decay_s` when the sight is lost. Only a mode the table already offers can be biased —
 `autonomy_modes` has to list `interact`, which the shipped config does.
@@ -224,7 +224,7 @@ global path plan, which is why the stored pose is a bearing and a range.
   a trip makes (`visits + 1`, confidence up by `confidence_step`). A goal that cannot get there — a
   wall, a veto, a timer — ends as `abandoned` with its reason and, if a confidence was ever measured,
   a decay instead of a rise.
-- **The HTTP surface is `/api/v1/places`** (`docs/CONTROL_API.md` §8): `GET` lists the catalogue and
+- **The HTTP surface is `/api/v1/places`** (`docs/CONTROL_API.md` [§8](CONTROL_API.md#8-places)): `GET` lists the catalogue and
   the walk in progress, `POST` creates one (a refused body comes back as `400` with `problems[]`),
   `DELETE /{id}` forgets one by id or name, and `POST /{id}/go` asks for a walk. The last one writes
   `place_request` for the next tick — the route asks, the navigator decides — so a client that gets
@@ -362,7 +362,7 @@ than stopping the runtime.
 
 Two routes expose them: `GET /api/v1/routines` lists what the runner loaded and which files it
 refused, and `POST /api/v1/routines/{id}/run` starts one, optionally as a rehearsal
-(`{"dry_run": true}`). Both shapes, and the four status codes, are in `docs/CONTROL_API.md` §3.
+(`{"dry_run": true}`). Both shapes, and the four status codes, are in `docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands).
 
 The run in progress is also in every state snapshot (`state.routines`, the same object the route calls
 `current`) and is pushed as a `routine` event whenever it moves — a new step, a new state, a veto — so
@@ -545,7 +545,7 @@ two are separate keys because `/decisions` is a live surface, not a diagnostic.
 
 **Replay:** `python -m tools.replay_decisions logs/houndmind_decisions.jsonl --check` validates a
 recorded file and prints what is in it; the same command without `--check` serves it through the
-control plane. See `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §16 — a replay has no touch or sound
+control plane. See `docs/HOUNDMIND_PROGRAMMING_GUIDE.md` [§16](HOUNDMIND_PROGRAMMING_GUIDE.md#16-developer-commands) — a replay has no touch or sound
 reading and cannot accept commands.
 
 ---
@@ -648,7 +648,7 @@ answer rather than an unexpected voice. A config with no `tts` table keeps the `
 
 **Driving it:** there is no `/say` or `/command` HTTP endpoint. The legacy port-8091 server was an
 unauthenticated path to `behavior_override`, so it is gone; a client sends
-`POST /api/v1/command` (§26), which goes through the interlock and is audited. Speech
+`POST /api/v1/command` ([§26](#26-control-plane--rest-websocket-camera-web-app)), which goes through the interlock and is audited. Speech
 recognition (`settings.voice_assistant.stt.enabled`) is the input that replaces it. The
 `python -m tools.voice_cli` helper was deleted with the port.
 
@@ -672,17 +672,17 @@ context.set("face_recognition_command", {"action": "enroll", "name": "Alice"})
 
 The next tick enrolls against the newest `vision_frame` (requires exactly one face in frame).
 The legacy port-8088 server is gone: `/status` is now `GET /api/v1/modules`, the roster of enrolled
-people is `GET /api/v1/people` (§26), and enrollment still has no v1 route — it is the command above.
+people is `GET /api/v1/people` ([§26](#26-control-plane--rest-websocket-camera-web-app)), and enrollment still has no v1 route — it is the command above.
 `python -m tools.face_recognition_cli` was deleted with the port.
 
-**It needs a frame, and only §21 publishes one.** `vision_frame` comes from
+**It needs a frame, and only [§21](#21-pi4-vision-feed-pi4) publishes one.** `vision_frame` comes from
 `modules.vision_pi4`, so this detector is Pi 4/5-only: the Pi 3 `modules.vision` path starts Vilib
 and publishes no `vision_frame` at all (#98), which means the detector finds nothing to look at and
 publishes nothing — not "nobody there".
 
 **What it publishes.** `faces` = `{timestamp, backend, detected}`. `timestamp` is the **frame's own
-capture time** (`vision_frame_ts` from §21), falling back to the tick only when a producer does not
-stamp its frames. That distinction is load-bearing for §3's occupancy: a frozen frame has to age,
+capture time** (`vision_frame_ts` from [§21](#21-pi4-vision-feed-pi4)), falling back to the tick only when a producer does not
+stamp its frames. That distinction is load-bearing for [§3](#3-perception)'s occupancy: a frozen frame has to age,
 or a dead camera reads as a person standing there for ever.
 
 **A missing wheel is a disabled module with a reason.** The `face_recognition` (dlib) backend needs
@@ -710,7 +710,7 @@ images), `face_model.yml` and `face_labels.json` for LBPH. That directory is the
 none of it off the device, and delete it if the dog is passed on. Older builds wrote `data/face_*`
 inside the install tree; that directory is left untouched and is not read any more (#104).
 
-**Forgetting someone** — `DELETE /api/v1/people/{id}`, `admin` scope (§9 of `docs/CONTROL_API.md`).
+**Forgetting someone** — `DELETE /api/v1/people/{id}`, `admin` scope ([§9](CONTROL_API.md#9-people) of `docs/CONTROL_API.md`).
 The id is the slug of the name, and the call removes the embeddings, the reference images and the
 trained model rather than just the name: a model trained on images you deleted still recognises the
 person. The last person to go leaves LBPH untrained — faces are still detected, nobody is named.
@@ -734,7 +734,7 @@ serves the frames it publishes:
 - `GET /api/v1/camera/stream` — MJPEG, requires the API token
 - `GET /api/v1/camera/snapshot` — single JPEG
 
-See §26 for the auth story. The old `settings.vision_pi4.http` block and its port 8090 server were
+See [§26](#26-control-plane--rest-websocket-camera-web-app) for the auth story. The old `settings.vision_pi4.http` block and its port 8090 server were
 removed; a config that still contains it fails to load with a suggestion to delete it.
 
 **Camera check tool:**
@@ -840,7 +840,7 @@ What replaces each part of it:
 
 | Dashboard endpoint | Now |
 |---|---|
-| `GET /` (HTML dashboard) | The web app at `GET /` on port 8420 (§26) |
+| `GET /` (HTML dashboard) | The web app at `GET /` on port 8420 ([§26](#26-control-plane--rest-websocket-camera-web-app)) |
 | `GET /snapshot` | `GET /api/v1/state`, or the WebSocket at `GET /api/v1/events` |
 | `/camera`, `camera_path` | `GET /api/v1/camera/stream`, `/camera/snapshot` |
 | `/download_support_bundle` | `GET /api/v1/support-bundle` (`admin` scope) |
@@ -954,7 +954,7 @@ runtime**: `path_planning_enabled` and the `path_planning` context key went with
 produced them ([#121](https://github.com/seven-lynx/HoundMind/issues/121)), because a grid route needs
 a position estimate this stack does not have.
 
-**Use instead:** `place_navigator` walks to a taught place (`docs/CONTROL_API.md` §8), and
+**Use instead:** `place_navigator` walks to a taught place (`docs/CONTROL_API.md` [§8](CONTROL_API.md#8-places)), and
 `obstacle_avoidance` handles everything inside one scan sweep.
  
 Note: setting `mapping.path_planning_enabled` or `mapping.goal` is now an unknown-key error at load.

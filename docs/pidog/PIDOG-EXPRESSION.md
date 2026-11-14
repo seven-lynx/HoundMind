@@ -3,10 +3,10 @@
 Status: **reference** — the LED board and the audio path: what the dog can show and say, and
 which vendor calls block.
 Verified against: `sunfounder/pidog@cee4bff` (pidog 1.4.0), `sunfounder/robot-hat@4556bd8` (2.5.x)
-Pairs with: `ROBOTHAT.md` §9 (the `Music`/`Speaker` primitives), `PIDOG-ACTIONS.md` (presets that
+Pairs with: `ROBOTHAT.md` [§9](ROBOTHAT.md#9-audio-music-speaker-tts) (the `Music`/`Speaker` primitives), `PIDOG-ACTIONS.md` (presets that
 speak)
 
-Sections: §1 LED board · §2 sound effects · §3 music and tones · §4 voice, STT, LLM · §5 quirks
+Sections: [§1](#1-the-led-board) LED board · [§2](#2-sound-effects) sound effects · [§3](#3-music-and-tones) music and tones · [§4](#4-voice-stt-and-llm) voice, STT, LLM · [§5](#5-quirks) quirks
 
 ---
 
@@ -106,7 +106,7 @@ is ten threads and ten overlapping clips; there is no mute, no queue and no canc
 
 ## 3. Music and tones
 
-The same `Music` object as `ROBOTHAT.md` §9.1:
+The same `Music` object as `ROBOTHAT.md` [§9.1](ROBOTHAT.md#91-music--the-one-pidog-uses):
 
 ```python
 m = dog.music
@@ -138,7 +138,7 @@ from robot_hat.llm import *
 ```
 
 So `from pidog.tts import Espeak` reaches the same class as `robot_hat.tts`
-(`ROBOTHAT.md` §9.3). Everything behind it — `sunfounder_voice_assistant`, Piper models, Vosk
+(`ROBOTHAT.md` [§9.3](ROBOTHAT.md#93-tts)). Everything behind it — `sunfounder_voice_assistant`, Piper models, Vosk
 models, API keys — is an optional install with its own setup and its own binaries.
 
 **The dog has no built-in speech.** Before TTS exists at all the speaker must be enabled:

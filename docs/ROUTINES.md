@@ -3,7 +3,7 @@
 Status: **contract** — the file format a user writes and the dog plays. A new optional key is an
 additive change; renaming a key, or making an optional one required, breaks every routine already on a
 device.
-Pairs with: `docs/CONTROL_API.md` §3 (the routes that list and start one), `config/actions.jsonc` (the
+Pairs with: `docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands) (the routes that list and start one), `config/actions.jsonc` (the
 vocabulary a step may name), `src/houndmind_ai/kernel/routine.py` (the validator this file describes)
 
 A routine is a list of actions the dog plays in order — stand up, look left, wag, sit. It is **data,
@@ -139,7 +139,7 @@ refusal is reported next to the file a user has to fix.
 | Two files declaring one `id` | the first file in sorted order keeps the id; the second is refused and names the file it collided with |
 
 `GET /api/v1/routines` lists those refusals under `refusals`, keyed by file name, with the validator's
-own paths — `docs/CONTROL_API.md` §3 has the shape.
+own paths — `docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands) has the shape.
 
 The shipped example set — one file per rule above, accepted and refused — lives in
 `tests/fixtures/routines/`. That directory is a legal routines directory, and
@@ -148,7 +148,7 @@ examples cannot drift away from the format they document.
 
 ## What this file does not cover
 
-- The routes that list and start a routine: `docs/CONTROL_API.md` §3, and §4/§5 for the snapshot block
+- The routes that list and start a routine: `docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands), and [§4](CONTROL_API.md#4-state-snapshot)/[§5](CONTROL_API.md#5-websocket) for the snapshot block
   and the socket event.
-- Turning the runner off: `docs/FEATURES_GUIDE.md` §7.
+- Turning the runner off: `docs/FEATURES_GUIDE.md` [§7](FEATURES_GUIDE.md#7-behavior).
 - Scheduling. A routine runs when something asks for it; nothing on the device starts one on a timer.

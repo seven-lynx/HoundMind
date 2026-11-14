@@ -13,15 +13,15 @@ A PiDog is a Raspberry Pi plus a Robot HAT plus twelve servos and five sensors.
 
 | Part | Count | Driven by | Documented in |
 |---|---|---|---|
-| Leg servos | 8 | `Robot('legs')` → 8 × `Servo` | §2, `PIDOG-MOTION.md` §4 |
-| Head servos (yaw, roll, pitch) | 3 | `Robot('head')` | §2 |
-| Tail servo | 1 | `Robot('tail')` | §2 |
-| Ultrasonic ranger | 1 | `Ultrasonic(Pin D1 trig, Pin D0 echo)` | `PIDOG-SENSORS.md` §1 |
-| Dual touch pads | 2 | `DualTouch('D2', 'D3')` | `PIDOG-SENSORS.md` §2 |
-| Sound-direction sensor | 1 | SPI0 + GPIO 6 busy | `PIDOG-SENSORS.md` §3 |
-| 6-axis IMU (SH3001) | 1 | I2C 0x36 | `PIDOG-SENSORS.md` §4 |
-| RGB board (11 LEDs) | 1 | I2C 0x74 | `PIDOG-EXPRESSION.md` §1 |
-| Speaker (on the HAT) | 1 | I2S audio, one enable pin | `PIDOG-EXPRESSION.md` §2 |
+| Leg servos | 8 | `Robot('legs')` → 8 × `Servo` | [§2](#2-servo-channels-and-pins), `PIDOG-MOTION.md` [§4](PIDOG-MOTION.md#4-moving-a-part) |
+| Head servos (yaw, roll, pitch) | 3 | `Robot('head')` | [§2](#2-servo-channels-and-pins) |
+| Tail servo | 1 | `Robot('tail')` | [§2](#2-servo-channels-and-pins) |
+| Ultrasonic ranger | 1 | `Ultrasonic(Pin D1 trig, Pin D0 echo)` | `PIDOG-SENSORS.md` [§1](PIDOG-SENSORS.md#1-ultrasonic-ranging) |
+| Dual touch pads | 2 | `DualTouch('D2', 'D3')` | `PIDOG-SENSORS.md` [§2](PIDOG-SENSORS.md#2-dual-touch) |
+| Sound-direction sensor | 1 | SPI0 + GPIO 6 busy | `PIDOG-SENSORS.md` [§3](PIDOG-SENSORS.md#3-sound-direction) |
+| 6-axis IMU (SH3001) | 1 | I2C 0x36 | `PIDOG-SENSORS.md` [§4](PIDOG-SENSORS.md#4-the-imu-sh3001) |
+| RGB board (11 LEDs) | 1 | I2C 0x74 | `PIDOG-EXPRESSION.md` [§1](PIDOG-EXPRESSION.md#1-the-led-board) |
+| Speaker (on the HAT) | 1 | I2S audio, one enable pin | `PIDOG-EXPRESSION.md` [§2](PIDOG-EXPRESSION.md#2-sound-effects) |
 | Camera | 0–1 | `vilib` / `picamera2`, not part of `pidog` | outside this set |
 
 `Pidog()` builds all of it in one constructor. Two of the twelve servos' worth of detail matter
@@ -89,7 +89,7 @@ dog.legs_move([[45, -45, -45, 45, 45, -45, -45, 45]], speed=60)
 
 `head_move` takes `[yaw, roll, pitch]`. Many humans write pitch first because that is the axis
 they think in. The vendor converts internally in `head_rpy_to_angle`, and past yaw ≈ ±45° the
-roll and pitch channels start to mix by design (see `PIDOG-MOTION.md` §4.1).
+roll and pitch channels start to mix by design (see `PIDOG-MOTION.md` [§4.1](PIDOG-MOTION.md#41-head_move--yawrollpitch-and-the-cross-mix)).
 
 ---
 
@@ -112,7 +112,7 @@ Two consequences worth internalising:
    before writing the channel, so the mechanical centre is `+45` on that servo.
 2. **Nothing warns you.** Out-of-range head values are clamped, not rejected, so a pose that
    looks wrong is more often a value that was silently limited than a broken servo. The leg
-   path is different: it can raise — see `PIDOG-MOTION.md` §7.
+   path is different: it can raise — see `PIDOG-MOTION.md` [§7](PIDOG-MOTION.md#7-known-defects-in-the-motion-path).
 
 ### 3.2 Speed constants (degrees per second)
 
@@ -124,7 +124,7 @@ Two consequences worth internalising:
 
 `Robot.max_dps` defaults to 428 and is how a `speed` of 0–100 becomes a duration: the requested
 duration is computed first, then lengthened if it would exceed the cap. The formula is in
-`ROBOTHAT.md` §5.3 — read it before assuming `speed=100` is "as fast as possible".
+`ROBOTHAT.md` [§5.3](ROBOTHAT.md#53-the-speed-model--read-this-before-tuning-a-gait) — read it before assuming `speed=100` is "as fast as possible".
 
 ### 3.3 Structure
 
@@ -139,7 +139,7 @@ duration is computed first, then lengthened if it would exceed the cap. The form
 These four numbers are the whole kinematic model. `BODY_STRUCT` is the 3×4 matrix of shoulder
 positions in body coordinates; `legpoint_struc` is the same matrix shifted by
 `set_legs()` — and `pose2coords()` fails until `set_legs()` has been called once. See
-`PIDOG-MOTION.md` §6.
+`PIDOG-MOTION.md` [§6](PIDOG-MOTION.md#6-body-pose-and-kinematics).
 
 ---
 
@@ -157,7 +157,7 @@ volts = dog.get_battery_voltage()   # e.g. 7.62
 ```
 
 `utils.get_battery_voltage()` still works but is a deprecated shim that emits a
-`DeprecationWarning` and forwards to the same code (`ROBOTHAT.md` §11.3).
+`DeprecationWarning` and forwards to the same code (`ROBOTHAT.md` [§11.3](ROBOTHAT.md#113-pinvalue-flips-direction)).
 
 A low battery is not a sensor reading you can trust to be steady: servos under load sag the
 rail, and every one of the twelve is a current spike. If you build a battery guard, hold a
@@ -257,7 +257,7 @@ trim. What it does, so the numbers above can be checked against it:
 `robot_hat.Servo.angle()` to mount the horns, and it touches no offset. If the horns are fitted
 wrong, zero them first; that is mechanical, not calibration.
 
-HoundMind's own step is non-interactive — `python -m tools.calibrate_servos` (`docs/TOOLS.md` §12):
+HoundMind's own step is non-interactive — `python -m tools.calibrate_servos` (`docs/TOOLS.md` [§12](../TOOLS.md#12-calibrate_servos)):
 the same file, no curses, dry unless `--apply` is given.
 
 ---

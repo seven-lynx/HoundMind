@@ -144,7 +144,7 @@ python -m tools.list_audio_devices
 ```
 
 If the list is empty, the I2S overlay is missing: run `sudo bash i2samp.sh` from the `pidog`
-directory (`docs/INSTALL.md` §3), or let the installer do it with `--run-i2samp`.
+directory (`docs/INSTALL.md` [§3](INSTALL.md#3-install-sunfounder-pidog-libraries-into-the-same-python-environment)), or let the installer do it with `--run-i2samp`.
 
 ## 8. `collect_support_bundle`
 
@@ -239,7 +239,7 @@ value did not read back (check the vendor log), `2` a usage error, no readable t
 There is no interactive preview on purpose: nudging a servo live needs a raw per-group angle write,
 and that primitive belongs to `act/interlock.py` alone. Trim with `--set`, look at the numbers, then
 `--apply`. The vendor's own script (`examples/0_calibration.py`) still exists and is documented in
-`docs/pidog/HARDWARE.md` §6 for anyone who prefers it.
+`docs/pidog/HARDWARE.md` [§6](pidog/HARDWARE.md#6-what-lives-on-disk) for anyone who prefers it.
 
 ## Adding a tool
 

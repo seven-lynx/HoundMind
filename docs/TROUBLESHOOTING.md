@@ -3,7 +3,7 @@
 Status: **runbook** — symptom to cause to command. Start here when something is wrong and you do not
 yet know which document owns it.
 Pairs with: `docs/LOGGING.md` (logs and support bundles), `docs/INSTALL.md` §Troubleshooting (install
-failures), `docs/HARDWARE_TEST.md` §10 (a step failed mid-ladder)
+failures), `docs/HARDWARE_TEST.md` [§10](HARDWARE_TEST.md#10-when-something-fails) (a step failed mid-ladder)
 
 Each row gives three things: what you saw, what it usually means, and what to run next. If the command
 does not answer it, the last column names the document that will.
@@ -24,18 +24,18 @@ does not answer it, the last column names the document that will.
 
 | What you see | Means | Do |
 |---|---|---|
-| `ModuleNotFoundError: No module named 'pidog'` | the SunFounder libraries are not in this venv | install them into the **same** environment (`docs/INSTALL.md` §3) — they are not on PyPI |
+| `ModuleNotFoundError: No module named 'pidog'` | the SunFounder libraries are not in this venv | install them into the **same** environment (`docs/INSTALL.md` [§3](INSTALL.md#3-install-sunfounder-pidog-libraries-into-the-same-python-environment)) — they are not on PyPI |
 | `ModuleNotFoundError: No module named 'tools'` | the package is not installed, so `-m tools.x` cannot resolve | `python -m pip install -e .`, or prefix with `PYTHONPATH=src` |
 | `ERROR: Could not find a version that satisfies the requirement pidog` | same cause as the first row | never `pip install pidog`; it does not exist on PyPI |
 | `python -m tools.installer_verify` prints `Python: 3.10 -> UNSUPPORTED`, or the installer exits 2 naming 3.11-3.13 | the interpreter is outside the range `pyproject.toml` declares | install 3.11-3.13 (Bookworm ships 3.11) or name one with `PYTHON=python3.13 bash scripts/install_houndmind.sh` |
-| `from robot_hat import device` fails, or the installer exits 2 saying `robot_hat` is not importable | the cloned `robot-hat` is older than 2.5.x, or its own sub-dependencies are missing | re-clone `2.5.x`; the installer probes `Robot, Pin, Ultrasonic, utils, Music, I2C` and names what is missing (`docs/pidog/ROBOTHAT.md` §1.3) |
+| `from robot_hat import device` fails, or the installer exits 2 saying `robot_hat` is not importable | the cloned `robot-hat` is older than 2.5.x, or its own sub-dependencies are missing | re-clone `2.5.x`; the installer probes `Robot, Pin, Ultrasonic, utils, Music, I2C` and names what is missing (`docs/pidog/ROBOTHAT.md` [§1.3](pidog/ROBOTHAT.md#13-which-version-is-installed)) |
 | `pip` refuses the package on 3.10, or a `wheel`/`gcc`/`dlib` build fails | interpreter too old, or no wheel for this OS | Bookworm 64-bit (3.11), or `--preset lite` if you do not need the heavy stack |
 
 ## 2. Start-up
 
 | What you see | Means | Do |
 |---|---|---|
-| the process exits 2 immediately with a list of problems | a config error, caught before any hardware is touched | fix the named key — an unknown key is an error, not a hint (`docs/FEATURES_GUIDE.md` §29) |
+| the process exits 2 immediately with a list of problems | a config error, caught before any hardware is touched | fix the named key — an unknown key is an error, not a hint (`docs/FEATURES_GUIDE.md` [§29](FEATURES_GUIDE.md#29-how-to-disable-any-feature)) |
 | a `ConfigError` naming a module or section you deleted | leftover key from an older config | delete the block; the did-you-mean names the replacement |
 | `unsupported` profile, or a refusal naming a release | the board is a Pi 3 or older | not supported; `v2026.01.18` is the last release that ran on one |
 | the process starts, then exits after a couple of seconds | something set `loop.max_cycles` | set it to `null` |
@@ -48,10 +48,10 @@ does not answer it, the last column names the document that will.
 |---|---|---|
 | `distance_cm: None` in a checkup | no reading: the sensor failed, or the vendor's ultrasonic cache has no sample yet | check the HAT is seated and I2C is on (`sudo raspi-config`), then re-run `python -m tools.hardware_checkup --skip-motion`; the first read after boot is usually the "no sample yet" case ([#108](https://github.com/seven-lynx/HoundMind/issues/108)) |
 | `[checkup] valid:` shows `False` for a sensor | that sensor did not answer, whatever its value line printed | branch on the flag, not the number — a `None` and a `False` are the same sentence |
-| a checkup prints `[checkup] pidog unavailable` and exits 2 | the vendor package is not in this venv | `docs/INSTALL.md` §3 — `pidog` is cloned, not on PyPI |
+| a checkup prints `[checkup] pidog unavailable` and exits 2 | the vendor package is not in this venv | `docs/INSTALL.md` [§3](INSTALL.md#3-install-sunfounder-pidog-libraries-into-the-same-python-environment) — `pidog` is cloned, not on PyPI |
 | a checkup exits 1 and prints `no reading from:` | at least one sensor did not answer | check the HAT is seated and I2C is on, then re-run; the named sensor is the one to investigate ([#109](https://github.com/seven-lynx/HoundMind/issues/109)) |
 | `*_valid: false` in `GET /state` | validity flags are published regardless of the badge module | branch on the flag before the value — a number with `valid: false` is not a measurement |
-| readings that stop updating | the sensor thread stalled, or the watchdog is holding motion | `GET /state` → `watchdog_hold`; see `docs/FEATURES_GUIDE.md` §10 |
+| readings that stop updating | the sensor thread stalled, or the watchdog is holding motion | `GET /state` → `watchdog_hold`; see `docs/FEATURES_GUIDE.md` [§10](FEATURES_GUIDE.md#10-watchdog) |
 
 ## 4. Motion
 
@@ -63,7 +63,7 @@ does not answer it, the last column names the document that will.
 | `409` with `veto: "expired"` | the deadman ran out before the command was refreshed | send it again; a held command must be refreshed |
 | `409` with `veto: "low_voltage"` | the battery is below the floor | charge it — a sagging battery under load is how a servo cooks |
 | commands accepted, nothing moves | `hal_motors` or `motion_gateway` is disabled | check both under `modules` in `config/settings.jsonc` |
-| servos jitter or buzz | speed too high for the load, or offsets were overwritten | lower `speed`, reduce `steps`, verify the offsets (`docs/HOUNDMIND_PROGRAMMING_GUIDE.md` §9) |
+| servos jitter or buzz | speed too high for the load, or offsets were overwritten | lower `speed`, reduce `steps`, verify the offsets (`docs/HOUNDMIND_PROGRAMMING_GUIDE.md` [§9](HOUNDMIND_PROGRAMMING_GUIDE.md#9-calibration-workflow)) |
 | a routine stops halfway with `state: refused` | a step was vetoed and the run ended rather than skipping it | `veto` names the reason (`docs/ROUTINES.md` §"How it plays") |
 
 ## 5. Control plane
@@ -75,7 +75,7 @@ does not answer it, the last column names the document that will.
 | `403` on `POST /api/v1/pair/open` | a client token cannot open a pairing window | use the device token, which holds `admin` |
 | connection refused on port 8420 | the plane is off, or bound elsewhere | `modules.api.enabled`, `settings.api.host` and `.port` |
 | `503` from `/routines`, `/places`, `/decisions` or `/logs` | the module that answers it is disabled | the `error` body names it; enable that module |
-| the WebSocket closes immediately | the first frame was not a valid `hello` | `docs/CONTROL_API.md` §5 |
+| the WebSocket closes immediately | the first frame was not a valid `hello` | `docs/CONTROL_API.md` [§5](CONTROL_API.md#5-websocket) |
 
 ## 6. Camera, audio, vision
 
@@ -84,7 +84,7 @@ does not answer it, the last column names the document that will.
 | `tools.camera_check --list-devices` finds nothing | camera not enabled, or not fitted | `sudo raspi-config` → Interface Options → Camera |
 | frames open but are black | lens cap, or the wrong index | try `--index 1`, and check the lens |
 | the feed starts but no frames arrive | `picamera2` failed and the fallback was not used | set `settings.vision_pi4.backend` to `"opencv"` |
-| `vision_inference_status: unconfigured` | the scheduler is on with no model | pass an `inference_fn`, or turn `inference_scheduler_enabled` off (`docs/FEATURES_GUIDE.md` §21a) |
+| `vision_inference_status: unconfigured` | the scheduler is on with no model | pass an `inference_fn`, or turn `inference_scheduler_enabled` off (`docs/FEATURES_GUIDE.md` [§21](FEATURES_GUIDE.md#21-pi4-vision-feed-pi4)a) |
 | the semantic labeler reports no labels | model files are missing | `python -m tools.download_opencv_models` |
 | `tools.list_audio_devices` is empty | the I2S overlay is not installed | `sudo bash i2samp.sh` from the `pidog` directory, or re-run the installer with `--run-i2samp` |
 | face recognition disables itself at start | `dlib`/`face_recognition` is not importable | optional install; the module degrades to `disabled` with that reason |

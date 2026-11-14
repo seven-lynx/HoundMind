@@ -23,7 +23,7 @@ Two different things share the word "board" here: the **Raspberry Pi** (detected
 
 | Board | Supported | Notes |
 |---|---|---|
-| Pi 5 | yes | Software-compatible with the PiDog code; needs a HAT V5 (§2). |
+| Pi 5 | yes | Software-compatible with the PiDog code; needs a HAT V5 ([§2](#2-which-hat)). |
 | Pi 4 | yes | The reference board for every measurement in this repo. |
 | Pi 3 and older | **no** | Refused by the installer and at config load. `v2026.01.18` is the last release that ran on one. |
 | No device tree (CI, workstation, container) | n/a | Classified `unknown`; the runtime proceeds as if it were a `pi4`. |

@@ -3,7 +3,7 @@
 Status: **reference** — every action the dog can be asked to perform, its class, the parameters it
 reads, and the behaviour buckets that draw on it.
 Pairs with: `config/actions.jsonc` (the file this page mirrors — the file is authoritative),
-`docs/ROUTINES.md` (the file format that names these), `docs/CONTROL_API.md` §3
+`docs/ROUTINES.md` (the file format that names these), `docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands)
 (`POST /command`, `GET /repertoire`)
 
 An action name is the unit of everything that moves. A command names one; a routine step names one; a
@@ -100,7 +100,7 @@ These are not in any bucket. They exist for a client or a routine that wants the
 | `head` | `yaw`, `pitch`, `speed`, `wait` | Degrees, clamped to the head's travel range. |
 | `rpy` | `roll`, `pitch`, `yaw` | Body pose in degrees — the whole chassis, not the head. |
 | `rgb` | `style`, `color`, `brightness`, `bps` | LED strip. `brightness` is 0–1 and is **not** clamped by the vendor. |
-| `sound` | `name`, `volume` | One of the shipped effects (`docs/pidog/PIDOG-EXPRESSION.md` §2.2). |
+| `sound` | `name`, `volume` | One of the shipped effects (`docs/pidog/PIDOG-EXPRESSION.md` [§2.2](pidog/PIDOG-EXPRESSION.md#22-the-effects-that-ship)). |
 | `speak` | `text`, `volume` | Vendor TTS; requires the vendor speech stack. |
 
 ## 6. Parameters
@@ -122,7 +122,7 @@ A parameter that the action does not declare is **refused**, not ignored: `{"act
 
 A bucket is named group of actions the behaviour FSM draws from, declared under `catalog` in
 `config/actions.jsonc`. The shipped buckets: `idle`, `alert`, `avoid`, `play`, `rest`, `patrol`,
-`explore`, `interact`. `docs/FEATURES_GUIDE.md` §7 explains how one is picked each tick — a
+`explore`, `interact`. `docs/FEATURES_GUIDE.md` [§7](FEATURES_GUIDE.md#7-behavior) explains how one is picked each tick — a
 recency-weighted draw, not `random.choice`.
 
 An action may appear in several buckets; `shift`-like duplicates cost nothing because the draw is
