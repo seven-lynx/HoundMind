@@ -68,8 +68,8 @@ Prints one line per package, ending in `Installer check: OK` and exit 0 — or `
 
 ## 4. `hardware_checkup`
 
-Reads each sensor once, then — unless told not to — stands the dog, turns it both ways and sweeps its
-head.
+Reads each sensor once through the same `DogHAL` adapter the runtime uses (`PidogHAL`), then — unless
+told not to — stands the dog, turns it both ways and sweeps its head.
 
 ```bash
 python -m tools.hardware_checkup --skip-motion   # the only form that is safe by default
@@ -79,9 +79,15 @@ python -m tools.hardware_checkup --skip-motion   # the only form that is safe by
 |---|---|
 | `--skip-motion` | read sensors only; no servo is commanded |
 | `--pause <seconds>` | pause between steps (default `0.6`) |
+| `--config <path>` | settings file other than `config/settings.jsonc`; its `sensors` block is what the HAL conditions readings with |
+
+The last reading line is `[checkup] valid:` (`distance=… touch=… sound=… imu=…`) — a sensor that did
+not answer prints `None` for its value and `False` there, while a quiet room legitimately prints
+`sound: detected=False dir=None`.
 
 Exit code 0 does **not** mean the sensors passed — a dead sensor prints `None` and still exits 0
-([#109](https://github.com/seven-lynx/HoundMind/issues/109)).
+([#109](https://github.com/seven-lynx/HoundMind/issues/109)). The only non-zero code is `2`, when the
+vendor package is missing and no dog could be opened at all.
 
 ## 5. `smoke_test`
 

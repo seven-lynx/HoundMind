@@ -68,19 +68,20 @@ source .venv/bin/activate
 **Two things that will bite you.**
 
 1. **A tool exiting 0 is not a pass.** `tools.hardware_checkup` returns 0 even when every sensor
-   failed — the failure shows up as a printed `None`, not an exit code (#109). Read the output;
-   do not trust `echo $?`.
-2. **The first distance reading can be `-1.0` on a healthy dog.** The vendor caches the ultrasonic
-   sample and the cache starts at `-1.0` until the sensor thread has taken one
-   (`docs/pidog/PIDOG-SENSORS.md:46-49`, #108). If you see `-1.0`, re-run the step before
-   concluding the sensor is dead.
+   failed — the failure shows up as a printed `None` and a `False` on its `[checkup] valid:` line,
+   not as an exit code (#109). Read the output; do not trust `echo $?`.
+2. **The first distance reading can be `None` on a healthy dog.** The vendor caches the ultrasonic
+   sample and the cache holds a `-1.0` placeholder until the sensor thread has taken one
+   (`docs/pidog/PIDOG-SENSORS.md:46-49`). The HAL rejects anything outside
+   `sensors.distance_min_cm`..`distance_max_cm`, so the placeholder reaches the checkup as `None`
+   (#108). Re-run the step before concluding the sensor is dead.
 
 ## 3. The ladder at a glance
 
 | # | Step | Command | Motion? | Time | Pass looks like |
 |---|---|---|---|---|---|
 | 1 | Install sanity | `python -m tools.installer_verify` | no | ~10 s | `Installer check: OK` |
-| 2 | Sensors | `python -m tools.hardware_checkup --skip-motion` | no | ~5 s | five lines, no `None` |
+| 2 | Sensors | `python -m tools.hardware_checkup --skip-motion` | no | ~5 s | five readings, no `None`, `valid:` all `True` |
 | 3 | Loop | `python -m tools.smoke_test` | no | ~5 s | `[smoke] PASS` |
 | 4 | Control plane | `python -m houndmind_ai`, then `GET /state` | no | ~2 min | `*_valid: true` |
 | 5 | Peripherals | `tools.camera_check`, `tools.list_audio_devices` | no | ~1 min | index found, frame saved |
@@ -123,7 +124,7 @@ python -m tools.hardware_checkup --skip-motion
 ```
 
 `--skip-motion` is not optional here: without it the tool stands the dog, turns it both ways and
-sweeps its head (`src/tools/hardware_checkup.py:95-107`). Step 6 is where that belongs.
+sweeps its head (`src/tools/hardware_checkup.py:24-31`). Step 6 is where that belongs.
 
 Expected on a healthy dog:
 
@@ -131,19 +132,22 @@ Expected on a healthy dog:
 [checkup] Reading sensors...
 [checkup] distance_cm: 41.7
 [checkup] touch: N
-[checkup] sound: detected=False dir=-1
+[checkup] sound: detected=False dir=None
 [checkup] acc: (412.0, -180.0, 16310.0)
 [checkup] gyro: (18.0, -7.0, 11.0)
+[checkup] valid: distance=True touch=True sound=True imu=True
 [checkup] Motion skipped.
 ```
 
-Five lines of numbers. **A `None` on any line is the failure**, whatever the exit code says (#109).
+Five readings and a verdict. **A `None` on `distance_cm`, `touch`, `acc` or `gyro`, or a `False` on
+the `valid:` line, is the failure**, whatever the exit code says (#109). `sound` is the exception: a
+quiet room is `detected=False dir=None` with `sound=True` on the verdict line.
 
 | Line | What the number is | Healthy | Not healthy |
 |---|---|---|---|
-| `distance_cm` | centimetres in front of the **head**, cached | a steady value once the dog is still; re-run if it jumps | `None` (read failed), `-1.0` (no sample yet — re-run, #108), `-2` (no echo: soft, angled or absent surface) |
+| `distance_cm` | centimetres in front of the **head**, conditioned by the HAL | a steady value once the dog is still; re-run if it jumps | `None` — read failed, no sample yet (re-run, #108), or no echo (soft, angled or absent surface); the vendor's `-1`/`-2` placeholders never reach this line |
 | `touch` | `N` none · `L` left pad · `R` right pad · `LS`/`RS` a stroke | `N` at rest, and the letter of whichever pad you hold down while it runs | `None`, or a letter with nothing touching it |
-| `sound: detected` / `dir` | busy line, then a bearing in 20° steps | `False dir=-1` in a quiet room; clap once and re-run for `True` with `0`–`359` | `None None` — the SPI module did not answer |
+| `sound: detected` / `dir` | busy line, then a bearing | `False dir=None` in a quiet room, with `sound=True` on the `valid:` line; clap once and re-run for `True` with a bearing | `detected=None dir=None` and `sound=False` — the SPI module did not answer |
 | `acc` | **raw counts**, 16384 per g | roughly ±16384 on the axis pointing at the floor, near 0 on the other two | all zeros, or `None` |
 | `gyro` | **raw counts**, 16.4 per °/s | near 0 at rest; thousands when you move the dog | all zeros, or `None` |
 
@@ -280,7 +284,7 @@ python -m tools.hardware_checkup --pause 1.5
 ```
 
 …which runs stand → turn left → turn right → head −30° → head +30° → head centre
-(`src/tools/hardware_checkup.py:95-107`); `--pause` slows it down, and 1.5 s is a better first run
+(`src/tools/hardware_checkup.py:24-31`); `--pause` slows it down, and 1.5 s is a better first run
 than the 0.6 s default. Or the whole loop with motion allowed:
 
 ```bash
@@ -305,16 +309,16 @@ Find the symptom, take the next step — not a different one.
 
 | Symptom | Most likely | Do this first |
 |---|---|---|
-| Every line in step 2 is `None` | the vendor layer did not load, so nothing reached the bus | `python -c "import pidog"`, then check `logs/houndmind.log`; a Pi with I2C disabled fails exactly like this (`sudo raspi-config` → Interface → I2C) |
-| `distance_cm: -1.0` | no sample had been taken yet | re-run step 2 (#108); if it stays `-1`, the transducer or its wiring is the suspect |
-| `distance_cm: -2` | no echo came back | test against a hard flat surface at arm's length before suspecting the sensor |
+| Every line in step 2 is `None` and every flag on `valid:` is `False` | the vendor layer did not load, so nothing reached the bus | `python -c "import pidog"`, then check `logs/houndmind.log`; a Pi with I2C disabled fails exactly like this (`sudo raspi-config` → Interface → I2C) |
+| `[checkup] pidog unavailable` and exit code 2 | the vendor package is not in this venv | `docs/INSTALL.md` §3 — `pidog` is cloned, not on PyPI |
+| `distance_cm: None`, everything else green | no sample yet (re-run, #108) or no echo from a soft or angled surface | re-run step 2 against a hard flat surface at arm's length before suspecting the transducer |
 | Step 2 passes, `sensor_reading: MISSING` in step 3 | the tool and the HAL read through different paths | the `hal`/`hal_sensors` module is `disabled` with a reason — `/api/v1/modules` or the log names it |
 | `[smoke] FAIL` only on `scan_latest` | `scanning` produced no reading | `/api/v1/modules` names a disabled reason; step 6 tells you whether the head moves at all |
 | `[smoke] FAIL` only on `mapping_openings` | `mapping` disabled or no scan to consume | `config/settings.jsonc` → `modules.mapping.enabled` |
 | `401` on `/api/v1/state` | missing or foreign bearer token | `cat ~/.houndmind/api_token` **stays on the device** — send it in the header, never into a report |
 | `Connection refused` on `:8420` | the API module is off, or on another host/port | `/meta` from the Pi itself first; then `api.host` / `api.port`, and `https://` if `api.tls_enabled` is on |
 | `Address already in use` | an earlier runtime is still running | `pkill -f houndmind_ai`, then start once |
-| Step 2 or 3 hangs on a live dog | the runtime already owns the servo bus | never run these two while `python -m houndmind_ai` is up — stop it first (#11: the checkup constructs its own `Pidog`) |
+| Step 2 or 3 hangs on a live dog | the runtime already owns the servo bus | never run these two while `python -m houndmind_ai` is up — stop it first (#11: the checkup opens its own `PidogHAL` in a second process) |
 | `temp_c` climbing past ~75 under step 3 | cooling, not HoundMind | the `pi-performance` question; a bare Pi 5 on a HAT V4 is also a power problem (`docs/INSTALL.md:18-23`) |
 
 ## 11. Recording the run
@@ -356,6 +360,7 @@ The bundle carries `metadata.json` (timestamp, commit, trace id), everything in 
   commands above are what it meant.
 - **Motion quality is a judgement**, not a measurement. §9's checklist is the closest thing to
   a pass criterion this project has, and it needs you watching.
-- **Run one thing at a time.** `tools.hardware_checkup` builds its own `Pidog()` (#11), so it and
-  `python -m houndmind_ai` must never be up at the same time.
+- **Run one thing at a time.** `tools.hardware_checkup` opens its own `PidogHAL`, which is a
+  `Pidog()` in a second process (#11), so it and `python -m houndmind_ai` must never be up at the
+  same time.
 

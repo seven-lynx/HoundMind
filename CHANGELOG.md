@@ -8,6 +8,19 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **The checkup is behind the HAL** (#11): `tools/hardware_checkup.py` constructed its own `Pidog()`, so
+  the documented device check bypassed the HAL's sensor conditioning, its bus lock and its ownership of
+  the dog, could not run against `FakeDogHAL`, and was the last `import pidog` in `src/` outside `hal/`.
+  It now opens `PidogHAL` (or an injected `DogHAL`), prints a value only when its validity flag is true
+  plus a `[checkup] valid:` verdict line, and issues the motion sequence as `hal.action(...)` in the
+  same stand / turn-left / turn-right / head-sweep order behind the same `--skip-motion` gate. New
+  `--config` hands `settings.sensors` to the HAL so the readings are the conditioned ones the loop
+  sees. `FakeDogHAL.set_sound()` can now express "the sensor answered and heard nothing", which is the
+  normal quiet-room state. New `tests/test_hardware_checkup.py` (six cases, fake only, no motion) and
+  an AST guard in `tests/test_imports.py` confining `import pidog` to `hal/vendor.py` and
+  `optional/voice.py`; `docs/TOOLS.md`, `docs/HARDWARE_TEST.md` and `docs/TROUBLESHOOTING.md` updated.
+  Exit codes are unchanged (#109), and the vendor's `-1`/`-2` distance placeholders no longer reach the
+  output (#108).
 - **Calibration is behind the HAL** (#10): `calibration/workflow.py` read `context["pidog"]`, a raw
   vendor handle `HalModule` published for it alone, so the one workflow that reports user-visible
   servo trim was the one path `FakeDogHAL` could not reach. `DogHAL` gains `read_offsets()` and a

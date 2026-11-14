@@ -97,10 +97,17 @@ class FakeDogHAL:
         self._touch = value
         self._touch_valid = True
 
-    def set_sound(self, direction: int | None) -> None:
+    def set_sound(self, direction: int | None, valid: bool | None = None) -> None:
+        """Set the sound reading.
+
+        `direction` is the bearing the vendor reports, or None when nothing was heard. `valid`
+        separates "the sensor answered and heard nothing" (the normal quiet-room state, and what
+        `PidogHAL` publishes) from "the sensor did not answer"; left out, it keeps the older
+        behaviour of tying validity to having a direction.
+        """
         self._sound_detected = direction is not None
         self._sound_direction = direction
-        self._sound_valid = direction is not None
+        self._sound_valid = (direction is not None) if valid is None else valid
 
     def set_battery(self, volts: float | None) -> None:
         self._battery_v = volts

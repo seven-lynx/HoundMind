@@ -1,66 +1,111 @@
+"""PiDog hardware checkup: one sensor snapshot, then a minimal motion run unless asked not to.
+
+Hardware comes from :class:`~houndmind_ai.hal.iface.DogHAL` - `PidogHAL` on a dog, a fake in a
+test - so the checkup reads the conditioned snapshot the runtime reads instead of opening a
+`Pidog()` of its own (#11). The exit code is still 0 whether a sensor answered or not (#109), so
+the `[checkup] valid:` line is the verdict.
+"""
+
 from __future__ import annotations
 
 import argparse
+import sys
 import time
+from pathlib import Path
+from typing import Any
+
+from houndmind_ai.hal.iface import DogHAL, SensorSnapshot
+
+__all__ = ["MOTION_STEPS", "describe", "main", "run_checkup"]
+
+# The motion sequence in HAL vocabulary, in the order the bench checklist expects
+# (`docs/HARDWARE_TEST.md` section 9): stand, both turns, then the head sweep and back to centre.
+# `wait` makes each step complete before the next begins, as the old direct vendor calls did.
+MOTION_STEPS: tuple[tuple[str, dict[str, Any]], ...] = (
+    ("stand", {"speed": 180, "steps": 1, "wait": True}),
+    ("turn_left", {"speed": 180, "steps": 1, "wait": True}),
+    ("turn_right", {"speed": 180, "steps": 1, "wait": True}),
+    ("head", {"yaw": -30.0, "speed": 70, "wait": True}),
+    ("head", {"yaw": 30.0, "speed": 70, "wait": True}),
+    ("head", {"yaw": 0.0, "speed": 70, "wait": True}),
+)
 
 
-def _read_distance(dog) -> float | None:
+def describe(snapshot: SensorSnapshot) -> list[str]:
+    """One line per sensor, plus the validity verdict.
+
+    A value is printed only when its flag says it is a measurement: `None` means "no reading",
+    never a fabricated number (`SensorSnapshot`, `hal/iface.py`). `sound` is the line where the
+    value can be legitimately absent on a healthy dog - nothing was heard - so it needs the
+    `valid:` line to be distinguishable from a sensor that did not answer.
+    """
+    distance = (
+        f"{snapshot.distance_cm:.1f}"
+        if snapshot.distance_valid and snapshot.distance_cm is not None
+        else "None"
+    )
+    touch = snapshot.touch if snapshot.touch_valid else "None"
+    sound = (
+        f"detected={snapshot.sound_detected} dir={snapshot.sound_direction}"
+        if snapshot.sound_valid
+        else "detected=None dir=None"
+    )
+    acc = str(snapshot.acc) if snapshot.imu_valid and snapshot.acc is not None else "None"
+    gyro = (
+        str(snapshot.gyro) if snapshot.imu_valid and snapshot.gyro is not None else "None"
+    )
+    valid = (
+        f"distance={snapshot.distance_valid} touch={snapshot.touch_valid} "
+        f"sound={snapshot.sound_valid} imu={snapshot.imu_valid}"
+    )
+    return [
+        f"[checkup] distance_cm: {distance}",
+        f"[checkup] touch: {touch}",
+        f"[checkup] sound: {sound}",
+        f"[checkup] acc: {acc}",
+        f"[checkup] gyro: {gyro}",
+        f"[checkup] valid: {valid}",
+    ]
+
+
+def run_checkup(hal: DogHAL, skip_motion: bool, pause: float) -> None:
+    """Read every sensor once; command the motion sequence only when motion is allowed."""
+    print("[checkup] Reading sensors...")
+    for line in describe(hal.read()):
+        print(line)
+
+    if skip_motion:
+        print("[checkup] Motion skipped.")
+        return
+
+    print("[checkup] Running minimal motion...")
+    delay = max(0.0, pause)
+    for name, params in MOTION_STEPS:
+        try:
+            hal.action(name, dict(params))
+        except Exception as exc:  # noqa: BLE001 - one failed step must not abandon the rest
+            print(f"[checkup] step {name} failed: {exc}", file=sys.stderr)
+        time.sleep(delay)
+    print("[checkup] Done.")
+
+
+def _load_settings(path: str | None) -> dict[str, Any]:
+    """The `settings` table, so the HAL conditions sensors the way the runtime does.
+
+    A checkup exists to test hardware, not to fail on a config problem: a file that will not load
+    degrades to the HAL's own defaults with one line saying why.
+    """
+    from houndmind_ai.core.config import load_config
+
     try:
-        if hasattr(dog, "read_distance"):
-            return float(dog.read_distance())
-        return float(dog.ultrasonic.read_distance())
-    except Exception:
-        return None
+        return dict(load_config(Path(path) if path else None).settings)
+    except Exception as exc:  # noqa: BLE001 - missing file, bad JSON, or a schema problem
+        print(f"[checkup] settings not loaded ({exc}); using HAL defaults", file=sys.stderr)
+        return {}
 
 
-def _read_touch(dog) -> str | None:
-    try:
-        return dog.dual_touch.read() or "N"
-    except Exception:
-        return None
-
-
-def _read_sound(dog) -> tuple[bool | None, int | None]:
-    try:
-        detected = bool(dog.ears.isdetected())
-        direction = int(dog.ears.read())
-        return detected, direction
-    except Exception:
-        return None, None
-
-
-def _read_imu(
-    dog,
-) -> tuple[tuple[float, float, float] | None, tuple[float, float, float] | None]:
-    try:
-        acc_raw = dog.accData
-        gyro_raw = dog.gyroData
-        acc = (float(acc_raw[0]), float(acc_raw[1]), float(acc_raw[2]))
-        gyro = (float(gyro_raw[0]), float(gyro_raw[1]), float(gyro_raw[2]))
-        return acc, gyro
-    except Exception:
-        return None, None
-
-
-def _safe_action(dog, action: str, speed: int = 180) -> None:
-    try:
-        dog.do_action(action.replace(" ", "_"), step_count=1, speed=speed)
-        if hasattr(dog, "wait_all_done"):
-            dog.wait_all_done()
-    except Exception:
-        pass
-
-
-def _head_move(dog, yaw: int, speed: int = 70) -> None:
-    try:
-        dog.head_move([[int(yaw), 0, 0]], speed=speed)
-        if hasattr(dog, "wait_head_done"):
-            dog.wait_head_done()
-    except Exception:
-        pass
-
-
-def main() -> None:
+def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
+    """Run the checkup. `hal` is the injection seam: `None` opens the real dog."""
     parser = argparse.ArgumentParser(
         description="PiDog hardware checkup (sensors + minimal motion)"
     )
@@ -70,47 +115,36 @@ def main() -> None:
     parser.add_argument(
         "--pause", type=float, default=0.6, help="Pause between steps (seconds)"
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--config", type=str, default=None, help="Path to settings.jsonc"
+    )
+    args = parser.parse_args(argv)
 
-    from pidog import Pidog  # type: ignore
+    owned = hal is None
+    if hal is None:
+        # Imported here, not at module scope: the vendor package is only needed on a dog, and a
+        # missing one must read as a reportable failure rather than an import traceback.
+        from houndmind_ai.hal.vendor import PidogHAL
 
-    dog = Pidog()
-    try:
-        print("[checkup] Reading sensors...")
-        distance = _read_distance(dog)
-        touch = _read_touch(dog)
-        sound_detected, sound_dir = _read_sound(dog)
-        acc, gyro = _read_imu(dog)
-
-        print(f"[checkup] distance_cm: {distance}")
-        print(f"[checkup] touch: {touch}")
-        print(f"[checkup] sound: detected={sound_detected} dir={sound_dir}")
-        print(f"[checkup] acc: {acc}")
-        print(f"[checkup] gyro: {gyro}")
-
-        if args.skip_motion:
-            print("[checkup] Motion skipped.")
-            return
-
-        print("[checkup] Running minimal motion...")
-        _safe_action(dog, "stand")
-        time.sleep(args.pause)
-        _safe_action(dog, "turn left")
-        time.sleep(args.pause)
-        _safe_action(dog, "turn right")
-        time.sleep(args.pause)
-        _head_move(dog, -30)
-        time.sleep(args.pause)
-        _head_move(dog, 30)
-        time.sleep(args.pause)
-        _head_move(dog, 0)
-        print("[checkup] Done.")
-    finally:
+        vendor_hal = PidogHAL(_load_settings(args.config))
         try:
-            dog.close()
-        except Exception:
-            pass
+            vendor_hal.start()
+        except Exception as exc:  # noqa: BLE001 - a missing vendor package is the report
+            print(f"[checkup] pidog unavailable: {exc}", file=sys.stderr)
+            return 2
+        hal = vendor_hal
+
+    try:
+        run_checkup(hal, args.skip_motion, args.pause)
+    finally:
+        # Only a HAL this tool opened is the tool's to close; an injected fake belongs to its test.
+        if owned:
+            try:
+                hal.close()
+            except Exception:  # noqa: BLE001 - nothing left to recover at exit
+                print("[checkup] close failed", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
