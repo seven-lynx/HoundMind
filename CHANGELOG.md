@@ -7,6 +7,17 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **One producer for `energy_level`** (#85): the behaviour module and `optional/energy_emotion.py` each
+  decayed the same number, applied the same boosts and clamped to the same bounds, under two different
+  switches. With both on, the reading decayed twice per tick and the boosts stacked, so the rate
+  depended on module order; with one on, the value was whichever ran last. The behaviour module is now
+  the only writer - `settings.energy.enabled` is the switch, a stimulus an emotion model does not need
+  cannot stall it, and the `boost_obstacle` term moved with it so nothing was lost. `energy_emotion`
+  became the consumer it already half was: it derives `energy_speed_hint`, `emotion_state` and the LED
+  request from the reading, and with no reading it publishes nothing and says once that
+  `settings.energy.enabled` is what produces one. Four new cases in `tests/test_energy_state.py`,
+  including "both switched on, one decay per tick"; `config/settings.jsonc` and
+  `docs/FEATURES_GUIDE.md` now name the single owner.
 - **`led_priority` is gone instead of honoured** (#87): four producers stamped `request["priority"]`
   from their own section's `led_priority` int, and the selector never read it - it walks
   `settings.led.priority` and takes the first live request, so the strip was decided by list order

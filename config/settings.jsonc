@@ -236,7 +236,8 @@
       "required": false
     },
     "energy_emotion": {
-      // Optional energy/emotion tracking (disabled by default).
+      // Derived emotion feedback (disabled by default). A consumer of `settings.energy`: with
+      // `settings.energy.enabled: false` there is no reading, so this publishes nothing and says so.
       "enabled": false,
       "required": false
     },
@@ -740,8 +741,8 @@
       // tired dog starts dozing off while idle instead of only once autonomy moves it to `rest`. The
       // band opens at 0.5 rather than at the rest threshold on purpose: under autonomy the rest state
       // wins at 0.35, so a bias confined below it would never be seen. 0 switches the band off.
-      // Needs an `energy_level` reading (`settings.energy` or `modules.energy_emotion`); without one
-      // it does nothing at all.
+      // Needs an `energy_level` reading (`settings.energy.enabled`); without one it does nothing
+      // at all.
       "energy_bias_start": 0.5,
       // Social bias (P4 PL3). Somebody in front of the dog raises the `interact` weight in the
       // autonomy draw, beside `personality.sociability`: `social_bias_peak` is how much more
@@ -855,6 +856,10 @@
     // =====================================================================
     // ENERGY & EMOTION (optional)
     // =====================================================================
+    // `energy_level` has one producer — the behaviour module — and `enabled` here is its switch.
+    // `modules.energy_emotion` only derives from the reading (speed hint, emotion label, LED):
+    // enabling it without `enabled: true` here gets a warning and no output, because there is
+    // nothing to read (two producers decaying one number per tick was #85).
     "energy": {
       "enabled": false,
       "initial": 0.6,
