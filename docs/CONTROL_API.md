@@ -47,6 +47,12 @@ the device token itself. Keep the dog on a network you trust, or close the door:
 - A firewall rule that admits only your own devices to port 8420.
 - A TLS-terminating reverse proxy in front, if you need to reach it from beyond the LAN.
 
+**The device advertises itself, and the advertisement is public.** With `settings.api.discovery_enabled`
+(the default) the control plane publishes one mDNS record so a client can resolve a name instead of
+an address (`#38`). Its TXT payload is `api_version`, `min_client` and `scheme` - a subset of what the
+unauthenticated `/meta` already reports, with no token, no device secret and no location. Anyone on
+the LAN can read it, which is exactly as much as they can read from `/meta` today.
+
 **TLS is available and off by default.** `settings.api.tls_enabled: true` serves HTTPS with a
 self-signed certificate generated on first start for this device — `docs/INSTALL.md` has the trust
 steps for a browser and a phone. A client that cannot be taught to trust it (the Android app is one

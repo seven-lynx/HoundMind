@@ -18,6 +18,7 @@ import time
 from typing import Any
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.services.discovery import MdnsAdvertiser
 from houndmind_ai.services.settings import ApiSettings
 from houndmind_ai.services.tls import TlsError, build_context
 
@@ -145,6 +146,7 @@ class ControlPlaneModule(Module):
             await runner.cleanup()
             return
         self._stop_event = asyncio.Event()
+        discovery = self._start_advertising(settings, plane)
         self._ready.set()
         logger.info(
             "Control plane listening on %s://%s:%s (token: %s)",
@@ -156,5 +158,31 @@ class ControlPlaneModule(Module):
         try:
             await self._stop_event.wait()
         finally:
+            # Withdrawn before the port goes: a record that outlives its socket points a client at
+            # nothing, which is worse than no record at all.
+            if discovery is not None:
+                discovery.stop()
             await runner.cleanup()
             logger.info("Control plane stopped")
+
+    @staticmethod
+    def _start_advertising(settings: ApiSettings, plane) -> MdnsAdvertiser | None:
+        """Publish the service record, or log once and carry on (#38).
+
+        Built from `plane.meta()` on purpose: the advertisement is public information, and taking
+        the values from the same payload is what keeps the two from disagreeing about what is
+        public. A failure here never reaches the caller - discovery is a convenience.
+        """
+        if not settings.discovery_enabled:
+            return None
+        meta = plane.meta()
+        advertiser = MdnsAdvertiser(
+            port=settings.port,
+            service_name=settings.discovery_name,
+            txt={
+                "api_version": str(meta.get("api_version", "")),
+                "min_client": str(meta.get("min_client", "")),
+                "scheme": str(meta.get("scheme", "")),
+            },
+        )
+        return advertiser if advertiser.start() else None

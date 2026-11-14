@@ -1041,6 +1041,10 @@ _API = Section(
         "link_loss_s": FloatSpec(minimum=1.0, maximum=60.0),
         "max_clients": IntSpec(minimum=1, maximum=64),
         "log_tail": IntSpec(minimum=1, maximum=5000),
+        # mDNS (#38): the control plane is findable by name on the LAN. A convenience, so it
+        # degrades to a log line rather than a boot failure when multicast is blocked.
+        "discovery_enabled": Bool(),
+        "discovery_name": StrSpec(),
     }
 )
 

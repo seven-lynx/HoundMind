@@ -1223,7 +1223,14 @@
       "link_loss_s": 6.0,
       "max_clients": 8,
       // Default and maximum `GET /api/v1/logs?tail=`.
-      "log_tail": 200
+      "log_tail": 200,
+      // Findable by name on the LAN (#38): one mDNS record, `houndmind._houndmind._tcp.local`,
+      // carrying the host, the port and the API version. Everything in it is already in the
+      // public /meta payload - no token, no secret, no location. Discovery is a convenience:
+      // a network that blocks multicast costs one log line and the address still works.
+      "discovery_enabled": true,
+      // The instance name a client sees, so two dogs on one LAN stay distinguishable.
+      "discovery_name": "houndmind"
     }
   }
 }

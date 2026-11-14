@@ -268,6 +268,31 @@ On Windows PowerShell:
 python -m houndmind_ai
 ```
 
+### Finding the device by name
+
+The control plane advertises itself over mDNS (Avahi's protocol, already on Raspberry Pi OS
+Bookworm), so a client does not have to be told an address that DHCP can change:
+
+- Service type `_houndmind._tcp.local`, instance `<settings.api.discovery_name>._houndmind._tcp.local`
+  (`houndmind._houndmind._tcp.local` by default).
+- The TXT record carries `api_version`, `min_client` and `scheme` - the same values `/meta`
+  publishes, and nothing else. No token, no device secret, no location.
+- The host record is `<hostname>.local`, so `http://<hostname>.local:8420/` works from any machine
+  that speaks mDNS (macOS and Windows 10+ do out of the box; Linux needs `avahi-daemon`, which
+  Bookworm ships).
+
+**When multicast is blocked** - a guest network, an IoT VLAN, a container, some managed switches -
+discovery simply does not resolve. Nothing fails: the runtime logs one line and keeps serving.
+Fall back to the address:
+
+```bash
+hostname -I                 # on the device: the LAN address
+curl http://<pi-ip>:8420/api/v1/meta
+```
+
+Turn it off entirely with `"discovery_enabled": false` under `settings.api`; the address still
+works.
+
 ### Stopping and restarting
 
 The runtime is a foreground process: it runs until you stop it. **No service unit ships with this

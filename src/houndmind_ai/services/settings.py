@@ -80,6 +80,10 @@ class ApiSettings:
     max_clients: int = 8
     # `GET /logs?tail=` default and ceiling.
     log_tail: int = 200
+    # mDNS advertisement (#38): discoverable by name on the LAN, off with one key. The record is
+    # public information - nothing in it is absent from the unauthenticated `/meta` payload.
+    discovery_enabled: bool = True
+    discovery_name: str = "houndmind"
 
     @classmethod
     def from_settings(cls, settings: Mapping[str, Any] | None) -> ApiSettings:
@@ -109,4 +113,6 @@ class ApiSettings:
             link_loss_s=_as_float(raw.get("link_loss_s"), cls.link_loss_s, 1.0, 60.0),
             max_clients=_as_int(raw.get("max_clients"), cls.max_clients, 1, 64),
             log_tail=_as_int(raw.get("log_tail"), cls.log_tail, 1, 5000),
+            discovery_enabled=_as_bool(raw.get("discovery_enabled"), cls.discovery_enabled),
+            discovery_name=_as_str(raw.get("discovery_name"), cls.discovery_name),
         )

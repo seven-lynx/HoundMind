@@ -978,6 +978,8 @@ mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed.
 | `link_loss_s` | `6.0` | A client that stops pinging loses its command. |
 | `max_clients` | `8` | Sessions kept; the least recently seen idle one is evicted. |
 | `log_tail` | `200` | Default and maximum `?tail=` for `/logs`. |
+| `discovery_enabled` | `true` | Advertise the control plane over mDNS so a client finds it by name (#38). Off means address-only. |
+| `discovery_name` | `houndmind` | The mDNS instance name, so two dogs on one LAN stay distinguishable. |
 
 **Disable:** `modules.api.enabled = false` removes the network surface entirely — the dog still
 runs, and nothing listens. That is the right setting for a dog that should never be reachable.
