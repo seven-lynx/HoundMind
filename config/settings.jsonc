@@ -394,7 +394,9 @@
         "backend": "speech_recognition",
         "vosk_model_path": ""
       },
-      // Text-to-speech settings
+      // Text-to-speech settings. `enabled: false` keeps the module silent even when it
+      // answers a question. `backend` picks the voice: "auto" tries the PiDog speaker first
+      // and falls back to pyttsx3, while "pidog" and "pyttsx3" each disable the other path.
       "tts": {
         "enabled": false,
         "backend": "pidog"

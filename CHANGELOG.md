@@ -366,6 +366,15 @@ Current Release: v2026.01.18
 - `manual` mode refused `Source.ROUTINE` (`kernel/commands.py`), so a user who started a routine from
   a client watched it die at step one. A routine is the same hand on the wheel, scripted: `manual`
   still excludes navigation and behaviour, and `rest` still excludes routines.
+- `settings.voice_assistant.tts` was shipped, documented and schema-validated, and nothing read it:
+  `optional/voice.py::_speak` picked an engine by itself, so `backend: "pyttsx3"` still used the
+  robot voice and `enabled: false` still spoke (#8). `_speak` now reads the table - `enabled` gates
+  every utterance, `auto` keeps the historical vendor-first order, and an explicit `backend`
+  disables the other path. A config with no `tts` table keeps the old order rather than going
+  silent. `tests/test_voice_tts.py` (6 cases) drives a `voice_text` through `tick`; FEATURES_GUIDE
+  section 19 and the `settings.jsonc` comment state the semantics. Wiring was chosen over deleting
+  the keys because both engine paths already existed, and `enabled: false` adding speech is the
+  worse of the two failures.
 
 
 ### Docs

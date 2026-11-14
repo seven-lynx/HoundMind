@@ -922,9 +922,9 @@ _VISION_PI4 = Section(
 )
 
 # `optional/voice.py`. The backend names are the ones its docstring documents and the ones the
-# recogniser selection branches on. `tts` is part of that documented contract but the module
-# picks a TTS engine at runtime instead of reading it: the key is accepted so an existing file
-# keeps loading, and wiring it is tracked with the voice work, not here.
+# recogniser selection branches on. `tts` is read too: `enabled` gates every utterance, and
+# `backend` picks the engine - `auto` tries the PiDog speaker and then pyttsx3, while an
+# explicit value disables the other path (#8).
 _VOICE = Section(
     fields={
         "enabled": Bool(),
