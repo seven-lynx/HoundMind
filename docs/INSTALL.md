@@ -269,6 +269,24 @@ On Windows PowerShell:
 python -m houndmind_ai
 ```
 
+### Stopping and restarting
+
+The runtime is a foreground process: it runs until you stop it. **No service unit ships with this
+tree** — there is no `houndmind.service`, so `sudo systemctl restart houndmind` has nothing to
+restart. That is a decision, not an omission: a restart policy for a robot has to say what happens
+to a gait that is halfway through, and no such rule is settled yet.
+
+| Task | What to do |
+|---|---|
+| Stop | `Ctrl-C` in the terminal the runtime is running in. The tick finishes and the HAL is closed. |
+| Restart | Stop it, then start it again with the command above. A routine file added or edited since boot is read at this point (`docs/ROUTINES.md`). |
+| Check it is running | `curl http://127.0.0.1:8420/health` answers without a token; `GET /api/v1/state` needs one. |
+| Find the token | `~/.houndmind/api_token`, written `0600` on the first start. Read it into a variable — do not paste it into a URL. |
+| Change the port | `settings.api.port` (default `8420`). |
+
+If the process died on its own, `logs/houndmind.log` says why: the runtime logs the exception, not
+only the exit.
+
 ## TLS for the control plane (optional)
 
 The control plane serves **plaintext HTTP** by default: the device token, every command and every

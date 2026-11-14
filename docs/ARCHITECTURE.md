@@ -67,6 +67,7 @@ The real tree, not the planned one:
 
 ```
 src/houndmind_ai/
+  main.py  __main__.py
   board/      detect.py
   core/       config.py  runtime.py  module.py  logging_setup.py
   kernel/     state.py  commands.py  intents.py  registry.py  scheduler.py  supervisor.py
@@ -85,9 +86,10 @@ src/houndmind_ai/
               face_recognition.py  semantic_labeler.py  slam_pi4.py  voice.py  energy_emotion.py
   services/   api.py  auth.py  camera.py  module.py  sessions.py  settings.py  state.py
               stream.py  tls.py  web/  (index.html, app.js, style.css)
-src/tools/    camera_check.py  collect_support_bundle.py  download_opencv_models.py
-              hardware_checkup.py  installer_verify.py  list_audio_devices.py
-              replay_decisions.py  smoke_test.py  validate_rtabmap_adapter.py
+src/tools/    calibrate_servos.py  camera_check.py  collect_support_bundle.py
+              download_opencv_models.py  hardware_checkup.py  installer_verify.py
+              list_audio_devices.py  replay_decisions.py  smoke_test.py
+              validate_rtabmap_adapter.py
 ```
 
 `board/` answers one question — which Raspberry Pi this is — and holds no policy of its own. There is
