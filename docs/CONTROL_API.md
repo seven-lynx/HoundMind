@@ -30,6 +30,7 @@ file. A route that exists in code and not here — or here and not in code — f
 7. [Versioning and compatibility](#7-versioning-and-compatibility)
 8. [Places](#8-places)
 9. [People](#9-people)
+10. [Calibration](#10-calibration) — the read-only run route
 
 ---
 
@@ -46,6 +47,12 @@ the device token itself. Keep the dog on a network you trust, or close the door:
 - `settings.api.host: "127.0.0.1"` and an SSH tunnel: `ssh -L 8420:localhost:8420 <user>@<pi>`.
 - A firewall rule that admits only your own devices to port 8420.
 - A TLS-terminating reverse proxy in front, if you need to reach it from beyond the LAN.
+
+**The device advertises itself, and the advertisement is public.** With `settings.api.discovery_enabled`
+(the default) the control plane publishes one mDNS record so a client can resolve a name instead of
+an address (`#38`). Its TXT payload is `api_version`, `min_client` and `scheme` - a subset of what the
+unauthenticated `/meta` already reports, with no token, no device secret and no location. Anyone on
+the LAN can read it, which is exactly as much as they can read from `/meta` today.
 
 **TLS is available and off by default.** `settings.api.tls_enabled: true` serves HTTPS with a
 self-signed certificate generated on first start for this device — `docs/INSTALL.md` has the trust
@@ -78,7 +85,7 @@ because rotating the device token is an operator decision, not a client one.
 |---|---|
 | `state:read` | `GET /state`, `/modules`, `/events` (WS), `/camera/*`, `/history` |
 | `move` | `POST /command`, `POST /stop`, `POST /mode` |
-| `config` | `GET`/`PATCH /config`, `GET /calibration` |
+| `config` | `GET`/`PATCH /config`, `GET /calibration`, `POST /calibration/run` |
 | `admin` | `POST /pair/open`, `GET`/`POST /people`, `DELETE /people/{id}`, `GET /logs`, `GET /support-bundle` — device token only |
 
 Header: `Authorization: Bearer <token>`. The two camera routes also accept `?ticket=<ticket>` because an
@@ -87,13 +94,18 @@ for 60 seconds and **single use**, and it buys `state:read` on one frame and not
 token is **not** accepted in a query string — it used to be, and that put the credential for `move`
 and `config` into browser history and access logs (`#18`).
 
+Both camera rows declare that requirement in `services/api.py::ROUTES` as the `HANDLER_SCOPE` marker,
+not as `None`: in that table `None` means "public on purpose", and the camera routes are not. The
+check happens inside the handler because a ticket has to be claimed there, and a visible marker is
+what stops the guard from looking redundant (`#39`).
+
 ---
 
 ## 2. Endpoints
 
 | Method | Path | Scope | Purpose |
 |---|---|---|---|
-| `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `scheme`, `device_id`, `board`, `profile`, `uptime_s`, `capabilities` |
+| `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `scheme`, `device_id`, `board`, `board_model`, `profile`, `uptime_s`, `capabilities` |
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
@@ -121,6 +133,7 @@ and `config` into browser history and access logs (`#18`).
 | `GET` | `/api/v1/config` | `config` | effective config, secrets redacted |
 | `PATCH` | `/api/v1/config` | `config` | four live keys only, listed below |
 | `GET` | `/api/v1/calibration` | `config` | servo offsets, read-only |
+| `POST` | `/api/v1/calibration/run` | `config` | run one read-only calibration request ([§10](#10-calibration)) |
 | `GET` | `/api/v1/history?limit=50` | `state:read` | recent commands with verdicts, and live sessions |
 | `GET` | `/api/v1/logs?tail=200` | `admin` | recent log lines, redacted |
 | `GET` | `/api/v1/support-bundle` | `admin` | zip: meta, state, modules, redacted config, audit, sessions |
@@ -138,9 +151,9 @@ would otherwise fail the module that reads it on every tick, which is a worse ve
 The change is applied **in memory only**. Every response carries `persisted: false`, and a restart
 reloads `config/settings.jsonc` — so a live edit is a session-scoped override, not a new default.
 
-**Reserved, not implemented in v1:** `POST /api/v1/calibration/run` (it moves the dog, so it needs a
-physical confirmation on the device first) and `POST /api/v1/update`. There is no route for face
+**Reserved, not implemented in v1:** `POST /api/v1/update`. There is no route for face
 enrollment or SLAM map download; both are runtime-context commands (see `FEATURES_GUIDE.md`).
+`POST /api/v1/calibration/run` is implemented, and it is **read-only** — see [§10](#10-calibration).
 
 ---
 
@@ -350,7 +363,7 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "started_at": 4212.3
   },
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "temp_c": 61.4, "mem_used_pct": 51.0 } },
-  "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [] },
+  "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [], "exempt": { "api": "exempt by settings.watchdog.ignore_modules" } },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 },
   "perf": { "tick_hz_target": 5, "tick_hz_actual": 4.98, "tick_ms": 41.2, "tick_overrun_ms": 0.0, "loop_delay_ms": 200.0 }
 }
@@ -411,6 +424,12 @@ Every field is `null` before the loop's first tick, because `0` would read as a 
 `supervisor` is the watchdog's own state: whether it is holding motion (`holding` + `reason`, which is
 `null` or a staleness reason), which modules it asked the runtime to restart, and which it has given
 up on. `holding: true` never means the dog was posed — recovery is stop-and-report.
+
+`exempt` names the modules the watchdog is configured never to restart, with the reason, so
+"exempt on purpose" is distinguishable from "healthy". The shipped `settings.watchdog.ignore_modules`
+exempts `api`, because restarting the control plane re-binds the port and drops every WebSocket
+client mid-request; the cost of that choice is that a wedged API cannot be restarted by anything,
+and this field is how it stays visible (`#25`).
 
 **Validity flags are mandatory and clients must honour them.** `distance_cm: 42.5` with
 `distance_valid: false` means "no measurement" — render "—", never "42 cm". This is the one rule in
@@ -664,4 +683,41 @@ feature, not a claim this route can honour today.
 nothing else: the command it writes (`face_recognition_command`) is the one
 [§20](FEATURES_GUIDE.md#20-face-recognition-pi4) of `docs/FEATURES_GUIDE.md` documents, so a routine
 step or a tool can enrol with no API involved.
+
+---
+
+## 10. Calibration
+
+`GET /api/v1/calibration` reports the servo trim and whether offsets are auto-applied. It and the
+route below are **read-only**: nothing in this build writes a servo offset over HTTP, and
+`CalibrationModule` (`calibration/workflow.py`) publishes no motion intent.
+
+```http
+POST /api/v1/calibration/run
+Authorization: Bearer <token>
+{ "request": "servo_zero" }
+→ 202 {"request": "servo_zero", "request_id": "9f3c1a77", "result": {"status": "ok", ...}}
+```
+
+| `request` | Measures |
+|---|---|
+| `servo_zero` | the trim the hardware already holds (`hal.read_offsets`), never written back |
+| `wall_follow` | the distance error against `calibration.wall_follow_target_distance_cm` |
+| `corner_seek` | the clearest angle of the latest scan |
+| `landmark_align` | the pose confidence against `calibration.landmark_alignment_confidence_min` |
+
+- The four names are an **allow-list** (`services/api.py::CALIBRATION_REQUESTS`). Anything else is
+  `400 unknown_request` with the list, and nothing is put on the context.
+- Every call carries a fresh `request_id`, so asking for the same reading twice is two runs. The
+  module's re-run guard compares the pair, not just the name.
+- `202` returns the module's result. `503 unavailable` means the runtime did not answer within one
+  second (five ticks at the shipped 5 Hz): the request stays queued and the next tick still runs it.
+- **There is no `POST /api/v1/calibration/apply`,** and no route that drives a servo in order to
+  calibrate it. A calibration that *does* move the dog is a separate route with its own physical
+  arming step; it must not be bolted onto this one, which is read-only by construction.
+- **Saving a trim is a device action**, not an API one: `python -m tools.calibrate_servos --set
+  joint=deg --apply` on the Pi writes through `DogHAL.apply_offsets`, merging over the loaded values
+  and clamping to `SERVO_OFFSET_LIMIT_DEG`. `settings.calibration.auto_apply_servo_offsets` replays
+  a saved trim at startup; nothing in the control plane writes one.
+
 

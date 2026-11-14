@@ -112,6 +112,35 @@ def test_the_same_request_is_not_re_run_every_tick(tmp_path) -> None:
     assert ctx.get("calibration_result") is first
 
 
+def test_an_api_request_carries_an_id_so_the_same_read_can_run_twice(tmp_path) -> None:
+    """`POST /calibration/run` twice with the same name is two runs (#17).
+
+    The re-run guard exists to stop a *config* request rewriting the file five times a second. It
+    compares the pair (request, id), so the API can ask for the same reading again while a config
+    that never changes still runs once.
+    """
+    hal = fake_with_trim()
+    ctx = DummyContext(settings_for(tmp_path))
+    HalModule("hal", hal=hal).start(ctx)
+    module = CalibrationModule("calibration")
+
+    ctx.set("calibration_request", {"request": "servo_zero", "id": "a1"})
+    module.tick(ctx)
+    first = ctx.get("calibration_result")
+    assert first["request_id"] == "a1"
+    assert first["status"] == "ok"
+
+    module.tick(ctx)
+    assert ctx.get("calibration_result") is first, "the same id is the request already answered"
+
+    ctx.set("calibration_request", {"request": "servo_zero", "id": "b2"})
+    module.tick(ctx)
+    second = ctx.get("calibration_result")
+    assert second is not first
+    assert second["request_id"] == "b2"
+    assert hal.offsets_applied == [], "two reads are still reads"
+
+
 def test_a_persist_path_that_cannot_be_written_does_not_break_the_tick(tmp_path) -> None:
     blocker = tmp_path / "not-a-directory"
     blocker.write_text("x", encoding="utf-8")

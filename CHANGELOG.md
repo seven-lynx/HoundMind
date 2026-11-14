@@ -7,6 +7,88 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The navigator and the watchdog agree about what a stale scan is** (#22): a sweep at the shipped
+  settings takes ~2.6 s while `navigation.scan_stale_s` shipped as 0.8 s, so `_scan_open_space`
+  rejected every healthy reading and then fell back to `scan_service.latest()` with no timestamp
+  check at all - the guard was dead code and the fallback chose the direction. There is now one
+  rule, `navigation/scanning.py::scan_freshness_window_s` (`max(floor, 1.5 × the measured sweep)`),
+  with `watchdog.scan_timeout_s` as its floor. The watchdog publishes the number it used as
+  `scan_stale_after_s`; the navigator prefers that key, falls back to the same rule when the
+  watchdog is disabled or has not ticked, and applies the window to the fallback as well - a
+  rejected reading is no longer published into `scan_reading`. `navigation.scan_stale_s` is retired,
+  so a config that still carries it fails at load with a suggestion rather than being ignored.
+  `tests/test_scan_freshness.py` (6 cases), plus the window assertion in `tests/test_watchdog.py`.
+- **`POST /api/v1/calibration/run` exists, and it cannot move the dog** (#17): the route was
+  reserved rather than stubbed because a remote calibration that sweeps every servo is the most
+  dangerous call in the product. Calibration in this tree only reads - servo trim, wall-follow
+  distance error, the clearest scan angle, pose confidence - so the route is that read half: scope
+  `config`, an allow-list of those four requests (`services/api.py::CALIBRATION_REQUESTS`), `400`
+  for anything else and `503` when the runtime does not answer within a second. The safety is
+  structural, not ceremonial: there is nothing for a physical confirmation to confirm, and a
+  prompt that guards nothing teaches the operator to approve it reflexively. A calibration that
+  *does* move servos needs its own route and its own arming step; it cannot dispatch through this
+  one. `CalibrationModule` now dedupes on `(request, id)`, so the same reading can be asked for
+  twice instead of being a silent no-op for the life of the process, and
+  `tests/test_api_routes.py` proves a run leaves `FakeDogHAL.offsets_applied` empty. Writing a trim
+  stays a device action (`python -m tools.calibrate_servos --apply`). `docs/CONTROL_API.md` §10,
+  `docs/FEATURES_GUIDE.md` §16/§26 and the CHANGELOG follow.
+- **No document promises a `houndmind doctor` command** (#23): it never existed, and two places
+  still named it. The `pyproject.toml` packaging comment cited it as the B-08 example (it now cites
+  `python -m tools.hardware_checkup`, which is the case that actually exercises the `tools*`
+  include), and the support bundle's own `README.txt` told the user it "adds file logs (Phase 6)" -
+  inside the zip a user is asked to attach to a bug report. That README now says what the bundle
+  carries and where file logs actually are (`GET /api/v1/logs`, or
+  `python -m tools.collect_support_bundle` on the device), and `tests/test_api_routes.py` asserts it
+  stops naming the phantom. Fixed in the same sweep because it is the same class of claim and was
+  contradicted by the very page it sat on: `FEATURES_GUIDE.md` §26 listed TLS under "not in v1"
+  while §26 documents it and `services/tls.py` ships it.
+- **Vilib no longer serves the camera on a port of its own** (#15): `optional/vision.py` called
+  `Vilib.display(local=False, web=True)`, which asked the vendor library - not this repository - to
+  run an HTTP stream on the Pi 3 path, outside the token gate, outside the audit trail and outside
+  the interlock. A grep for `BaseHTTPRequestHandler` could never find it, because the listener lives
+  in `vilib`. The argument is now `web=False`: the module republishes `Vilib.img` as `vision_frame`,
+  which is what `services/camera.py` reads, so the stream had no consumer here. `local` stays
+  `False` - a preview window needs a display a headless runtime does not have, and the capture
+  thread `camera_start` owns does not depend on it. `tests/test_no_legacy_http.py` gains a
+  source-level guard for the one surface an AST scan cannot reach. What `vilib` does with
+  `web=False` is unobservable from the workstation; confirming it on the Pi belongs to the #26
+  checklist.
+- **The control plane says where it is** (#38): nothing advertised the device, so every client needed
+  a hand-entered IP that DHCP could change on the next lease. `services/discovery.py` publishes one
+  mDNS record - `houndmind._houndmind._tcp.local`, a `_houndmind._tcp` service with the host, the
+  port and a TXT payload of `api_version`/`min_client`/`scheme` - announces it three times, answers
+  a query that names it, and withdraws it with a zero TTL on a clean stop. Standard library only, so
+  no dependency: `zeroconf` on every install, `lite` included, is not worth a few dozen lines of DNS
+  wire format. The record is public information and is built from `plane.meta()`, which
+  `tests/test_discovery.py` asserts; a blocked multicast group costs one log line and nothing else.
+  `settings.api.discovery_enabled` (default `true`) and `discovery_name` follow, with
+  `docs/INSTALL.md` §*Finding the device by name* and the address fallback.
+- **A Pi 4 honours `--preset`** (#29): the installer forced `full` on a Pi 4 whatever the flag said,
+  so `--preset lite` attempted dlib/opencv/rtabmap the user had just asked to skip. The choice moved
+  into `resolve_preset()`: an explicit flag wins on every board, and `auto` keeps the documented
+  defaults (`full` on a Pi 4, `lite` elsewhere). `tests/test_installer_preset.py` covers both halves.
+- **The installer stops installing flask** (#30): it was a dependency of the four per-feature HTTP
+  servers the control plane replaced, and no module imports it. Gone from `scripts/installer_core.py`,
+  `requirements.txt` and the `full` extra - the extra because `tests/test_dependency_mirrors.py`
+  holds the mirror and the extra to the same package set. The model downloader beside it stays.
+- **One board rule, two callers** (#31): `scripts/installer_core.py` kept its own copy of the
+  generation regexes, which is how a Pi 5 was installed as a Pi 4. The table now lives in
+  `board/rules.py` - stdlib only - which `board/detect.py` imports and the installer loads by path,
+  because it runs before the package exists. `tests/test_board_detect.py` keeps the agreement test
+  and adds one that fails if a second table reappears in the installer.
+- **`/meta` reports the raw device-tree model** (#32): `board: unknown` said only that detection
+  failed. `board_model` carries the string verbatim, next to the `board` kind and the `profile`, and
+  a support bundle picks it up for free. `docs/CONTROL_API.md` §2 and `tests/test_api_meta.py` follow.
+- **The camera routes declare the scope they enforce** (#39): both rows were `None`, which everywhere
+  else in `ROUTES` means "public on purpose", while the handlers demanded `state:read` through a
+  single-use ticket. `HANDLER_SCOPE` names the second case, `None` keeps one meaning, and the test
+  whitelist that used to excuse the camera is gone - replaced by one that proves removing the guard
+  would be caught.
+- **An exempt module is visible** (#25): `settings.watchdog.ignore_modules` ships as `["api"]`, so a
+  wedged control plane was invisible - the one failure the API cannot report. `state.supervisor`
+  now carries `exempt: {name: reason}` for the modules the watchdog deliberately will not restart,
+  which keeps "exempt on purpose" distinguishable from "healthy" without restarting anything.
+
 - **The architecture tree names every file** (#68): `docs/ARCHITECTURE.md` §2 had drifted from the
   package it documents. `kernel/actions.py` and `kernel/decisions.py` were missing - the half of the
   issue that matters most, since this file is the map a reader uses to decide where a rule belongs -

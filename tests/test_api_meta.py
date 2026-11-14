@@ -47,13 +47,27 @@ def test_meta_reports_the_detected_board_and_the_applied_profile(tmp_path) -> No
     context = DummyContext()
     context.set("device_id", "houndmind-dev")
     context.set("board", "pi5")
+    context.set("board_model", "Raspberry Pi 5 Model B Rev 1.0")
     context.set("profile", "pi5")
 
     meta = make_plane(context, tmp_path).meta()
 
     assert meta["board"] == "pi5"
+    assert meta["board_model"] == "Raspberry Pi 5 Model B Rev 1.0"
     assert meta["profile"] == "pi5"
     assert meta["device_id"] == "houndmind-dev"
+
+
+def test_the_raw_model_is_null_before_the_device_tree_answers(tmp_path) -> None:
+    """`board: unknown` is only actionable if the device tree's own words are visible (#32).
+
+    An absent model stays `null`: inventing `"unknown"` as the string would make "the file was
+    not there" indistinguishable from a board that called itself that.
+    """
+    meta = make_plane(DummyContext(), tmp_path).meta()
+
+    assert meta["board"] is None
+    assert meta["board_model"] is None
 
 
 def test_the_boot_time_device_id_wins_over_the_config_default(tmp_path) -> None:

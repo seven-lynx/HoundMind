@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.hal.sensors import SensorReading
 from houndmind_ai.kernel.commands import Source
@@ -142,6 +144,18 @@ def test_a_slow_scan_is_not_called_stale() -> None:
     assert board.find(Source.WATCHDOG) is None, "3 s old for a 2.6 s scan is fresh"
 
 
+def test_the_watchdog_publishes_the_window_it_used() -> None:
+    """One number at runtime: the navigator reads this instead of deriving a second one (#22)."""
+    module, context, board = build()
+    context.set("scan_duration_s", 2.6)
+    context.set("sensor_reading", reading())
+    context.set("scan_reading", scan())
+
+    module.tick(context)
+
+    assert context.get("scan_stale_after_s") == pytest.approx(3.9)
+
+
 def test_a_scan_older_than_its_own_duration_is_stale() -> None:
     module, context, board = build()
     context.set("scan_duration_s", 2.6)
@@ -231,6 +245,39 @@ def test_the_watchdog_never_restarts_itself() -> None:
     module.tick(context)
 
     assert context.get("restart_modules") is None
+
+
+def test_an_ignored_module_is_reported_as_exempt_not_as_healthy() -> None:
+    """`api` ships exempt, so a wedged control plane must still be visible in `/state` (#25).
+
+    It is never restarted - a restart drops every connected client - but silence about it would
+    make "exempt on purpose" indistinguishable from "healthy".
+    """
+    settings = {"watchdog": {**SETTINGS["watchdog"], "ignore_modules": ["api"]}}
+    module, context, board = build(settings)
+    context.set("sensor_reading", reading())
+    context.set("scan_reading", scan())
+    context.set("module_statuses", {"api": status(last_heartbeat_ts=time.time() - 60.0)})
+
+    module.tick(context)
+
+    assert context.get("restart_modules") is None
+    assert context.get("watchdog_status")["exempt"] == {
+        "api": "exempt by settings.watchdog.ignore_modules"
+    }
+
+
+def test_a_disabled_module_is_not_called_exempt() -> None:
+    """An exemption is a decision the watchdog made; a module that is off was never a candidate."""
+    settings = {"watchdog": {**SETTINGS["watchdog"], "ignore_modules": ["api"]}}
+    module, context, board = build(settings)
+    context.set("sensor_reading", reading())
+    context.set("scan_reading", scan())
+    context.set("module_statuses", {"api": status(enabled=False, started=False)})
+
+    module.tick(context)
+
+    assert context.get("watchdog_status")["exempt"] == {}
 
 
 def test_a_disabled_watchdog_does_nothing() -> None:

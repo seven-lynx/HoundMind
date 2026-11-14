@@ -30,6 +30,30 @@ def _safe_int(val: Any, default: int) -> int:
         return default
 
 
+# A sweep is measured in seconds: one head move and one settle per angle, several distance
+# samples per angle. `scan_settle_s: 0.12`, `scan_samples: 3` and yaw +/-60 deg in 15 deg steps is
+# ~2.6 s at the shipped config, so a fixed sub-second window called a healthy scan stale by
+# definition (P3-4). This is the floor when no `watchdog.scan_timeout_s` is configured.
+SCAN_STALE_FLOOR_S = 2.0
+
+
+def scan_freshness_window_s(floor_s: Any, measured_s: Any) -> float:
+    """One rule for "is this scan still usable": `max(floor, 1.5 x the measured sweep)`.
+
+    `floor_s` is the configured floor (`watchdog.scan_timeout_s`); the module constant stands in
+    when it is missing or not positive. The rule lives in one function on purpose: the watchdog
+    and the navigator asked the same question with two different constants, so the guarded path
+    in `obstacle_avoidance` was dead code and the fallback drove the dog on readings the watchdog
+    would not move on (#22). `safety/watchdog.py` publishes the result as `scan_stale_after_s`
+    so there is one number at runtime, not two calculations that happen to agree.
+    """
+    floor = _safe_float(floor_s, 0.0)
+    if floor <= 0:
+        floor = SCAN_STALE_FLOOR_S
+    measured = _safe_float(measured_s, 0.0)
+    return max(floor, measured * 1.5)
+
+
 @dataclass
 class ScanReading:
     mode: str

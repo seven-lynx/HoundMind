@@ -527,8 +527,9 @@
       "scan_history_size": 10,
       // Ultrasonic samples per scan point.
       "scan_samples": 3,
-      // Stale scan threshold (seconds) before requesting a new scan.
-      "scan_stale_s": 0.8,
+      // Scan freshness has no key here any more (#22): it is one rule, the larger of
+      // watchdog.scan_timeout_s and 1.5x the measured sweep, shared by the navigator and the
+      // watchdog.
       // Head scan sweep range (degrees).
       "scan_yaw_max_deg": 60,
       // Head scan step size (degrees).
@@ -1018,6 +1019,9 @@
       // Modules to monitor (empty = every enabled, started module).
       "monitor_modules": [],
       // Modules never to restart. The watchdog adds itself, so it cannot restart itself.
+      // `api` is exempt on purpose: a restart re-binds the port and drops every client. The
+      // exemption is reported in /state `supervisor.exempt`, so it stays visible rather than
+      // silently reading as healthy (#25).
       "ignore_modules": ["api"],
       // Base delay before another restart of the same module (seconds).
       "restart_cooldown_s": 1.0,
@@ -1220,7 +1224,14 @@
       "link_loss_s": 6.0,
       "max_clients": 8,
       // Default and maximum `GET /api/v1/logs?tail=`.
-      "log_tail": 200
+      "log_tail": 200,
+      // Findable by name on the LAN (#38): one mDNS record, `houndmind._houndmind._tcp.local`,
+      // carrying the host, the port and the API version. Everything in it is already in the
+      // public /meta payload - no token, no secret, no location. Discovery is a convenience:
+      // a network that blocks multicast costs one log line and the address still works.
+      "discovery_enabled": true,
+      // The instance name a client sees, so two dogs on one LAN stay distinguishable.
+      "discovery_name": "houndmind"
     }
   }
 }

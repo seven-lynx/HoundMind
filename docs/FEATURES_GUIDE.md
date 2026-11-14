@@ -161,7 +161,9 @@ background worker (`kernel/scheduler.py`), so a sweep never blocks the decision 
 is in flight `scan_in_flight` is true and a second request is dropped rather than queued.
 `scan_continuous: true` scans on a timer; `false` scans only while a motion is being executed.
 The measured sweep duration is published as `scan_duration_s`, which the watchdog uses to decide
-what "stale" means for this board.
+what "stale" means for this board - and the navigator reads the resulting window from
+`scan_stale_after_s`, so a direction is never chosen from a reading the watchdog would not move on
+(#22).
 
 **Disable:** `modules.scanning.enabled = false`
 
@@ -493,7 +495,20 @@ back off exponentially (`restart_cooldown_s` × `restart_backoff_factor`, capped
 earns a fresh budget.
 
 The scan staleness window is the larger of `scan_timeout_s` and 1.5× the measured scan duration,
-because a sweep takes seconds and a fixed sub-second window called a healthy scan stale.
+because a sweep takes seconds and a fixed sub-second window called a healthy scan stale. It is one
+rule, in `navigation/scanning.py::scan_freshness_window_s`, and the watchdog publishes the number it
+used as `scan_stale_after_s`: the navigator picks a direction from the same reading, so it reads
+that key instead of deriving a second window, and applies it to the `scan_service.latest()` fallback
+too. `navigation.scan_stale_s` was retired with it — a second knob for one question is how the two
+came to disagree about the same timestamp (#22).
+
+**The control plane is exempt, and says so.** `ignore_modules` ships as `["api"]`: restarting the
+control plane re-binds the port and drops every connected client, and a restart triggered by a
+heartbeat lag looks to a phone exactly like the dog going offline. The cost of that choice is a
+blind spot, because the API is the only way anyone sees the dog - so `/state` reports the exemption
+in `supervisor.exempt` with its reason. A wedged control plane therefore reads as `exempt`, never
+as healthy, and an operator with a client still connected can see it. Anything else in
+`ignore_modules` is reported the same way.
 
 **Default:** Enabled (it does nothing unless the dog is asked to move on stale data).
 
@@ -604,6 +619,11 @@ range/localisation requests (`wall_follow`, `corner_seek`, `landmark_align`). Th
 through the HAL (`DogHAL.read_offsets`) and written through `DogHAL.apply_offsets`, clamped to ±20°
 and merged over the values already on the dog — nothing here invents an offset, and saving one does
 not move the dog. Keys are the joint names in `hal/iface.py::SERVO_GROUPS`.
+
+The read half runs from a config request or from `POST /api/v1/calibration/run`
+([`CONTROL_API.md` §10](CONTROL_API.md#10-calibration)), which can only dispatch the four read-only
+requests. The write half is the device CLI: `python -m tools.calibrate_servos` prints the trim,
+`--set joint=deg` prints what it would write, and only `--apply` saves it.
 
 **Disable:** `modules.calibration.enabled = false`
 
@@ -909,7 +929,7 @@ as specified in `docs/CONTROL_API.md`:
 | Places | `GET`/`POST`/`DELETE /api/v1/places`, `POST /places/{id}/go` | `state:read` / `config` / `move` |
 | People | `GET /api/v1/people`, `DELETE /api/v1/people/{id}` | `admin` — ids and names only, never an embedding |
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
-| Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration` | `config` |
+| Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration`, `POST /calibration/run` | `config` |
 | History | `GET /api/v1/history` | `state:read` |
 | Diagnostics | `GET /api/v1/logs`, `/support-bundle` | `admin` |
 | Web app | `GET /` and `/static/*` | same origin, token in the browser |
@@ -970,13 +990,17 @@ mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed.
 | `link_loss_s` | `6.0` | A client that stops pinging loses its command. |
 | `max_clients` | `8` | Sessions kept; the least recently seen idle one is evicted. |
 | `log_tail` | `200` | Default and maximum `?tail=` for `/logs`. |
+| `discovery_enabled` | `true` | Advertise the control plane over mDNS so a client finds it by name (#38). Off means address-only. |
+| `discovery_name` | `houndmind` | The mDNS instance name, so two dogs on one LAN stay distinguishable. |
 
 **Disable:** `modules.api.enabled = false` removes the network surface entirely — the dog still
 runs, and nothing listens. That is the right setting for a dog that should never be reachable.
 
-**Not in v1:** TLS (documented gap, Phase 6), remote access beyond the LAN, accounts,
-`POST /api/v1/calibration/run` (it moves the dog, so it needs a physical confirmation on the
-device first).
+**Not in v1:** remote access beyond the LAN and accounts. `POST /api/v1/calibration/run` is
+implemented and is **read-only**: it dispatches the four calibration requests that read, never one
+that writes an offset, so it needs no physical confirmation. A calibration that moves the dog stays
+a device action (`python -m tools.calibrate_servos --apply`,
+[`CONTROL_API.md` §10](CONTROL_API.md#10-calibration)).
 
 ---
 
