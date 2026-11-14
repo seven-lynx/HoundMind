@@ -220,7 +220,8 @@ curl -s -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
      http://<pi-ip>:8420/api/v1/modules
 ```
 
-The token is written 0600 to `~/.houndmind/api_token` on the device. **Never paste it into an
+The token is written 0600 to `~/.houndmind/api_token` on the device's first start, so it does not
+exist until `python -m houndmind_ai` has run once. **Never paste it into an
 issue, a chat or a screenshot**, and never quote it in a report. A `401` means the header is
 missing or the token is not this device's — it does not mean the API is down.
 

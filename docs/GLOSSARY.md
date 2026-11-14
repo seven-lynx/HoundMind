@@ -77,7 +77,7 @@ points at, that file is the one with the bug.
 |---|---|
 | **control plane** | The single HTTP + WebSocket listener on port 8420 (`services/api.py`). The only network surface. |
 | **scope** | What a token may do: `state:read`, `move`, `config`, `admin`. Declared per route. |
-| **device token** | The install-issued secret in `~/.houndmind/api_token` (0600). Never logged, never in a URL. |
+| **device token** | The secret the runtime writes on first start to `~/.houndmind/api_token` (0600), owned by `services/auth.py::TokenStore`. The installer does not create it. Never logged, never in a URL. |
 | **pairing code** | A six-digit, five-minute, single-use code exchanged at `POST /api/v1/pair` for a client token. |
 | **ticket** | A single-use, 60-second camera credential, because an `<img>` tag cannot send a header. |
 | **unauthenticated route** | `/meta`, `/health`, `/pair`, `/events` (the socket authenticates in its first frame), and the two camera routes via `?ticket=` |
