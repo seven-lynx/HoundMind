@@ -8,6 +8,15 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **The web app's assets carry the version** (#102): `index.html` loaded `/static/app.js` with no
+  version and `add_static` sent no `Cache-Control`, so a browser was free to apply heuristic
+  freshness and keep an `app.js` from an older release. Once the camera minted its frames through
+  `POST /camera/ticket`, that stale file asked with `?token=`, got a `401`, and the pane reported
+  "enable a vision module" - a confident and wrong cause. `GET /` now stamps `?v=<package version>`
+  into both asset URLs (`services/api.py::_asset_version`; empty in an uninstalled tree, which is
+  simply the old bare path) and `/static/` answers `Cache-Control: no-cache` from one
+  `on_response_prepare` hook, so a returning browser revalidates instead of trusting its copy.
+  `docs/CONTROL_API.md` states the asset contract and `tests/test_api_routes.py` holds it.
 - **Documentation sections are links** (#116): `§N` references were plain text, so a reader had to
   find a numbered section by eye and `docs/README.md`'s promise of one index meant less than it
   looked. 272 of them are anchors now - in-page `[§4](#4-context-keys)` and cross-page
