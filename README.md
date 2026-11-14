@@ -221,7 +221,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Decision Feed                  | Enabled     | Last 200 decisions behind `/decisions`; JSONL off by default |
 | Control Plane (REST/WS/web)    | Enabled     | Port 8420, token-gated; `modules.api`  |
 | LED Manager                    | Enabled     |                                       |
-| Calibration                    | Disabled    | Opt-in; writes servo offsets, moves the dog |
+| Calibration                    | Disabled    | Opt-in; reads and writes servo trim through the HAL |
 | Safety                         | Disabled    | Opt-in for emergency stop/tilt        |
 | Health Monitor                 | Disabled    | Opt-in for CPU/mem/temp/throttling    |
 | Balance                        | Disabled    | Opt-in for IMU posture                |

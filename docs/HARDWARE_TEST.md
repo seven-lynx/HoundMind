@@ -349,8 +349,9 @@ The bundle carries `metadata.json` (timestamp, commit, trace id), everything in 
 - **It is a procedure, not a gate.** Step 2's exit code is always 0 (#109), so the verdict is read
   by a human from the output. Do not script a green/red from it yet.
 - **One run, one board.** Nothing here is endurance, thermal headroom, or servo calibration. The
-  calibration workflow is separate, and it moves the dog on purpose — see
-  `calibration/servo_calibration.py` and do not run it as part of a bench test.
+  calibration workflow is separate, and the vendor's own calibration script moves the dog on
+  purpose — see `hal/iface.py` (`read_offsets` / `apply_offsets`) and do not run a calibration as
+  part of a bench test.
 - **`houndmind doctor` does not exist** (#23). If a document elsewhere points you at it, the
   commands above are what it meant.
 - **Motion quality is a judgement**, not a measurement. §9's checklist is the closest thing to

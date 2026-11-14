@@ -946,7 +946,10 @@
     // CALIBRATION HOOKS
     // =====================================================================
     "calibration": {
-      // Stored servo zero offsets (name -> degrees). Filled by calibration runs.
+      // Stored servo zero offsets (joint name -> signed degrees, clamped to +/-20). The keys are
+      // the vendor's joint order: lf_shoulder, lf_leg, rf_shoulder, rf_leg, lh_shoulder, lh_leg,
+      // rh_shoulder, rh_leg, head_yaw, head_roll, head_pitch, tail. Filled by calibration runs;
+      // the vendor's own file in ~/.config/pidog/pidog.conf stays the authority.
       "servo_zero_offsets": {},
       // Default calibration behavior options.
       "auto_apply_servo_offsets": false,

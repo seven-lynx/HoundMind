@@ -576,7 +576,11 @@ sent and the HAL's own default applies — the rate every effect ran at before t
 ---
 
 ## 16) Calibration
-**What it does:** Runs servo calibration workflows.
+**What it does:** Reports the servo trim the hardware already has (`servo_zero`) and runs the
+range/localisation requests (`wall_follow`, `corner_seek`, `landmark_align`). The trim is read
+through the HAL (`DogHAL.read_offsets`) and written through `DogHAL.apply_offsets`, clamped to ±20°
+and merged over the values already on the dog — nothing here invents an offset, and saving one does
+not move the dog. Keys are the joint names in `hal/iface.py::SERVO_GROUPS`.
 
 **Disable:** `modules.calibration.enabled = false`
 

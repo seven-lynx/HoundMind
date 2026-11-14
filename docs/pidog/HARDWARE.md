@@ -208,7 +208,9 @@ Full table (`robot_hat/device.py`): `D0`–`D16`, plus `SW`, `USER`, `LED`, `BOA
 ## 6. What lives on disk
 
 Servo trim and IMU calibration are **user data written by calibration runs**. Read them; never
-invent or overwrite them (`calibration/servo_calibration.py` owns the HoundMind side).
+invent or overwrite them (`hal/iface.py` names the three lists in `SERVO_GROUPS`; `read_offsets` /
+`apply_offsets` move them, and the vendor's own `examples/0_calibration.py` is the interactive
+step).
 
 | File | Owner | Keys |
 |---|---|---|

@@ -28,8 +28,15 @@ import warnings
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
-from houndmind_ai.calibration.servo_calibration import apply_servo_offsets
-from houndmind_ai.hal.iface import DOG_ACTIONS, SensorSnapshot, as_float, as_int
+from houndmind_ai.hal.iface import (
+    DOG_ACTIONS,
+    SERVO_GROUP_OF,
+    SERVO_GROUPS,
+    SERVO_OFFSET_LIMIT_DEG,
+    SensorSnapshot,
+    as_float,
+    as_int,
+)
 
 # A pure spelling helper from the command vocabulary: `ActionFlow` names come back spaced
 # ("turn left") and everything above the HAL compares canonical names. `kernel/commands.py`
@@ -39,6 +46,14 @@ from houndmind_ai.kernel.commands import canonical_action
 logger = logging.getLogger(__name__)
 
 __all__ = ["PidogHAL"]
+
+# One vendor entry point per offset group. They replace the whole list, which is why
+# `apply_offsets` reads the current values before it writes.
+_GROUP_SETTERS = {
+    "legs": "set_leg_offsets",
+    "head": "set_head_offsets",
+    "tail": "set_tail_offset",
+}
 
 
 def _safe_float(val: Any, default: float) -> float:
@@ -137,15 +152,6 @@ class PidogHAL:
         """Open the dog and start its action queue. Raises if the vendor package is absent."""
         self._ensure_dog()
         self._ensure_action_flow()
-
-    @property
-    def vendor(self) -> Any:
-        """The raw `Pidog`. Only for `calibration/workflow.py`, which still speaks its API.
-
-        Everything else must use the `DogHAL` methods: a second caller of this property is a
-        second place that knows the vendor exists.
-        """
-        return self._ensure_dog()
 
     # ----------------------------------------------------------------- sensors
 
@@ -581,8 +587,73 @@ class PidogHAL:
         except queue.Full:  # pragma: no cover - the drain above made room
             pass
 
+    # ------------------------------------------------------------- calibration
+
+    def read_offsets(self) -> dict[str, float]:
+        """The trim the vendor loaded from its own config file, name -> signed degrees."""
+        with self._bus:
+            return self._read_offsets_locked(self._ensure_dog())
+
+    def _read_offsets_locked(self, dog: Any) -> dict[str, float]:
+        """`Robot.offset` for each group, translated to joint names. Absent, never zeroed."""
+        offsets: dict[str, float] = {}
+        for group, names in SERVO_GROUPS.items():
+            values = getattr(getattr(dog, group, None), "offset", None)
+            if not isinstance(values, (list, tuple)) or len(values) != len(names):
+                logger.debug("No readable %s offset list on the vendor object", group)
+                continue
+            for name, value in zip(names, values, strict=True):
+                try:
+                    offsets[name] = float(value)
+                except (TypeError, ValueError):
+                    logger.debug("Unreadable %s offset %r", name, value)
+        return offsets
+
     def apply_offsets(self, offsets: Mapping[str, float]) -> None:
-        apply_servo_offsets(self._ensure_dog(), dict(offsets or {}))
+        """Save the trim group by group, merged over what the hardware already has.
+
+        The vendor's setters replace a whole list, so an offset for one joint must never zero the
+        other seven: the current values are read first, the requested ones merged in, and the
+        full list written. `reset_list` is deliberately not passed — it re-poses the dog, and
+        replaying stored offsets at startup must not move anything.
+        """
+        with self._bus:
+            dog = self._ensure_dog()
+            current = self._read_offsets_locked(dog)
+            merged: dict[str, dict[str, float]] = {}
+            for name, value in (offsets or {}).items():
+                group = SERVO_GROUP_OF.get(name)
+                if group is None:
+                    logger.warning("Ignoring unknown servo offset %r", name)
+                    continue
+                if name not in current:
+                    # No baseline for this joint: writing the group would invent the rest of it.
+                    logger.warning("No current %s offset for %r; not writing it", group, name)
+                    continue
+                number = as_float(value, current[name])
+                clamped = max(-SERVO_OFFSET_LIMIT_DEG, min(SERVO_OFFSET_LIMIT_DEG, number))
+                if clamped != number:
+                    logger.warning("Servo offset %s=%.2f clamped to %.2f", name, number, clamped)
+                merged.setdefault(group, {})[name] = clamped
+
+            for group, values in merged.items():
+                names = SERVO_GROUPS[group]
+                if any(name not in current for name in names):
+                    logger.warning("Incomplete %s offsets; not writing that group", group)
+                    continue
+                self._write_group(dog, group, [values.get(name, current[name]) for name in names])
+
+    def _write_group(self, dog: Any, group: str, values: list[float]) -> None:
+        """Save one group through its own vendor entry point; no re-pose, no invented values."""
+        setter_name = _GROUP_SETTERS[group]
+        setter = getattr(dog, setter_name, None)
+        if not callable(setter):
+            logger.warning("Vendor exposes no %s(); %s offsets not saved", setter_name, group)
+            return
+        try:
+            setter(values)
+        except Exception:  # noqa: BLE001 - a vendor save failure is logged, not fatal
+            logger.warning("Failed to save %s offsets", group, exc_info=True)
 
     def stop(self) -> None:
         """Stop motion now: clear the queued actions, then ask the vendor to halt."""
