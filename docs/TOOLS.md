@@ -20,6 +20,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 9. [`replay_decisions`](#9-replay_decisions)
 10. [`download_opencv_models`](#10-download_opencv_models)
 11. [`validate_rtabmap_adapter`](#11-validate_rtabmap_adapter)
+12. [`calibrate_servos`](#12-calibrate_servos)
 
 ---
 
@@ -36,6 +37,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Why did the dog do that at 14:03? | `replay_decisions` |
 | The semantic labeler has no model | `download_opencv_models` |
 | Is the RTAB-Map adapter wired up? | `validate_rtabmap_adapter` |
+| Which servo joint is leaning, and what trim is saved? | `calibrate_servos` |
 
 ## 2. Motion risk
 
@@ -45,6 +47,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
 | `camera_check`, `list_audio_devices`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
+| `calibrate_servos` | no — it reads and saves the trim; a saved offset does not pose the dog (`hal/iface.py::DogHAL.apply_offsets`) |
 
 Neither motion-capable tool moves the dog unless asked, but read the second row twice:
 **leaving `--skip-motion` off `hardware_checkup` is a motion run.**
@@ -209,6 +212,34 @@ python -m tools.validate_rtabmap_adapter --camera 0
 | `--count <n>` | how many frames to send (default `5`) |
 
 Requires RTAB-Map to be installed — see `scripts/install_rtabmap_pi4.md`. It does not move the dog.
+
+## 12. `calibrate_servos`
+
+Reads the servo trim the dog has loaded, shows the twelve joints, and — with an explicit flag — saves
+a new one. This is the step every install needs before the dog stands straight, and it did not exist
+in HoundMind; it used to be the vendor's interactive curses script (#142).
+
+```bash
+python -m tools.calibrate_servos                                  # read-only
+python -m tools.calibrate_servos --set lf_shoulder=6 --set tail=-3  # dry run: prints, saves nothing
+python -m tools.calibrate_servos --set lf_shoulder=6 --apply       # writes through DogHAL
+```
+
+| Flag | Meaning |
+|---|---|
+| `--set JOINT=DEG` | offset for one joint, repeatable; clamped to ±20 |
+| `--apply` | save the result; **without it nothing is written** |
+
+Output is one line per joint in the vendor's group order (`legs`, `head`, `tail`), with the current
+value and the proposed one; a joint the HAL could not read prints `unread` rather than `0.0`, and is
+never written, because saving its group would invent the other values in that list. A value past ±20
+is clamped and the clamp is what gets saved. Exit codes: `0` saved or nothing to save, `1` a written
+value did not read back (check the vendor log), `2` a usage error, no readable trim, or no dog.
+
+There is no interactive preview on purpose: nudging a servo live needs a raw per-group angle write,
+and that primitive belongs to `act/interlock.py` alone. Trim with `--set`, look at the numbers, then
+`--apply`. The vendor's own script (`examples/0_calibration.py`) still exists and is documented in
+`docs/pidog/HARDWARE.md` §6 for anyone who prefers it.
 
 ## Adding a tool
 
