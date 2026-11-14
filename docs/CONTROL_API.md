@@ -312,7 +312,8 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "last_command": "forward", "source": "navigation", "since_s": 0.8,
     "vetoed": false, "veto": null, "tilt_latched": false, "displaced": 0
   },
-  "nav": { "decision": "forward", "confidence": 0.82 },
+  "safety": { "active": false, "emergency_stop": false },
+  "nav": { "decision": "forward", "confidence": 0.82, "heading_calibrated": true },
   "decision": {
     "schema_version": 1, "ts": 4212.3, "trace_id": "trace123",
     "mode": "patrol", "state": "alert", "intent": "forward", "source": "navigation",
@@ -327,9 +328,10 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "state": "running", "dry_run": false, "action": "sit", "veto": null, "detail": null,
     "started_at": 1762771200.31
   },
-  "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [] },
+  "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "temp_c": 61.4, "mem_used_pct": 51.0 } },
   "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [] },
-  "modules": { "loaded": 11, "disabled": 3, "failed": 0 }
+  "modules": { "loaded": 11, "disabled": 3, "failed": 0 },
+  "perf": { "tick_hz_target": 5, "tick_hz_actual": 4.98, "tick_ms": 41.2, "tick_overrun_ms": 0.0, "loop_delay_ms": 200.0 }
 }
 ```
 
@@ -359,6 +361,25 @@ it is a timestamp to display, not one to compare against this stream.
 this tick — a client that pressed forward and sees `source: "watchdog"` can tell "someone else is
 driving" from "the dog ignored me". `actuators.veto` carries the reason the last command was refused,
 and `actuators.tilt_latched` reports the latch state the client must surface.
+
+`safety` answers the narrower question `actuators` cannot: is the safety module overriding right now
+(`active`), and is the emergency stop set (`emergency_stop`). Both are `false` while
+`modules.safety` is disabled, which is the shipped default — that is the module not running, not the
+dog reporting itself safe, and a client must not render the two the same way.
+
+`nav.heading_calibrated` says whether the gyro bias was measured this run
+(`navigation/orientation.py`). A turn made on a calibrated heading and one made on a drifting heading
+look identical in `nav.decision`, so a client that shows heading quality needs the flag.
+
+`health.high_water` is the session's peak for each health signal (`temp_c`, `gpu_temp_c`, `load_1m`,
+`mem_used_pct`), which is what a support bundle wants: the average hides the thermal spike that
+throttled vision. It is `{}` while `modules.health` is disabled.
+
+`perf` is the loop against its budget, in milliseconds — the same unit as `tick_ms` on
+`/api/v1/modules`. `tick_ms` is the EMA of one tick's duration (not the worst one),
+`tick_overrun_ms` how far past the budget the last tick ran, and `loop_delay_ms` the target interval.
+Every field is `null` before the loop's first tick, because `0` would read as a free loop;
+`tick_hz_actual` stays `null` until there are two ticks to compare.
 
 `supervisor` is the watchdog's own state: whether it is holding motion (`holding` + `reason`, which is
 `null` or a staleness reason), which modules it asked the runtime to restart, and which it has given

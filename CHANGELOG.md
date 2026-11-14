@@ -246,6 +246,11 @@ Current Release: v2026.01.18
   config section it shipped with.
 
 ### Changed
+- `/state` carries four blocks it had the data for and never published: `safety` (`active`,
+  `emergency_stop`), `nav.heading_calibrated`, `health.high_water`, and `perf` — the loop's
+  `tick_hz_actual`, `tick_ms`, `tick_overrun_ms` and `loop_delay_ms`, which `core/runtime.py` was
+  computing every tick and dropping on the floor (#124, #125). The dashboard gains a Loop readout
+  and `docs/CONTROL_API.md` §4 documents all four, including which are `null` before the first tick.
 - Idle is no longer a constant: `behavior/library.py` draws from the whole bucket with a recency weight
   instead of returning `idle_actions[0]` nineteen times in twenty (#37). Three knobs set it —
   `behavior.action_reuse_cooldown_s` (ships `20`: how long an action stays out of its bucket before it

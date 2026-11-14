@@ -175,6 +175,11 @@ function render(state) {
   $("t-temp").textContent = health.temp_c === null || health.temp_c === undefined
     ? "—"
     : `${Number(health.temp_c).toFixed(1)} °C`;
+  const perf = state.perf || {};
+  $("t-loop").textContent =
+    perf.tick_hz_actual === null || perf.tick_hz_actual === undefined
+      ? "—"
+      : `${Number(perf.tick_hz_actual).toFixed(1)} Hz / ${Number(perf.tick_ms).toFixed(0)} ms`;
 
   const actuators = state.actuators || {};
   $("t-command").textContent = actuators.last_command
