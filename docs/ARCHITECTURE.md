@@ -232,8 +232,9 @@ warning thresholds where the board's own behaviour differs. The safety envelope
   `voice_assistant`) from silently doing nothing.
 - Under `modules.<name>` only `enabled` and `required` are read; tuning lives under
   `settings.<name>`, and a tuning key placed under `modules` is reported rather than ignored.
-- Secrets are **never** in this file: the API token lives at `~/.houndmind/api_token` (0600) and the
-  config references the path.
+- Secrets are **never** in this file: the API token is written on first start to
+  `~/.houndmind/api_token` (0600) by `services/auth.py::TokenStore`, and the config references the
+  path.
 
 ---
 

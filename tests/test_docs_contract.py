@@ -145,6 +145,21 @@ def _resolves(node: object, parts: list[str]) -> bool:
     return True
 
 
+def test_no_page_claims_the_installer_issues_the_token() -> None:
+    """`services/auth.py::TokenStore.ensure()` creates the token; nothing else does.
+
+    A page that says the installer writes `~/.houndmind/api_token` sends an operator to a file that
+    does not exist until the runtime has started once, and `scripts/installer_core.py` never touches
+    it. The claim lived in `FEATURES_GUIDE.md` and `GLOSSARY.md` long after the code settled (#16).
+    """
+    offenders: list[str] = []
+    for page in pages():
+        for number, line in enumerate(page.read_text(encoding="utf-8").splitlines(), 1):
+            if "install-issued" in line or "installer pre-creates" in line:
+                offenders.append(f"{label(page)}:{number}")
+    assert offenders == [], f"the installer does not issue the device token: {offenders}"
+
+
 def test_cited_settings_keys_exist() -> None:
     """A `settings.<section>.<field>` a page names must resolve, or the page cost a user a load error."""
     shipped = _shipped_settings()

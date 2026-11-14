@@ -8,6 +8,14 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **The device token has one owner, and it is the runtime** (#16): `services/auth.py::TokenStore`
+  has always written `~/.houndmind/api_token` on first start, but three pages said otherwise —
+  `FEATURES_GUIDE.md` claimed the installer pre-created it "(Phase 6)", and that page plus
+  `GLOSSARY.md` called it "install-issued". `scripts/installer_core.py` has never referenced the
+  file, and it runs steps under `sudo`, so an installer-owned token would land in the wrong home
+  or with the wrong owner. `FEATURES_GUIDE.md`, `GLOSSARY.md`, `ARCHITECTURE.md` and
+  `HARDWARE_TEST.md` now describe first-start creation, and `tests/test_docs_contract.py` fails if
+  the installer claim returns.
 - **The checkup is behind the HAL** (#11): `tools/hardware_checkup.py` constructed its own `Pidog()`, so
   the documented device check bypassed the HAL's sensor conditioning, its bus lock and its ownership of
   the dog, could not run against `FakeDogHAL`, and was the last `import pidog` in `src/` outside `hal/`.

@@ -883,11 +883,12 @@ as specified in `docs/CONTROL_API.md`:
 
 **The token.** Generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token` with mode 0600. It is never in `config/settings.jsonc`, never in a log
-line and never in this repository. There is no token-generator script to run: the process creates
-the file if it is missing, and the installer pre-creates it with the right ownership (Phase 6). To
-read it on the device: `cat ~/.houndmind/api_token`. To pair a phone or a second browser, open a
-pairing window and enter the 6-digit code it prints — the code is single-use and expires after
-five minutes.
+line and never in this repository. There is no token-generator script to run: the runtime creates
+the file if it is missing, on the first start of `python -m houndmind_ai`, with the directory `0700`
+and the file `0600`. The installer does not create it, so a fresh install has no token file until
+the runtime has run once. To read it on the device: `cat ~/.houndmind/api_token`. To pair a phone
+or a second browser, open a pairing window and enter the 6-digit code it prints — the code is
+single-use and expires after five minutes.
 
 **It is not encrypted by default.** The control plane speaks plain HTTP on port 8420: the token, every
 command and every camera frame travel in the clear. The token is the whole security boundary, so
@@ -923,7 +924,7 @@ mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed.
 |---|---|---|
 | `host` | `0.0.0.0` | Bind address. The token is the security boundary, not the bind — and the traffic is cleartext. |
 | `port` | `8420` | One port for REST, WebSocket, MJPEG and the web app. |
-| `token_path` | `~/.houndmind/api_token` | Where the install-issued token lives. |
+| `token_path` | `~/.houndmind/api_token` | Where the device token is written on first start (`0600`). |
 | `tls_enabled` | `false` | Serve HTTPS instead of HTTP. Off means cleartext — see the warning above. |
 | `tls_cert` | `~/.houndmind/tls/cert.pem` | Certificate. Generated self-signed on first start when missing while TLS is on. |
 | `tls_key` | `~/.houndmind/tls/key.pem` | Private key for that certificate, `0600`. |
