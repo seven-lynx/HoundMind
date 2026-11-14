@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 
 API_VERSION = 1
 
-__all__ = ["API_VERSION", "LIVE_CONFIG_KEYS", "ControlPlane", "create_app"]
+__all__ = ["API_VERSION", "HANDLER_SCOPE", "LIVE_CONFIG_KEYS", "ControlPlane", "create_app"]
 
 # Keys a client may change live. Each one is re-read from `settings` every tick by its module,
 # so a change takes effect immediately; everything else is refused rather than silently stored,
@@ -1303,9 +1303,17 @@ def _no_identity(plane: ControlPlane) -> web.Response:
 # `docs/CONTROL_API.md` in `tests/test_api_routes.py`. A route that exists in code and not in
 # the contract is how two clients drift apart.
 #
-# `scope=None` means "no bearer token": `/meta` and `/health` are the liveness surface, and the
-# WebSocket authenticates inside its own `hello` frame because a browser cannot set a header on
-# a WebSocket handshake.
+# `scope=None` means exactly one thing: the route is public on purpose. `/meta` and `/health` are
+# the liveness surface, and the WebSocket authenticates inside its own `hello` frame because a
+# browser cannot set a header on a handshake.
+#
+# `HANDLER_SCOPE` is the other case, and it is not `None`. The camera routes *do* require
+# `state:read`, but the check lives inside their handler, because an `<img>` cannot send an
+# `Authorization` header and a single-use ticket replaces it (`_camera_principal`, #18). Writing
+# `None` on those two rows made the table read "video is unauthenticated" - a plausible enough
+# reading that it was acted on - and left `None` carrying two meanings at once (#39).
+HANDLER_SCOPE = "state:read (in handler)"
+
 ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/meta", None, _meta),
     ("GET", "/health", None, _health),
@@ -1318,8 +1326,8 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("POST", "/people", "admin", _people_enroll),
     ("GET", "/decisions", "state:read", _decisions),
     ("GET", "/events", None, _events),
-    ("GET", "/camera/stream", None, _camera_stream),
-    ("GET", "/camera/snapshot", None, _camera_snapshot),
+    ("GET", "/camera/stream", HANDLER_SCOPE, _camera_stream),
+    ("GET", "/camera/snapshot", HANDLER_SCOPE, _camera_snapshot),
     ("POST", "/camera/ticket", "state:read", _camera_ticket),
     ("POST", "/pair", None, _pair),
     ("POST", "/pair/open", "admin", _pair_open),
@@ -1350,7 +1358,13 @@ def create_app(plane: ControlPlane) -> web.Application:
     router = app.router
 
     for method, path, scope, handler in ROUTES:
-        router.add_route(method, f"{API_PREFIX}{path}", _authed(scope)(handler) if scope else handler)
+        route = f"{API_PREFIX}{path}"
+        if scope is None or scope is HANDLER_SCOPE:
+            # Public, or enforced inside the handler: registering a bearer wrapper either way
+            # would break the route it is meant to protect.
+            router.add_route(method, route, handler)
+        else:
+            router.add_route(method, route, _authed(scope)(handler))
 
     router.add_get("/", _index)
     if plane.static_root.is_dir():

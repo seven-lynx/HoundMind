@@ -87,6 +87,11 @@ for 60 seconds and **single use**, and it buys `state:read` on one frame and not
 token is **not** accepted in a query string — it used to be, and that put the credential for `move`
 and `config` into browser history and access logs (`#18`).
 
+Both camera rows declare that requirement in `services/api.py::ROUTES` as the `HANDLER_SCOPE` marker,
+not as `None`: in that table `None` means "public on purpose", and the camera routes are not. The
+check happens inside the handler because a ticket has to be claimed there, and a visible marker is
+what stops the guard from looking redundant (`#39`).
+
 ---
 
 ## 2. Endpoints

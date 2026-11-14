@@ -18,7 +18,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.services import api as api_module
-from houndmind_ai.services.api import API_PREFIX, ROUTES, ControlPlane, create_app
+from houndmind_ai.services.api import API_PREFIX, HANDLER_SCOPE, ROUTES, ControlPlane, create_app
 from houndmind_ai.services.auth import PAIRING_SCOPES
 from houndmind_ai.services.settings import ApiSettings
 
@@ -76,12 +76,47 @@ def test_every_documented_route_exists_and_no_extra_route_is_served() -> None:
 
 
 def test_a_scope_is_declared_for_every_route_that_needs_one() -> None:
-    """A route with no scope must be one of the two public ones, the camera and the WS."""
-    innocent = PUBLIC | {"/events", "/pair", "/camera/stream", "/camera/snapshot"}
+    """`None` has exactly one meaning: the route is public on purpose (#39).
+
+    The camera rows used to declare `None` while their handlers enforced `state:read`, so the
+    table read "video is unauthenticated" and `None` meant two things at once. They now declare
+    `HANDLER_SCOPE`; this test fails if any route goes back to being ambiguous.
+    """
+    public = PUBLIC | {"/events"}
     for method, path, scope, _handler in ROUTES:
-        if path in innocent:
+        if path in public:
+            assert scope is None, f"{method} {path} is public but declares {scope!r}"
             continue
         assert scope is not None, f"{method} {path} has no scope and is not public"
+
+    camera = {path: scope for _m, path, scope, _h in ROUTES if path.startswith("/camera/")}
+    assert camera["/camera/stream"] == HANDLER_SCOPE
+    assert camera["/camera/snapshot"] == HANDLER_SCOPE
+
+
+def test_a_camera_handler_that_stops_asking_itself_is_caught(tmp_path, monkeypatch) -> None:
+    """The camera scope is enforced in the handler, so removing the guard must not be silent.
+
+    `_camera_principal` is the only place either camera route learns it needs `state:read`.
+    Planted here, a refusal proves the handler consults it: with the call deleted the route
+    would reach the camera service and answer 200 (a frame is in the context) instead.
+    """
+
+    def refuse(_plane, _request):
+        raise api_module.AuthError("unauthorized", "planted refusal")
+
+    async def scenario() -> list[tuple[int, str]]:
+        monkeypatch.setattr(api_module, "_camera_principal", refuse)
+        plane = make_plane(tmp_path)
+        plane.context.set("vision_frame_jpeg", b"\xff\xd8jpegdata")
+        async with TestClient(TestServer(create_app(plane))) as client:
+            answers: list[tuple[int, str]] = []
+            for path in ("/camera/snapshot", "/camera/stream"):
+                response = await client.get(f"{API_PREFIX}{path}")
+                answers.append((response.status, (await response.json())["detail"]))
+            return answers
+
+    assert asyncio.run(scenario()) == [(401, "planted refusal"), (401, "planted refusal")]
 
 
 def test_an_anonymous_request_is_refused_everywhere_but_liveness(tmp_path) -> None:
