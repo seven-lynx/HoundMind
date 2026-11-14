@@ -139,6 +139,10 @@ class BehaviorModule(Module):
         # The idle picker runs later through the registry, with no arguments, so it reads these two.
         self._idle_settings = settings
         # Energy / internal state: initialize, apply stimulus boosts, decay, and persist.
+        # One producer, by construction: `energy_level` is written here and nowhere else in the tree,
+        # and `settings.energy.enabled` is the switch. `optional/energy_emotion.py` reads the reading
+        # and derives a speed hint, an emotion label and an LED request from it - two decays per tick
+        # was the bug that arrangement replaced (#85).
         energy_settings = (context.get("settings") or {}).get("energy", {})
         energy_enabled = bool(energy_settings.get("enabled", False))
         if energy_enabled:
@@ -159,6 +163,10 @@ class BehaviorModule(Module):
             except Exception:
                 boost_sound = 0.05
             try:
+                boost_obstacle = float(energy_settings.get("boost_obstacle", 0.02))
+            except Exception:
+                boost_obstacle = 0.02
+            try:
                 energy_min = float(energy_settings.get("min", 0.0))
             except Exception:
                 energy_min = 0.0
@@ -176,6 +184,10 @@ class BehaviorModule(Module):
                 energy = min(energy_max, energy + boost_touch)
             if sound:
                 energy = min(energy_max, energy + boost_sound)
+            # An obstacle is a startle, not a stimulus with a habit: the module that used to add this
+            # boost kept it separate from habituation, and moving it here must not change that.
+            if perception.get("obstacle"):
+                energy = min(energy_max, energy + boost_obstacle)
 
             # Apply decay and clamp
             try:

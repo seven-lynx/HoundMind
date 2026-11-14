@@ -340,8 +340,8 @@ filled by one **recency-weighted draw** — not by `random.choice`, and no longe
   `autonomy_interval_s`, and `personality` multiplies those weights (`curiosity` → `explore`,
   `sociability` → `interact`, `activity` → `patrol`/`play`). Modes are registered as
   `<mode>_behavior`; the translation happens in one place, `BehaviorRegistry.pick_mode`.
-- **Energy.** When an `energy_level` reading exists (from `settings.energy` or the optional
-  `energy_emotion` module — both ship off), a reading below `behavior.energy_bias_start` (ships `0.5`)
+- **Energy.** When an `energy_level` reading exists (from `settings.energy`, which ships off), a
+  reading below `behavior.energy_bias_start` (ships `0.5`)
   lets the `rest` actions join the `idle` pool and outrank it, saturating at
   `autonomy_rest_energy_max` (0.35): a tired dog starts to doze off while idle instead of only once
   autonomy moves it to `rest`. With no reading, `energy_bias_start: 0`, or a reading above the band,
@@ -410,13 +410,23 @@ When enabled, habituation reduces repeated reactions to identical stimuli (touch
 `settings` flag is the switch.
 
 **Energy (internal state)**
-The runtime can maintain a lightweight `energy_level` that persists in the runtime context, decays over time, and increases briefly in response to stimuli (touch, sound). This is an optional internal state used by autonomy selection (play/rest bias) and can be enabled for more lifelike energy/mood dynamics.
+The runtime can maintain a lightweight `energy_level` that persists in the runtime context, decays over
+time, and increases briefly in response to stimuli (touch, sound, an obstacle). This is an optional
+internal state used by autonomy selection (play/rest bias) and by the idle energy band.
+
+**One producer.** `behavior/fsm.py` owns the reading and `settings.energy.enabled` is its switch.
+`modules.energy_emotion` is a *consumer*: it derives `energy_speed_hint`, `emotion_state` and an LED
+request from the reading, and with `settings.energy.enabled: false` there is nothing to read, so it
+publishes nothing and warns once. Two modules used to decay the same number, which made the rate depend
+on module order rather than on either config section
+([#85](https://github.com/seven-lynx/HoundMind/issues/85)).
 
 **Settings:**
-- `settings.energy.enabled` (default: false) — enable/disable energy persistence
-- `settings.energy.initial` — initial energy when not present in context
+- `settings.energy.enabled` (default: false) — the switch; nothing else produces `energy_level`
+- `settings.energy.initial` — starting energy on the first tick
 - `settings.energy.decay_per_tick` — amount to reduce energy each tick
-- `settings.energy.boost_touch` / `settings.energy.boost_sound` — per-stimulus energy boosts
+- `settings.energy.boost_touch` / `boost_sound` / `boost_obstacle` — per-stimulus boosts
+- `settings.energy.speed_slow_threshold` / `speed_fast_threshold` — where `energy_speed_hint` turns
 
 Enable with:
 
@@ -426,7 +436,8 @@ Enable with:
 }
 ```
 
-When disabled, `energy_level` is not updated by the behavior module.
+When disabled, `energy_level` is not updated at all, and every consumer behaves as it does with no
+reading.
 
 ---
 

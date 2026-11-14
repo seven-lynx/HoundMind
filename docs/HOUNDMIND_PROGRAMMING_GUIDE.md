@@ -261,7 +261,7 @@ The keys a module may rely on. Anything not here is private and may change.
 | `runtime_mode` | `idle` \| `patrol` \| `manual` \| `rest` |
 | `stuck_recovery` | `dict` — obstacle avoidance's stuck-recovery state; the event log records it |
 | `gentle_recovery_active` | `bool` — a gentle retreat is in progress |
-| `energy_level`, `energy_speed_hint` | `float`, `str \| None` — 0..1 energy, and the speed hint the motors clamp to |
+| `energy_level`, `energy_speed_hint` | `float`, `str \| None` — 0..1 energy (one producer: `behavior/fsm.py`, switched by `settings.energy.enabled`), and the speed hint the motors clamp to |
 | `emotion_state` | `str` — the label `optional/energy_emotion.py` publishes for LEDs and behaviour |
 | `behavior_habituation` | `dict` — `{stimulus, count}`, the per-stimulus counter `behavior/fsm.py` keeps |
 | `orientation_calibration_ok` | `bool` — a calibration run produced the z-axis bias (`orientation_bias_z`); `False` when it had no samples. Served as `nav.heading_calibrated` |
@@ -572,7 +572,9 @@ curl -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
   you get without it. `AttentionModule` emits `led_request:attention` alongside.
 
 Energy and emotion (`optional/energy_emotion.py`) feed the same bias inputs, so enabling them changes
-which actions the dog picks — motion-adjacent, not a display-only module.
+which actions the dog picks — motion-adjacent, not a display-only module. It derives from
+`energy_level` rather than producing it: with `settings.energy.enabled: false` the reading does not
+exist and the module publishes nothing.
 
 ---
 
