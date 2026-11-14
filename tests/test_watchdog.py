@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.hal.sensors import SensorReading
 from houndmind_ai.kernel.commands import Source
@@ -140,6 +142,18 @@ def test_a_slow_scan_is_not_called_stale() -> None:
     module.tick(context)
 
     assert board.find(Source.WATCHDOG) is None, "3 s old for a 2.6 s scan is fresh"
+
+
+def test_the_watchdog_publishes_the_window_it_used() -> None:
+    """One number at runtime: the navigator reads this instead of deriving a second one (#22)."""
+    module, context, board = build()
+    context.set("scan_duration_s", 2.6)
+    context.set("sensor_reading", reading())
+    context.set("scan_reading", scan())
+
+    module.tick(context)
+
+    assert context.get("scan_stale_after_s") == pytest.approx(3.9)
 
 
 def test_a_scan_older_than_its_own_duration_is_stale() -> None:

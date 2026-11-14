@@ -527,8 +527,9 @@
       "scan_history_size": 10,
       // Ultrasonic samples per scan point.
       "scan_samples": 3,
-      // Stale scan threshold (seconds) before requesting a new scan.
-      "scan_stale_s": 0.8,
+      // Scan freshness has no key here any more (#22): it is one rule, the larger of
+      // watchdog.scan_timeout_s and 1.5x the measured sweep, shared by the navigator and the
+      // watchdog.
       // Head scan sweep range (degrees).
       "scan_yaw_max_deg": 60,
       // Head scan step size (degrees).

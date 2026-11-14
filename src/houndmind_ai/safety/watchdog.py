@@ -17,7 +17,9 @@ Two jobs remain, both honest:
 
 The staleness window for scans is derived from how long a scan actually takes, because the
 shipped sweep takes ~2.6 s and `scan_stale_s` was 0.8: a perfectly healthy scan was "stale" by
-definition (P3-4).
+definition (P3-4). The rule is `navigation/scanning.py::scan_freshness_window_s`, and this module
+publishes the number it computed as `scan_stale_after_s` so the navigator does not keep a second
+constant for the same question (#22).
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ import time
 from houndmind_ai.core.module import Module
 from houndmind_ai.kernel.commands import MOTION_ACTIONS, Source
 from houndmind_ai.kernel.supervisor import RestartPolicy, Supervisor, SupervisorReport
+from houndmind_ai.navigation.scanning import scan_freshness_window_s
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +75,13 @@ class WatchdogModule(Module):
 
         now = time.time()
         sensor_stale = self._sensor_stale(context, settings, now)
-        scan_stale = self._scan_stale(context, settings, now)
+        # One window, computed here and published: the navigator picks a direction from the same
+        # reading this hold is about, so it must not derive a second number (#22).
+        scan_window_s = scan_freshness_window_s(
+            settings.get("scan_timeout_s"), context.get("scan_duration_s")
+        )
+        context.set("scan_stale_after_s", scan_window_s)
+        scan_stale = self._scan_stale(context, scan_window_s, now)
         self._hold_motion(context, sensor_stale, scan_stale, now)
         self._restart_what_stopped(context, settings, now)
 
@@ -87,16 +96,11 @@ class WatchdogModule(Module):
         return (now - _safe_float(getattr(reading, "timestamp", 0.0), 0.0)) > timeout
 
     @staticmethod
-    def _scan_stale(context, settings, now: float) -> bool:
-        floor_s = _safe_float(settings.get("scan_timeout_s"), 2.0)
-        # A scan cannot be staler than it takes to run one. The measured duration comes from
-        # `ScanningService`; when there is none yet, the floor stands alone.
-        measured = _safe_float(context.get("scan_duration_s"), 0.0)
-        timeout = max(floor_s, measured * 1.5)
+    def _scan_stale(context, window_s: float, now: float) -> bool:
         reading = context.get("scan_reading")
         if reading is None:
             return True
-        return (now - _safe_float(getattr(reading, "timestamp", 0.0), 0.0)) > timeout
+        return (now - _safe_float(getattr(reading, "timestamp", 0.0), 0.0)) > window_s
 
     def _hold_motion(self, context, sensor_stale: bool, scan_stale: bool, now: float) -> None:
         """Publish a `stop` while the dog is asked to move on data we cannot trust.

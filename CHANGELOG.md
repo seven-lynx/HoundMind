@@ -7,6 +7,17 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The navigator and the watchdog agree about what a stale scan is** (#22): a sweep at the shipped
+  settings takes ~2.6 s while `navigation.scan_stale_s` shipped as 0.8 s, so `_scan_open_space`
+  rejected every healthy reading and then fell back to `scan_service.latest()` with no timestamp
+  check at all - the guard was dead code and the fallback chose the direction. There is now one
+  rule, `navigation/scanning.py::scan_freshness_window_s` (`max(floor, 1.5 × the measured sweep)`),
+  with `watchdog.scan_timeout_s` as its floor. The watchdog publishes the number it used as
+  `scan_stale_after_s`; the navigator prefers that key, falls back to the same rule when the
+  watchdog is disabled or has not ticked, and applies the window to the fallback as well - a
+  rejected reading is no longer published into `scan_reading`. `navigation.scan_stale_s` is retired,
+  so a config that still carries it fails at load with a suggestion rather than being ignored.
+  `tests/test_scan_freshness.py` (6 cases), plus the window assertion in `tests/test_watchdog.py`.
 - **`POST /api/v1/calibration/run` exists, and it cannot move the dog** (#17): the route was
   reserved rather than stubbed because a remote calibration that sweeps every servo is the most
   dangerous call in the product. Calibration in this tree only reads - servo trim, wall-follow

@@ -176,6 +176,17 @@ def test_every_shipped_section_is_covered_by_the_schema() -> None:
     assert set(raw["settings"]) == set(_settings_section().fields)
 
 
+def test_the_retired_scan_staleness_key_is_refused() -> None:
+    """`navigation.scan_stale_s` is one of two answers to one question; the other one won (#22).
+
+    A config that still carries it must fail at load rather than be silently ignored, because
+    ignoring it is how the navigator and the watchdog came to disagree about the same timestamp.
+    """
+    problems = validate_config_tree({"settings": {"navigation": {"scan_stale_s": 0.8}}})
+    assert paths(problems) == ["config.settings.navigation.scan_stale_s"]
+    assert "unknown key" in problems[0].message
+
+
 def test_a_state_name_typo_in_the_entry_table_is_rejected() -> None:
     """`alertt` would be a beat that never fires: the config that loads and does nothing."""
     problems = validate_config_tree(

@@ -7,6 +7,7 @@ from typing import Any
 
 from houndmind_ai.core.module import Module
 from houndmind_ai.kernel.commands import Source
+from houndmind_ai.navigation.scanning import scan_freshness_window_s
 
 logger = logging.getLogger(__name__)
 
@@ -472,13 +473,11 @@ class ObstacleAvoidanceModule(Module):
         """
         scan_reading = context.get("scan_reading")
         scan_service = context.get("scan_service")
-        scan_stale_s = float(
-            settings.get("scan_stale_s", settings.get("scan_interval_s", 0.5))
-        )
+        window_s = self._scan_window_s(context)
 
         if scan_reading is not None:
-            reading_ts = getattr(scan_reading, "timestamp", 0.0)
-            if now - float(reading_ts) <= scan_stale_s:
+            reading_ts = _safe_float(getattr(scan_reading, "timestamp", 0.0), 0.0)
+            if now - reading_ts <= window_s:
                 return self._process_scan(scan_reading, settings)
 
         if scan_service is None:
@@ -497,6 +496,18 @@ class ObstacleAvoidanceModule(Module):
                 latest = None
             if latest is None:
                 return None
+            latest_ts = _safe_float(getattr(latest, "timestamp", 0.0), 0.0)
+            if now - latest_ts > window_s:
+                # A fallback that skips the check is worse than no fallback: it made the guarded
+                # path above dead code and chose a direction from a reading older than the one
+                # the watchdog refuses to hold motion on (#22). Nothing is published, so the
+                # stale reading cannot be laundered into `scan_reading` either.
+                logger.debug(
+                    "Discarding scan_service.latest(): age %.2fs exceeds the %.2fs window",
+                    now - latest_ts,
+                    window_s,
+                )
+                return None
             reading = latest
             context.set("scan_reading", reading)
             context.set("scan_latest", reading.to_dict())
@@ -504,6 +515,27 @@ class ObstacleAvoidanceModule(Module):
         except Exception as exc:  # noqa: BLE001
             logger.warning("On-demand scan processing failed: %s", exc)
             return None
+
+    @staticmethod
+    def _scan_window_s(context) -> float:
+        """How old a scan may be before it is not a basis for a direction (#22).
+
+        The watchdog computes this from the same reading and publishes it, so prefer its number.
+        The fallback is the same rule, for a runtime whose watchdog is disabled or has not ticked
+        yet, and it reads `watchdog.scan_timeout_s` rather than keeping a duplicate of it in the
+        `navigation` section.
+        """
+        published = _safe_float(context.get("scan_stale_after_s"), 0.0)
+        if published > 0:
+            return published
+        root = context.get("settings") or {}
+        watchdog_settings = root.get("watchdog", {}) if isinstance(root, dict) else {}
+        floor = (
+            watchdog_settings.get("scan_timeout_s")
+            if isinstance(watchdog_settings, dict)
+            else None
+        )
+        return scan_freshness_window_s(floor, context.get("scan_duration_s"))
 
     def _process_scan(self, reading, settings) -> tuple[str, float, bool, float | None] | None:
         yaw_max = _safe_int(settings.get("scan_yaw_max_deg", 60), 60)

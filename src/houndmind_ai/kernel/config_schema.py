@@ -526,7 +526,10 @@ _NAVIGATION = Section(
         "scan_continuous": Bool(),
         "scan_history_size": IntSpec(minimum=1),
         "scan_samples": IntSpec(minimum=1),
-        "scan_stale_s": _POSITIVE,
+        # `scan_stale_s` was retired (#22): scan freshness is one rule, in
+        # `navigation/scanning.py::scan_freshness_window_s`, with `watchdog.scan_timeout_s` as its
+        # floor. A second knob for the same question is how the navigator and the watchdog came
+        # to disagree about the same timestamp.
         "scan_yaw_max_deg": FloatSpec(minimum=0.0, maximum=180.0),
         "scan_step_deg": FloatSpec(minimum=1.0, maximum=180.0),
         "scan_settle_s": _NON_NEGATIVE,
