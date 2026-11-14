@@ -8,6 +8,18 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **A device tool's exit code can be trusted** (#109, #111): `tools.hardware_checkup` returned 0
+  whether a sensor answered or not, so a scripted verify, a gate and the bench checklist all read a
+  dead ultrasonic as a pass. It now exits 1 when any of the four sensors did not answer, prints
+  `[checkup] sensors: all answered` or `[checkup] no reading from: <names>`, and keeps 0 for "all
+  answered" and 2 for "no dog could be opened"; a failed motion step still only reports on stderr.
+  `tools.installer_verify` checked for Python 3.10 and merely warned on 3.12+, certifying an
+  interpreter `pyproject.toml` refuses and the next `pip install` rejects. Both use the declared range
+  now (3.11-3.13); the verifier's copy is held to `scripts/installer_core.py::is_supported_python` and
+  to `requires-python` by the new `tests/test_python_support.py`, and `scripts/installer_core.py` no
+  longer looks for a verifier under the root `tools/` package that was removed. `docs/TOOLS.md`,
+  `docs/HARDWARE_TEST.md`, `docs/QUICKSTART.md` and `docs/TROUBLESHOOTING.md` had recorded all of it
+  as known defects and now describe the fixed behaviour.
 - **The device token has one owner, and it is the runtime** (#16): `services/auth.py::TokenStore`
   has always written `~/.houndmind/api_token` on first start, but three pages said otherwise —
   `FEATURES_GUIDE.md` claimed the installer pre-created it "(Phase 6)", and that page plus
