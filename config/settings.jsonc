@@ -667,8 +667,6 @@
     "mapping": {
       // Enable mapping module (safe to keep on by default).
       "enabled": true,
-      // Future hook for optional path planning.
-      "path_planning_enabled": true,
       // Max samples to keep in memory.
       "sample_history_max": 500,
       // Max age for samples in seconds (0 = keep forever).

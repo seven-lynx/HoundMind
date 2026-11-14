@@ -424,6 +424,15 @@ Current Release: v2026.01.18
   disagrees with, instead of leaving the contradiction silent.
 
 ### Removed
+- The A* path-planning hook, and the two keys that were supposed to feed it.
+  `default_path_planning_hook` read `mapping_state["grid_map"]`, `mapping_state["current_cell"]` and
+  `settings["goal"]`; the mapper writes `grid` (a cell map, not a 2-D array), nothing in the tree
+  estimates a position, and `goal` was never in the schema — so the hook returned
+  `{"path": [], "success": false}` on every tick, its `path_planning` output had no consumer, and
+  following `README`/`FEATURES_GUIDE` to set `goal` made the runtime exit at load (#121).
+  `path_planning_enabled`, `path_planning_hook`, the `path_planning` context key and the hook are
+  gone; `mapping/path_planner.py::astar` stays as a documented library helper with its own tests, and
+  goal-directed walking remains `place_navigator`.
 - `docs/api_reference.md`, `docs/QUICK_START_PROGRAMMING.md` and `docs/voice_setup_instructions.md`.
   Their content moved into `HOUNDMIND_PROGRAMMING_GUIDE.md` (§4–§6, §1, §14), `FEATURES_GUIDE.md`
   (§17) and `PIDOG_PROGRAMMING_GUIDE.md` (vendor method reference). Four documents described the same

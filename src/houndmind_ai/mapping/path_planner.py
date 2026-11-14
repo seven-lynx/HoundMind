@@ -27,18 +27,3 @@ def astar(grid, start, goal, passable=lambda v: v == 0):
             if 0 <= nx < w and 0 <= ny < h and passable(grid[ny][nx]) and (nx,ny) not in closed:
                 heapq.heappush(open_set, (cost+1+abs(goal[0]-nx)+abs(goal[1]-ny), cost+1, (nx,ny), path+[(nx,ny)]))
     return []
-
-def default_path_planning_hook(mapping_state, sample, settings):
-    """
-    Example hook: plan from current to goal using A* on a grid map.
-    mapping_state: dict with 'samples' and (optionally) 'grid_map'
-    settings: config dict, may include 'goal' as (x, y)
-    Returns: dict with 'path' and 'success'
-    """
-    grid = mapping_state.get('grid_map')
-    start = mapping_state.get('current_cell')
-    goal = settings.get('goal')
-    if not (grid and start and goal):
-        return {'path': [], 'success': False}
-    path = astar(grid, start, goal)
-    return {'path': path, 'success': bool(path)}

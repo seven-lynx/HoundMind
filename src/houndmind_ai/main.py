@@ -25,7 +25,6 @@ from houndmind_ai.kernel.registry import Capability, ModuleRegistry
 from houndmind_ai.logging.decision_log import DecisionLogModule
 from houndmind_ai.logging.event_logger import EventLoggerModule
 from houndmind_ai.logging.led_manager import LedManagerModule
-from houndmind_ai.mapping import default_path_planning_hook
 from houndmind_ai.mapping.mapper import MappingModule
 from houndmind_ai.navigation.local_planner import LocalPlannerModule
 from houndmind_ai.navigation.obstacle_avoidance import ObstacleAvoidanceModule
@@ -187,11 +186,6 @@ def main() -> None:
         config.profile,
     )
     context_filter.set_context_source(runtime.context.get)
-
-    # Register path planning hook for Pi4 if enabled
-    mapping_settings = (config.settings or {}).get("mapping", {})
-    if mapping_settings.get("path_planning_enabled", False):
-        runtime.context.set("path_planning_hook", default_path_planning_hook)
 
     runtime.run()
 

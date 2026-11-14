@@ -934,22 +934,19 @@ device first).
 
 ---
 
-## 27) Path Planning (A* for Pi4)
-**What it does:**
-- Plans a path from the current cell to a specified goal using the A* algorithm on a grid map.
-- The planned path is available in the runtime context for navigation and debugging.
+## 27) Path Planning (A* helper)
 
-**Enable:**
-- Set `"path_planning_enabled": true` in the `mapping` section of your config.
-- Set a goal with `"goal": [x, y]` in the same section.
+**What it is:** `houndmind_ai.mapping.path_planner.astar`, a dependency-free A* over a grid of `0`
+(free) / `1` (obstacle), plus the example below. It is a library function with **no caller in the
+runtime**: `path_planning_enabled` and the `path_planning` context key went with the hook that
+produced them ([#121](https://github.com/seven-lynx/HoundMind/issues/121)), because a grid route needs
+a position estimate this stack does not have.
 
-**Usage:**
-- The mapping module will call the path planning hook each tick if enabled.
-- The planned path will be available in the context as `path_planning`.
+**Use instead:** `place_navigator` walks to a taught place (`docs/CONTROL_API.md` §8), and
+`obstacle_avoidance` handles everything inside one scan sweep.
  
-Note: When `mapping.path_planning_enabled` is set, the runtime will automatically
-register the default A* hook into the context as `path_planning_hook`, so no
-further wiring is required for the basic grid-based planner.
+Note: setting `mapping.path_planning_enabled` or `mapping.goal` is now an unknown-key error at load.
+`goal` never was a key, so the old text here stopped the runtime at startup.
 
 **Example:**
 ```python
@@ -969,8 +966,8 @@ print("Path:", path)
 # Output: [(0, 0), (1, 0), (2, 0), (2, 1), (2, 2), (3, 2), (4, 2), (4, 3), (4, 4)]
 ```
 
-**Disable:**
-- Set `"path_planning_enabled": false` in the mapping config.
+**Not a runtime feature:** there is nothing to enable or disable. The two keys the old text told you
+to set (`path_planning_enabled`, `goal`) are gone from the schema, and setting them is a load error.
 
 ---
 

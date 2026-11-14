@@ -245,7 +245,6 @@ The keys a module may rely on. Anything not here is private and may change.
 | `identity_roster` | `dict \| None` — `{backend, path, people: [{id, name}]}`, published by `optional/face_recognition.py` at start and after every mutation; what `GET /api/v1/people` serves, and never an embedding |
 | `identity_admin` | `IdentityForgetter \| None` — the module's `forget(id)` and nothing else, published at start and cleared at stop; `DELETE /api/v1/people/{id}` is its only caller, and it runs in an executor because an LBPH retrain reads every image |
 | `mapping_openings`, `mapping_state` | `dict` |
-| `path_planning`, `path_planning_hook` | `list` / callable |
 | `behavior_override` | `str \| None` |
 | `behavior_state` | `str` — the FSM's published state (`idle`, `alert`, …), not a command |
 | `runtime_mode` | `idle` \| `patrol` \| `manual` \| `rest` |
@@ -358,7 +357,7 @@ everything you tune lives under `settings`:
 | `sensors` | `poll_hz`, history length, distance sampling and filtering |
 | `perception` | fusion thresholds |
 | `navigation` | scan cadence, `turn_cooldown_s`, `safe_distance_cm`, stuck recovery |
-| `mapping` | home map, `path_planning_enabled`, `goal` |
+| `mapping` | home map, occupancy grid, opening scoring |
 | `behavior` | action sets, cooldowns, autonomy, micro-idle, habituation |
 | `routines` | `dir` — where the routine files live (`docs/ROUTINES.md`), default `~/.houndmind/routines`; the runner reads it once at start |
 | `personality`, `energy`, `emotion` | behaviour bias multipliers |
@@ -531,10 +530,10 @@ which actions the dog picks — motion-adjacent, not a display-only module.
 
 - `MappingModule` accumulates `mapping_openings` and safe paths from scans, and can write a home-map
   snapshot under `data/maps/` when enabled.
-- Path planning is an A* hook over a grid (`mapping/path_planner.py`). Set
-  `"path_planning_enabled": true` and `"goal": [x, y]` under `mapping`; the runtime registers the
-  default hook as `path_planning_hook`, `MappingModule` calls it each tick, and the result appears as
-  `path_planning`.
+- `mapping/path_planner.py::astar` is a library helper over a grid, with **no caller in the runtime**:
+  the hook and the `path_planning` key were retired because a route needs a position estimate this
+  stack does not have (#121). The example below is the whole feature surface. Goal-directed walking
+  is `navigation/place_navigator.py` (`docs/CONTROL_API.md` §8).
 
 ```python
 from houndmind_ai.mapping.path_planner import astar

@@ -1,5 +1,7 @@
-"""Mapping and home map storage."""
+"""Mapping and home map storage.
 
-from .path_planner import default_path_planning_hook
+`path_planner.astar` is a library helper with no caller in the runtime (#121), so nothing here is
+re-exported: importing this package used to pull a hook the runtime then registered for nobody.
+"""
 
-__all__ = ["default_path_planning_hook"]
+__all__: list[str] = []

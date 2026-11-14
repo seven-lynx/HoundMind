@@ -601,7 +601,6 @@ _NAVIGATION = Section(
 _MAPPING = Section(
     fields={
         "enabled": Bool(),
-        "path_planning_enabled": Bool(),
         "sample_history_max": IntSpec(minimum=1),
         "sample_max_age_s": _NON_NEGATIVE,
         "home_map_enabled": Bool(),
