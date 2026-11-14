@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **An injected `IntentBoard` is no longer replaced** (#58): `act/gateway.py` chose its board with
+  `board or IntentBoard(...)`, and `IntentBoard` defines `__len__` - so a caller that passed a
+  freshly built, still-empty board had it silently discarded and went on publishing into one
+  nobody read. The gateway now tests `is None`. Producers read the board from the context, so no
+  device was affected; the trap was a test or a replay tool that holds its own reference and looks
+  green. `tests/test_gateway.py` asserts the identity instead of the ring, which is the check the
+  old one could not make.
 - **The `identity_guard` CI job is removed**: it failed any push or pull request whose commits were
   authored by an account other than the project's own, and it was one of the four required checks on
   `main`. The job and its required status context are both gone, so three job definitions and three

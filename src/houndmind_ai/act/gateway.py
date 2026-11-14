@@ -99,7 +99,10 @@ class MotionGatewayModule(Module):
         self.bus = bus
         # The internal producers' notice board. Created here when a caller does not inject one,
         # so a gateway built on its own still works; `main.build_registry` lets it default.
-        self.board = board or IntentBoard(clock=self._clock)
+        # `is None` rather than truthiness: `IntentBoard` defines `__len__` (`kernel/intents.py:144`),
+        # so a freshly built board is falsy and `board or ...` would discard the object a caller kept
+        # a reference to, leaving it publishing into a board nobody reads (#58).
+        self.board = board if board is not None else IntentBoard(clock=self._clock)
         self._last_key: tuple[str, Source, tuple[tuple[str, str], ...]] | None = None
         self._last_verdict: Verdict | None = None
         self._last_cancelled: frozenset[tuple[str, Source]] = frozenset()
