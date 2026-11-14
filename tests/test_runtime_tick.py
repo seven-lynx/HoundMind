@@ -240,3 +240,30 @@ def test_the_shipped_config_still_has_the_safety_modules_off() -> None:
         entry = load_config().modules.get(name)
         assert entry is not None, f"{name} should be declared in the shipped config"
         assert entry.enabled is False, f"{name} must ship disabled"
+
+
+def test_runtime_tick_is_published_for_every_tick() -> None:
+    """`runtime_tick` is the index a log record carries, so the loop has to be the one setting it.
+
+    `CONTEXT_FIELDS` (`core/logging_setup.py:15`) copies it into every JSON line. Before #126 only a
+    test ever populated it, which meant no production line could be matched to a tick while the log
+    tests went on asserting the field.
+    """
+
+    class Probe(Module):
+        def __init__(self) -> None:
+            super().__init__("probe")
+            self.seen: list[object] = []
+
+        def tick(self, context) -> None:
+            self.seen.append(context.get("runtime_tick"))
+
+    config = load_config()
+    config.loop.max_cycles = 3
+    # The shipped cadence sleeps between ticks; three of them at 5 Hz would be most of a second for
+    # nothing, and this test is about the index, not the pacing.
+    config.loop.tick_hz = 100
+    probe = Probe()
+    HoundMindRuntime(config, [probe]).run()
+
+    assert probe.seen == [0, 1, 2]

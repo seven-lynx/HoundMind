@@ -26,6 +26,22 @@ All three files are separate on purpose; which one you want depends on the quest
 says what the process did, the event log says what the dog's state was every half second, and the
 decision log says why the tick chose what it chose.
 
+## Record fields
+
+A line in `logs/houndmind.log` is one JSON object. Four fields come from the runtime context
+(`core/logging_setup.py::CONTEXT_FIELDS`); everything else attached to a record is dropped, which is
+what keeps the file readable at 10 Hz.
+
+| Field | Set by | Meaning |
+|---|---|---|
+| `device_id` | `main.py:181` | `device.device_id`, or the hostname when it is unset |
+| `trace_id` | `core/runtime.py:53` | one id per run, shared with the decision records of that run |
+| `runtime_tick` | `core/runtime.py:206` | the loop's tick index, counting from `0` |
+| `tick_ts` | `core/runtime.py:203` | when that tick started, monotonic — not epoch seconds |
+
+`runtime_tick` is the field that makes a log line joinable to `houndmind_decisions.jsonl` and to a
+record behind `/api/v1/decisions`: match on the index, not on a float timestamp.
+
 ## Collect a support bundle
 
 Recommended, because it gathers the files *and* the metadata that makes them readable. Run it inside
