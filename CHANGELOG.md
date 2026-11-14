@@ -7,6 +7,18 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The LED strip has a `health` source, and the dead writes around it are gone** (#78, #163):
+  `safety/sensor_health.py` published `led_request:health` into a source no configuration could
+  name, and `behavior/habituation.py` published `led_request:habituation:<stimulus>` — a key family
+  the selector's per-source walk can never address — plus a `telemetry:habituation:<stimulus>`
+  snapshot nothing read. `health` is now a real source: in the schema's choices, in the shipped
+  default order second after `safety`, with `settings.led.health_mode` choosing its effect. The
+  module ships disabled, so the default only bites once a user turns it on — and when they do, the
+  request carries a monotonic `until_ts` refreshed every tick while a sensor is unhappy and cleared
+  when it recovers, so a reachable health colour cannot hold the strip after the problem is gone.
+  Habituation keeps one output, `habituation:<stimulus>:habituated`, which `behavior/attention.py`
+  reads. `docs/FEATURES_GUIDE.md` §7 and §15, `tests/test_led_manager.py`,
+  `tests/test_sensor_health.py` (2 new cases) and `tests/test_habituation_multi.py` follow.
 - **`wait` and `steps` reach the HAL on a posture or expression step** (#69): `config/actions.jsonc`
   declared no parameters for either class, and `hal/motors.py` forwarded a payload only for its
   `_PARAM_ACTIONS` set, so `{"action": "stand", "params": {"wait": true}}` was refused by the

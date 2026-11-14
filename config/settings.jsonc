@@ -890,7 +890,8 @@
       // The order is the precedence: the list is walked front to back and the first source with a
       // live request owns the strip, so "safety" first is a guarantee. Reordering overrides it —
       // that is the only lever; the numeric priority a producer puts on a request is not read.
-      "priority": ["safety", "navigation", "attention", "emotion"],
+      // "health" is sensor_health, which ships disabled; the slot only matters once it is enabled.
+      "priority": ["safety", "health", "navigation", "attention", "emotion"],
       "cooldown_s": 0.4,
       "brightness": 0.7,
       "default_color": "blue",
@@ -898,6 +899,9 @@
       "safety_mode": "boom",
       "attention_color": "cyan",
       "attention_mode": "listen",
+      // Sensor-health colours come from `sensor_health.led_*_color` on the request; this is the
+      // effect they run at.
+      "health_mode": "breath",
       "nav_mode": "breath",
       "nav_turn_mode": "listen",
       "nav_obstacle_mode": "bark",

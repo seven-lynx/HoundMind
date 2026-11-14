@@ -9,7 +9,7 @@ from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PRIORITY = ("safety", "navigation", "attention", "emotion")
+DEFAULT_PRIORITY = ("safety", "health", "navigation", "attention", "emotion")
 
 # The idle slot's source; a real source is never an empty string, so it cannot collide with one.
 _IDLE_SOURCE = ""
@@ -158,6 +158,11 @@ class LedManagerModule(Module):
         elif source == "attention":
             color = settings.get("attention_color", "cyan")
             mode_name = settings.get("attention_mode", "listen")
+        elif source == "health":
+            # A sensor-health colour is a diagnosis, not an expression: the request names the
+            # colour and this chooses only the effect (#78). `safety/sensor_health.py` keeps the
+            # request refreshed while the sensors are unhappy and clears it when they recover.
+            mode_name = settings.get("health_mode", "breath")
         elif source == "emotion":
             color = (emotion.get("led_colors", {}) or {}).get(
                 mode, settings.get("emotion_color", "blue")

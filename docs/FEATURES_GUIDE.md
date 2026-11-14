@@ -396,14 +396,15 @@ When enabled, habituation reduces repeated reactions to identical stimuli (touch
 - `settings.habituation.threshold` (default: 3) — number of events within `window_s` to trigger habituation
 - `settings.habituation.recovery_s` (default: 6.0) — quiet period (seconds) to reset habituation
 
-**LED & Telemetry:**
-- When a stimulus becomes habituated the runtime publishes an LED request under
-  `led_request:habituation:<stimulus>` (mode `blink`) and a snapshot under
-  `telemetry:habituation:<stimulus>` carrying the timestamp, count, threshold and recovery window.
-- **Caveat:** the LED priority list (`settings.led.priority`) names `safety`, `navigation`,
-  `attention` and `emotion` only, so it cannot address this namespaced key — the request is
-  published, but nothing selects it for display yet
-  ([#78](https://github.com/seven-lynx/HoundMind/issues/78)).
+**Output:**
+- The flag is the whole output. `habituation:<stimulus>:habituated` is what other modules read
+  (`behavior/attention.py` consults it), and it is deliberately the only channel: a habituation is a
+  fact about a stimulus, not an expression, so it does not take the LED strip.
+- Earlier builds also published an LED request under `led_request:habituation:<stimulus>` and a
+  snapshot under `telemetry:habituation:<stimulus>`, and neither had a reader — the LED selector
+  walks `settings.led.priority` and can never address a namespaced key family. Both were removed
+  ([#78](https://github.com/seven-lynx/HoundMind/issues/78),
+  [#163](https://github.com/seven-lynx/HoundMind/issues/163)).
 
 **Disable:** `settings.habituation.enabled = false`. Habituation is the one module with no
 `modules.habituation` entry in the shipped config — the runtime constructs it enabled and the
@@ -566,13 +567,21 @@ reading and cannot accept commands.
 **What it does:** Centralized LED priority handling. It picks the highest-priority live request from
 `led_request:<source>` and applies it through the HAL's `rgb`, so a colour and its animation rate come
 from one place instead of from whichever module wrote last. The order is `settings.led.priority`
-(default `["safety", "navigation", "attention", "emotion"]`), and **the order is the precedence**: the
-list is walked front to back and the first source with a live request owns the strip, so `safety` first
-is a guarantee rather than an accident of the default. Reordering that list is the one way to override
-it — put `emotion` ahead of `safety` and an expression does take the strip. There is deliberately no
+(default `["safety", "health", "navigation", "attention", "emotion"]`), and **the order is the
+precedence**: the list is walked front to back and the first source with a live request owns the
+strip, so `safety` first is a guarantee rather than an accident of the default. Reordering that list
+is the one way to override it — put `emotion` ahead of `safety` and an expression does take the
+strip. There is deliberately no
 second lever: a request is `{mode, color?, bps?, until_ts?}`, and a numeric priority stamped on the
 request would be config that loads and decides nothing
 ([#87](https://github.com/seven-lynx/HoundMind/issues/87)).
+
+**Sources.** One module per slot, and each key is exactly `led_request:<source>`:
+`safety/supervisor.py` (`safety`), `safety/sensor_health.py` (`health`, which ships disabled),
+`navigation/obstacle_avoidance.py` (`navigation`), `behavior/attention.py` (`attention`) and
+`optional/energy_emotion.py` (`emotion`). A producer whose key is not in the list — or that names a
+key family rather than one source — is publishing something nothing can select, which is what #78
+found and removed.
 
 **Requests can expire.** A request is `{mode, color?, bps?, until_ts?}`. `until_ts` is a deadline on
 the runtime's monotonic clock; once it passes, the request stops winning and its key is cleared, so the

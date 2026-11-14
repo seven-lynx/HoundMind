@@ -758,8 +758,10 @@ _LED = Section(
         # than a coincidence of the default. Reordering is allowed and deliberately overrides that
         # guarantee — a user who puts `emotion` ahead of `safety` gets what they configured. The
         # numeric `priority` the producers stamp on a request is not consulted at all.
+        # `health` is `safety/sensor_health.py`, which ships disabled: the slot only means anything
+        # once a user enables that module (#78).
         "priority": ListOf(
-            StrSpec(choices=("safety", "navigation", "attention", "emotion"))
+            StrSpec(choices=("safety", "health", "navigation", "attention", "emotion"))
         ),
         "cooldown_s": _NON_NEGATIVE,
         "brightness": _FRACTION,
@@ -768,6 +770,9 @@ _LED = Section(
         "safety_mode": StrSpec(),
         "attention_color": StrSpec(),
         "attention_mode": StrSpec(),
+        # The effect a sensor-health colour runs at; the colour itself is the request's, because
+        # only the module that read the sensors knows which one (`health_mode`, #78).
+        "health_mode": StrSpec(),
         "nav_mode": StrSpec(),
         "nav_turn_mode": StrSpec(),
         "nav_obstacle_mode": StrSpec(),

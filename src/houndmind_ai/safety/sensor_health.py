@@ -7,6 +7,12 @@ from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
 
+# How long a health colour stays live without being refreshed. The module rewrites the request every
+# tick while the sensors are unhappy, so this only has to outlast one slow tick; it is not a hold
+# that a healthy dog eventually inherits (#78).
+_LED_HOLD_S = 2.0
+
+
 class SensorHealthModule(Module):
     """Monitors sensor health and updates LED/logs based on config thresholds."""
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
@@ -59,9 +65,26 @@ class SensorHealthModule(Module):
             led_color = settings.get("led_warning_color", "yellow")
         if status == "error":
             led_color = settings.get("led_error_color", "red")
-        # Update LED if changed
-        if led_color != self._last_led:
-            context.set("led_request:health", {"mode": "health", "color": led_color})
+        # Update LED if changed. A health colour is a request like any other, so it is only live
+        # while its deadline is: the deadline is refreshed every tick while the sensors are
+        # unhappy, and the request is cleared when they recover. Without that, a `health` source
+        # the selector can now reach would own the strip for the rest of the session (#78).
+        if status == "ok":
+            if self._last_led is not None:
+                context.set("led_request:health", None)
+                self._last_led = None
+        else:
+            context.set(
+                "led_request:health",
+                {
+                    "mode": "health",
+                    "color": led_color,
+                    # Monotonic, not the wall clock `now` above: the manager's deadlines are on the
+                    # loop clock (`logging/led_manager.py`), and staleness here is wall-clock
+                    # because the sensor timestamps are. Two clocks, asked separately.
+                    "until_ts": time.monotonic() + _LED_HOLD_S,
+                },
+            )
             self._last_led = led_color
         # Log if changed or periodically
         if (self._last_status != status or now - self._last_log_ts > 10) and settings.get("log_enabled", True):

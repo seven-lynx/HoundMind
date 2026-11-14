@@ -55,33 +55,11 @@ class HabituationModule(Module):
                 if now - last > recovery_s:
                     st["count"] = 0
 
-            prev_hab = bool(st.get("habituated", False))
             habituated = st.get("count", 0) >= threshold
             st["habituated"] = habituated
+            # The flag is the whole output. There is no second channel: the LED request and the
+            # `telemetry:habituation:<stimulus>` snapshot this module used to write were both dead
+            # - the selector walks `settings.led.priority` and cannot address a namespaced key
+            # family, and nothing in `src/` reads the telemetry key (#78, #163).
             context.set(f"habituation:{stimulus}:habituated", bool(habituated))
 
-            # Emit LED request and telemetry snapshot when a stimulus becomes habituated.
-            if habituated and not prev_hab:
-                st["last_hab_ts"] = now
-                # LED request uses a namespaced key so the LED manager can pick it up.
-                context.set(
-                    f"led_request:habituation:{stimulus}",
-                    {
-                        "timestamp": now,
-                        "mode": "blink",
-                        "color": settings.get("led_color", "yellow"),
-                        "priority": int(settings.get("led_priority", 50)),
-                        "stimulus": stimulus,
-                    },
-                )
-                # Telemetry snapshot for habituation event
-                context.set(
-                    f"telemetry:habituation:{stimulus}",
-                    {
-                        "timestamp": now,
-                        "stimulus": stimulus,
-                        "count": st.get("count", 0),
-                        "threshold": threshold,
-                        "recovery_s": recovery_s,
-                    },
-                )
