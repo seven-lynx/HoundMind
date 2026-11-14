@@ -7,6 +7,16 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **`led_priority` is gone instead of honoured** (#87): four producers stamped `request["priority"]`
+  from their own section's `led_priority` int, and the selector never read it - it walks
+  `settings.led.priority` and takes the first live request, so the strip was decided by list order
+  while four schema-validated knobs changed nothing. Honouring the ints would have let a mis-set
+  `emotion.led_priority: 100` outrank safety, which is the one ordering the contract promises, so the
+  four keys and the four reads are removed rather than wired up: the list stays the single lever, as
+  the LED manager's own tests already pinned. `config/settings.jsonc`, the schema, and
+  `docs/FEATURES_GUIDE.md` section 15 now say so; a config that still carries `led_priority` under
+  `safety`, `navigation`, `attention` or `emotion` is reported as an unknown key at load, which is the
+  point - it was only ever inert, and now the loader says so.
 - **One owner for the cue warning** (#90): the FSM warned about every entry cue missing from the
   advisory `behavior.cue_sounds` list and played it anyway, which was the only signal available when
   it was written. Once the HAL learned to name a sound the vendor cannot find, that second opinion

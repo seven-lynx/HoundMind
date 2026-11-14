@@ -842,7 +842,6 @@ class ObstacleAvoidanceModule(Module):
             {
                 "timestamp": time.time(),
                 "mode": mode,
-                "priority": int(settings.get("led_priority", 50)),
             },
         )
 

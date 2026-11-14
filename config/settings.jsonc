@@ -618,7 +618,6 @@
       "gentle_recovery_cooldown_s": 8.0,
       // LED feedback for navigation states.
       "led_enabled": true,
-      "led_priority": 50,
       "led_patrol_color": "green",
       "led_turn_color": "orange",
       "led_obstacle_color": "red",
@@ -870,7 +869,6 @@
     },
     "emotion": {
       "led_enabled": false,
-      "led_priority": 40,
       "led_cooldown_s": 1.0,
       "led_colors": {
         "calm": "blue",
@@ -918,8 +916,7 @@
       "head_yaw_max_deg": 60.0,
       "head_turn_speed": 70,
       "respect_scanning": true,
-      "scan_block_s": 0.4,
-      "led_priority": 60
+      "scan_block_s": 0.4
     },
     // =====================================================================
     // MOTORS
@@ -989,8 +986,6 @@
       "tilt_action": "lie",
       // Cooldown between tilt triggers (seconds).
       "tilt_cooldown_s": 1.0,
-      // LED priority for safety conditions.
-      "led_priority": 80,
       // Priority order for action overrides (highest first).
       "override_priority": ["safety", "watchdog", "navigation", "behavior"],
       // Clear lower-priority actions when safety is active.

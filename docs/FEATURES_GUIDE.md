@@ -558,8 +558,10 @@ from one place instead of from whichever module wrote last. The order is `settin
 (default `["safety", "navigation", "attention", "emotion"]`), and **the order is the precedence**: the
 list is walked front to back and the first source with a live request owns the strip, so `safety` first
 is a guarantee rather than an accident of the default. Reordering that list is the one way to override
-it — put `emotion` ahead of `safety` and an expression does take the strip — and the numeric `priority`
-a producer stamps on its request is not consulted at all.
+it — put `emotion` ahead of `safety` and an expression does take the strip. There is deliberately no
+second lever: a request is `{mode, color?, bps?, until_ts?}`, and a numeric priority stamped on the
+request would be config that loads and decides nothing
+([#87](https://github.com/seven-lynx/HoundMind/issues/87)).
 
 **Requests can expire.** A request is `{mode, color?, bps?, until_ts?}`. `until_ts` is a deadline on
 the runtime's monotonic clock; once it passes, the request stops winning and its key is cleared, so the
