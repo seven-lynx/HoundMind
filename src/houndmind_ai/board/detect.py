@@ -12,67 +12,26 @@ fact.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from houndmind_ai.board.rules import classify_text
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["MODEL_PATH", "SUPPORTED_KINDS", "BoardInfo", "classify_model", "detect"]
 
 # The kernel's own words. Present on every Raspberry Pi with a device tree, absent on a
-# workstation, a container and CI — which is why "absent" is `unknown` and not an error.
+# workstation, a container and CI - which is why "absent" is `unknown` and not an error.
 MODEL_PATH = Path("/proc/device-tree/model")
 
 # The two editions this project ships. Anything else a Pi says about itself is either a board
 # we dropped (Pi 3 and older) or a board we have no measurement for.
 SUPPORTED_KINDS: tuple[str, ...] = ("pi4", "pi5")
 
-# Matched against the lowercased model string, in order. Signs such as the CM5 and the Pi 500
-# carry their generation in the name, so all three spellings of a generation belong together.
-#
-# Every pattern ends on a word boundary so a generation is matched as a whole token. The model
-# string also carries a revision — "Raspberry Pi 4 Model B Rev 1.5" is a Pi 4 — so matching a
-# bare digit, which is the obvious shortcut, silently invents a Pi 5.
-_GENERATIONS: tuple[tuple[str, tuple[re.Pattern[str], ...]], ...] = (
-    (
-        "pi5",
-        tuple(
-            re.compile(pattern)
-            for pattern in (
-                r"raspberry pi 5\b",
-                r"raspberry pi 500\b",
-                r"compute module 5\b",
-            )
-        ),
-    ),
-    (
-        "pi4",
-        tuple(
-            re.compile(pattern)
-            for pattern in (
-                r"raspberry pi 4\b",
-                r"raspberry pi 400\b",
-                r"compute module 4\b",
-            )
-        ),
-    ),
-    (
-        # Named rather than merely unrecognised: these boards are a refusal, not a shrug.
-        "unsupported",
-        tuple(
-            re.compile(pattern)
-            for pattern in (
-                r"raspberry pi 3\b",
-                r"raspberry pi 2\b",
-                r"raspberry pi 1\b",
-                r"raspberry pi zero",
-                r"compute module 3\b",
-                r"compute module 1\b",
-            )
-        ),
-    ),
-)
+# The generation table is `board/rules.py`, which the installer loads by path as well: it runs
+# before this package is installed and cannot import it, so a copy here is how the two answers
+# drifted apart (#31).
 
 
 @dataclass(frozen=True)
@@ -95,16 +54,10 @@ class BoardInfo:
 def classify_model(model: str) -> str:
     """Map a device-tree model string to a board kind.
 
-    Pure: the caller supplies the string, so the mapping is testable without a Raspberry Pi.
+    Pure: the caller supplies the string, so the mapping is testable without a Raspberry Pi. The
+    rule itself is `board/rules.py`; this is the import-side spelling of it.
     """
-    # The attribute is NUL-terminated; some kernels also pad it. Normalise before matching.
-    text = " ".join(model.replace("\x00", " ").split()).lower()
-    if not text:
-        return "unknown"
-    for kind, patterns in _GENERATIONS:
-        if any(pattern.search(text) for pattern in patterns):
-            return kind
-    return "unknown"
+    return classify_text(model)
 
 
 def detect(path: Path | None = None) -> BoardInfo:

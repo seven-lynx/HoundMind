@@ -81,10 +81,10 @@ def test_only_the_shipped_editions_are_supported(kind: str, supported: bool) -> 
 
 @lru_cache(maxsize=1)
 def _installer_detect():
-    """The installer's copy of this rule, loaded by path.
+    """The installer's board answer, loaded by path.
 
     `scripts/` is not importable as a package and the installer must run before HoundMind is
-    installed, so it cannot share the code. It can share the answers.
+    installed, so it loads `board/rules.py` from the checkout instead of importing it (#31).
     """
     path = Path(__file__).resolve().parents[1] / "scripts" / "installer_core.py"
     spec = importlib.util.spec_from_file_location("_installer_core", path)
@@ -109,5 +109,21 @@ def _installer_detect():
     ],
 )
 def test_the_installer_and_the_runtime_agree(model: str) -> None:
-    """The installer reported a Pi 5 as a Pi 4 for as long as the two were written separately."""
+    """They agree by construction now: one table, loaded by both (#31)."""
     assert _installer_detect()(model) == classify_model(model)
+
+
+def test_the_installer_carries_no_second_pattern_table() -> None:
+    """The drift this removed: a board one side learns and the other never hears about.
+
+    A generation regex in `scripts/installer_core.py` means the table has been copied back, which
+    is exactly how a Pi 5 came to be installed as a Pi 4 (#31).
+    """
+    source = (Path(__file__).resolve().parents[1] / "scripts" / "installer_core.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "GENERATIONS" not in source
+    assert 're.search(r"raspberry pi' not in source
+    assert 're.search(r"compute module' not in source
+    assert "classify_text" in source, "the installer must ask the shared rule, not its own"

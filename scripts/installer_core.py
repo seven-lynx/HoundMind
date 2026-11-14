@@ -7,13 +7,14 @@ Do not call directly; use scripts/install_houndmind.sh.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 # Named so a Pi 3 owner has somewhere to go. Kept in step with the last tag that shipped Pi 3.
 LAST_PI3_RELEASE = "v2026.01.18"
@@ -38,17 +39,42 @@ def is_windows() -> bool:
     return os.name == "nt"
 
 
+_BOARD_RULES: ModuleType | None = None
+
+
+def board_rules() -> ModuleType:
+    """The runtime's own board rule, loaded by path (#31).
+
+    `scripts/` is not a package and this runs before `houndmind_ai` is installed, so the shared
+    file cannot be imported the normal way. Loading it is the point: the installer used to keep a
+    second copy of the pattern table, the copies answered differently - a Pi 5 went in as a Pi 4 -
+    and nothing compared them.
+    """
+    global _BOARD_RULES
+    if _BOARD_RULES is None:
+        path = Path(__file__).resolve().parents[1] / "src" / "houndmind_ai" / "board" / "rules.py"
+        if not path.is_file():
+            raise RuntimeError(
+                f"installer is incomplete: {path} is missing, so the board cannot be identified"
+            )
+        spec = importlib.util.spec_from_file_location("_houndmind_board_rules", path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"cannot load the board rule from {path}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _BOARD_RULES = module
+    return _BOARD_RULES
+
+
 def detect_pi_class(model: str | None = None) -> str:
     """Return 'pi4', 'pi5', 'unsupported' or 'unknown' from the device-tree model.
 
-    Mirrors `src/houndmind_ai/board/detect.py`, which is the authority. The installer runs
-    before the package exists, so it cannot import it and the two have to be kept in step;
-    `tests/test_board_detect.py` asserts that they agree.
+    The rule itself is `src/houndmind_ai/board/rules.py`, shared with the runtime and loaded by
+    path. The word boundaries that file carries are load-bearing: the model string also carries a
+    revision, so "Raspberry Pi 4 Model B Rev 1.5" is a Pi 4 and matching a bare digit invents a
+    Pi 5.
 
-    The word boundaries are load-bearing: the model string carries a revision, so
-    "Raspberry Pi 4 Model B Rev 1.5" is a Pi 4 and matching a bare digit invents a Pi 5.
-
-    ``model`` exists for that test; production passes nothing and the device tree answers.
+    ``model`` exists for tests; production passes nothing and the device tree answers.
     """
     if model is None:
         try:
@@ -56,12 +82,10 @@ def detect_pi_class(model: str | None = None) -> str:
             model = raw.decode("utf-8", errors="replace")
         except OSError:
             model = ""
-    model = " ".join(model.replace("\x00", " ").split()).lower()
 
-    if re.search(r"raspberry pi 5\b|raspberry pi 500\b|compute module 5\b", model):
-        return "pi5"
-    if re.search(r"raspberry pi 4\b|raspberry pi 400\b|compute module 4\b", model):
-        return "pi4"
+    kind = str(board_rules().classify_text(model))
+    if kind != "unknown":
+        return kind
     if model:
         # A readable device tree means a Raspberry Pi; if the generation is not one we ship for
         # it is a board we dropped (Pi 3 and older) or a new one nobody has tested.
@@ -76,6 +100,18 @@ def detect_pi_class(model: str | None = None) -> str:
         # profile is the safe direction.
         return "pi4"
     return "unknown"
+
+
+def resolve_preset(pi_class: str, requested: str) -> str:
+    """Which preset to install. An explicit `--preset` means the same thing on every board (#29).
+
+    `auto` keeps the documented defaults: `full` on a Pi 4, `lite` everywhere else, because nothing
+    has been measured on a Pi 5 yet. This branch used to force `full` on a Pi 4 whatever the flag
+    said, so `--preset lite` attempted dlib, opencv and rtabmap that the user had asked to skip.
+    """
+    if requested != "auto":
+        return requested
+    return "full" if pi_class == "pi4" else "lite"
 
 
 def venv_paths(venv_path: Path) -> tuple[Path, Path]:
@@ -418,7 +454,12 @@ def main() -> int:
         print("pip not found; activate your environment first")
         return 2
 
-    pi_class = detect_pi_class()
+    try:
+        pi_class = detect_pi_class()
+    except RuntimeError as exc:
+        # An incomplete checkout is a stop, not a guess: the wrong board decides the dependencies.
+        print(exc)
+        return 2
     if pi_class == "unsupported":
         print(
             "This board is not supported: HoundMind runs on a Raspberry Pi 4 or Pi 5.\n"
@@ -430,13 +471,7 @@ def main() -> int:
         # selection still has to work on them.
         print("Warning: no Raspberry Pi detected; assuming a Pi 4 for dependency selection.")
 
-    if pi_class == "pi4":
-        # A Pi 4 still forces `full`, so `--preset` is ignored on it. That defect is known and
-        # is fixed with the installer rewrite; a Pi 5 must not inherit it, so it honours the
-        # flag like any other board.
-        preset = "full"
-    else:
-        preset = args.preset if args.preset != "auto" else "lite"
+    preset = resolve_preset(pi_class, args.preset)
 
     req = repo_root / "requirements-lite.txt"
     # Auto-build RTAB-Map for a Pi 4/5 full preset, or when explicitly requested.
@@ -514,11 +549,9 @@ def main() -> int:
                 return code
         else:
             return code
-    # Always install Flask and run model downloader for Pi4/5
+    # Run the model downloader for Pi4/5. Nothing installs flask here any more: it was a
+    # dependency of the four per-feature HTTP servers, which the control plane replaced (#30).
     if pi_class in ("pi4", "pi5"):
-        code = run([str(pip), "install", "flask"])
-        if code != 0:
-            return code
         # The downloader lives beside the package. This pointed at a repo-root `tools/`
         # directory, which was deleted with the legacy servers, so the branch had silently done
         # nothing since; `src/tools/` is where the script actually is.

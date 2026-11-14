@@ -23,7 +23,7 @@ dependencies = ["json5", "aiohttp>=3.9,<4"]
 # `lite` is retained as an empty preset so `pip install -e .[lite]` in existing docs, the
 # installer and CI keeps working while the heavy stack moves out of the default install.
 lite = []
-full = ["numpy", "scipy", "opencv-contrib-python", "face_recognition", "SpeechRecognition", "pyaudio", "sounddevice", "rtabmap-py", "flask", "pyttsx3", "vosk"]
+full = ["numpy", "scipy", "opencv-contrib-python", "face_recognition", "SpeechRecognition", "pyaudio", "sounddevice", "rtabmap-py", "pyttsx3", "vosk"]
 # ruff is pinned exactly: the lint result must not depend on which version PyPI served
 # that morning. Bump it deliberately, in its own commit, and expect new findings.
 dev = ["ruff==0.17.4", "pytest>=8", "mypy>=1.11", "pytest-cov"]

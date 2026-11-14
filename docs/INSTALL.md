@@ -74,10 +74,9 @@ The installer script will:
 4) Install HoundMind and verify imports.
 
 ### Board detection
-- **Pi 5**: honours `--preset`; the default is **lite**, because nothing has been measured on a Pi 5
-  yet and a full install of dlib/rtabmap on an untested board is not something to do unattended.
-- **Pi 4**: still forces the **full** preset, so `--preset` is ignored on a Pi 4. That is a known
-  defect; it is fixed with the installer rewrite rather than quietly changed here.
+- **Pi 4 and Pi 5**: both honour `--preset`. With `--preset auto` (the default) a Pi 4 installs
+  **full** and a Pi 5 installs **lite**, because nothing has been measured on a Pi 5 yet and a
+  full install of dlib/rtabmap on an untested board is not something to do unattended.
 - **Anything older**: refused before anything is installed, with the last supporting release named.
 
 You can override with:
@@ -95,7 +94,7 @@ Optional flags:
 - `--force-recreate-venv` (delete and recreate the venv even if it exists)
 - `--skip-pidog` (skip SunFounder install if already done)
 - `--run-i2samp` (runs the PiDog audio setup script)
-- `--preset auto|lite|full` (auto detects Pi model)
+- `--preset auto|lite|full` (default `auto`: Pi 4 -> `full`, Pi 5 -> `lite`; an explicit choice wins on every board)
 
 Additional installer flags (new):
 - `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make` and requires system build deps and `sudo`). Useful for Pi 4/5 full installs.
