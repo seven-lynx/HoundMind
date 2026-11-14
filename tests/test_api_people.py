@@ -225,6 +225,8 @@ def test_the_roster_slugs_names_and_collapses_repeats(tmp_path) -> None:
         "path": str(tmp_path / "face_references.json"),
         # `slug` is the rule `Place.id` follows: lowercase, `_`-joined (`kernel/place.py:109`).
         "people": [{"id": "alex_kim", "name": "Alex Kim"}, {"id": "sam", "name": "Sam"}],
+        # Nothing has been enrolled through the command yet.
+        "last_enroll": None,
     }
 
 
@@ -254,7 +256,12 @@ def test_a_backend_that_names_nobody_publishes_an_empty_roster() -> None:
 
     module._publish_roster(context)
 
-    assert published(context) == {"backend": "stub", "path": None, "people": []}
+    assert published(context) == {
+        "backend": "stub",
+        "path": None,
+        "people": [],
+        "last_enroll": None,
+    }
 
 
 def test_a_name_with_no_usable_characters_is_not_a_person(tmp_path) -> None:
@@ -517,4 +524,191 @@ def test_stopping_the_module_takes_the_forgetter_with_it() -> None:
     assert context.get("identity_admin") is None
     assert context.get("identity_roster") is None
     assert module.available is False
+
+
+# ---- POST: enrolment is asynchronous, so the answer is the roster (P4 PL9)
+
+
+def test_a_post_teaches_one_face_and_answers_the_handle(tmp_path) -> None:
+    """`202` with the id the roster will show, and the command the module reads on its next tick."""
+
+    async def scenario() -> None:
+        plane, _module = identity_plane(tmp_path, names=())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/people", headers=auth(plane), json={"name": "Alex Kim"}
+            )
+            body = await response.json()
+            command = plane.context.get("face_recognition_command")
+
+        assert response.status == 202, body
+        assert body == {"id": "alex_kim", "name": "Alex Kim", "status": "pending"}
+        assert command == {"action": "enroll", "name": "Alex Kim"}
+
+    asyncio.run(scenario())
+
+
+def test_a_post_with_no_usable_name_teaches_nothing(tmp_path) -> None:
+    """The id is `slug(name)`, so a name that slugs to nothing cannot become a person."""
+
+    async def scenario() -> None:
+        plane, _module = identity_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            for payload in ({}, {"name": ""}, {"name": 5}, {"name": "///"}, {"name": "   "}):
+                response = await client.post(
+                    f"{API_PREFIX}/people", headers=auth(plane), json=payload
+                )
+                assert response.status == 400, (payload, await response.json())
+            assert plane.context.get("face_recognition_command") is None
+
+    asyncio.run(scenario())
+
+
+def test_a_post_against_a_stopped_module_is_a_503(tmp_path) -> None:
+    """A write cannot honestly report "learning" about a module that is not running."""
+
+    async def scenario() -> None:
+        plane = plane_for(
+            tmp_path,
+            status=module_status(
+                disabled_reason="identity is disabled; enable modules.face_recognition"
+            ),
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/people", headers=auth(plane), json={"name": "Alex"}
+            )
+            body = await response.json()
+
+        assert response.status == 503
+        assert "modules.face_recognition" in body["detail"]
+        assert plane.context.get("face_recognition_command") is None
+
+    asyncio.run(scenario())
+
+
+def test_a_paired_client_cannot_teach_a_face(tmp_path) -> None:
+    """Enrolment is the deliberate, admin-scoped act the canon describes (section 6.4)."""
+
+    async def scenario() -> None:
+        plane, _module = identity_plane(tmp_path)
+        client_token, _principal = plane.authorizer.issue_client_token("Pixel 8")
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/people",
+                headers={"Authorization": f"Bearer {client_token}"},
+                json={"name": "Mallory"},
+            )
+
+        assert response.status == 403
+        assert plane.context.get("face_recognition_command") is None
+
+    asyncio.run(scenario())
+
+
+def test_the_route_reports_the_last_enrolment(tmp_path) -> None:
+    """`last_enroll` is the field a client polls after a `202`; it has to reach the body."""
+
+    async def scenario() -> None:
+        report = {"name": "Alex", "ok": False, "reason": "two faces", "ts": 1.0}
+        plane = plane_for(tmp_path, roster=roster_of(people=[], last_enroll=report))
+        async with TestClient(TestServer(create_app(plane))) as client:
+            body = await (await client.get(f"{API_PREFIX}/people", headers=auth(plane))).json()
+
+        assert body["last_enroll"] == report
+
+    asyncio.run(scenario())
+
+
+class EnrollingCv2:
+    """The three calls an enrolment makes on `cv2`: grayscale, one image write, nothing else."""
+
+    COLOR_BGR2GRAY = 0
+
+    @staticmethod
+    def cvtColor(frame, code):
+        return frame
+
+    @staticmethod
+    def imwrite(path, image) -> bool:
+        Path(path).write_bytes(b"png")
+        return True
+
+
+class Faces:
+    """A cascade stand-in that finds exactly the boxes it was given."""
+
+    def __init__(self, boxes) -> None:
+        self._boxes = boxes
+
+    def detectMultiScale(self, gray, **kwargs):
+        return self._boxes
+
+
+class Frame:
+    """A frame only has to survive cropping here: the grayscale call and `imwrite` are faked."""
+
+    def __getitem__(self, key):
+        return "face"
+
+
+def enrolling_module(boxes):
+    module = FaceRecognitionModule("face_recognition")
+    module.backend = "opencv"
+    module._cv2 = EnrollingCv2
+    module._cascade = Faces(boxes)
+    return module
+
+
+def test_an_enrolment_with_two_faces_refuses_by_name_and_says_why() -> None:
+    """The report is the only place a client can learn this: it used to be a log line."""
+
+    module = enrolling_module([(0, 0, 20, 20), (40, 40, 20, 20)])
+    context = DummyContext()
+    context.set("vision_frame", "frame")
+
+    module._handle_command({"action": "enroll", "name": "Alex"}, context, {})
+
+    roster = published(context)
+    assert roster["people"] == []
+    assert roster["last_enroll"]["name"] == "Alex"
+    assert roster["last_enroll"]["ok"] is False
+    assert "exactly one face" in roster["last_enroll"]["reason"]
+
+
+def test_an_enrolment_with_no_frame_refuses_instead_of_going_quiet() -> None:
+    """A `202` followed by nothing is the failure this field exists to prevent."""
+
+    module = FaceRecognitionModule("face_recognition")
+    module.backend = "face_recognition"
+    context = DummyContext()
+
+    module._handle_command({"action": "enroll", "name": "Alex"}, context, {})
+
+    report = published(context)["last_enroll"]
+    assert report["ok"] is False
+    assert "no camera frame" in report["reason"]
+
+
+def test_a_successful_enrolment_says_so(tmp_path, monkeypatch) -> None:
+    """One face, one image written, and `ok: true` — the other half of the field."""
+
+    module = enrolling_module([(0, 0, 20, 20)])
+    monkeypatch.setattr(module, "_train_lbph", lambda *args: None)
+    context = DummyContext()
+    context.set("vision_frame", Frame())
+    settings = {
+        "lbph": {
+            "dataset_dir": str(tmp_path / "dataset"),
+            "model_path": str(tmp_path / "face_model.yml"),
+            "label_map_path": str(tmp_path / "face_labels.json"),
+        }
+    }
+
+    module._handle_command({"action": "enroll", "name": "Alex"}, context, settings)
+
+    report = published(context)["last_enroll"]
+    assert report["ok"] is True
+    assert report["reason"] is None
+    assert (tmp_path / "dataset" / "Alex").is_dir()
 
