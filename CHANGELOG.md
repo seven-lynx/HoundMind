@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The `identity_guard` CI job is removed**: it failed any push or pull request whose commits were
+  authored by an account other than the project's own, and it was one of the four required checks on
+  `main`. The job and its required status context are both gone, so three job definitions and three
+  required contexts remain (`Lint and Test (3.11)`, `Type checks (mypy) (3.11)`, `Packaging build`).
+  The Dependabot exemption from #138 existed only so that job would not block a bump pull request,
+  and left with it; `.github/dependabot.yml` and its test stay. The authorship rule itself is still
+  checked locally - `check_rules.py` W6 warns over the unpushed range, `--audit-history` reports the
+  published history, and `.githooks/pre-push` stops a foreign author before the push.
 - **One producer for `energy_level`** (#85): the behaviour module and `optional/energy_emotion.py` each
   decayed the same number, applied the same boosts and clamped to the same bounds, under two different
   switches. With both on, the reading decayed twice per tick and the boosts stacked, so the rate
