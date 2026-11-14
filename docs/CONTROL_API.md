@@ -79,7 +79,7 @@ because rotating the device token is an operator decision, not a client one.
 | `state:read` | `GET /state`, `/modules`, `/events` (WS), `/camera/*`, `/history` |
 | `move` | `POST /command`, `POST /stop`, `POST /mode` |
 | `config` | `GET`/`PATCH /config`, `GET /calibration` |
-| `admin` | `POST /pair/open`, `GET /people`, `DELETE /people/{id}`, `GET /logs`, `GET /support-bundle` — device token only |
+| `admin` | `POST /pair/open`, `GET`/`POST /people`, `DELETE /people/{id}`, `GET /logs`, `GET /support-bundle` — device token only |
 
 Header: `Authorization: Bearer <token>`. The two camera routes also accept `?ticket=<ticket>` because an
 `<img>` tag cannot set a header: mint one with `POST /api/v1/camera/ticket` (`state:read`), it is valid
@@ -101,6 +101,7 @@ and `config` into browser history and access logs (`#18`).
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
 | `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress ([§8](#8-places)) |
 | `GET` | `/api/v1/people` | `admin` | enrolled people: ids and names only, never an embedding ([§9](#9-people)) |
+| `POST` | `/api/v1/people` | `admin` | teach one face: `202` with the handle to poll; a refusal lands in `last_enroll` ([§9](#9-people)) |
 | `DELETE` | `/api/v1/people/{id}` | `admin` | forget one person: the embedding and every reference face go, not just the name ([§9](#9-people)) |
 | `GET` | `/api/v1/decisions?limit=50` | `state:read` | the last N decision records, oldest first ([§4](#4-state-snapshot)); 503 when the feed is not running |
 | `GET` | `/api/v1/events` | token in `hello` frame | WebSocket telemetry + event stream ([§5](#5-websocket)) |
@@ -543,14 +544,20 @@ publishes the roster; this route reports it and nothing else.
 
 | Route | Scope | Answers |
 |---|---|---|
-| `GET /api/v1/people` | `admin` | `{identity, path, people}` |
+| `GET /api/v1/people` | `admin` | `{identity, path, people, last_enroll}` |
+| `POST /api/v1/people` | `admin` | `202 {id, name, status}` · `400` · `503` |
 | `DELETE /api/v1/people/{id}` | `admin` | `{removed: {id, name}, path}` · `404` · `503` |
 
 ```jsonc
 {"identity": {"enabled": true, "backend": "face_recognition", "reason": null},
  "path": "/home/pi/.houndmind/face_references.json",
- "people": [{"id": "alex_kim", "name": "Alex Kim"}]}
+ "people": [{"id": "alex_kim", "name": "Alex Kim"}],
+ "last_enroll": {"name": "Alex Kim", "ok": true, "reason": null, "ts": 1731628800.0}}
 ```
+
+`last_enroll` is the outcome of the most recent enrolment request — `{name, ok, reason, ts}`, `null`
+before the first one and again once the module stops. It is where a client reads the reason a person
+did not appear in `people`; nothing about a face is in it.
 
 `identity` is the module's own account of itself: `backend` is whichever backend is running, and
 `reason` is why there is no roster. `path` names the file those identities are kept in — the one
@@ -571,12 +578,40 @@ keeps the two states apart is the block:
 ```jsonc
 {"identity": {"enabled": false, "backend": null,
               "reason": "identity is disabled; enable modules.face_recognition"},
- "path": null, "people": []}
+ "path": null, "people": [], "last_enroll": null}
 ```
 
 `reason` is the module's `disabled_reason` verbatim when it has one — `missing dependency:
 face_recognition (dlib)` is a different problem from a switched-off module, and the module is the one
 that knows which. `people: []` beside `identity.enabled: false` is never read as "nobody is enrolled".
+
+### Enrolling
+
+```http
+POST /api/v1/people
+{"name": "Alex Kim"}
+
+→ 202 {"id": "alex_kim", "name": "Alex Kim", "status": "pending"}
+```
+
+Admin scope, like the read and the delete. `202` is the honest status: an enrolment needs the next
+tick and **exactly one face in frame**, so the route accepts the request and returns the handle the
+client will see in `people` — it does not claim the person is known yet.
+
+**The answer is the roster, not this body.** A client that wants to know how it went re-reads
+`GET /api/v1/people`: either the person is in `people`, or `last_enroll` says why not — `"no camera
+frame yet, so there is nothing to enrol from"`, `"enrolment needs exactly one face in frame; got 2"`,
+or `"backend 'face_recognition' cannot enrol"` after the wheel went missing. Before this route, the
+same refusal was a `WARNING` line on the device that no client could read
+([#103](https://github.com/seven-lynx/HoundMind/issues/103)).
+
+- **`400`** for a name that is absent, not a string, blank, or has no usable characters. The id is
+  `slug(name)`, so a name that slugs to nothing cannot be a person.
+- **`503`** when no identity module is running, with the same `detail` the read puts in
+  `identity.reason`. A read may report "nothing to show" about a stopped module; a write may not
+  report "learning".
+- Enrolling one name twice is legal and means two reference faces for one person, which is how the
+  detector already treats the pair.
 
 ### Forgetting
 
@@ -607,7 +642,8 @@ That sentence also promises the thumbnail is removed; nothing in this build gene
 exists and what is tested is the embedding and the reference images — thumbnails would be a separate
 feature, not a claim this route can honour today.
 
-**Enrolment is not a route.** It is still a runtime command ([§20](FEATURES_GUIDE.md#20-face-recognition-pi4) of `docs/FEATURES_GUIDE.md`), so a
-client cannot add a person yet; this route is what a client reads after someone has
-([#103](https://github.com/seven-lynx/HoundMind/issues/103)).
+**A routine can do the same thing without a client.** `POST /api/v1/people` is a publisher and
+nothing else: the command it writes (`face_recognition_command`) is the one
+[§20](FEATURES_GUIDE.md#20-face-recognition-pi4) of `docs/FEATURES_GUIDE.md` documents, so a routine
+step or a tool can enrol with no API involved.
 

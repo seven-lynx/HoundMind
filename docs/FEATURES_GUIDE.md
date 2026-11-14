@@ -665,16 +665,19 @@ recognition (`settings.voice_assistant.stt.enabled`) is the input that replaces 
 - `modules.face_recognition.enabled = true`
 - `settings.face_recognition.backend = "opencv"` or `"face_recognition"`
 
-**Enrolling a face:** there is no `/enroll` endpoint. Enrollment is a runtime command —
+**Enrolling a face:** `POST /api/v1/people` with `{"name": "Alice"}` (`admin`, see
+[§26](#26-control-plane--rest-websocket-camera-web-app)) answers `202` with the handle to poll; the
+outcome is `last_enroll` on `GET /api/v1/people`, which is also where a refusal is reported — the frame
+held no face, two faces, or the backend cannot enrol. Underneath, the route publishes the same runtime
+command, so a routine step or a tool can do it with no client:
 
 ```python
 context.set("face_recognition_command", {"action": "enroll", "name": "Alice"})
 ```
 
-The next tick enrolls against the newest `vision_frame` (requires exactly one face in frame).
+The next tick enrolls against the newest `vision_frame` (it requires exactly one face in frame).
 The legacy port-8088 server is gone: `/status` is now `GET /api/v1/modules`, the roster of enrolled
-people is `GET /api/v1/people` ([§26](#26-control-plane--rest-websocket-camera-web-app)), and enrollment still has no v1 route — it is the command above.
-`python -m tools.face_recognition_cli` was deleted with the port.
+people is `GET /api/v1/people`, and `python -m tools.face_recognition_cli` was deleted with the port.
 
 **It needs a frame, and only [§21](#21-pi4-vision-feed-pi4) publishes one.** `vision_frame` comes from
 `modules.vision_pi4`, so this detector is Pi 4/5-only: the Pi 3 `modules.vision` path starts Vilib

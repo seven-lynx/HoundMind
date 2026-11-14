@@ -41,6 +41,7 @@ from houndmind_ai.kernel.commands import (
 )
 from houndmind_ai.kernel.config_schema import Problem, validate_settings_section
 from houndmind_ai.kernel.decisions import DecisionRing
+from houndmind_ai.kernel.place import slug
 from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.kernel.routine_store import StoreReport
 from houndmind_ai.services.auth import (
@@ -1187,6 +1188,7 @@ async def _people_list(request: web.Request) -> web.Response:
                 },
                 "path": None,
                 "people": [],
+                "last_enroll": None,
             }
         )
     people = roster.get("people")
@@ -1195,8 +1197,40 @@ async def _people_list(request: web.Request) -> web.Response:
             "identity": {"enabled": True, "backend": roster.get("backend"), "reason": None},
             "path": roster.get("path"),
             "people": people if isinstance(people, list) else [],
+            "last_enroll": roster.get("last_enroll"),
         }
     )
+
+
+async def _people_enroll(request: web.Request) -> web.Response:
+    """Teach the dog one face, and answer with the handle a client polls (§9, P4 PL9).
+
+    `202`, not `200`: an enrolment needs the next tick and exactly one face in frame, so the most
+    this route can honestly promise is that the request is accepted. `GET /api/v1/people` is the
+    state that carries the rest — the person appears in `people`, or `last_enroll.reason` says why
+    not. Refusals used to stop at a log line no client can read.
+
+    `503` when no identity module is running, the asymmetry `DELETE` already uses: a read can report
+    "nothing to show" about a stopped module, a write cannot report "learning".
+    """
+    plane = _plane(request)
+    if plane.context.get("identity_admin") is None:
+        return _no_identity(plane)
+    body = await _json_body(request)
+    name = body.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return web.json_response(
+            {"error": "bad_request", "detail": "name must be a non-empty string"}, status=400
+        )
+    name = name.strip()
+    person_id = slug(name)
+    if not person_id:
+        return web.json_response(
+            {"error": "bad_request", "detail": "name needs at least one usable character"},
+            status=400,
+        )
+    plane.context.set("face_recognition_command", {"action": "enroll", "name": name})
+    return web.json_response({"id": person_id, "name": name, "status": "pending"}, status=202)
 
 
 async def _people_delete(request: web.Request) -> web.Response:
@@ -1254,6 +1288,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/routines", "state:read", _routines_list),
     ("GET", "/places", "state:read", _places_list),
     ("GET", "/people", "admin", _people_list),
+    ("POST", "/people", "admin", _people_enroll),
     ("GET", "/decisions", "state:read", _decisions),
     ("GET", "/events", None, _events),
     ("GET", "/camera/stream", None, _camera_stream),

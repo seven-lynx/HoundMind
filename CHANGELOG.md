@@ -6,8 +6,18 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 
 Current Release: v2026.01.18
 
-
 ## [Unreleased]
+- **A face can be enrolled over the API** (#103): `GET /api/v1/people` reported a roster that nothing
+  a client could reach could populate - enrolment existed only as a runtime-context command, so the
+  one admin-scoped surface in the API could be read and never actioned. New `POST /api/v1/people`
+  (`admin`) takes `{"name": ...}`, publishes the command the module already reads and answers `202`
+  with the id the roster will show. Enrolment needs the next tick and exactly one face in frame, so
+  the answer is the state a client polls: `GET /people` gains `last_enroll {name, ok, reason, ts}`,
+  and every refusal that used to be a `WARNING` on the device - no frame, two faces, a backend that
+  cannot enrol - now reaches the client in the module's own words. `400` for a name that slugs to
+  nothing, `503` when identity is not running, and a paired phone still cannot enrol.
+  `docs/CONTROL_API.md` section 9 documents the round trip, `docs/FEATURES_GUIDE.md` section 20 the
+  route, and `tests/test_api_people.py` grows eight cases.
 - **The web app's assets carry the version** (#102): `index.html` loaded `/static/app.js` with no
   version and `add_static` sent no `Cache-Control`, so a browser was free to apply heuristic
   freshness and keep an `app.js` from an older release. Once the camera minted its frames through
@@ -113,7 +123,6 @@ Current Release: v2026.01.18
   `tests/test_calibration_workflow.py` cover it on the fake, with no motion. Also: a
   `persist_path` that cannot be created is now logged instead of raising out of the tick. The
   vendor's interactive script is still the only way to *measure* a trim (#142).
-
 
 - **`docs/` audited end to end**, and seven documents added where a reader had nowhere to go:
   `QUICKSTART.md` (flashed card to running dog, no motion), `REPERTOIRE.md` (all 43 actions with
@@ -390,7 +399,6 @@ Current Release: v2026.01.18
   wrong in both directions: 3.10 is outside the range `pip install` accepts, and 3.12/3.13 were refused
   even though the package declares support for them.
 
-
 ### Fixed
 - `PATCH /api/v1/config` stored any value for a live key without running the schema, so
   `{"led.brightness": "high"}` answered `200` and then made `led_manager.tick` raise on every tick
@@ -481,7 +489,6 @@ Current Release: v2026.01.18
   section 19 and the `settings.jsonc` comment state the semantics. Wiring was chosen over deleting
   the keys because both engine paths already existed, and `enabled: false` adding speech is the
   worse of the two failures.
-
 
 ### Docs
 - `docs/CONTROL_API.md` §2/§3 document `GET /api/v1/repertoire` and the four action classes;
@@ -809,7 +816,6 @@ Current Release: v2026.01.18
   Delete those blocks; nothing in them has an effect any more. `tests/test_no_legacy_http.py`
   keeps the servers deleted rather than relying on review to notice a fifth one.
 
-
 ## [v2026.01.18] - 2026-01-18
 
 ### Changed
@@ -824,7 +830,6 @@ Current Release: v2026.01.18
 ### Notes
 - Files updated: `pyproject.toml`, top-level docs and guides (version header updates).
 - If you rely on runtime behavior, there were no code changes since the previous release (see v2026.01.16 notes).
-
 
 ## [v2026.01.16] - 2026-01-16
 

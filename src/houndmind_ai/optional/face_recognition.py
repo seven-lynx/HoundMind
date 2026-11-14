@@ -38,11 +38,12 @@ class FaceRecognitionModule(Module):
     Lite backend: OpenCV Haar detector with optional LBPH recognition.
     Heavy backend: face_recognition (dlib-based) with embeddings.
 
-    Enrollment is driven from the runtime, not from an HTTP endpoint: publish
-    `{"action": "enroll", "name": "Alice"}` under `face_recognition_command` and the next
-    tick runs it against the newest `vision_frame`. The legacy port-8088 server (`/status`,
-    `/faces`, `/enroll`) is gone; `/status` is now `GET /api/v1/modules` and the roster of
-    enrolled people is `GET /api/v1/people`, published here under `identity_roster`.
+    Enrollment is driven by a command, not by the HTTP layer: `POST /api/v1/people` (and anything
+    else holding the context) publishes `{"action": "enroll", "name": "Alice"}` under
+    `face_recognition_command`, and the next tick runs it against the newest `vision_frame`. The
+    module never learns who asked. The legacy port-8088 server (`/status`, `/faces`, `/enroll`) is
+    gone; `/status` is now `GET /api/v1/modules` and the roster of enrolled people, with the outcome
+    of the last enrolment, is `GET /api/v1/people`, published here under `identity_roster`.
     """
 
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
@@ -66,6 +67,11 @@ class FaceRecognitionModule(Module):
         self._embeddings_path: Path | None = None
         self._known_embeddings: list[list[float]] = []
         self._known_names: list[str] = []
+        # How the last enrolment went, published with the roster. `POST /api/v1/people` answers
+        # `202` because enrolment needs the next tick and one face in frame, so the outcome has to
+        # be readable somewhere — a refusal that only reaches the log is a refusal no client can
+        # show (P4 PL9).
+        self._last_enroll: dict[str, Any] | None = None
         # The control plane runs on its own thread (`services/module.py:73`), so a `DELETE` and a
         # `tick` touch these three containers from different threads. The lock makes one thing true:
         # the pair `(_known_names, _known_embeddings)` is always read as a pair, and every mutation
@@ -183,6 +189,8 @@ class FaceRecognitionModule(Module):
         self.available = False
         context.set("identity_admin", None)
         context.set("identity_roster", None)
+        # A stale enrolment report would be a claim about a detector that is no longer running.
+        self._last_enroll = None
 
     def tick(self, context) -> None:
         if not self.available or not self.status.enabled:
@@ -280,6 +288,9 @@ class FaceRecognitionModule(Module):
                 "backend": self.backend,
                 "path": str(path) if path is not None else None,
                 "people": [people[key] for key in sorted(people)],
+                # The last enrolment's outcome, so `POST /api/v1/people` can answer `202` and still
+                # let a client learn why nothing appeared in `people` (P4 PL9).
+                "last_enroll": self._last_enroll,
             },
         )
 
@@ -485,32 +496,58 @@ class FaceRecognitionModule(Module):
             return None
 
     def _handle_command(self, command: dict, context, settings: dict) -> None:
-        action = command.get("action")
-        name = command.get("name")
-        frame = context.get("vision_frame")
-        if action != "enroll" or not name or frame is None:
-            return
+        """Run one `face_recognition_command` and publish how it went (P4 PL9).
 
-        if self.backend == "opencv":
-            self._enroll_opencv(name, frame, settings)
-        elif self.backend == "face_recognition":
-            self._enroll_face_recognition(name, frame, settings)
-        else:
-            # Nothing was written, so the roster cannot have changed.
+        The outcome travels with the roster, not only into a log line: `POST /api/v1/people`
+        answers `202` because an enrolment needs the next tick and exactly one face in frame, so
+        the state a client polls is the only honest answer. Every branch that used to `return`
+        silently — no name, no frame, the wrong number of faces, a backend that cannot enrol —
+        now records why.
+        """
+        if command.get("action") != "enroll":
             return
+        raw = command.get("name")
+        if not isinstance(raw, str) or not raw.strip():
+            self._record_enroll(context, None, "an enrolment needs a name")
+            return
+        name = raw.strip()
+        frame = context.get("vision_frame")
+        if frame is None:
+            self._record_enroll(
+                context, name, "no camera frame yet, so there is nothing to enrol from"
+            )
+            return
+        if self.backend == "opencv":
+            reason = self._enroll_opencv(name, frame, settings)
+        elif self.backend == "face_recognition":
+            reason = self._enroll_face_recognition(name, frame, settings)
+        else:
+            reason = f"backend {self.backend!r} cannot enrol"
+        self._record_enroll(context, name, reason)
+
+    def _record_enroll(self, context, name: str | None, reason: str | None) -> None:
+        """Store the outcome and republish the roster, which is where a client reads it."""
+        if reason is not None:
+            logger.warning("Enrolment refused for %r: %s", name, reason)
+        self._last_enroll = {
+            "name": name,
+            "ok": reason is None,
+            "reason": reason,
+            "ts": time.time(),
+        }
         self._publish_roster(context)
 
-    def _enroll_opencv(self, name: str, frame, settings: dict) -> None:
+    def _enroll_opencv(self, name: str, frame, settings: dict) -> str | None:
+        """Store one reference face and retrain; the reason it could not, or `None`."""
         if self._cv2 is None or self._cascade is None:
-            return
+            return "the OpenCV detector is not loaded"
         cv2 = self._cv2
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self._cascade.detectMultiScale(
             gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
         )
         if len(faces) != 1:
-            logger.warning("Enroll requires exactly one face; got %d", len(faces))
-            return
+            return f"enrolment needs exactly one face in frame; got {len(faces)}"
 
         x, y, w, h = faces[0]
         face_roi = gray[y : y + h, x : x + w]
@@ -532,6 +569,7 @@ class FaceRecognitionModule(Module):
             lbph_settings.get("label_map_path", "~/.houndmind/face/face_labels.json")
         )
         self._train_lbph(dataset_dir, model_path, label_map_path)
+        return None
 
     def _train_lbph(
         self, dataset_dir: Path, model_path: Path, label_map_path: Path
@@ -577,21 +615,21 @@ class FaceRecognitionModule(Module):
         label_map_path.write_text(json.dumps(label_map, indent=2), encoding="utf-8")
         self._label_map = label_map
 
-    def _enroll_face_recognition(self, name: str, frame, settings: dict) -> None:
+    def _enroll_face_recognition(self, name: str, frame, settings: dict) -> str | None:
+        """Add one embedding under `name`; the reason it could not, or `None`."""
         try:
             import face_recognition  # type: ignore
         except ImportError as exc:
             # Returning here used to mean "enrolled" from the caller's side with no file written:
             # a missing wheel is a module that cannot do its job, not a silent no-op (P4 PL4).
             self.disable(f"missing dependency: face_recognition ({exc})")
-            return
+            return "the dlib backend is not installed"
 
         rgb = frame[:, :, ::-1]
         locations = face_recognition.face_locations(rgb)
         encodings = face_recognition.face_encodings(rgb, locations)
         if len(encodings) != 1:
-            logger.warning("Enroll requires exactly one face; got %d", len(encodings))
-            return
+            return f"enrolment needs exactly one face in frame; got {len(encodings)}"
 
         # Rebound together under the lock, never appended one list at a time: the two lists are
         # parallel by contract, and a reader that sees an embedding without its name is a wrong
@@ -600,6 +638,7 @@ class FaceRecognitionModule(Module):
             self._known_embeddings = [*self._known_embeddings, encodings[0].tolist()]
             self._known_names = [*self._known_names, name]
             self._save_embeddings_locked()
+        return None
 
     def _load_embeddings(self) -> None:
         if self._embeddings_path is None or not self._embeddings_path.exists():
