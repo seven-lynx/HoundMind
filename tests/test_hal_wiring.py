@@ -61,17 +61,11 @@ def test_hal_module_publishes_the_injected_hal() -> None:
     assert ctx.get("hal") is None
 
 
-def test_a_vendor_hal_also_publishes_the_legacy_pidog_key() -> None:
-    """`calibration/workflow.py` still speaks the vendor API; that door stays documented."""
-
-    class StubVendorHAL(FakeDogHAL):
-        @property
-        def vendor(self):
-            return "the-dog"
-
+def test_hal_module_publishes_no_vendor_handle() -> None:
+    """`context["pidog"]` is gone: the HAL is the only door a consumer has (#10)."""
     ctx = DummyContext()
-    HalModule("hal", hal=StubVendorHAL()).start(ctx)
-    assert ctx.get("pidog") == "the-dog"
+    HalModule("hal", hal=FakeDogHAL()).start(ctx)
+    assert "pidog" not in ctx.data
 
 
 def test_sensor_service_reads_through_the_hal() -> None:

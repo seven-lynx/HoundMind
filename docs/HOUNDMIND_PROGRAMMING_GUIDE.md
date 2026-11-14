@@ -458,6 +458,25 @@ Supported requests (`calibration/workflow.py`): `servo_zero`, `wall_follow`, `co
 `landmark_align`. The module reads `context["calibration_request"]` first, then
 `settings.calibration.request`, and publishes the outcome as `calibration_result`.
 
+`servo_zero` reads the trim the hardware already has through `context["hal"]`
+(`DogHAL.read_offsets()`). It never writes and never moves the dog. The joints are named in the
+vendor's own list order (`hal/iface.py`, `SERVO_GROUPS`):
+
+| Group | Names |
+|---|---|
+| legs | `lf_shoulder` `lf_leg` `rf_shoulder` `rf_leg` `lh_shoulder` `lh_leg` `rh_shoulder` `rh_leg` |
+| head | `head_yaw` `head_roll` `head_pitch` |
+| tail | `tail` |
+
+Writing goes through `DogHAL.apply_offsets()`: values are clamped to ±20°, each group is merged
+over the values already loaded — the vendor setter replaces a whole list, so one joint must not
+zero the rest — and a group whose current values cannot be read is skipped rather than written as
+zeros. Saving a trim is not a move; the dog takes the new offsets on its next motion command.
+
+The vendor's interactive step is `examples/0_calibration.py` in the `pidog` package (keys `1`-`8`
+for the legs, `9`/`0`/`-` for yaw/roll/pitch, `=` for the tail). HoundMind has no calibration CLI
+yet (#142); the vendor script and HoundMind both write the same file, so use one of them.
+
 Persistence and application, both off the critical path:
 
 | Key | Default | Meaning |

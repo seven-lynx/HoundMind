@@ -11,7 +11,14 @@ import time
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
-from houndmind_ai.hal.iface import DOG_ACTIONS, DogHAL, SensorSnapshot
+from houndmind_ai.hal.iface import (
+    DOG_ACTIONS,
+    SERVO_GROUP_OF,
+    SERVO_OFFSET_LIMIT_DEG,
+    DogHAL,
+    SensorSnapshot,
+    as_float,
+)
 
 __all__ = ["FakeDogHAL"]
 
@@ -39,6 +46,9 @@ class FakeDogHAL:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.distance_samples: list[tuple[int, float]] = []
         self.offsets_applied: list[dict[str, float]] = []
+        # What the "hardware" currently has loaded, as the vendor file would. Empty means "no
+        # trim measured yet", which is why `apply_offsets` refuses a joint it has no baseline for.
+        self._offsets: dict[str, float] = {}
         # Audio is recorded rather than played: a test asserts the *choice* of effect, never
         # wall-clock timing.
         self.sounds: list[tuple[str, int]] = []
@@ -99,6 +109,10 @@ class FakeDogHAL:
     def set_actions(self, actions: frozenset[str]) -> None:
         self._actions = actions
 
+    def set_offsets(self, offsets: Mapping[str, float]) -> None:
+        """Load a servo trim the way the vendor file would, so a read has something to report."""
+        self._offsets = dict(offsets)
+
     # ---- DogHAL ------------------------------------------------------------
 
     def read(self) -> SensorSnapshot:
@@ -140,8 +154,23 @@ class FakeDogHAL:
             self.distance_samples.append((samples, between_reads_s))
             return self._distance_cm
 
+    def read_offsets(self) -> dict[str, float]:
+        with self._bus:
+            return dict(self._offsets)
+
     def apply_offsets(self, offsets: Mapping[str, float]) -> None:
-        self.offsets_applied.append(dict(offsets))
+        """Mirror the contract: unknown names ignored, clamped, and no baseline means no write."""
+        with self._bus:
+            self.offsets_applied.append(dict(offsets))
+            for name, value in (offsets or {}).items():
+                if name not in SERVO_GROUP_OF:
+                    continue
+                if name not in self._offsets:
+                    continue
+                number = as_float(value, self._offsets[name])
+                self._offsets[name] = max(
+                    -SERVO_OFFSET_LIMIT_DEG, min(SERVO_OFFSET_LIMIT_DEG, number)
+                )
 
     def stop(self) -> None:
         self.stop_count += 1

@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-from houndmind_ai.calibration.servo_calibration import collect_servo_defaults
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
@@ -18,6 +17,10 @@ class CalibrationModule(Module):
     Calibration is triggered via `context['calibration_request']` or
     `settings.calibration.request` when provided. This module emits a
     `calibration_result` and may update `localization_confidence` in context.
+
+    The servo trim is read and written through `context['hal']` (`DogHAL.read_offsets` /
+    `apply_offsets`) and never through a vendor object; the vendor's own config file remains the
+    authority for the values.
     """
 
     def __init__(
@@ -55,8 +58,14 @@ class CalibrationModule(Module):
         logger.info("Calibration request=%s result=%s", request, result.get("status"))
 
     def _calibrate_servo_zero(self, context) -> dict[str, Any]:
-        dog = context.get("pidog")
-        offsets = collect_servo_defaults(dog)
+        """Report the trim the hardware already has. Nothing here writes or moves."""
+        hal = context.get("hal")
+        offsets: dict[str, float] = {}
+        if hal is not None:
+            try:
+                offsets = dict(hal.read_offsets())
+            except Exception:  # noqa: BLE001 - a broken vendor read is "no data", not a crash
+                logger.warning("Failed to read servo offsets", exc_info=True)
         return {
             "timestamp": time.time(),
             "request": "servo_zero",
@@ -147,9 +156,11 @@ class CalibrationModule(Module):
         path = Path(str(settings.get("persist_path", "data/calibration.json")))
         if not path.is_absolute():
             path = Path(__file__).resolve().parents[3] / path
-        path.parent.mkdir(parents=True, exist_ok=True)
         payload = {"last_result": result, "updated_at": time.time()}
         try:
+            # Inside the guard: a `persist_path` pointing at a file is a bad config, not a reason
+            # for the calibration tick to raise every loop.
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except Exception:  # noqa: BLE001
             logger.debug("Failed to persist calibration", exc_info=True)

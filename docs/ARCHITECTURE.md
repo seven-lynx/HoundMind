@@ -79,7 +79,7 @@ src/houndmind_ai/
   mapping/    mapper.py  path_planner.py
   behavior/   fsm.py  library.py  registry.py  attention.py  habituation.py  routine_runner.py
   perception/ fusion.py
-  calibration/ servo_calibration.py  workflow.py
+  calibration/ workflow.py
   logging/    event_logger.py  decision_log.py  led_manager.py
   optional/   vision.py  vision_pi4.py  vision_preprocessing.py  vision_inference_scheduler.py
               face_recognition.py  semantic_labeler.py  slam_pi4.py  voice.py  energy_emotion.py
@@ -106,7 +106,7 @@ iterating.
 | Layer | Thread | Rule |
 |---|---|---|
 | Decision (kernel, nav, behavior) | one loop thread | **Never blocks.** No `sleep`, no `wait_*`, no file I/O, no socket I/O. |
-| Actuator gateway | one worker | Serialises commands, and the HAL holds one lock on the servo bus for every caller. Owns the only `pidog` call path for motion. |
+| Actuator gateway | one worker | Serialises commands, and the HAL holds one lock on the servo bus for every caller. Owns the only `pidog` call path — motion and servo trim alike. |
 | Sensor service | one worker per sensor family | Publishes an immutable `SensorSnapshot`; readers take the latest. |
 | Camera | one producer | Encodes once, fans out frames to N clients; drops on backpressure. |
 | Control plane | asyncio event loop, own thread | Never touches hardware directly; posts commands to the bus. |

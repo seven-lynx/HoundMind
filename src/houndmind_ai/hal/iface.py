@@ -14,7 +14,20 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
-__all__ = ["DOG_ACTIONS", "DogHAL", "SensorSnapshot", "as_float", "as_int"]
+__all__ = [
+    "DOG_ACTIONS",
+    "HEAD_SERVO_NAMES",
+    "LEG_SERVO_NAMES",
+    "SERVO_GROUPS",
+    "SERVO_GROUP_OF",
+    "SERVO_NAMES",
+    "SERVO_OFFSET_LIMIT_DEG",
+    "TAIL_SERVO_NAMES",
+    "DogHAL",
+    "SensorSnapshot",
+    "as_float",
+    "as_int",
+]
 
 # The actions the HAL implements itself. Anything else in `config/actions.jsonc` is a vendor
 # `ActionFlow` name that is passed through, so this list describes the contract, not the whole
@@ -39,6 +52,37 @@ DOG_ACTIONS: frozenset[str] = frozenset(
         "speak",
     }
 )
+
+# The joints whose trim the vendor stores, in the order the vendor's own lists use
+# (`docs/pidog/HARDWARE.md:59-70`): eight leg angles — shoulder then leg, front-left first —
+# head `[yaw, roll, pitch]`, then one tail. The order is positional because
+# `~/.config/pidog/pidog.conf` stores three lists (`legs_servo_offset_list`,
+# `head_servo_offset_list`, `tail_servo_offset_list`), not a mapping; these names are the
+# translation both adapters and the calibration tool share.
+LEG_SERVO_NAMES: tuple[str, ...] = (
+    "lf_shoulder",
+    "lf_leg",
+    "rf_shoulder",
+    "rf_leg",
+    "lh_shoulder",
+    "lh_leg",
+    "rh_shoulder",
+    "rh_leg",
+)
+HEAD_SERVO_NAMES: tuple[str, ...] = ("head_yaw", "head_roll", "head_pitch")
+TAIL_SERVO_NAMES: tuple[str, ...] = ("tail",)
+SERVO_GROUPS: Mapping[str, tuple[str, ...]] = {
+    "legs": LEG_SERVO_NAMES,
+    "head": HEAD_SERVO_NAMES,
+    "tail": TAIL_SERVO_NAMES,
+}
+SERVO_NAMES: tuple[str, ...] = LEG_SERVO_NAMES + HEAD_SERVO_NAMES + TAIL_SERVO_NAMES
+SERVO_GROUP_OF: Mapping[str, str] = {
+    name: group for group, names in SERVO_GROUPS.items() for name in names
+}
+# `robot_hat.Robot.set_offset` clamps a saved trim to ±20°, so the HAL clamps first and never
+# leaves the vendor to reject a value the workflow computed (`docs/pidog/HARDWARE.md:227`).
+SERVO_OFFSET_LIMIT_DEG: float = 20.0
 
 
 def as_float(value: Any, default: float) -> float:
@@ -184,8 +228,23 @@ class DogHAL(Protocol):
         """
         ...
 
+    def read_offsets(self) -> dict[str, float]:
+        """The servo zero offsets currently loaded on the hardware, name -> signed degrees.
+
+        The vendor's own file (`~/.config/pidog/pidog.conf`) is the authority; this reports what
+        it loaded. A joint whose value could not be read is **absent**, never reported as ``0.0``
+        — "not measured" is not "measured straight".
+        """
+        ...
+
     def apply_offsets(self, offsets: Mapping[str, float]) -> None:
-        """Apply servo zero offsets. The calibration workflow writes these; nothing invents them."""
+        """Save servo zero offsets, clamped to :data:`SERVO_OFFSET_LIMIT_DEG`.
+
+        The calibration workflow and `hal/motors.py` supply these; nothing invents them. Saving a
+        trim is not a move: a HAL must not pose the dog here. A name this HAL does not know is
+        ignored, and a group whose current values cannot be read is not written at all —
+        replacing a whole vendor list with zeros would be user data nobody measured.
+        """
         ...
 
     def stop(self) -> None:

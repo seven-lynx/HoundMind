@@ -7,7 +7,7 @@ the closed-loop turn that reads the heading between steps. The vendor calls move
 - the `pidog` import and the `ActionFlow` queue, which this module used to own,
 - `do_action` / `wait_all_done` for a single supervised step,
 - `head_move` for head-follow, `set_rpy` for balance,
-- `apply_servo_offsets` for calibration,
+- `apply_offsets` for calibration,
 - closing the dog, which every module used to attempt for itself.
 
 The module reads exactly one command key, `motion_command`, which `act/gateway.py` produced

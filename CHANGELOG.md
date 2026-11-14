@@ -8,6 +8,20 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **Calibration is behind the HAL** (#10): `calibration/workflow.py` read `context["pidog"]`, a raw
+  vendor handle `HalModule` published for it alone, so the one workflow that reports user-visible
+  servo trim was the one path `FakeDogHAL` could not reach. `DogHAL` gains `read_offsets()` and a
+  working `apply_offsets()` — the old helpers called `set_servo_zero` / `get_servo_zero`, which
+  `Pidog` does not have, so both directions were silent no-ops on a real dog, `auto_apply_servo_offsets`
+  included. Offsets are keyed by joint name in the vendor's list order (`lf_shoulder` … `tail`); a
+  write merges over the values already loaded and clamps to ±20 rather than replacing a list with
+  zeros, and never passes the vendor's `reset_list` (saving a trim must not pose the dog).
+  `context["pidog"]` no longer exists, `calibration/servo_calibration.py` is deleted, and the name
+  table lives in `hal/iface.py`. New `tests/test_hal_offsets.py` and
+  `tests/test_calibration_workflow.py` cover it on the fake, with no motion. Also: a
+  `persist_path` that cannot be created is now logged instead of raising out of the tick. The
+  vendor's interactive script is still the only way to *measure* a trim (#142).
+
 
 - **`docs/` audited end to end**, and seven documents added where a reader had nowhere to go:
   `QUICKSTART.md` (flashed card to running dog, no motion), `REPERTOIRE.md` (all 43 actions with

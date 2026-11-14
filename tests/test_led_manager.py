@@ -137,8 +137,6 @@ def test_led_manager_priority_selection():
     ctx = DummyContext()
     hal = FakeDogHAL()
     ctx.set("hal", hal)
-    # The legacy vendor handle is present and must be ignored: the LED path goes via `hal`.
-    ctx.set("pidog", type("Legacy", (), {})())
     ctx.set(
         "settings",
         {
@@ -160,8 +158,6 @@ def test_led_manager_priority_selection():
     module = LedManagerModule("led_manager")
     module.tick(ctx)
 
-    dog = ctx.get("pidog")
-    assert dog is not None, "the legacy handle should still be untouched by the LED module"
     calls = [params for name, params in hal.calls if name == "rgb"]
     assert calls, "LED manager should update the strip"
     assert calls[-1]["style"] == "boom"

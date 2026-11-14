@@ -59,12 +59,6 @@ class HalModule(Module):
 
         self.hal = hal
         context.set("hal", hal)
-        # `calibration/workflow.py` still speaks the vendor API directly; it is the last
-        # consumer of the old key and goes away with the calibration wizard (Phase 5). Kept
-        # published so a calibration run behaves exactly as it did before this refactor.
-        vendor = getattr(hal, "vendor", None)
-        if vendor is not None:
-            context.set("pidog", vendor)
 
     def tick(self, context) -> None:
         """Nothing to do: the HAL is pulled by whoever needs a reading or an action."""
@@ -77,5 +71,4 @@ class HalModule(Module):
                 logger.warning("Failed to close the HAL: %s", exc)
             self.hal = None
         context.set("hal", None)
-        context.set("pidog", None)
         super().stop(context)
