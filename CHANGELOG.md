@@ -7,6 +7,42 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The control plane says where it is** (#38): nothing advertised the device, so every client needed
+  a hand-entered IP that DHCP could change on the next lease. `services/discovery.py` publishes one
+  mDNS record - `houndmind._houndmind._tcp.local`, a `_houndmind._tcp` service with the host, the
+  port and a TXT payload of `api_version`/`min_client`/`scheme` - announces it three times, answers
+  a query that names it, and withdraws it with a zero TTL on a clean stop. Standard library only, so
+  no dependency: `zeroconf` on every install, `lite` included, is not worth a few dozen lines of DNS
+  wire format. The record is public information and is built from `plane.meta()`, which
+  `tests/test_discovery.py` asserts; a blocked multicast group costs one log line and nothing else.
+  `settings.api.discovery_enabled` (default `true`) and `discovery_name` follow, with
+  `docs/INSTALL.md` §*Finding the device by name* and the address fallback.
+- **A Pi 4 honours `--preset`** (#29): the installer forced `full` on a Pi 4 whatever the flag said,
+  so `--preset lite` attempted dlib/opencv/rtabmap the user had just asked to skip. The choice moved
+  into `resolve_preset()`: an explicit flag wins on every board, and `auto` keeps the documented
+  defaults (`full` on a Pi 4, `lite` elsewhere). `tests/test_installer_preset.py` covers both halves.
+- **The installer stops installing flask** (#30): it was a dependency of the four per-feature HTTP
+  servers the control plane replaced, and no module imports it. Gone from `scripts/installer_core.py`,
+  `requirements.txt` and the `full` extra - the extra because `tests/test_dependency_mirrors.py`
+  holds the mirror and the extra to the same package set. The model downloader beside it stays.
+- **One board rule, two callers** (#31): `scripts/installer_core.py` kept its own copy of the
+  generation regexes, which is how a Pi 5 was installed as a Pi 4. The table now lives in
+  `board/rules.py` - stdlib only - which `board/detect.py` imports and the installer loads by path,
+  because it runs before the package exists. `tests/test_board_detect.py` keeps the agreement test
+  and adds one that fails if a second table reappears in the installer.
+- **`/meta` reports the raw device-tree model** (#32): `board: unknown` said only that detection
+  failed. `board_model` carries the string verbatim, next to the `board` kind and the `profile`, and
+  a support bundle picks it up for free. `docs/CONTROL_API.md` §2 and `tests/test_api_meta.py` follow.
+- **The camera routes declare the scope they enforce** (#39): both rows were `None`, which everywhere
+  else in `ROUTES` means "public on purpose", while the handlers demanded `state:read` through a
+  single-use ticket. `HANDLER_SCOPE` names the second case, `None` keeps one meaning, and the test
+  whitelist that used to excuse the camera is gone - replaced by one that proves removing the guard
+  would be caught.
+- **An exempt module is visible** (#25): `settings.watchdog.ignore_modules` ships as `["api"]`, so a
+  wedged control plane was invisible - the one failure the API cannot report. `state.supervisor`
+  now carries `exempt: {name: reason}` for the modules the watchdog deliberately will not restart,
+  which keeps "exempt on purpose" distinguishable from "healthy" without restarting anything.
+
 - **The architecture tree names every file** (#68): `docs/ARCHITECTURE.md` §2 had drifted from the
   package it documents. `kernel/actions.py` and `kernel/decisions.py` were missing - the half of the
   issue that matters most, since this file is the map a reader uses to decide where a rule belongs -
