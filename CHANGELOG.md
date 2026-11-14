@@ -8,6 +8,13 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **Section 4 of the programming guide now holds the keys modules actually use** (#115): 30 context
+  keys were set in the tree and absent from the table every module author reads, among them
+  `battery_voltage` (three consumers), `sensor_service`, `energy_level`/`energy_speed_hint`,
+  `pose_hint`, `health_high_water`, `device_id`/`board_model` and the optional modules' own
+  `*_status` dicts. A half-published contract is worse than an unpublished one: a reader concludes
+  the key does not exist and writes a second producer. The keys a module keeps for itself are listed
+  in a new "internal bookkeeping - not a contract" subsection instead of being silently missing.
 - **The install path matches the range and the vendor set it documents** (#113, #114): both wrappers
   accepted only `python3.10`/`python3.11` and preferred the 3.10 that `pip` refuses, so the first
   command in the guide exited 2 on Trixie (3.13) and silently chose 3.10 on a machine that had both.

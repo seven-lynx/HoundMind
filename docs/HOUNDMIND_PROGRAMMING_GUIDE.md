@@ -217,6 +217,14 @@ The keys a module may rely on. Anything not here is private and may change.
 | `module_tick_durations` | `dict` | All durations at once |
 | `restart_modules` | `list[str]` | Modules the watchdog wants restarted |
 | `quiet_mode_active` | `bool` | Suppresses behaviour chatter |
+| `runtime_tick` | `int` | Monotonic cycle counter, set before the modules run; also a log field (`docs/LOGGING.md`) |
+
+**Identity and board** — set once at startup, by `main.py`
+
+| Key | Type | Meaning |
+|---|---|---|
+| `device_id` | `str` | Stable id for this device; what `/meta` and the API serve |
+| `board_model` | `str` | The device-tree model string the profile was chosen from (`board/detect.py`) |
 
 **Sensors and perception**
 
@@ -233,6 +241,9 @@ The keys a module may rely on. Anything not here is private and may change.
 | `scan_in_flight` | `bool` |
 | `scan_worker`, `scan_service` | worker and service handles |
 | `current_heading` | `float` — degrees |
+| `sensor_service` | service handle — the sensor loop; `orientation`, `fusion` and `safety/supervisor.py` read it |
+| `battery_voltage` | `float` — pack volts, published only while valid; `act/gateway.py`, `behavior/fsm.py` and `/state` prefer it over the reading |
+| `pose_hint` | `dict` — what `perception/fusion.py` infers about the body; the calibration workflow reads it |
 
 **Navigation, mapping and behaviour**
 
@@ -248,6 +259,12 @@ The keys a module may rely on. Anything not here is private and may change.
 | `behavior_override` | `str \| None` |
 | `behavior_state` | `str` — the FSM's published state (`idle`, `alert`, …), not a command |
 | `runtime_mode` | `idle` \| `patrol` \| `manual` \| `rest` |
+| `stuck_recovery` | `dict` — obstacle avoidance's stuck-recovery state; the event log records it |
+| `gentle_recovery_active` | `bool` — a gentle retreat is in progress |
+| `energy_level`, `energy_speed_hint` | `float`, `str \| None` — 0..1 energy, and the speed hint the motors clamp to |
+| `emotion_state` | `str` — the label `optional/energy_emotion.py` publishes for LEDs and behaviour |
+| `behavior_habituation` | `dict` — `{stimulus, count}`, the per-stimulus counter `behavior/fsm.py` keeps |
+| `orientation_calibration_ok` | `bool` — a calibration run produced the z-axis bias (`orientation_bias_z`); `False` when it had no samples. Served as `nav.heading_calibrated` |
 
 **Motion** — the only keys `hal_motors` reads
 
@@ -286,6 +303,7 @@ the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py
 | `tilt_warning` | `dict` (`pitch`, `roll`) |
 | `watchdog_hold`, `watchdog_status` | `dict` |
 | `health_status`, `health_degraded` | `dict`, `bool` |
+| `health_high_water` | `dict[str, float \| None]` — the worst value each health metric reached since start; served as `health.high_water` |
 | `scan_interval_override_s` | `float \| None` |
 | `led_request:safety` \| `:navigation` \| `:attention` \| `:emotion` \| `:health` | `dict` |
 
@@ -299,6 +317,17 @@ the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py
 | `face_recognition_command` | `dict` |
 | `voice_text`, `voice_command` | `str` |
 | `slam_map_data`, `slam_trajectory` | `dict` |
+| `vision_status`, `vision_inference_status`, `vision_inference_result` | `dict` — `optional/vision_pi4.py`'s readiness (`{status, backend}`), the scheduler's state (`{state}`) and its latest answer |
+| `vision_frame_interval_override_s` | `float \| None` — the health monitor asking vision to slow down |
+| `face_recognition_status`, `semantic_status`, `slam_status` | `dict` — `{status, backend}` from each optional module, published by the module itself |
+| `slam_pose` | `dict \| None` — the pose SLAM published last |
+| `event_log_report` | `dict` — the event writer's own state (`logging/event_logger.py`) |
+
+**Internal bookkeeping — not a contract**
+
+| Key | Why it is private |
+|---|---|
+| `attention_active_ts`, `head_turn_follow_release_ts`, `health_status_last_log_ts`, `vision_frame_ts`, `gentle_recovery_until`, `orientation_bias_z` | Timestamps and accumulators a module keeps for itself — the `<name>_ts` suffix is the giveaway. They may change or vanish without a contract bump, and no module may read another module's. |
 
 **Removed, and not coming back:** `safety_action`, `watchdog_action`, `navigation_action`,
 `behavior_action`. Producers publish to the `IntentBoard` instead, and `hal_motors` never reads a
