@@ -2,8 +2,9 @@
 
 Status: **reference** — which Raspberry Pi this runs on, which HAT it needs, and what the profile
 actually changes.
-Pairs with: `src/houndmind_ai/board/detect.py` (the detector), `config/settings.jsonc` §profiles (the
-overrides), `docs/INSTALL.md` §Supported boards (the installation rules)
+Pairs with: `src/houndmind_ai/board/detect.py` (the detector), the `profiles` block of
+`config/settings.jsonc` (the overrides — JSONC has no headings, so there is nothing to link to),
+`docs/INSTALL.md` [§Supported boards](INSTALL.md#supported-boards) (the installation rules)
 
 Two different things share the word "board" here: the **Raspberry Pi** (detected in software) and the
 **Robot HAT** seated on it (not visible to the runtime at all). They have separate rules.
@@ -40,7 +41,8 @@ The runtime **cannot** see which Robot HAT is fitted, so this is not a config ke
 - **Robot HAT V5** supplies 5V/5A, which is what a Pi 5 requires.
 
 A Pi 5 on a V4 can shut down mid-run, and some V4 owners report WiFi trouble; treat that combination
-as a bench test, not an edition. `docs/INSTALL.md` §"A Pi 5 edition is a board *and* a HAT" is the full
+as a bench test, not an edition. `docs/INSTALL.md`
+[§"A Pi 5 edition is a board and a HAT"](INSTALL.md#a-pi-5-edition-is-a-board-and-a-hat) is the full
 statement.
 
 ## 3. How the profile is resolved

@@ -8,7 +8,8 @@ Every feature is configured in `config/settings.jsonc`. Simulation mode is not s
 require real PiDog hardware, and `lite` on a workstation imports cleanly but moves nothing.
 
 > **Rule of thumb:** if a feature is misbehaving, set its module `enabled` to `false` and restart.
-> `§29` is the procedure; `§30` is the list of things that usually caused it.
+> [§29](#29-how-to-disable-any-feature) is the procedure; [§30](#30-troubleshooting) is the list of
+> things that usually caused it.
 
 Section numbers are stable references — other files cite them. Append, do not renumber.
 
@@ -903,7 +904,8 @@ to carry `?token=` — the operator credential, in browser history and every acc
 `state:read` on a single frame. The web app mints its own.
 
 **Turning TLS on** is one key — `"tls_enabled": true` — and the certificate is generated on first
-start, self-signed, for this device. Each client trusts it once; `docs/INSTALL.md` §*TLS* has the
+start, self-signed, for this device. Each client trusts it once;
+`docs/INSTALL.md` [§TLS](INSTALL.md#tls-for-the-control-plane-optional) has the
 browser, phone and `curl` steps, including the part that bites: an Android HTTP client rejects a
 self-signed certificate by default unless the app carries its own trust configuration.
 
