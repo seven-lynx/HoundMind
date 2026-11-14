@@ -503,8 +503,10 @@ zero the rest — and a group whose current values cannot be read is skipped rat
 zeros. Saving a trim is not a move; the dog takes the new offsets on its next motion command.
 
 The vendor's interactive step is `examples/0_calibration.py` in the `pidog` package (keys `1`-`8`
-for the legs, `9`/`0`/`-` for yaw/roll/pitch, `=` for the tail). HoundMind has no calibration CLI
-yet (#142); the vendor script and HoundMind both write the same file, so use one of them.
+for the legs, `9`/`0`/`-` for yaw/roll/pitch, `=` for the tail). HoundMind's own step is
+non-interactive — `python -m tools.calibrate_servos` (`docs/TOOLS.md` §12): it prints this table with
+the values the dog has loaded, takes `--set joint=deg` and writes only with `--apply`. Both write the
+same vendor file, so use one of them, not both in one session.
 
 Persistence and application, both off the critical path:
 
@@ -694,6 +696,7 @@ $env:PYTHONPATH='src'; python -m pytest -q
 Device tools (never run by a test, and `hardware_checkup` moves the dog without `--skip-motion`):
 
 ```bash
+python -m tools.calibrate_servos            # read-only: the 12 joints and the saved trim
 python -m tools.hardware_checkup --skip-motion
 python -m tools.smoke_test
 python -m tools.camera_check --list-devices

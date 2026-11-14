@@ -8,6 +8,18 @@ Current Release: v2026.01.18
 
 
 ## [Unreleased]
+- **Servo trim has a step of our own** (#142): the only way to *save* a trim was the vendor's
+  interactive curses script - outside the HAL, outside the interlock, outside any test - while
+  `POST /api/v1/calibration/run` stayed reserved. New `python -m tools.calibrate_servos` prints the
+  twelve joints in `SERVO_GROUPS` order with the offset the dog has loaded, takes repeatable
+  `--set joint=deg` (clamped to ±20) and writes only with `--apply`, through `DogHAL.apply_offsets`:
+  merged over the loaded values, never with the vendor's `reset_list`, so saving a trim does not pose
+  the dog. A joint the HAL could not read prints `unread` and is never written; a value that does not
+  read back after the save exits 1. There is no interactive preview on purpose - that needs a raw
+  per-group angle write, which stays out of the runtime's reach. New
+  `tests/test_calibrate_servos.py` (8 cases, fake only, no motion), `docs/TOOLS.md` §12, guide §9/§16,
+  and `docs/pidog/HARDWARE.md` §6.1 (the vendor key map, `OFFSET_STEP`, `reset_list`, and why
+  `servo_zeroing.py` is not a trim).
 - **Action pins are proposed instead of discovered** (#138): `.github/workflows/ci.yml` is the only
   workflow and its `uses:` pins were maintained by hand, so nothing proposed a bump until a GitHub
   runtime deprecation broke a run - the annotation on the broken run was the first signal. New

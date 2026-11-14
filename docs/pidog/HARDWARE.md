@@ -229,6 +229,37 @@ Three details that surprise people:
 - Servo offsets are clamped to ±20° when saved (`Robot.set_offset`), so a wildly wrong
   calibration cannot be stored even if the workflow computes it.
 
+### 6.1 The vendor calibration procedure
+
+`examples/0_calibration.py` is a curses script, and it is the only vendor step that *measures* a
+trim. What it does, so the numbers above can be checked against it:
+
+| Key | Servo |
+|---|---|
+| `1`–`8` | the eight leg servos, in the body order `SERVO_GROUPS` uses (`lf_shoulder` `lf_leg` `rf_shoulder` `rf_leg` `lh_shoulder` `lh_leg` `rh_shoulder` `rh_leg`) |
+| `9` / `0` / `-` | head yaw / roll / pitch |
+| `=` | tail |
+| `W` / `A` | increase the selected offset |
+| `S` / `D` | decrease it |
+| `Space` | save, after `Confirm save ? (y/n)` |
+| `Ctrl+C` | quit; unsaved changes prompt before exiting |
+
+- One keypress moves an offset by `OFFSET_STEP = (180 / 2000) * (20000 / 4095)` — about **0.44°**
+  (`0_calibration.py:20`). A trim is adjusted in fractions of a degree.
+- The live preview is `legs.servo_write_raw` / `head.servo_write_raw` / `tail.servo_write_raw` with
+  `original angle + offset`, so the dog holds the pose while the number changes.
+- Saving is `set_leg_offsets(leg_offset, reset_list=legs_orignal_angles)`, `set_head_offsets(...)`,
+  `set_tail_offset(...)` (`:371-373`). **`reset_list` is where HoundMind differs**: the vendor
+  re-poses the legs to their original angles on the way out, and `DogHAL.apply_offsets` never passes
+  it — saving a trim must not move the dog.
+
+`examples/servo_zeroing.py` is a different thing: it drives all twelve channels to angle 0 through
+`robot_hat.Servo.angle()` to mount the horns, and it touches no offset. If the horns are fitted
+wrong, zero them first; that is mechanical, not calibration.
+
+HoundMind's own step is non-interactive — `python -m tools.calibrate_servos` (`docs/TOOLS.md` §12):
+the same file, no curses, dry unless `--apply` is given.
+
 ---
 
 ## 7. HAT revisions, Pi models and the GPIO chip
