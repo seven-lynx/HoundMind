@@ -205,3 +205,48 @@ def test_health_reports_the_session_high_water_marks() -> None:
 
     assert high_water == {"temp_c": 71.5, "gpu_temp_c": 68.0}
     assert build_state(RuntimeContext(), now=0.0)["health"]["high_water"] == {}
+
+# ------------------------------------------------------------- the head sweep (#169)
+
+
+def test_no_scan_yet_is_an_absent_block_not_zeros() -> None:
+    """`null` and "a sweep that measured nothing" are different answers."""
+    context = RuntimeContext()
+
+    assert build_state(context, now=0.0)["scan"] is None
+
+
+def test_a_sweep_is_summarised_with_its_bearing_count() -> None:
+    context = RuntimeContext()
+    context.set(
+        "scan_latest",
+        {
+            "mode": "sweep",
+            "timestamp": 4211.9,
+            "angles": {"-45": 120.0, "0": 88.0, "45": 140.0},
+        },
+    )
+
+    scan = build_state(context, now=4212.0)["scan"]
+
+    assert scan == {"mode": "sweep", "timestamp": 4211.9, "samples": 3}
+    assert "angles" not in scan, "the bearings are a separate read, not part of the 10 Hz frame"
+
+
+def test_a_three_way_scan_counts_only_the_bearings_that_read() -> None:
+    context = RuntimeContext()
+    context.set(
+        "scan_latest",
+        {"mode": "three_way", "timestamp": 5.0, "forward": 90.0, "right": 40.0},
+    )
+
+    scan = build_state(context, now=6.0)["scan"]
+
+    assert scan == {"mode": "three_way", "timestamp": 5.0, "samples": 2}
+
+
+def test_a_reading_with_no_mode_or_timestamp_is_not_reported() -> None:
+    context = RuntimeContext()
+    context.set("scan_latest", {"mode": "", "timestamp": 5.0})
+
+    assert build_state(context, now=6.0)["scan"] is None

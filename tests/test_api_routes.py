@@ -805,3 +805,30 @@ def test_the_web_app_serves_versioned_assets_and_revalidates(tmp_path, monkeypat
         f"the document must revalidate too, else a stale index.html runs new JavaScript,"
         f" got Cache-Control={document_cache!r}"
     )
+
+def test_the_scan_route_answers_null_before_the_first_sweep(tmp_path) -> None:
+    """`200` with `scan: null` is an answer, not a failure: the module may simply be off (#169)."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            before = await client.get(f"{API_PREFIX}/scan", headers=headers)
+            before_body = await before.json()
+
+            reading = {
+                "mode": "sweep",
+                "timestamp": 4211.9,
+                "angles": {"-45": 120.0, "0": 88.0, "45": 140.0},
+            }
+            plane.context.set("scan_latest", reading)
+            after = await client.get(f"{API_PREFIX}/scan", headers=headers)
+            after_body = await after.json()
+
+            state = await (await client.get(f"{API_PREFIX}/state", headers=headers)).json()
+
+        assert before.status == 200 and before_body == {"scan": None}
+        assert after.status == 200
+        assert after_body["scan"] == reading, "the route returns the reading verbatim"
+        assert state["scan"] == {"mode": "sweep", "timestamp": 4211.9, "samples": 3}
+
+    asyncio.run(scenario())

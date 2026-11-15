@@ -930,6 +930,7 @@ as specified in `docs/CONTROL_API.md`:
 | Identity | `GET /api/v1/meta` | none |
 | Caller identity | `GET /api/v1/whoami` | any valid token — the caller's `device`, `scopes` and `kind`, the same shape as the socket's `welcome` frame |
 | State snapshot | `GET /api/v1/state` | `state:read` |
+| Head sweep | `GET /api/v1/scan` | `state:read` — the last sweep's bearings; `state.scan` carries the summary so a client fetches only when it changed |
 | Module list | `GET /api/v1/modules` | `state:read` |
 | Decisions | `GET /api/v1/decisions` | `state:read` |
 | Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame; `hello.logs` adds droppable live log lines (`admin`) |
