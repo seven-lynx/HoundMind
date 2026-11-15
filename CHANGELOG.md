@@ -7,6 +7,19 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A live config change survives the process**: `PATCH /api/v1/config` answered `persisted: false`
+  and the edit died with the runtime (#174, #128). It now writes the value into the `settings.jsonc`
+  the runtime read — `core/config.py::Config.path`, set by `load_config` — and both happen or neither
+  does: the file is written first, then the live table updated. The write is **surgical**: the
+  value's bytes are replaced and every comment in the file survives, using a JSONC scanner that
+  cannot be fooled by a lookalike key inside a string, inside a comment, or inside an array
+  (`services/config_writer.py`). The conflict check is `(mtime, size, digest)` rather than
+  `(mtime, size)`, because `0.7` → `0.6` is a same-length edit and an mtime under the filesystem's
+  granularity would have let the runtime overwrite exactly the edit the owner's decision (G1) says
+  must win: a changed file is `409 conflict` and nothing is applied. A live key that is not *written*
+  in the file is refused rather than inserted with a guessed indentation, and the rewritten text is
+  proved to load and to say the asked-for value before it replaces anything. `persisted: false` now
+  means only one thing: this runtime had no settings file (`Config` built in code).
 - **A place can be corrected instead of retyped**: `PATCH /api/v1/places/{id}` changes any of `name`,
   `heading_deg`, `distance_cm` or `anchor`; omitted fields keep their value (#173). Before this, a typo
   in a name or a heading measured wrong meant `DELETE` and `POST`, which threw away `visits` and

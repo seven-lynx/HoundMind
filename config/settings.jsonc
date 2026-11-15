@@ -248,6 +248,11 @@
     }
   },
   "settings": {
+    // Four keys below can be changed at runtime and on disk by `PATCH /api/v1/config`:
+    // `behavior.action_cooldown_s`, `led.brightness`, `motors.min_action_interval_s` and
+    // `navigation.safe_distance_cm` (#174). The write is surgical - the value's bytes are replaced and
+    // these comments survive - and it is refused with 409 if this file changed since the runtime
+    // started. Everything else here is read at start-up only.
     // =====================================================================
     // DEVICE IDENTITY
     // =====================================================================

@@ -40,6 +40,9 @@ class Config:
     # The profile that was actually applied, after board detection. Empty for a `Config` built
     # by hand, so a caller that never went through `load_config` cannot claim one.
     profile: str = ""
+    # The file this config was read from (#174). `None` for a `Config` built by hand or by
+    # `from_dict`, and that is what makes `PATCH /config` refuse to persist rather than guess a path.
+    path: Path | None = None
 
     @staticmethod
     def from_dict(raw: dict, profile: str = "") -> Config:
@@ -184,6 +187,9 @@ def load_config(path: Path | None = None) -> Config:
     profile = resolve_profile(raw)
     raw = _apply_profile_overrides(raw, profile)
     config = Config.from_dict(raw, profile=profile)
+    # Remember the file, so `PATCH /config` can persist a live change into the file the runtime
+    # actually read (#174) instead of a guessed default path.
+    config.path = config_path
 
     for warning in validate_config(config):
         logger.warning("Config warning: %s", warning)
