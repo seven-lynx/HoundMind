@@ -40,7 +40,10 @@ def _disable_modules(config, names: frozenset[str]) -> None:
 
 def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Automated PiDog smoke test (sensors + scan + mapping)"
+        description=(
+            "Automated PiDog smoke test: sensors only by default, "
+            "plus scan and mapping with --include-motion"
+        )
     )
     parser.add_argument(
         "--config", type=str, default=None, help="Path to settings.jsonc"
