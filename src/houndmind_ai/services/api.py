@@ -1172,6 +1172,16 @@ async def _decisions(request: web.Request) -> web.Response:
     )
 
 
+# The level names `core/logging_setup.py::JsonFormatter` writes, and the whole accepted set for the
+# `level` query parameter: an unknown one is a 400 rather than a silent "no lines match", because
+# "your filter is misspelled" and "nothing matched" are different answers (#171).
+_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+_LOG_CHUNK = 64 * 1024
+# A filtered read walks back further than the unfiltered tail, but the work has to be bounded: 4 MiB
+# is hours of this runtime's log and still one comfortable read on a Pi's SD card.
+_FILTER_BUDGET = 4 * 1024 * 1024
+
+
 async def _logs(request: web.Request) -> web.Response:
     plane = _plane(request)
     tail = request.query.get("tail")
@@ -1179,8 +1189,16 @@ async def _logs(request: web.Request) -> web.Response:
         count = max(1, min(int(tail), plane.settings.log_tail)) if tail else plane.settings.log_tail
     except (TypeError, ValueError):
         raise AuthError("bad_request", "tail must be an integer", status=400) from None
-    lines = _tail_lines(plane, count)
-    if lines is None:
+    level = (request.query.get("level") or "").strip().upper()
+    if level and level not in _LOG_LEVELS:
+        raise AuthError(
+            "bad_request",
+            f"level must be one of {', '.join(_LOG_LEVELS)}",
+            status=400,
+        )
+    contains = (request.query.get("contains") or "").strip()
+    found = _tail_lines(plane, count, level=level or None, contains=contains or None)
+    if found is None:
         return web.json_response(
             {
                 "error": "unavailable",
@@ -1188,11 +1206,20 @@ async def _logs(request: web.Request) -> web.Response:
             },
             status=503,
         )
-    return web.json_response({"lines": lines})
+    lines, truncated = found
+    return web.json_response(
+        {
+            "lines": lines,
+            "filtered": bool(level or contains),
+            # `truncated` means the walk stopped at its byte budget before reaching the start of the
+            # file, so "no lines" is "no match in the window", not "no match in the log" (#171).
+            "truncated": truncated,
+        }
+    )
 
 
-def _tail_lines(plane: ControlPlane, count: int) -> list[str] | None:
-    """Read the last `count` lines without loading the file. None means "no file configured"."""
+def _log_path(plane: ControlPlane) -> Path | None:
+    """The configured log file, or None when file logging is switched off."""
     settings = plane.context.get("settings") or {}
     logging_settings = settings.get("logging", {}) if isinstance(settings, dict) else {}
     logging_settings = logging_settings if isinstance(logging_settings, dict) else {}
@@ -1202,16 +1229,94 @@ def _tail_lines(plane: ControlPlane, count: int) -> list[str] | None:
     path = Path(str(name))
     if not path.is_absolute():
         path = Path(__file__).resolve().parents[3] / path
+    return path
+
+
+def _tail_lines(
+    plane: ControlPlane,
+    count: int,
+    *,
+    level: str | None = None,
+    contains: str | None = None,
+) -> tuple[list[str], bool] | None:
+    """The last `count` lines, optionally filtered. None means "no log file configured".
+
+    Unfiltered is one 64 KiB read from the end: the default panel view must not depend on the file's
+    size. A filter has to look further back or it lies in exactly the case it exists for — "the ERROR
+    was ten minutes ago" (#171) — so it walks backwards in 64 KiB chunks, stopping once it has
+    `count` matches or has read `_FILTER_BUDGET` bytes.
+
+    The second element is `truncated`: the walk stopped at the budget rather than at the start of the
+    file, so an empty answer honestly means "nothing matched in the window".
+    """
+    path = _log_path(plane)
+    if path is None:
+        return None
     try:
         with path.open("rb") as handle:
             handle.seek(0, io.SEEK_END)
-            size = handle.tell()
-            # 64 KiB is enough for a few thousand lines and bounded regardless of file size.
-            handle.seek(max(0, size - 65536))
-            chunk = handle.read().decode("utf-8", errors="replace")
+            end = handle.tell()
+            if level is None and not contains:
+                handle.seek(max(0, end - _LOG_CHUNK))
+                chunk = handle.read().decode("utf-8", errors="replace")
+                return chunk.splitlines()[-count:], False
+            budget = min(end, _FILTER_BUDGET)
+            window = b""
+            kept: list[str] = []
+            while end > 0 and len(window) < budget:
+                step = min(_LOG_CHUNK, end)
+                end -= step
+                handle.seek(end)
+                window = handle.read(step) + window
+                lines = window.decode("utf-8", errors="replace").splitlines()
+                if end > 0:
+                    # The first element is cut at the window edge; the next iteration completes it.
+                    lines = lines[1:]
+                kept = _matching_lines(lines, count, level, contains)
+                if len(kept) >= count:
+                    break
     except OSError:
         return None
-    return chunk.splitlines()[-count:]
+    return kept[-count:], end > 0
+
+
+def _matching_lines(
+    lines: list[str], count: int, level: str | None, contains: str | None
+) -> list[str]:
+    """The last `count` lines that match, walking backwards so the cost is the match, not the file.
+
+    The file is one JSON object per line (`core/logging_setup.py::JsonFormatter`). A traceback's
+    continuation lines carry no level of their own, so a `level` filter keeps record lines only -
+    which is what the panel has always rendered. `contains` still matches continuation lines, because
+    the stack trace is usually the thing being searched for.
+    """
+    needle = contains.lower() if contains else None
+    kept: list[str] = []
+    for line in reversed(lines):
+        if needle is not None and needle not in line.lower():
+            continue
+        if level is not None and _line_level(line) != level:
+            continue
+        kept.append(line)
+        if len(kept) >= count:
+            break
+    kept.reverse()
+    return kept
+
+
+def _line_level(line: str) -> str | None:
+    """The `level` of a JSON log line, or None when the line is not a record."""
+    stripped = line.strip()
+    if not stripped.startswith("{"):
+        return None
+    try:
+        payload = json.loads(stripped)
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get("level")
+    return str(value).upper() if value else None
 
 
 async def _support_bundle(request: web.Request) -> web.Response:

@@ -141,13 +141,20 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/calibration` | `config` | servo offsets, read-only |
 | `POST` | `/api/v1/calibration/run` | `config` | run one read-only calibration request ([§10](#10-calibration)) |
 | `GET` | `/api/v1/history?limit=50` | `state:read` | recent commands with verdicts, and live sessions |
-| `GET` | `/api/v1/logs?tail=200` | `admin` | recent log lines, redacted |
+| `GET` | `/api/v1/logs?tail=200&level=ERROR&contains=<text>` | `admin` | recent log lines, redacted; `level` (one of `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`) and `contains` (case-insensitive substring) are applied by the server across a bounded scan, not to the fetched tail |
 | `GET` | `/api/v1/support-bundle` | `admin` | zip: meta, state, modules, redacted config, audit, sessions |
 
 `PATCH /config` writes only `behavior.action_cooldown_s`, `led.brightness`,
-`motors.min_action_interval_s` and `navigation.safe_distance_cm` (`services/api.py:70`), each re-read
+`motors.min_action_interval_s` and `navigation.safe_distance_cm` (`services/api.py:81`), each re-read
 every tick by its module. Any other key is refused with the live list in the body, because a config
 write that changes nothing is the bug this API exists to avoid.
+
+The `logs` response is `{"lines": [...], "filtered": bool, "truncated": bool}`. `truncated` is the
+honest half of a filter: it says the walk stopped at its 4 MiB budget before reaching the start of the
+file, so `lines: []` means "no match in that window", not "no match in the log". An unknown `level` is
+a `400` carrying the accepted set, because a misspelled filter and an empty result are different
+answers. A traceback's continuation lines carry no level, so `level` keeps record lines only; `contains`
+still matches them.
 
 A value the config **file** would have rejected is refused too: the write is checked against the same
 section schema (`kernel/config_schema.py::validate_settings_section`), so a `400` carries

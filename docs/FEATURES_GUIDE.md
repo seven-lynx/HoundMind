@@ -935,7 +935,7 @@ as specified in `docs/CONTROL_API.md`:
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
 | Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration`, `POST /calibration/run` | `config` |
 | History | `GET /api/v1/history` | `state:read` |
-| Diagnostics | `GET /api/v1/logs`, `/support-bundle` | `admin` |
+| Diagnostics | `GET /api/v1/logs` (`?level=` / `?contains=` filtered server-side), `/support-bundle` | `admin` |
 | Web app | `GET /` and `/static/*` | same origin, token in the browser |
 
 **The web app covers every route above.** `GET /` serves thirteen panels: Overview (subject posture,

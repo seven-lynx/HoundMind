@@ -1,5 +1,9 @@
 // Logs: the runtime's own JSON lines, filterable, plus the support bundle.
 //
+// The level and the search box are query parameters, not client-side filters: the server scans back
+// through the file for a match, so a filter that matches nothing recent still finds the older line
+// (#171). The panel renders record lines only; a traceback's continuation lines have no fields.
+//
 // `admin` scope, which pairing deliberately does not grant - so a paired phone sees a sentence
 // explaining the gap rather than an empty box. The bundle is fetched as a blob because an `<a href>`
 // cannot carry the bearer header, and the URL would otherwise carry a credential into history.
@@ -53,23 +57,23 @@ export const logs = {
     const search = root.querySelector("#lg-search");
 
     let lines = [];
+    let truncated = false;
+    let searchTimer = null;
 
     function render() {
-      const wanted = level.value;
-      const needle = search.value.trim().toLowerCase();
+      // No filtering here any more: `?level=` and `?contains=` are answered by the server across its
+      // whole scan window, so an empty table means "nothing matched", not "nothing matched in the
+      // last 80 lines it happened to fetch" (#171). Records only - a traceback's continuation line
+      // has no fields to put in a row.
       const shown = lines
         .map(parse)
         .filter((record) => record)
-        .filter((record) => (wanted === "all" ? true : String(record.level || "").toUpperCase() === wanted))
-        .filter((record) => {
-          if (!needle) return true;
-          return JSON.stringify(record).toLowerCase().includes(needle);
-        })
-        .slice()
         .reverse();
 
       if (!shown.length) {
-        list.innerHTML = `<div class="empty">no lines match</div>`;
+        list.innerHTML = `<div class="empty">${
+          truncated ? "no match in the last 4 MiB of the log" : "no lines match"
+        }</div>`;
         return;
       }
       const rows = shown
@@ -96,18 +100,28 @@ export const logs = {
     async function load() {
       error.textContent = "";
       const count = Math.max(10, Math.min(500, Number(tail.value) || 80));
+      const params = new URLSearchParams({ tail: String(count) });
+      if (level.value && level.value !== "all") params.set("level", level.value);
+      const needle = search.value.trim();
+      if (needle) params.set("contains", needle);
       try {
-        const payload = await api(`/logs?tail=${count}`);
+        const payload = await api(`/logs?${params.toString()}`);
         lines = payload.lines || [];
+        truncated = Boolean(payload.truncated);
         render();
       } catch (err) {
         lines = [];
+        truncated = false;
         list.innerHTML = `<div class="empty">${esc(errorText(err))}</div>`;
       }
     }
 
-    level.addEventListener("change", render);
-    search.addEventListener("input", render);
+    level.addEventListener("change", load);
+    search.addEventListener("input", () => {
+      // A keystroke is not a request: the server does the scanning, so wait for the typing to stop.
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(load, 300);
+    });
     tail.addEventListener("change", load);
     root.querySelector("#lg-refresh").addEventListener("click", load);
 
