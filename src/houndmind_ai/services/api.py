@@ -505,6 +505,65 @@ async def _scan(request: web.Request) -> web.Response:
     )
 
 
+# One response has to be drawable on a phone, so the grid is capped. The cap keeps the cells with the
+# most hits: a map that outgrew it is exactly the one where the strong returns are worth keeping.
+_MAP_CELLS = 4000
+
+
+async def _map(request: web.Request) -> web.Response:
+    """The occupancy grid the mapper built, bounded (#175).
+
+    `mapping` has kept a hit histogram per cell since P3 (`mapping/mapper.py::_ingest_into_grid`) and
+    nothing could see it. Cells are published as `[ix, iy, hits]` **in cells, not centimetres**:
+    `cell_size_cm` rides along so a client scales them, and the integer pair is what the mapper
+    stores, so nothing here re-derives a projection and disagrees with the producer.
+
+    `truncated` and `count` say what was left out, because an empty corner of a truncated map means
+    "not sent", not "not mapped" - and only one of those is worth walking into.
+    """
+    plane = _plane(request)
+    state = plane.context.get("mapping_state")
+    settings = (plane.context.get("settings") or {}).get("mapping", {})
+    settings = settings if isinstance(settings, dict) else {}
+    grid_enabled = bool(settings.get("grid_enabled", True))
+    grid = state.get("grid") if isinstance(state, dict) else None
+    cells = grid.get("cells") if isinstance(grid, dict) else None
+    if not isinstance(cells, dict) or not cells:
+        return web.json_response(
+            {"map": None, "grid_enabled": grid_enabled},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    triples: list[list[int]] = []
+    for key, hits in cells.items():
+        try:
+            ix_text, iy_text = str(key).split(",", 1)
+            triples.append([int(ix_text), int(iy_text), int(hits)])
+        except (AttributeError, TypeError, ValueError):
+            # A key that is not `ix,iy` is not a cell this mapper wrote; skip it rather than answer
+            # 500 for the whole map because the context was poked by something else.
+            continue
+
+    total = len(triples)
+    truncated = total > _MAP_CELLS
+    if truncated:
+        triples.sort(key=lambda cell: (-cell[2], cell[0], cell[1]))
+        triples = triples[:_MAP_CELLS]
+    cell_size = _number(settings.get("cell_size_cm"))
+    return web.json_response(
+        {
+            "map": {
+                "cell_size_cm": cell_size if cell_size is not None else 10.0,
+                "cells": triples,
+                "count": total,
+                "truncated": truncated,
+            },
+            "grid_enabled": grid_enabled,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 async def _modules(request: web.Request) -> web.Response:
     return web.json_response(build_modules(_plane(request).context))
 
@@ -1742,6 +1801,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/whoami", ANY_SCOPE, _whoami),
     ("GET", "/state", "state:read", _state),
     ("GET", "/scan", "state:read", _scan),
+    ("GET", "/map", "state:read", _map),
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/routines", "state:read", _routines_list),
