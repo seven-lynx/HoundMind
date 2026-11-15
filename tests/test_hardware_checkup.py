@@ -18,6 +18,7 @@ def _make_healthy(hal: FakeDogHAL) -> FakeDogHAL:
     hal.set_sound(None, valid=True)
     hal.set_acc((412.0, -180.0, 16310.0))
     hal.set_gyro((18.0, -7.0, 11.0))
+    hal.set_battery(7.42)
     return hal
 
 
@@ -46,6 +47,7 @@ def test_skip_motion_reads_the_snapshot_and_commands_nothing(capsys):
     assert "[checkup] sound: detected=False dir=None" in out
     assert "[checkup] acc: (412.0, -180.0, 16310.0)" in out
     assert "[checkup] gyro: (18.0, -7.0, 11.0)" in out
+    assert "[checkup] battery: 7.42 V" in out
     assert "[checkup] valid: distance=True touch=True sound=True imu=True" in out
     assert "[checkup] sensors: all answered" in out
     assert "[checkup] Motion skipped." in out
@@ -66,6 +68,7 @@ def test_a_failed_reading_prints_none_and_says_so(capsys):
     assert "[checkup] sound: detected=None dir=None" in out
     assert "[checkup] acc: None" in out
     assert "[checkup] gyro: None" in out
+    assert "[checkup] battery: None" in out
     assert "[checkup] valid: distance=False touch=False sound=False imu=False" in out
     assert "[checkup] no reading from: distance, touch, sound, imu" in out
 
@@ -103,6 +106,19 @@ def test_a_quiet_room_is_valid_without_a_direction(capsys):
     out = capsys.readouterr().out
     assert "[checkup] sound: detected=False dir=None" in out
     assert "sound=True" in out
+
+
+def test_a_missing_battery_reading_is_reported_and_not_a_failure(capsys):
+    """The sense line is optional: no voltage gets its own line, it does not fail the checkup."""
+
+    hal = _healthy()
+    hal.set_battery(None)
+
+    assert main(["--skip-motion", "--pause", "0"], hal=hal) == 0
+
+    out = capsys.readouterr().out
+    assert "[checkup] battery: None" in out
+    assert "no reading from" not in out
 
 
 def test_motion_runs_the_documented_sequence_through_the_hal(capsys):

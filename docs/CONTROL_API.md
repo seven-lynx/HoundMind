@@ -36,8 +36,8 @@ file. A route that exists in code and not here — or here and not in code — f
 
 ## 1. Authentication
 
-Two mechanisms, both bearer-style. Everything requires a token except `/meta`, `/health` and
-`/pair`, which is the exchange that *produces* a token.
+Two mechanisms, both bearer-style. Everything requires a token except `/api/v1/meta`,
+`/api/v1/health` and `/api/v1/pair`, which is the exchange that *produces* a token.
 
 **This is plaintext HTTP.** Nothing on port 8420 is encrypted: the device token, every command and
 every camera frame cross the LAN in the clear. The token *is* the security boundary, so anyone who can
@@ -51,8 +51,8 @@ the device token itself. Keep the dog on a network you trust, or close the door:
 **The device advertises itself, and the advertisement is public.** With `settings.api.discovery_enabled`
 (the default) the control plane publishes one mDNS record so a client can resolve a name instead of
 an address (`#38`). Its TXT payload is `api_version`, `min_client` and `scheme` - a subset of what the
-unauthenticated `/meta` already reports, with no token, no device secret and no location. Anyone on
-the LAN can read it, which is exactly as much as they can read from `/meta` today.
+unauthenticated `/api/v1/meta` already reports, with no token, no device secret and no location.
+Anyone on the LAN can read it, which is exactly as much as they can read from `/api/v1/meta` today.
 
 **TLS is available and off by default.** `settings.api.tls_enabled: true` serves HTTPS with a
 self-signed certificate generated on first start for this device — `docs/INSTALL.md` has the trust
@@ -246,7 +246,7 @@ from a command until it is added to `config/actions.jsonc`. `null` is never a gu
 
 Producers and the catalog spell motion with spaces (`"turn left"`, `"wag tail"`); the vocabulary is
 underscored, and `kernel/commands.py::canonical_action` is the only translation. A client that wants
-the raw catalog still reads `config/actions.jsonc` from the repository — `GET /meta`'s `capabilities`
+the raw catalog still reads `config/actions.jsonc` from the repository — `GET /api/v1/meta`'s `capabilities`
 is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus `camera`, `pairing` and
 `routines` when available), not a list of actions.
 
@@ -370,7 +370,7 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
 ```
 
 `ts` is the runtime's **monotonic** clock, not epoch seconds: compare it to other timestamps in the
-same stream, never to wall time. Device identity and version live in `GET /meta`, not here.
+same stream, never to wall time. Device identity and version live in `GET /api/v1/meta`, not here.
 
 `decision` is the tick's decision record (`kernel/decisions.py`) — the same object
 `GET /api/v1/decisions` returns a list of. `intent` and `source` name the intent that won the tick;

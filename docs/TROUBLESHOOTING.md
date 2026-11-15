@@ -71,7 +71,7 @@ does not answer it, the last column names the document that will.
 
 | What you see | Means | Do |
 |---|---|---|
-| `401` on everything except `/meta` and `/health` | no token, or the wrong one | the token is in `~/.houndmind/api_token`; send `Authorization: Bearer <token>` |
+| `401` on everything except `/api/v1/meta` and `/api/v1/health` | no token, or the wrong one | the token is in `~/.houndmind/api_token`; send `Authorization: Bearer <token>` |
 | `401` on `/camera/stream?token=…` | a token in a URL is refused by design | mint a ticket with `POST /api/v1/camera/ticket`, then use `?ticket=` |
 | `403` on `POST /api/v1/pair/open` | a client token cannot open a pairing window | use the device token, which holds `admin` |
 | connection refused on port 8420 | the plane is off, or bound elsewhere | `modules.api.enabled`, `settings.api.host` and `.port` |

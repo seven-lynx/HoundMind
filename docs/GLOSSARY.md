@@ -80,7 +80,7 @@ points at, that file is the one with the bug.
 | **device token** | The secret the runtime writes on first start to `~/.houndmind/api_token` (0600), owned by `services/auth.py::TokenStore`. The installer does not create it. Never logged, never in a URL. |
 | **pairing code** | A six-digit, five-minute, single-use code exchanged at `POST /api/v1/pair` for a client token. |
 | **ticket** | A single-use, 60-second camera credential, because an `<img>` tag cannot send a header. |
-| **unauthenticated route** | `/meta`, `/health`, `/pair`, `/events` (the socket authenticates in its first frame), and the two camera routes via `?ticket=` |
+| **unauthenticated route** | `/api/v1/meta`, `/api/v1/health`, `/api/v1/pair`, `/api/v1/events` (the socket authenticates in its first frame), and the two camera routes via `?ticket=` |
 
 ## 6. Health and failure
 
