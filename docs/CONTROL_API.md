@@ -133,6 +133,7 @@ what stops the guard from looking redundant (`#39`).
 | `POST` | `/api/v1/routines/{id}/run` | `move` | start one routine; optional `{"dry_run": true}` ([§3](#3-commands)) |
 | `POST` | `/api/v1/places` | `config` | create one place; a refused body is `400` with `problems[]` ([§8](#8-places)) |
 | `DELETE` | `/api/v1/places/{id}` | `config` | forget one place by id or name; a second call is `404` ([§8](#8-places)) |
+| `PATCH` | `/api/v1/places/{id}` | `config` | correct a place's `name`, `heading_deg`, `distance_cm` or `anchor`; the `id` cannot change ([§8](#8-places)) |
 | `POST` | `/api/v1/places/{id}/go` | `move` | ask the dog to walk to one place; optional `{"at_anchor": true}` ([§8](#8-places)) |
 | `GET` | `/api/v1/mode` | `state:read` | current mode |
 | `POST` | `/api/v1/mode` | `move` | switch `idle` \| `patrol` \| `manual` \| `rest` |
@@ -567,18 +568,26 @@ display verbatim — it must never contain a path, a token, or a stack trace.
 ## 8. Places
 
 A place is a named pose a person taught: `{id, name, heading_deg, distance_cm, anchor, confidence,
-created_ts, visits}`. `id` is the slug of the name (`"Living Room"` → `living_room`) and is what every
-other route takes. Nothing infers a place from a scan, and `DELETE` is the only way one disappears.
+created_ts, visits}`. `id` is the slug of the name at creation (`"Living Room"` → `living_room`) and is
+what every other route takes. **The id never changes**, including on a rename: goals and the navigator
+address a place by id, so correcting a name must not move the handle out from under a walk that is
+already under way. Nothing infers a place from a scan, and `DELETE` is the only way one disappears.
 
 | Route | Body | Answers |
 |---|---|---|
 | `POST /api/v1/places` | `{"name", "heading_deg", "distance_cm"}` required; `{"anchor", "confidence"}` optional | `201 {"place": {...}}` · `400 {"problems": [...]}` · `503` |
+| `PATCH /api/v1/places/{id}` | any of `{"name", "heading_deg", "distance_cm", "anchor"}` — omitted fields keep their value | `200 {"place": {...}, "path"}` · `400 {"problems": [...]}` · `404` + `suggestion` · `503` |
 | `DELETE /api/v1/places/{id}` | none — the path segment may be an id **or** a name | `200 {"removed": {...}}` · `404` + `suggestion` · `503` |
 | `POST /api/v1/places/{id}/go` | `{"at_anchor": true}` — optional, see below | `202 {"accepted", "id", "name", "at_anchor"}` · `404` · `409` · `503` |
 
 `400` bodies carry `problems[]` in the `{path, message, hint}` shape [§2](#2-endpoints)'s config validator already
 uses, so a client shows them without translating: a duplicate name, a heading the format does not
 allow, a name with no characters usable in an id (`"///"` slugs to `""`), or the catalogue limit.
+
+`PATCH` follows the same rules and adds two of its own: an empty body is a `400` (a write that changes
+nothing is how a client comes to believe it edited something), and `id` in the body is a `400` that says
+to delete and recreate, because ignoring it would look like success. Renaming onto an existing name is
+the duplicate-name `Problem` a second `POST` would return.
 
 **Types are not coerced.** `{"heading_deg": true}` is a `400`, not 1.0 — `true` is an `int` in
 Python — and `{"heading_deg": "90"}` is a `400`, not 90 degrees.

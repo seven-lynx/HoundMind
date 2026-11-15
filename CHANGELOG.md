@@ -7,6 +7,16 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A place can be corrected instead of retyped**: `PATCH /api/v1/places/{id}` changes any of `name`,
+  `heading_deg`, `distance_cm` or `anchor`; omitted fields keep their value (#173). Before this, a typo
+  in a name or a heading measured wrong meant `DELETE` and `POST`, which threw away `visits` and
+  `created_ts`. **The `id` never changes**, including on a rename: goals and the navigator address a
+  place by id, so a correction must not move the handle out from under a walk that is already under
+  way — `id` in the body is a `400` that says to delete and recreate rather than a field that is
+  quietly ignored. Validation is the store's existing document check, so a rename onto an existing
+  name comes back as the same `problems[]` a second `POST` returns, and an empty body is a `400`
+  instead of a write that changes nothing. `PlaceStore.update` takes the same per-instance write lock
+  as `add`/`remove`, and the Places panel gains a Rename button.
 - **The log tail is live, and it cannot outvote the dog**: the Logs panel polled `GET /api/v1/logs`
   every few seconds, so a line written between polls appeared late and a burst could only be read by
   asking again (#170). The WebSocket gains a third frame class, `log`: `hello` may carry `"logs": true`

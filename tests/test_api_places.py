@@ -322,3 +322,99 @@ def test_go_to_an_unknown_place_is_a_404_with_a_suggestion(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+
+def test_a_place_can_be_renamed_and_keeps_its_id(tmp_path) -> None:
+    """#173: a typo in a name used to mean forget and retype, which loses the visit count."""
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, place_model())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/places/kitchen", headers=auth(plane), json={"name": "Galley"}
+            )
+            body = await response.json()
+            catalogue = await (await client.get(f"{API_PREFIX}/places", headers=auth(plane))).json()
+
+        assert response.status == 200
+        assert body["place"]["id"] == "kitchen", "the id is the handle goals use"
+        assert body["place"]["name"] == "Galley"
+        assert body["path"].endswith("places.json")
+        assert [(place["id"], place["name"]) for place in catalogue["places"]] == [
+            ("kitchen", "Galley")
+        ]
+        # On disk, not just in the answer.
+        assert stored(tmp_path)[0]["name"] == "Galley"
+
+    asyncio.run(scenario())
+
+
+def test_a_patch_refuses_a_new_id_and_an_empty_body(tmp_path) -> None:
+    """Silently ignoring `id` would look like a successful rename of the handle."""
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, place_model())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            new_id = await client.patch(
+                f"{API_PREFIX}/places/kitchen", headers=auth(plane), json={"id": "galley"}
+            )
+            empty = await client.patch(
+                f"{API_PREFIX}/places/kitchen", headers=auth(plane), json={}
+            )
+            new_id_body = await new_id.json()
+            empty_body = await empty.json()
+
+        assert new_id.status == 400
+        assert "id cannot be changed" in new_id_body["detail"]
+        assert empty.status == 400
+        assert "at least one of" in empty_body["detail"]
+        assert stored(tmp_path)[0]["name"] == "Kitchen", "neither request may have written"
+
+    asyncio.run(scenario())
+
+
+def test_a_patch_for_an_unknown_place_is_a_404_with_a_suggestion(tmp_path) -> None:
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, place_model())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/places/kitch", headers=auth(plane), json={"name": "Galley"}
+            )
+            body = await response.json()
+
+        assert response.status == 404
+        assert body["error"] == "not_found"
+        assert body["suggestion"] == "kitchen"
+
+    asyncio.run(scenario())
+
+
+def test_a_rename_onto_an_existing_name_comes_back_as_problems(tmp_path) -> None:
+    """The same refusal a second `POST` would produce, so a client renders it the same way."""
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, place_model(), place_model(name="Hall", heading_deg=90.0))
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/places/kitchen", headers=auth(plane), json={"name": "Hall"}
+            )
+            body = await response.json()
+
+        assert response.status == 400
+        assert body["error"] == "bad_request"
+        assert body["problems"], "a refusal a client can show a user, not a bare message"
+        assert [place["name"] for place in stored(tmp_path)] == ["Kitchen", "Hall"]
+
+    asyncio.run(scenario())
+
+
+def test_a_patch_without_the_navigator_is_a_503(tmp_path) -> None:
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, place_model(), with_navigator=False)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/places/kitchen", headers=auth(plane), json={"name": "Galley"}
+            )
+            body = await response.json()
+
+        assert response.status == 503
+        assert body["error"] == "unavailable"
+
+    asyncio.run(scenario())
+
