@@ -98,3 +98,83 @@ def test_a_vendor_without_speak_stays_a_debug_line(caplog) -> None:
     hal._play("bark", 70)
 
     assert missing_sound_warnings(caplog) == []
+
+
+class _Ears:
+    """The 2.x `SoundDirection` shape: `isdetected()` plus a direction read."""
+
+    def __init__(self, detected: bool = True, direction: int = 90) -> None:
+        self.detected = detected
+        self.direction = direction
+        self.reads = 0
+
+    def isdetected(self) -> bool:
+        return self.detected
+
+    def read(self) -> int:
+        self.reads += 1
+        return self.direction
+
+
+def sound_warnings(caplog) -> list[str]:
+    """The #183 warning specifically, so a cue-name warning cannot mask it."""
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == LOGGER
+        and record.levelno == logging.WARNING
+        and "Sound sensor unavailable" in record.getMessage()
+    ]
+
+
+def test_a_vendor_without_ears_is_reported_once_with_the_pidog_revision(caplog) -> None:
+    """#183: the installed build has no `ears`, and before this it said so only at DEBUG, per tick."""
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    hal = PidogHAL(settings={}, dog=object())
+
+    assert hal._read_sound(hal._dog) == (False, None, False)
+    assert hal._read_sound(hal._dog) == (False, None, False)
+
+    messages = sound_warnings(caplog)
+    assert len(messages) == 1, "one warning for the session, not one per tick"
+    assert "'ears'" in messages[0]
+    assert "pidog " in messages[0], "the reason names the vendor revision it was talking to"
+    assert not [
+        record for record in caplog.records if record.getMessage() == "Sound detect failed"
+    ], "the per-tick DEBUG traceback is what made the bench log unreadable"
+
+
+def test_the_start_probe_names_the_reason_before_the_first_read(caplog) -> None:
+    """The benchmark sequence: `start()` probes, then the loop reads every tick."""
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    hal = PidogHAL(settings={}, dog=object())
+
+    hal._probe_sound(hal._dog)
+    hal._read_sound(hal._dog)
+
+    assert len(sound_warnings(caplog)) == 1
+
+
+def test_a_vendor_with_ears_is_never_reported(caplog) -> None:
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    dog = type("EaredDog", (), {"ears": _Ears(detected=True, direction=90)})()
+    hal = PidogHAL(settings={}, dog=dog)
+
+    hal._probe_sound(dog)
+
+    assert hal._read_sound(dog) == (True, 90, True)
+    assert sound_warnings(caplog) == []
+
+
+def test_ears_without_isdetected_is_latched_once_as_a_revision_mismatch(caplog) -> None:
+    """An attribute error here is a vendor revision, not a bus glitch: say so once and stop."""
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    dog = type("HalfEaredDog", (), {"ears": object()})()
+    hal = PidogHAL(settings={}, dog=dog)
+
+    assert hal._read_sound(dog) == (False, None, False)
+    assert hal._read_sound(dog) == (False, None, False)
+
+    messages = sound_warnings(caplog)
+    assert len(messages) == 1
+    assert "AttributeError" in messages[0]

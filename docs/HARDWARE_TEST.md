@@ -172,7 +172,7 @@ above, not by this line.
 |---|---|---|---|
 | `distance_cm` | centimetres in front of the **head**, conditioned by the HAL | a steady value once the dog is still; re-run if it jumps | `None` — read failed, no sample yet (re-run, #108), or no echo (soft, angled or absent surface); the vendor's `-1`/`-2` placeholders never reach this line |
 | `touch` | `N` none · `L` left pad · `R` right pad · `LS`/`RS` a stroke | `N` at rest, and the letter of whichever pad you hold down while it runs | `None`, or a letter with nothing touching it |
-| `sound: detected` / `dir` | busy line, then a bearing | `False dir=None` in a quiet room, with `sound=True` on the `valid:` line; clap once and re-run for `True` with a bearing | `detected=None dir=None` and `sound=False` — the SPI module did not answer |
+| `sound: detected` / `dir` | busy line, then a bearing | `False dir=None` in a quiet room, with `sound=True` on the `valid:` line; clap once and re-run for `True` with a bearing | `detected=None dir=None` and `sound=False` — the SPI module did not answer; the `[checkup] hint:` line that follows names the log warning carrying the reason (#183) |
 | `acc` | **raw counts**, 16384 per g | roughly ±16384 on the axis pointing at the floor, near 0 on the other two | all zeros, or `None` |
 | `gyro` | **raw counts**, 16.4 per °/s | near 0 at rest; thousands when you move the dog | all zeros, or `None` |
 

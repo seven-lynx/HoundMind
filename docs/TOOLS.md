@@ -88,7 +88,10 @@ python -m tools.hardware_checkup --skip-motion   # the only form that is safe by
 The reading lines end in `[checkup] valid:` (`distance=… touch=… sound=… imu=…`) and one verdict line:
 `sensors: all answered`, or `no reading from: <names>`. A sensor that did not answer prints `None` for
 its value and `False` in `valid:`, while a quiet room legitimately prints
-`sound: detected=False dir=None`.
+`sound: detected=False dir=None`. When `sound=False`, a `[checkup] hint:` line follows: the vendor
+swallows its own init exception, so the tool cannot name the cause and points at the one
+`Sound sensor unavailable: …` warning in the log instead, which names the missing attribute and the
+`pidog` revision it found (#183).
 
 | Exit | Meaning |
 |---|---|
