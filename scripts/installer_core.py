@@ -29,6 +29,13 @@ ROBOT_HAT_BRANCH = "2.5.x"
 # importable - so the installer probes the surface the first action needs (#114).
 ROBOT_HAT_PROBE = "from robot_hat import Robot, Pin, Ultrasonic, utils, Music, I2C"
 
+# What `robot_hat/__init__.py` gates its exports on. Three of these are pulled in by nothing else
+# the installer installs, and a missing `lgpio` or `pygame` made the probe above fail with an
+# ImportError naming `robot_hat` rather than the real culprit - with the probe failing, `pidog` was
+# never installed at all (#180). `pyaudio` arrives from `requirements.txt` on the full preset.
+ROBOT_HAT_DEPS = ("smbus2", "lgpio", "pyaudio", "pygame")
+
+
 
 def run(cmd: list[str]) -> int:
     print("+", " ".join(cmd))
@@ -123,6 +130,33 @@ def venv_paths(venv_path: Path) -> tuple[Path, Path]:
 def python_can_import(python: Path, module: str) -> bool:
     code = run([str(python), "-c", f"import {module}"])
     return code == 0
+
+
+def missing_modules(python: Path, names: tuple[str, ...]) -> list[str]:
+    """Which of `names` this interpreter cannot import.
+
+    The probe answers "`robot_hat` did not import"; this answers "because these are absent". An
+    interpreter that cannot run the probe reports every name, because not-checked is not present.
+    """
+    snippet = (
+        "import importlib.util as u\n"
+        "missing = []\n"
+        "for name in %r:\n"
+        "    try:\n"
+        "        if u.find_spec(name) is None:\n"
+        "            missing.append(name)\n"
+        "    except Exception:\n"
+        "        missing.append(name)\n"
+        "print(','.join(missing))\n"
+    ) % (list(names),)
+    try:
+        out = subprocess.check_output(
+            [str(python), "-c", snippet], stderr=subprocess.STDOUT
+        )
+    except Exception:  # noqa: BLE001 - a probe that cannot run names nothing for certain
+        return list(names)
+    lines = out.decode("utf-8", "replace").strip().splitlines()
+    return [item for item in (lines[-1].split(",") if lines else []) if item]
 
 
 def python_version_tuple(python: Path) -> tuple[int, int] | None:
@@ -331,24 +365,19 @@ def build_rtabmap(cache_root: Path, pip: Path, python: Path) -> int:
         except Exception:
             pass
 
-    # Install Python bindings (use pip from the active environment)
+    # Install the Python bindings. Upstream `introlab/rtabmap` no longer ships the `python/` source
+    # directory this used to `pip install` from, and the old fallback re-checked that same path, so
+    # the build returned 0 having installed nothing and `installer_verify` was the first place an
+    # operator learned `rtabmap-py` was missing (#181). Say it here, and fail.
     rtabmap_python = rtabmap_path / "python"
-    if rtabmap_python.exists():
-        code = run([str(pip), "install", str(rtabmap_python)])
-        if code != 0:
-            return code
-    else:
-        # Fallback: try setup.py install
-        py_dir = rtabmap_path / "python"
-        if py_dir.exists():
-            code = run([str(python), str(py_dir / "setup.py"), "build"])
-            if code != 0:
-                return code
-            code = run(["sudo", str(python), str(py_dir / "setup.py"), "install"])
-            if code != 0:
-                return code
-
-    return 0
+    if not rtabmap_python.exists():
+        print(
+            "RTAB-Map built, but this tree ships no `python/` bindings source (upstream removed "
+            "it): `rtabmap-py` cannot be installed, so `slam_pi4` stays unavailable. See "
+            "scripts/install_rtabmap_pi4.md."
+        )
+        return 1
+    return run([str(pip), "install", str(rtabmap_python)])
 
 
 def main() -> int:
@@ -575,7 +604,13 @@ def main() -> int:
                 # inside the project's venv so imports succeed during verification.
                 # Ensure PiDog runtime helpers and hardware bindings are present.
                 # Add `readchar` which `pidog` expects for keyboard input handling.
-                code = run([str(pip), "install", "gpiozero", "RPi.GPIO", "smbus2", "spidev", "readchar"])
+                # `lgpio` and `pygame` are here for the probe below, not for `pidog`'s own code:
+                # `robot_hat` refuses to export anything without them, so a clean image failed the
+                # probe and skipped the PiDog install entirely (#180).
+                code = run([
+                    str(pip), "install",
+                    "gpiozero", "RPi.GPIO", "smbus2", "spidev", "readchar", "lgpio", "pygame",
+                ])
                 if code != 0:
                     print("Warning: failed to install gpiozero/RPi.GPIO; continuing and attempting vendor installs.")
                 # Ensure a `smbus` import is available. Some vendor code
@@ -615,10 +650,16 @@ def main() -> int:
                 # (#114).
                 code = run([str(python), "-c", ROBOT_HAT_PROBE])
                 if code != 0:
+                    absent = missing_modules(python, ROBOT_HAT_DEPS)
+                    reason = (
+                        f"missing module(s): {', '.join(absent)}. "
+                        if absent
+                        else "`robot_hat` imports its parts but not the classes `pidog` needs. "
+                    )
                     print(
-                        "robot-hat installed, but `pidog` would not be able to import it: check "
-                        "that smbus2, lgpio, pyaudio and pygame are in this venv, and that the "
-                        f"cloned branch is {ROBOT_HAT_BRANCH} rather than v2.0."
+                        "robot-hat installed, but `pidog` would not be able to import it: "
+                        + reason
+                        + f"Check that the cloned branch is {ROBOT_HAT_BRANCH} rather than v2.0."
                     )
                     return 2
 

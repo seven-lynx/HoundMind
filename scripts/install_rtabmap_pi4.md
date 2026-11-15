@@ -24,19 +24,26 @@ sudo make install
 
 ## 3. Install Python Bindings (rtabmap-py)
 
-If not built automatically, build and install the Python bindings:
+**There is no bindings directory in a current checkout.** Upstream `introlab/rtabmap` removed the
+`python/` source tree this guide used to `pip install` from, and `-DWITH_PYTHON=ON` in step 2 builds
+`PyMatcher` / `PyDetector` / `PyDescriptor` under `corelib/src/python` - not the `rtabmap` module
+HoundMind imports (#181). `cd ../python` therefore fails with "No such file or directory" on any
+current clone.
 
-```bash
-cd ../python
-python3 setup.py build
-sudo python3 setup.py install
-```
+Until the bindings come back upstream, or are built here against the installed libraries with
+pybind11, `rtabmap-py` cannot be installed: the C++ library from step 2 is installed and usable from
+C++, `settings.slam_pi4.backend = "rtabmap"` stays unavailable, and
+`python -m tools.installer_verify` reports `rtabmap-py: MISSING`. The installer says the same thing
+and reports the RTAB-Map step as failed, instead of returning success having installed nothing.
 
 ## 4. Test Installation
 
 ```bash
 python3 -c "import rtabmap; print(rtabmap.__version__)"
 ```
+
+Expected to fail with `ModuleNotFoundError: No module named 'rtabmap'` until section 3 has a real
+answer.
 
 ---
 
