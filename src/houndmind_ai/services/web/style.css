@@ -31,6 +31,15 @@
 
 * { box-sizing: border-box; }
 
+/* `hidden` is implemented by the user agent as `[hidden] { display: none }`, and an author rule
+   that sets `display` on the same element beats it however specific the selector is. Both `.connect`
+   and `.shell` set `display: grid`, so `element.hidden = true` left the connect card on screen: the
+   console opened one screen below it and "Use token" looked like a dead button while it was working
+   perfectly. One rule, so `hidden` means what it says everywhere - now and in whatever gets added
+   next. */
+[hidden] { display: none !important; }
+
+
 html, body { height: 100%; }
 
 body {
@@ -175,7 +184,6 @@ a { color: var(--amber); }
   color: #ffd9a0;
 }
 .banner[data-tone="bad"] { background: #2b1418; border-bottom-color: #5a2a2e; color: #ffb3b8; }
-.banner[hidden] { display: none; }
 .banner strong { font-weight: 600; }
 
 /* ---------------------------------------------------------------- rail */
@@ -524,7 +532,6 @@ tbody tr:hover { background: #161f27; }
   background: #05080bcc;
   backdrop-filter: blur(3px);
 }
-.palette[hidden] { display: none; }
 .palette input { width: min(560px, 90vw); font-size: 1rem; padding: .7rem .8rem; }
 .palette-list {
   width: min(560px, 90vw);
