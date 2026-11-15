@@ -134,9 +134,9 @@ This is plaintext HTTP: the token crosses the LAN in the clear. `"tls_enabled": 
 [docs/INSTALL.md](docs/INSTALL.md) §*TLS* for the trust steps, and keep port 8420 off the internet
 either way.
 
-Everything under `/api/v1` needs the token from `~/.houndmind/api_token`; `/health` and `/meta`
-do not. The full contract is [docs/CONTROL_API.md](docs/CONTROL_API.md), and the token and pairing
-story is §26 of [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md).
+Everything under `/api/v1` needs the token from `~/.houndmind/api_token`; `/api/v1/health` and
+`/api/v1/meta` do not. The full contract is [docs/CONTROL_API.md](docs/CONTROL_API.md), and the token
+and pairing story is §26 of [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md).
 
 The old per-feature servers are gone — there is no separate telemetry dashboard on 8092, vision
 stream on 8090, voice control on 8091 or face enrollment on 8088. Each was an unauthenticated

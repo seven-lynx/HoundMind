@@ -38,6 +38,10 @@ def describe(snapshot: SensorSnapshot) -> list[str]:
     never a fabricated number (`SensorSnapshot`, `hal/iface.py`). `sound` is the line where the
     value can be legitimately absent on a healthy dog - nothing was heard - so it needs the
     `valid:` line to be distinguishable from a sensor that did not answer.
+
+    `battery` is the pack voltage the HAT itself measures. It is reported, never enforced: a dog
+    without the sense line reads `None`, so it stays out of `_no_reading`, and the power gate in a
+    bench run is `vcgencmd get_throttled` in `docs/HARDWARE_TEST.md` section 2 (#185).
     """
     distance = (
         f"{snapshot.distance_cm:.1f}"
@@ -54,6 +58,11 @@ def describe(snapshot: SensorSnapshot) -> list[str]:
     gyro = (
         str(snapshot.gyro) if snapshot.imu_valid and snapshot.gyro is not None else "None"
     )
+    battery = (
+        f"{snapshot.battery_v:.2f} V"
+        if snapshot.battery_valid and snapshot.battery_v is not None
+        else "None"
+    )
     valid = (
         f"distance={snapshot.distance_valid} touch={snapshot.touch_valid} "
         f"sound={snapshot.sound_valid} imu={snapshot.imu_valid}"
@@ -64,6 +73,7 @@ def describe(snapshot: SensorSnapshot) -> list[str]:
         f"[checkup] sound: {sound}",
         f"[checkup] acc: {acc}",
         f"[checkup] gyro: {gyro}",
+        f"[checkup] battery: {battery}",
         f"[checkup] valid: {valid}",
     ]
 

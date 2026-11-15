@@ -43,6 +43,24 @@ supported.** A V4 is fine for a bench test; it is not an edition this project ca
 The runtime cannot see which HAT is fitted, so this is not a configuration key. It is a power-supply
 fact, and the reason the Pi 5 edition is documented as V5-only.
 
+### Power: a Pi 4 on the PiDog pack
+
+The HAT feeds the Pi from the pack, so the pack's state is the Pi's supply. A Pi 4 under load - four
+servos plus WiFi - draws more than a partly discharged pack can deliver through the HAT, and the
+first symptom is not a warning: the Pi browns out and reboots, which reads exactly like a crash. The
+runtime cannot prevent it, and `sensors.battery_poll_s` only reports what the HAT measures after the
+fact.
+
+Check the rail before a run, and after any reboot nobody asked for:
+
+```bash
+vcgencmd get_throttled     # 0x0 is clean; 0x50000 means under-voltage and throttling have occurred
+```
+
+Bits 16-18 are sticky for the life of the boot, so a non-zero value straight after a fresh boot means
+the supply had already sagged. `docs/HARDWARE_TEST.md` [section 2](HARDWARE_TEST.md#2-before-you-start)
+carries the full bit table.
+
 ## Python
 
 - Supported: **3.11, 3.12, 3.13** — the range `pyproject.toml` declares. Bookworm ships 3.11 (the
@@ -304,7 +322,7 @@ to a gait that is halfway through, and no such rule is settled yet.
 |---|---|
 | Stop | `Ctrl-C` in the terminal the runtime is running in. The tick finishes and the HAL is closed. |
 | Restart | Stop it, then start it again with the command above. A routine file added or edited since boot is read at this point (`docs/ROUTINES.md`). |
-| Check it is running | `curl http://127.0.0.1:8420/health` answers without a token; `GET /api/v1/state` needs one. |
+| Check it is running | `curl http://127.0.0.1:8420/api/v1/health` answers without a token; `GET /api/v1/state` needs one. |
 | Find the token | `~/.houndmind/api_token`, written `0600` on the first start. Read it into a variable — do not paste it into a URL. |
 | Change the port | `settings.api.port` (default `8420`). |
 

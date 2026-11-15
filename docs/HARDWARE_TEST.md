@@ -53,6 +53,29 @@ A green run through step 5 is a "the electronics and the loop are healthy" resul
 - [ ] Camera lens covered until step 5.
 - [ ] Know the stop path before you start: `Ctrl+C` in the terminal, or lift the dog.
 
+**Power, before anything else.** A brown-out is the one failure that reads like a software fault: the
+process vanishes, the Pi boots clean, and the previous boot's log is gone unless journald is
+persistent. `vcgencmd get_throttled` answers it, and bits 16-18 are **sticky for the life of the
+boot** - which is what makes a reading taken straight after a reboot meaningful.
+
+```bash
+vcgencmd get_throttled     # 0x0 is clean; anything else is a supply problem, not a code problem
+```
+
+| Bit | Mask | Means |
+|---|---|---|
+| 0 | `0x1` | under-voltage right now |
+| 1 | `0x2` | ARM frequency capped right now |
+| 2 | `0x4` | currently throttled |
+| 16 | `0x10000` | under-voltage has occurred since boot |
+| 17 | `0x20000` | ARM frequency capping has occurred since boot |
+| 18 | `0x40000` | throttling has occurred since boot |
+
+`0x50000` (bits 16 and 18) immediately after a boot means the pack has already sagged: charge or
+replace it, and do not start step 6. A Pi 4 under the PiDog pack's regulator draws more than a
+partly discharged pack can supply through the HAT, and a brown-out costs the SD card as well as the
+run (#185).
+
 **Software setup.**
 
 ```bash
@@ -132,6 +155,7 @@ Expected on a healthy dog:
 [checkup] sound: detected=False dir=None
 [checkup] acc: (412.0, -180.0, 16310.0)
 [checkup] gyro: (18.0, -7.0, 11.0)
+[checkup] battery: 7.42 V
 [checkup] valid: distance=True touch=True sound=True imu=True
 [checkup] Motion skipped.
 ```
@@ -139,6 +163,10 @@ Expected on a healthy dog:
 Five readings and a verdict. **A `None` on `distance_cm`, `touch`, `acc` or `gyro`, or a `False` on
 the `valid:` line, is the failure**, whatever the exit code says (#109). `sound` is the exception: a
 quiet room is `detected=False dir=None` with `sound=True` on the verdict line.
+
+`battery` is a readout, not a gate: a dog without the sense line prints `None` and is still healthy,
+and it never appears in `no reading from`. The power question is answered by `vcgencmd get_throttled`
+above, not by this line.
 
 | Line | What the number is | Healthy | Not healthy |
 |---|---|---|---|
@@ -207,8 +235,8 @@ Then, from an SSH session or another machine on the same network:
 
 ```bash
 # no token needed — is the process alive?
-curl -s http://<pi-ip>:8420/meta
-curl -s http://<pi-ip>:8420/health
+curl -s http://<pi-ip>:8420/api/v1/meta
+curl -s http://<pi-ip>:8420/api/v1/health
 
 # state:read — the token is read from the file, never pasted
 curl -s -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
@@ -314,7 +342,7 @@ Find the symptom, take the next step — not a different one.
 | `[smoke] FAIL` only on `scan_latest` | `scanning` produced no reading | `/api/v1/modules` names a disabled reason; step 6 tells you whether the head moves at all |
 | `[smoke] FAIL` only on `mapping_openings` | `mapping` disabled or no scan to consume | `config/settings.jsonc` → `modules.mapping.enabled` |
 | `401` on `/api/v1/state` | missing or foreign bearer token | `cat ~/.houndmind/api_token` **stays on the device** — send it in the header, never into a report |
-| `Connection refused` on `:8420` | the API module is off, or on another host/port | `/meta` from the Pi itself first; then `api.host` / `api.port`, and `https://` if `api.tls_enabled` is on |
+| `Connection refused` on `:8420` | the API module is off, or on another host/port | `/api/v1/meta` from the Pi itself first; then `api.host` / `api.port`, and `https://` if `api.tls_enabled` is on |
 | `Address already in use` | an earlier runtime is still running | `pkill -f houndmind_ai`, then start once |
 | Step 2 or 3 hangs on a live dog | the runtime already owns the servo bus | never run these two while `python -m houndmind_ai` is up — stop it first (#11: the checkup opens its own `PidogHAL` in a second process) |
 | `temp_c` climbing past ~75 under step 3 | cooling, not HoundMind | the `pi-performance` question; a bare Pi 5 on a HAT V4 is also a power problem (`docs/INSTALL.md:18-23`) |
