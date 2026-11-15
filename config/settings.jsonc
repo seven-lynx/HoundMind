@@ -434,9 +434,10 @@
       "enabled": false,
       "backend": "stub",
       "interval_s": 0.5,
-      // OpenCV DNN settings (set model/config/labels to enable)
-      "model_path": "models/ssd_mobilenet_v3_large_coco_2020_01_14.pb",
-      "config_path": "models/ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt",
+      // OpenCV DNN settings. `python -m tools.download_opencv_models` writes exactly these three
+      // names into `models/`; `backend: "opencv_dnn"` is the switch that turns the detector on.
+      "model_path": "models/ssd_mobilenet_v1_coco.pb",
+      "config_path": "models/ssd_mobilenet_v1_coco.pbtxt",
       "labels_path": "models/coco_labels.txt",
       "input_width": 320,
       "input_height": 320,
