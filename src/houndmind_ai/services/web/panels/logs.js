@@ -7,7 +7,7 @@
 // The bundle contains `config/settings.jsonc` verbatim, WiFi credentials included. The button says
 // so before you press it.
 
-import { api, apiBlob, clockTime, errorText, esc, fmt } from "../lib.js";
+import { api, apiBlob, clockTime, download, errorText, esc, fmt } from "../lib.js";
 
 const LEVELS = ["all", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"];
 
@@ -115,12 +115,7 @@ export const logs = {
       error.textContent = "";
       try {
         const blob = await apiBlob("/support-bundle");
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "houndmind-support.zip";
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        download(blob, "houndmind-support.zip");
       } catch (err) {
         error.textContent =
           err.status === 403 ? errorText(err) : `No bundle: ${err.message}`;

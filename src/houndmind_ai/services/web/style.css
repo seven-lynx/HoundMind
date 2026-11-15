@@ -103,9 +103,10 @@ a { color: var(--amber); }
 .shell {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   grid-template-areas:
     "brand topbar"
+    "rail  banner"
     "rail  stage"
     "rail  ticker";
   min-height: 100dvh;
@@ -163,6 +164,19 @@ a { color: var(--amber); }
 .brand-name { font-weight: 600; letter-spacing: .01em; }
 
 .topbar-right { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+
+/* A connection that is not live is stated across the top of every panel, not just in a chip. */
+.banner {
+  grid-area: banner;
+  padding: .45rem 1.1rem;
+  font-size: .86rem;
+  background: #2b1d13;
+  border-bottom: 1px solid var(--amber-dim);
+  color: #ffd9a0;
+}
+.banner[data-tone="bad"] { background: #2b1418; border-bottom-color: #5a2a2e; color: #ffb3b8; }
+.banner[hidden] { display: none; }
+.banner strong { font-weight: 600; }
 
 /* ---------------------------------------------------------------- rail */
 
@@ -531,9 +545,10 @@ tbody tr:hover { background: #161f27; }
 @media (max-width: 860px) {
   .shell {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr auto;
+    grid-template-rows: auto auto auto 1fr auto;
     grid-template-areas:
       "topbar"
+      "banner"
       "rail"
       "stage"
       "ticker";

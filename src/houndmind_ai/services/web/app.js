@@ -160,7 +160,12 @@ function connect() {
     try { frame = JSON.parse(message.data); } catch (err) { return; }
     if (!frame || typeof frame !== "object") return;
 
-    if (frame.type === "state") {
+    if (frame.type === "welcome") {
+      // The server's first word: who this socket authenticated as, and with which scopes. The app
+      // uses it to explain a `403` before making the request that would produce one.
+      const data = frame.data || {};
+      store.set({ scopes: data.scopes || [], welcome: data }, "socket");
+    } else if (frame.type === "state") {
       lastFrameAt = Date.now();
       if (store.health !== "live") store.set({ health: "live" }, "socket");
       store.frame(frame.data || {});
@@ -206,6 +211,9 @@ function renderChrome() {
     badge.dataset.link = store.health;
     badge.textContent =
       store.health === "offline" && store.apiAlive ? "no stream" : HEALTH_LABEL[store.health] || store.health;
+    badge.title = store.welcome
+      ? `as ${store.welcome.device || "?"} · scopes: ${(store.scopes || []).join(", ") || "none"}`
+      : "";
   }
 
   const mode = (store.state && store.state.mode) || "—";
@@ -219,6 +227,24 @@ function renderChrome() {
   const id = $("device-id");
   if (id && meta.device_id) {
     id.textContent = `${meta.device_id}${meta.profile ? ` · ${meta.profile}` : ""}`;
+  }
+
+  const banner = $("banner");
+  if (banner) {
+    if (store.health === "live") {
+      banner.hidden = true;
+    } else {
+      banner.hidden = false;
+      const offline = store.health === "offline";
+      banner.dataset.tone = offline ? "bad" : "";
+      banner.innerHTML = offline
+        ? `<strong>No connection.</strong> The device is not answering${
+            store.apiAlive ? " on the telemetry stream, though HTTP does" : ""
+          } — every panel below shows its last known state, and nothing you press will reach the dog.`
+        : store.health === "stale"
+        ? `<strong>Telemetry stopped.</strong> No frames for over 4 seconds — the panels show their last known state while the socket retries.`
+        : `<strong>Connecting…</strong> waiting for the device to answer.`;
+    }
   }
 }
 
@@ -466,6 +492,21 @@ async function boot() {
     showConnect("");
     return;
   }
+
+  // Prove the device answers before leaving the connect screen. A console that appears and then
+  // does nothing is the hardest failure to read, and it is exactly what a stale server process
+  // produces: the page is already in memory, so it keeps looking alive while every call fails.
+  $("connect-error").textContent = "";
+  $("connect-hint").textContent = "checking the device…";
+  try {
+    store.meta = await api("/meta");
+  } catch (err) {
+    showConnect(errorText(err));
+    $("connect-hint").textContent =
+      "Paste the device token from ~/.houndmind/api_token, or pair. Nothing is shown until the device answers.";
+    return;
+  }
+
   $("connect").hidden = true;
   $("shell").hidden = false;
   renderNav();
@@ -473,15 +514,6 @@ async function boot() {
   renderTicker();
   route();
   connect();
-
-  try {
-    // `/meta` is the only unauthenticated route with device facts in it; without it the console
-    // still works, so a failure here costs a label and nothing else.
-    store.meta = await api("/meta");
-    renderChrome();
-  } catch (err) {
-    /* the connection badge already reports whether the plane answers */
-  }
 }
 
 // A document without the console is a stale `index.html`, not a broken device - and the person

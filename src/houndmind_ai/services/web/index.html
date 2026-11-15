@@ -54,6 +54,11 @@
     </div>
   </header>
 
+  <!-- Shown whenever the stream is not live. A dead socket must be obvious from across the room,
+       not a small badge in the corner that says the same thing whether the Pi is off or the tab
+       lost its WiFi. -->
+  <div id="banner" class="banner" role="status" hidden></div>
+
   <nav id="nav" class="rail" aria-label="Panels"></nav>
 
   <main id="panels" class="stage">

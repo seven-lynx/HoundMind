@@ -5,7 +5,7 @@
 // snapshot uses the same ticket, and the download goes through a blob so the URL is not in the
 // browser's history with a credential in it.
 
-import { api, errorText, esc } from "../lib.js";
+import { api, download, errorText, esc } from "../lib.js";
 
 export const camera = {
   id: "camera",
@@ -64,12 +64,7 @@ export const camera = {
         const response = await fetch(`/api/v1/camera/snapshot?ticket=${encodeURIComponent(value)}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `houndmind-${new Date().toISOString().replace(/[:.]/g, "-")}.jpg`;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        download(blob, `houndmind-${new Date().toISOString().replace(/[:.]/g, "-")}.jpg`);
       } catch (err) {
         error.textContent = error && err.status ? errorText(err) : `No still: ${err.message}`;
       }

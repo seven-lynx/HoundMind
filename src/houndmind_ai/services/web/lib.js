@@ -257,3 +257,29 @@ export function facts(pairs) {
   return `<dl class="kv">${rows}</dl>`;
 }
 
+/** True when the token this socket authenticated with holds `scope`. */
+export function may(scope) {
+  return Array.isArray(store.scopes) && store.scopes.includes(scope);
+}
+
+/**
+ * Save a blob as a file.
+ *
+ * The anchor is attached, clicked and removed rather than clicked detached: Firefox treats a
+ * detached anchor's href as a path in some configurations, which surfaces as
+ * "Content at http://… may not load or link to file:///". It also means the click is a real user
+ * gesture on a real element if the browser decides to ask questions.
+ */
+export function download(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
