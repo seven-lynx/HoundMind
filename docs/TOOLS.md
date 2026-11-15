@@ -183,7 +183,7 @@ The decision JSONL is **off by default** (`decision_log_file_enabled: false`) â€
 
 ## 10. `download_opencv_models`
 
-Fetches the MobileNet-SSD model and COCO labels the semantic labeler uses.
+Fetches the SSD-MobileNet COCO model and labels the semantic labeler reads.
 
 ```bash
 python -m tools.download_opencv_models
@@ -192,9 +192,12 @@ python -m tools.download_opencv_models --dest models
 
 | Flag | Meaning |
 |---|---|
-| `--dest <dir>` | destination folder (default `models`) |
+| `--dest <dir>` | destination folder, relative to the repository root (default `models`) |
 
-Writes `ssd_mobilenet_v3_large_coco_2020_01_14.pb`, its `.pbtxt` and `coco_labels.txt`.
+Writes `ssd_mobilenet_v1_coco.pb` (the TensorFlow frozen graph, taken out of the 77 MB
+`ssd_mobilenet_v1_coco_2017_11_17` model-zoo tarball), `ssd_mobilenet_v1_coco.pbtxt` and
+`coco_labels.txt` (the 90 COCO class names). Both raw URLs are pinned to OpenCV `4.10.0`, so a
+rerun fetches the same files.
 
 ## 11. `validate_rtabmap_adapter`
 

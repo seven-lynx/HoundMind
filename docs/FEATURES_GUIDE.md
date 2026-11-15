@@ -853,9 +853,12 @@ python -m tools.download_opencv_models
 ```
 
 This populates `models/` with:
-- `ssd_mobilenet_v3_large_coco_2020_01_14.pb`
-- `ssd_mobilenet_v3_large_coco_2020_01_14.pbtxt`
+- `ssd_mobilenet_v1_coco.pb`
+- `ssd_mobilenet_v1_coco.pbtxt`
 - `coco_labels.txt`
+
+The three paths `settings.semantic_labeler` ships with already point at those names, so on a fresh
+install only `backend` (and `modules.semantic_labeler.enabled`) has to change.
 
 **Disable:** `modules.semantic_labeler.enabled = false`
 
