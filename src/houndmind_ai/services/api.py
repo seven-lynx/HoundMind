@@ -66,7 +66,14 @@ logger = logging.getLogger(__name__)
 
 API_VERSION = 1
 
-__all__ = ["API_VERSION", "HANDLER_SCOPE", "LIVE_CONFIG_KEYS", "ControlPlane", "create_app"]
+__all__ = [
+    "API_VERSION",
+    "ANY_SCOPE",
+    "HANDLER_SCOPE",
+    "LIVE_CONFIG_KEYS",
+    "ControlPlane",
+    "create_app",
+]
 
 # Keys a client may change live. Each one is re-read from `settings` every tick by its module,
 # so a change takes effect immediately; everything else is refused rather than silently stored,
@@ -316,14 +323,21 @@ async def _errors(request: web.Request, handler):
         )
 
 
-def _authed(scope: str):
-    """Require a valid token and a scope. Applied at route-registration time."""
+def _authed(scope: str | None = None):
+    """Require a valid token, and a scope when one is named. Applied at registration time.
+
+    `scope=None` means "any valid token", which is one route's requirement: `/whoami` must answer a
+    caller holding *any* scope, because the scopes it reports are the answer (#168). Every other
+    route names one, so `None` cannot be read as "no auth" here - that spelling is reserved for
+    `ROUTES`, where `None` means public on purpose.
+    """
 
     def decorate(handler):
         async def wrapped(request: web.Request):
             plane = _plane(request)
             principal = plane.authorizer.authenticate(request.headers.get("Authorization"))
-            plane.authorizer.require(principal, scope)
+            if scope is not None:
+                plane.authorizer.require(principal, scope)
             request[_PRINCIPAL] = principal
             return await handler(request)
 
@@ -416,6 +430,26 @@ async def _meta(request: web.Request) -> web.Response:
 async def _health(request: web.Request) -> web.Response:
     # Liveness only. No detail: this route is unauthenticated by design.
     return web.json_response({"status": "ok"})
+
+
+async def _whoami(request: web.Request) -> web.Response:
+    """What this token is, and what it may do (#168).
+
+    Deliberately no scope requirement: the caller who needs this answer is the one holding a token
+    that cannot read `/state`, `/config` or `/logs`, so a named scope would refuse exactly that
+    caller. The payload carries the same keys as the WebSocket `welcome` frame (`services/stream.py`),
+    so a panel parses one shape whether the identity arrived over HTTP or the socket - `device` is
+    the principal's name there, which is why it is spelled that way here.
+    """
+    principal = request[_PRINCIPAL]
+    return web.json_response(
+        {
+            "device": principal.name,
+            "scopes": sorted(principal.scopes),
+            "kind": principal.kind,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def _state(request: web.Request) -> web.Response:
@@ -1395,9 +1429,16 @@ def _no_identity(plane: ControlPlane) -> web.Response:
 # reading that it was acted on - and left `None` carrying two meanings at once (#39).
 HANDLER_SCOPE = "state:read (in handler)"
 
+# The third row shape, and it is not `HANDLER_SCOPE`: `/whoami` requires a valid token and no
+# particular scope, because what it reports *is* the scope list (#168). Writing `state:read` there
+# would refuse a client holding only `move`, which is exactly the client that needs to be told it
+# cannot read state.
+ANY_SCOPE = "any valid token"
+
 ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/meta", None, _meta),
     ("GET", "/health", None, _health),
+    ("GET", "/whoami", ANY_SCOPE, _whoami),
     ("GET", "/state", "state:read", _state),
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
@@ -1445,6 +1486,9 @@ def create_app(plane: ControlPlane) -> web.Application:
             # Public, or enforced inside the handler: registering a bearer wrapper either way
             # would break the route it is meant to protect.
             router.add_route(method, route, handler)
+        elif scope is ANY_SCOPE:
+            # A token, any token: the wrapper authenticates and stops there (`/whoami`, #168).
+            router.add_route(method, route, _authed()(handler))
         else:
             router.add_route(method, route, _authed(scope)(handler))
 

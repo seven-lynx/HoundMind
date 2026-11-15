@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A client can ask what its token may do, before a request fails**: the web app inferred its scopes
+  from `403` responses, so the Config, Logs and People panels could only explain a refusal after
+  making the call that produced one (#168). `GET /api/v1/whoami` answers with the caller's `device`
+  name, `scopes` and `kind` — the same keys as the WebSocket `welcome` frame, from one declaration in
+  `ROUTES`, so a panel parses one shape whichever transport delivered it. It requires a token and **no
+  particular scope** (a new `ANY_SCOPE` row shape): naming a scope would refuse exactly the caller who
+  needs the answer, a token that cannot read state. The console calls it during boot, so the scoped
+  controls are explained correctly while the socket is still connecting or down.
 - **The HAL says why the sound sensor is unusable, once**: on the bench build, `Pidog` had no `ears`
   attribute, so `hal/vendor.py::_read_sound` raised into an `except` that logged at DEBUG on every
   tick and published `sound_valid: False` with no reason - the checkup printed `detected=None dir=None`

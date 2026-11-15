@@ -39,6 +39,11 @@ file. A route that exists in code and not here — or here and not in code — f
 Two mechanisms, both bearer-style. Everything requires a token except `/api/v1/meta`,
 `/api/v1/health` and `/api/v1/pair`, which is the exchange that *produces* a token.
 
+`/api/v1/whoami` is the one route that requires a token and **no particular scope**. It reports the
+scopes a token holds, so naming one would refuse the caller who most needs the answer — a client whose
+token cannot read state, config or logs. It is the HTTP twin of the WebSocket `welcome` frame
+([§5](#5-websocket)): same `device`/`scopes` shape, no socket required.
+
 **This is plaintext HTTP.** Nothing on port 8420 is encrypted: the device token, every command and
 every camera frame cross the LAN in the clear. The token *is* the security boundary, so anyone who can
 observe the network — or read a single access log — holds `move`, `config`, and `admin` if they catch
@@ -107,6 +112,7 @@ what stops the guard from looking redundant (`#39`).
 |---|---|---|---|
 | `GET` | `/api/v1/meta` | none | `api_version`, `min_client`, `scheme`, `device_id`, `board`, `board_model`, `profile`, `uptime_s`, `capabilities` |
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
+| `GET` | `/api/v1/whoami` | any valid token | the caller's `device` name, `scopes` and `kind` — the same shape as the `welcome` frame, so a client can say what its token cannot do before a request fails (#168) |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |

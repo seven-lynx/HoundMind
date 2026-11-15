@@ -211,8 +211,10 @@ function renderChrome() {
     badge.dataset.link = store.health;
     badge.textContent =
       store.health === "offline" && store.apiAlive ? "no stream" : HEALTH_LABEL[store.health] || store.health;
-    badge.title = store.welcome
-      ? `as ${store.welcome.device || "?"} · scopes: ${(store.scopes || []).join(", ") || "none"}`
+    badge.title = (store.identity || store.welcome)
+      ? `as ${(store.identity || store.welcome).device || "?"} · scopes: ${
+          (store.scopes || []).join(", ") || "none"
+        }`
       : "";
   }
 
@@ -509,6 +511,16 @@ async function boot() {
 
   $("connect").hidden = true;
   $("shell").hidden = false;
+  // The socket's `welcome` frame reports the scopes, but a tab that opens while the stream is down
+  // renders every scoped control as unavailable with no explanation - and the reason is "your token
+  // lacks the scope", which is exactly what `/whoami` answers over HTTP (#168). The socket still
+  // overwrites it on connect; this only makes the gates honest in the gap.
+  try {
+    const identity = await api("/whoami");
+    store.set({ scopes: identity.scopes || [], identity }, "whoami");
+  } catch (err) {
+    // A `401` here is "this token is not valid", which the socket reports in its own words.
+  }
   renderNav();
   renderChrome();
   renderTicker();

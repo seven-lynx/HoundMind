@@ -21,7 +21,14 @@ from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.hal.iface import LEG_SERVO_NAMES
 from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.services import api as api_module
-from houndmind_ai.services.api import API_PREFIX, HANDLER_SCOPE, ROUTES, ControlPlane, create_app
+from houndmind_ai.services.api import (
+    ANY_SCOPE,
+    API_PREFIX,
+    HANDLER_SCOPE,
+    ROUTES,
+    ControlPlane,
+    create_app,
+)
 from houndmind_ai.services.auth import PAIRING_SCOPES
 from houndmind_ai.services.settings import ApiSettings
 
@@ -95,6 +102,42 @@ def test_a_scope_is_declared_for_every_route_that_needs_one() -> None:
     camera = {path: scope for _m, path, scope, _h in ROUTES if path.startswith("/camera/")}
     assert camera["/camera/stream"] == HANDLER_SCOPE
     assert camera["/camera/snapshot"] == HANDLER_SCOPE
+
+    whoami = {path: scope for _m, path, scope, _h in ROUTES if path == "/whoami"}
+    assert whoami == {"/whoami": ANY_SCOPE}, (
+        "the route that reports scopes must not require one: a `move`-only token is the caller "
+        "that needs the answer (#168)"
+    )
+
+
+def test_whoami_answers_any_token_with_its_own_scopes(tmp_path) -> None:
+    """#168: a client learns what its token cannot do before a request fails, not after.
+
+    The token here holds `move` only, so `/state` refuses it - which is exactly why `/whoami` has to
+    answer it. The payload mirrors the WebSocket `welcome` frame (`device`/`scopes`), so a panel parses
+    one shape whether identity arrived over HTTP or the socket.
+    """
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        token, _principal = plane.authorizer.issue_client_token("Pen", scopes=["move"])
+        headers = {"Authorization": f"Bearer {token}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            anonymous = await client.get(f"{API_PREFIX}/whoami")
+            assert anonymous.status == 401
+            assert (await anonymous.json())["error"] == "unauthorized"
+
+            identity = await client.get(f"{API_PREFIX}/whoami", headers=headers)
+            body = await identity.json()
+
+            assert identity.status == 200
+            assert body == {"device": "Pen", "scopes": ["move"], "kind": "client"}
+            assert identity.headers["Cache-Control"] == "no-store"
+
+            # The same token is refused the read route: the answer has to exist for this caller.
+            refused = await client.get(f"{API_PREFIX}/state", headers=headers)
+            assert refused.status == 403
+
+    asyncio.run(scenario())
 
 
 def test_a_camera_handler_that_stops_asking_itself_is_caught(tmp_path, monkeypatch) -> None:
