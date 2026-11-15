@@ -94,7 +94,8 @@ forms only with clearance around the dog and a hand near the power. `docs/HARDWA
 full six-step ladder, and it says what a pass looks like before you run each step.
 
 ## Automated smoke test
-- Run a non-motion smoke test (sensors + scan + mapping):
+- Run a non-motion smoke test (the loop and the sensors; a scan needs the head, so `scan_latest` and
+  `mapping_openings` report `SKIPPED`):
   - `python -m tools.smoke_test` (recommended after `pip install -e .` or with `PYTHONPATH=src`)
 - Add `--include-motion` to allow navigation/motor actions.
 

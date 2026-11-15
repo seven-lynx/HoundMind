@@ -101,8 +101,10 @@ exit status answers for.
 
 ## 5. `smoke_test`
 
-Runs the real runtime for a fixed number of cycles with motors gated off, and checks that a scan and a
-map were produced.
+Runs the real runtime for a fixed number of cycles with every module that can move the dog switched
+off, and reports whether the HAL published a reading. A scan needs the head and `mapping` publishes
+from a scan, so `scan_latest` and `mapping_openings` report `SKIPPED` in that mode; `--include-motion`
+is where the sensor-to-scan-to-mapping chain is exercised, and it moves the dog.
 
 ```bash
 python -m tools.smoke_test
@@ -116,7 +118,8 @@ python -m tools.smoke_test --cycles 20 --tick-hz 5
 | `--tick-hz <n>` | tick rate for the run (default `5`) |
 | `--include-motion` | allow navigation and motor actions — **moves the dog** |
 
-A pass looks like `[smoke] PASS`.
+A pass looks like `[smoke] PASS` - in the motionless mode that is a reading plus two `SKIPPED` lines,
+by design.
 
 ## 6. `camera_check`
 
