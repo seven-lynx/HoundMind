@@ -31,7 +31,7 @@ export const logs = {
     root.innerHTML = `
       <div class="card">
         <div class="row" style="justify-content:space-between">
-          <h3 style="margin:0">Tail</h3>
+          <h3 style="margin:0">Tail <span id="lg-mode" class="chip">tail</span></h3>
           <div class="row">
             <label style="margin:0">lines<input id="lg-tail" type="number" min="10" max="500" value="80" style="width:5.5rem"></label>
             <label style="margin:0">level<select id="lg-level">${LEVELS.map(
@@ -55,12 +55,20 @@ export const logs = {
     const tail = root.querySelector("#lg-tail");
     const level = root.querySelector("#lg-level");
     const search = root.querySelector("#lg-search");
+    const mode = root.querySelector("#lg-mode");
 
     let lines = [];
     let truncated = false;
+    let live = false;
+    let signature = "";
     let searchTimer = null;
 
+    // A filter is a server-side query over the file (#171), so it and the live batch cannot be mixed:
+    // the panel shows one or the other, and the chip says which.
+    const filtering = () => level.value !== "all" || search.value.trim() !== "";
+
     function render() {
+      mode.textContent = live ? "live" : filtering() ? "filtered" : "tail";
       // No filtering here any more: `?level=` and `?contains=` are answered by the server across its
       // whole scan window, so an empty table means "nothing matched", not "nothing matched in the
       // last 80 lines it happened to fetch" (#171). Records only - a traceback's continuation line
@@ -72,7 +80,11 @@ export const logs = {
 
       if (!shown.length) {
         list.innerHTML = `<div class="empty">${
-          truncated ? "no match in the last 4 MiB of the log" : "no lines match"
+          truncated
+            ? "no match in the last 4 MiB of the log"
+            : live
+            ? "waiting for the next line"
+            : "no lines match"
         }</div>`;
         return;
       }
@@ -99,6 +111,10 @@ export const logs = {
 
     async function load() {
       error.textContent = "";
+      // A poll is history, not the live channel: the chip has to say so, and the next live batch is
+      // free to take the panel back.
+      live = false;
+      signature = "";
       const count = Math.max(10, Math.min(500, Number(tail.value) || 80));
       const params = new URLSearchParams({ tail: String(count) });
       if (level.value && level.value !== "all") params.set("level", level.value);
@@ -139,7 +155,23 @@ export const logs = {
     load();
 
     return {
-      update() { /* logs are pulled on demand; the state rate is not a log rate */ },
+      update(state) {
+        // The live channel (#170), used only while no filter is set: a filtered view is a
+        // server-side query, and mixing the two would show unmatched lines under a filter.
+        // `signature` keeps a 10 Hz state frame from re-rendering an unchanged table.
+        if (filtering()) {
+          live = false;
+          return;
+        }
+        const ring = (state && state.logLines) || [];
+        const next = ring.length ? `${ring.length}:${ring[ring.length - 1]}` : "";
+        if (!next || next === signature) return;
+        signature = next;
+        lines = ring;
+        truncated = false;
+        live = true;
+        render();
+      },
     };
   },
 };

@@ -151,7 +151,10 @@ function connect() {
 
   socket.addEventListener("open", () => {
     attempt = 0;
-    socket.send(JSON.stringify({ type: "hello", token }));
+    // `logs: true` asks for the live log channel (#170). The server grants it only to a token with
+    // `admin` - the same scope `GET /api/v1/logs` needs - and says so in `welcome.logs`, so a paired
+    // phone keeps its socket and simply has no live log channel.
+    socket.send(JSON.stringify({ type: "hello", token, logs: true }));
     startPing();
   });
 
@@ -165,6 +168,14 @@ function connect() {
       // uses it to explain a `403` before making the request that would produce one.
       const data = frame.data || {};
       store.set({ scopes: data.scopes || [], welcome: data }, "socket");
+    } else if (frame.type === "log") {
+      // Droppable on purpose (#170): the server sends the newest batch and drops older ones rather
+      // than closing the socket, so this ring is bounded here too. A client that cannot keep up
+      // loses lines, never telemetry.
+      const batch = ((frame.data || {}).lines || []).filter((line) => typeof line === "string");
+      if (batch.length) {
+        store.set({ logLines: (store.logLines || []).concat(batch).slice(-600) }, "log");
+      }
     } else if (frame.type === "state") {
       lastFrameAt = Date.now();
       if (store.health !== "live") store.set({ health: "live" }, "socket");

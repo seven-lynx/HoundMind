@@ -17,6 +17,7 @@ from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.kernel.decisions import DecisionRecord
 from houndmind_ai.services.api import API_PREFIX, ControlPlane, create_app
 from houndmind_ai.services.settings import ApiSettings
+from houndmind_ai.services.stream import LogTail
 
 
 class DummyContext:
@@ -83,6 +84,125 @@ def test_nothing_is_answered_before_hello(tmp_path) -> None:
         assert frame.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.CLOSED), frame.type
 
     asyncio.run(scenario())
+
+
+def test_the_log_channel_tails_the_file_after_hello(tmp_path) -> None:
+    """#170: the socket carries new lines, so the Logs panel does not have to poll for them."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        log_path = tmp_path / "houndmind.log"
+        log_path.write_text('{"level": "INFO", "message": "written before connect"}\n', "utf-8")
+        plane.context.set(
+            "settings", {"logging": {"enable_file": True, "log_file_name": str(log_path)}}
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            ws = await client.ws_connect(f"{API_PREFIX}/events")
+            await ws.send_json(
+                {"type": "hello", "token": plane.tokens.ensure(), "logs": True}
+            )
+            welcome = await until(ws, "welcome")
+            assert welcome["data"]["logs"] is True
+
+            # Let the pump take its first look at the file, so the offset is the current end and the
+            # write below is unambiguously *new*. Without this the test would race the pump.
+            await asyncio.sleep(0.2)
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write('{"level": "WARNING", "message": "written after connect"}\n')
+
+            frame = await until(ws, "log")
+
+        assert any("written after connect" in line for line in frame["data"]["lines"])
+
+    asyncio.run(scenario())
+
+
+def test_a_token_without_admin_keeps_its_socket_and_gets_no_log_frames(tmp_path) -> None:
+    """The channel is `admin`'s, like `GET /logs`; asking without it must not cost the stream."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        log_path = tmp_path / "houndmind.log"
+        log_path.write_text("", "utf-8")
+        plane.context.set(
+            "settings", {"logging": {"enable_file": True, "log_file_name": str(log_path)}}
+        )
+        token, _principal = plane.authorizer.issue_client_token("Pen", scopes=["state:read"])
+        async with TestClient(TestServer(create_app(plane))) as client:
+            ws = await client.ws_connect(f"{API_PREFIX}/events")
+            await ws.send_json({"type": "hello", "token": token, "logs": True})
+            welcome = await until(ws, "welcome")
+            assert welcome["data"]["logs"] is False
+
+            with log_path.open("a", encoding="utf-8") as handle:
+                handle.write('{"level": "ERROR", "message": "not for this token"}\n')
+
+            # Several pump ticks with the file growing under them: state keeps arriving, log never.
+            seen: list[str] = []
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 0.6
+            while loop.time() < deadline:
+                frame = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
+                seen.append(str(frame.get("type")))
+
+        assert "state" in seen, "the socket is still a telemetry stream"
+        assert "log" not in seen
+
+    asyncio.run(scenario())
+
+
+def test_log_tail_publishes_whole_lines_only(tmp_path) -> None:
+    """A record is published once it is complete: no half-lines, and no re-reading the fragment."""
+    path = tmp_path / "houndmind.log"
+    path.write_text("first\n", "utf-8")
+    context = DummyContext()
+    context.set("settings", {"logging": {"enable_file": True, "log_file_name": str(path)}})
+    tail = LogTail(context)
+
+    assert tail.read_new() == [], "the first call starts at the end of the file, replaying nothing"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write('{"level": "INFO", "message": "half')
+    assert tail.read_new() == [], "a half-written record is not a line yet"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(' a line"}\n')
+    assert tail.read_new() == ['{"level": "INFO", "message": "half a line"}']
+    assert tail.read_new() == [], "nothing was written since"
+
+
+def test_log_tail_follows_a_rotated_file(tmp_path) -> None:
+    """A new file means a new offset: the old one would read from the middle of a different log."""
+    path = tmp_path / "houndmind.log"
+    path.write_text("old\n", "utf-8")
+    context = DummyContext()
+    context.set("settings", {"logging": {"enable_file": True, "log_file_name": str(path)}})
+    tail = LogTail(context)
+    assert tail.read_new() == []
+
+    path.unlink()
+    path.write_text("rotated\n", "utf-8")
+    assert tail.read_new() == [], "a fresh file starts at its own end"
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("after rotation\n")
+    assert tail.read_new() == ["after rotation"]
+
+
+def test_log_tail_does_not_read_a_rewritten_file_from_the_middle(tmp_path) -> None:
+    """In-place rewrite, same inode: only the byte at the old offset proves it is still the same log.
+
+    This is the case CI caught. A rotated file can be handed the inode of the one it replaced, so
+    the identity check passes and the old offset lands mid-record - the tail published `"ted"`.
+    """
+    path = tmp_path / "houndmind.log"
+    path.write_text("aaaa\n", "utf-8")
+    context = DummyContext()
+    context.set("settings", {"logging": {"enable_file": True, "log_file_name": str(path)}})
+    tail = LogTail(context)
+    assert tail.read_new() == []
+
+    path.write_text("bbbbbbbb\n", "utf-8")  # longer than before, same inode on every filesystem
+    assert tail.read_new() == [], "the old offset would have produced the fragment 'bbb'"
+
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("tail\n")
+    assert tail.read_new() == ["tail"]
 
 
 def test_a_good_token_gets_welcome_state_and_a_pong(tmp_path) -> None:

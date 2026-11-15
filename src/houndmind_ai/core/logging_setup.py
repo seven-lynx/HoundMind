@@ -4,6 +4,7 @@ import logging.handlers
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 # The only context keys that reach a log record.
@@ -159,4 +160,33 @@ def setup_logging(config: dict[str, Any] | None = None) -> ContextFilter:
     return context_filter
 
 
-__all__ = ["CONTEXT_FIELDS", "ContextFilter", "JsonFormatter", "setup_logging"]
+def log_file_path(settings: object) -> Path | None:
+    """The configured log file, or None when file logging is switched off.
+
+    One definition because two surfaces read this file: the `GET /api/v1/logs` route and the live
+    tail on the WebSocket (#170). A log panel whose history and whose live frames came from two
+    different paths would disagree with itself, and that is worse than no panel.
+
+    `settings` is the whole `settings` table as it arrives in the runtime context, so a caller with a
+    context needs no knowledge of the logging keys.
+    """
+    table = settings if isinstance(settings, dict) else {}
+    logging_settings = table.get("logging", {})
+    logging_settings = logging_settings if isinstance(logging_settings, dict) else {}
+    if not logging_settings.get("enable_file", True):
+        return None
+    name = logging_settings.get("log_file_name") or "logs/houndmind.log"
+    path = Path(str(name))
+    if not path.is_absolute():
+        # `src/houndmind_ai/core/logging_setup.py` -> the checkout or install root.
+        path = Path(__file__).resolve().parents[3] / path
+    return path
+
+
+__all__ = [
+    "CONTEXT_FIELDS",
+    "ContextFilter",
+    "JsonFormatter",
+    "log_file_path",
+    "setup_logging",
+]

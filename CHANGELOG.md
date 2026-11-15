@@ -7,6 +7,20 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The log tail is live, and it cannot outvote the dog**: the Logs panel polled `GET /api/v1/logs`
+  every few seconds, so a line written between polls appeared late and a burst could only be read by
+  asking again (#170). The WebSocket gains a third frame class, `log`: `hello` may carry `"logs": true`
+  and a token holding `admin` — the scope `GET /logs` already needs — receives batches of the lines
+  written since it connected, read by `services/stream.py::LogTail` from the same file the route reads.
+  A token without `admin` keeps its socket and is told `welcome.logs: false`; taking telemetry away
+  from a paired phone to punish it for asking about logs would be the wrong trade. The class is
+  **droppable**: the newest batch replaces an undelivered one, so a slow client loses lines and never
+  its socket — the opposite rule to `event`, and the reason the two are separate classes. The pump
+  reads the file only while some subscriber asked for it, `LogTail` publishes whole lines only (a
+  half-written record waits for its newline) and restarts at the end of a rotated file, detected by
+  the byte at the old offset rather than the inode — a filesystem may hand the replacement the same
+  inode, which is how CI caught the tail publishing the fragment `"ted"` — and the panel shows `live`
+  when no filter is set and falls back to the filtered poll when one is.
 - **The log filter looks past the last page**: the Logs panel filtered the lines it had fetched, so a
   filter that matched nothing recent showed an empty table even when the older line was there (#171).
   `GET /api/v1/logs` now takes `level=` (one of `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`, anything

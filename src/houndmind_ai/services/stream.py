@@ -1,12 +1,16 @@
 """The telemetry stream: one state pump, N subscribers, honest backpressure.
 
-Two frame classes with different rules:
+Three frame classes with different rules:
 
 - ``state`` is a **latest value**. A slow client skips frames rather than falling behind; a
   phone on a weak link should show the current distance, not a two-second-old queue.
 - ``event`` and ``command_ack`` are **never dropped**. If a client cannot keep up with those,
   it is disconnected, because losing "command_vetoed" is how a user ends up shouting at a dog
   that is refusing to move for a reason nobody told them.
+- ``log`` is **dropped, never disconnected** (#170). Log lines arrive in bursts, and a console
+  that opened the Logs panel on a slow link should lose lines, not its telemetry. Only a client
+  that asked for the channel in `hello` receives it, and only a token holding `admin` is granted
+  it: `GET /api/v1/logs` is an `admin` route, and the live tail is the same data.
 
 The hub owns no policy: it asks for a state snapshot and hands the result to whoever is
 listening. Link-loss and command submission live in `services/api.py`.
@@ -20,15 +24,18 @@ import json
 import logging
 import time
 from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 
 from aiohttp import web
 
+from houndmind_ai.core.logging_setup import log_file_path
 from houndmind_ai.services.auth import Authorizer
 from houndmind_ai.services.sessions import SessionRegistry
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["EventHub"]
+__all__ = ["EventHub", "LogTail"]
 
 # A client that cannot absorb this many non-droppable frames is not a slow client, it is a
 # broken one, and the socket is closed rather than grown.
@@ -63,14 +70,18 @@ def _routine_signature(routines: object) -> str | None:
 
 
 class _Subscriber:
-    """One connection's two channels."""
+    """One connection's three channels."""
 
-    __slots__ = ("ws", "state", "events", "wake", "token")
+    __slots__ = ("ws", "state", "events", "logs", "wake", "token", "wants_logs")
 
     def __init__(self, ws: web.WebSocketResponse) -> None:
         self.ws = ws
         self.state: dict[str, object] | None = None
         self.events: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=_EVENT_QUEUE)
+        # Latest log batch, not a queue: assignment is the drop policy, exactly like `state`. A client
+        # that cannot keep up loses older lines and keeps its socket (#170).
+        self.logs: list[str] | None = None
+        self.wants_logs = False
         self.wake = asyncio.Event()
         self.token: str | None = None
 
@@ -83,6 +94,7 @@ class EventHub:
         authorizer: Authorizer,
         sessions: SessionRegistry,
         snapshot: Callable[[], dict[str, object]],
+        log_lines: Callable[[], list[str]] | None = None,
         state_hz: float = 10.0,
         link_loss_s: float = 6.0,
         on_link_loss: Callable[[str], None] | None = None,
@@ -91,6 +103,9 @@ class EventHub:
         self.authorizer = authorizer
         self.sessions = sessions
         self._snapshot = snapshot
+        # New lines from the log file, or None when this plane has no log channel. Injected rather
+        # than discovered: the hub reads no settings and opens no files of its own.
+        self._log_lines = log_lines
         self.state_hz = max(1.0, state_hz)
         self.link_loss_s = max(1.0, link_loss_s)
         self._on_link_loss = on_link_loss
@@ -134,6 +149,17 @@ class EventHub:
                 for sub in list(self._subs):
                     sub.state = frame  # latest value: assignment *is* the queue policy
                     sub.wake.set()
+                # The log channel (#170): read only when a subscriber actually asked for it, so a
+                # plane with no Logs panel open does no file I/O at all. A burst past the handler's
+                # line cap is truncated there, not queued here - the client loses old lines, which
+                # is the whole point of a droppable class.
+                if self._log_lines is not None and any(sub.wants_logs for sub in self._subs):
+                    batch = self._log_lines()
+                    if batch:
+                        for sub in list(self._subs):
+                            if sub.wants_logs:
+                                sub.logs = batch  # newest batch wins; an older one is dropped
+                                sub.wake.set()
                 # The `decision` event fires on a change of *choice*, not on a tick (C7). `event`
                 # is the non-droppable channel, so a per-tick event would turn a six-second stall
                 # into a disconnect - and `state` already carries the current decision.
@@ -224,7 +250,12 @@ class EventHub:
 
                 kind = payload.get("type")
                 if kind == "hello":
-                    authed = await self._hello(ws, sub, str(payload.get("token") or ""))
+                    authed = await self._hello(
+                        ws,
+                        sub,
+                        str(payload.get("token") or ""),
+                        bool(payload.get("logs")),
+                    )
                     if not authed:
                         break
                     self._subs.add(sub)
@@ -258,7 +289,13 @@ class EventHub:
                 await ws.close()
         return ws
 
-    async def _hello(self, ws: web.WebSocketResponse, sub: _Subscriber, token: str) -> bool:
+    async def _hello(
+        self,
+        ws: web.WebSocketResponse,
+        sub: _Subscriber,
+        token: str,
+        wants_logs: bool = False,
+    ) -> bool:
         try:
             principal = self.authorizer.authenticate_token(token)
             self.authorizer.require(principal, "state:read")
@@ -266,6 +303,11 @@ class EventHub:
             code = getattr(exc, "code", "unauthorized")
             await ws.send_json({"type": "error", "error": code})
             return False
+
+        # The log channel is `admin`'s business, exactly as `GET /api/v1/logs` is (#170). A token
+        # without it keeps the socket and simply does not get the channel: refusing the upgrade
+        # would take the state stream away from a paired phone to punish it for asking.
+        sub.wants_logs = bool(wants_logs) and "admin" in principal.scopes
 
         # One socket per token, as the contract says: the new connection evicts the old one and
         # says so, because two live clients driving one dog is not a feature, it is a race.
@@ -291,21 +333,32 @@ class EventHub:
                     "scopes": sorted(principal.scopes),
                     "device": principal.name,
                     "session": session.to_dict(),
+                    # Whether the requested log channel was granted: the client asked for it in
+                    # `hello`, and a token without `admin` is refused without losing its socket.
+                    "logs": sub.wants_logs,
                 },
             }
         )
         return True
 
     async def _send_loop(self, sub: _Subscriber) -> None:
-        """Events first (they matter), then the latest state when nothing else is pending."""
+        """Events first (they matter), then one log batch, then the latest state.
+
+        One frame per turn keeps the promise of each class: an event can never be starved by a log
+        burst, and a log burst can delay telemetry by at most one frame.
+        """
         try:
             while not sub.ws.closed:
                 frame: dict[str, object] | None
                 try:
                     frame = sub.events.get_nowait()
                 except asyncio.QueueEmpty:
-                    frame = sub.state
-                    sub.state = None
+                    if sub.logs is not None:
+                        frame = {"type": "log", "data": {"lines": sub.logs}}
+                        sub.logs = None
+                    else:
+                        frame = sub.state
+                        sub.state = None
                 if frame is None:
                     sub.wake.clear()
                     with contextlib.suppress(asyncio.TimeoutError):
@@ -318,3 +371,72 @@ class EventHub:
             logger.debug("WebSocket send failed", exc_info=True)
         finally:
             self._subs.discard(sub)
+class LogTail:
+    """New lines appended to the configured log file, for the `log` frame class (#170).
+
+    The file is the one `GET /api/v1/logs` reads, resolved by the same `log_file_path`, so the live
+    tail cannot disagree with the polled history. `read_new` never raises: an unreadable, missing or
+    rotated file means "nothing this tick", not a dead stream.
+
+    The first call starts at the current end of the file. The client has already fetched the history;
+    the live channel is for what happens next, and replaying the file on connect would duplicate it.
+    """
+
+    def __init__(
+        self, context: Any, *, max_lines: int = 200, max_bytes: int = 64 * 1024
+    ) -> None:
+        self._context = context
+        self._max_lines = max(1, max_lines)
+        self._max_bytes = max(1, max_bytes)
+        self._path: Path | None = None
+        self._offset = 0
+        self._identity: tuple[int, int] | None = None
+
+    def read_new(self) -> list[str]:
+        """Lines written since the last call, oldest first, at most `max_lines` of them."""
+        getter = getattr(self._context, "get", None)
+        settings = getter("settings") if callable(getter) else None
+        path = log_file_path(settings)
+        if path is None:
+            return []
+        try:
+            stat = path.stat()
+        except OSError:
+            return []
+        identity = (stat.st_dev, stat.st_ino)
+        same_file = path == self._path and identity == self._identity
+        if not same_file or stat.st_size < self._offset:
+            # First call, a rotated file, or a truncation: start from the end and replay nothing.
+            self._path = path
+            self._identity = identity
+            self._offset = stat.st_size
+            return []
+        if stat.st_size == self._offset:
+            return []
+        start = max(self._offset, stat.st_size - self._max_bytes)
+        try:
+            with path.open("rb") as handle:
+                if self._offset:
+                    # An inode can be **reused** by the file that replaced it - Linux handed the new
+                    # log the same one in CI - so the identity above is not proof. Confirm instead
+                    # that the last byte consumed is still the line break this reader left behind:
+                    # one byte per tick, and it is what stops a rotated log being read from the
+                    # middle as a fragment ("ted").
+                    handle.seek(self._offset - 1)
+                    if handle.read(1) != b"\n":
+                        self._offset = stat.st_size
+                        return []
+                handle.seek(start)
+                chunk = handle.read(stat.st_size - start)
+        except OSError:
+            return []
+        cut = chunk.rfind(b"\n")
+        if cut == -1:
+            # Only a partial line has been written so far: the rest arrives on a later tick.
+            return []
+        complete = chunk[: cut + 1]
+        # Advance past whole lines only. Publishing a half-written record and then re-reading its
+        # tail as a fragment would put two broken lines in the panel for one record.
+        self._offset = start + len(complete)
+        lines = complete.decode("utf-8", errors="replace").splitlines()
+        return lines[-self._max_lines :]
