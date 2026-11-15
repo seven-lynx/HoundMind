@@ -75,6 +75,23 @@ def describe(snapshot: SensorSnapshot) -> list[str]:
         f"[checkup] gyro: {gyro}",
         f"[checkup] battery: {battery}",
         f"[checkup] valid: {valid}",
+        *_sound_hint(snapshot),
+    ]
+
+
+def _sound_hint(snapshot: SensorSnapshot) -> list[str]:
+    """Point at the reason when the sound sensor did not answer (#183).
+
+    The vendor constructor prints `sound_direction init ... fail` and swallows the exception, so
+    this tool cannot name the cause. The HAL logs exactly one `Sound sensor unavailable: ...`
+    warning with the attribute and the `pidog` revision, and this line says where to look instead
+    of inventing a diagnosis from a boolean.
+    """
+    if snapshot.sound_valid:
+        return []
+    return [
+        '[checkup] hint: the sound sensor did not answer - look for "Sound sensor unavailable" '
+        "in the log, which names the attribute and the pidog revision (#183)"
     ]
 
 

@@ -26,6 +26,8 @@ import threading
 import time
 import warnings
 from collections.abc import Callable, Mapping
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as dist_version
 from typing import Any, cast
 
 from houndmind_ai.hal.iface import (
@@ -46,6 +48,24 @@ from houndmind_ai.kernel.commands import canonical_action
 logger = logging.getLogger(__name__)
 
 __all__ = ["PidogHAL"]
+
+# The installer clones the vendor tree at its default branch, so two installs can disagree about
+# the `Pidog` API. When a sub-device cannot be used, the warning names the revision the HAL was
+# talking to (#183): "sound does not work" is unactionable, "no `ears` on pidog 2.4.1" is a pairing
+# bug someone can fix.
+def _pidog_version() -> str:
+    try:
+        import pidog  # type: ignore[import-not-found]
+    except ImportError:
+        return "not importable"
+    version = getattr(pidog, "__version__", None)
+    if version:
+        return str(version)
+    try:
+        return dist_version("pidog")
+    except PackageNotFoundError:
+        return "unknown version"
+
 
 # One vendor entry point per offset group. They replace the whole list, which is why
 # `apply_offsets` reads the current values before it writes.
@@ -103,6 +123,10 @@ class PidogHAL:
         # into a state must not turn one missing effect into a log flood (#81). Only the audio
         # worker thread touches this, so it needs no lock.
         self._warned_sounds: set[str] = set()
+        # Why the sound sub-device is unusable, if it is (#183). `None` means "not known to be
+        # broken"; once set, the per-tick read returns invalid without retrying and without a
+        # traceback nobody reads, and the reason is in the one WARNING that set it.
+        self._sound_reason: str | None = None
         # The vendor's action list, read once (see `_read_vendor_actions`).
         self._vendor_action_names: frozenset[str] | None = None
         self._closed = False
@@ -150,7 +174,7 @@ class PidogHAL:
 
     def start(self) -> None:
         """Open the dog and start its action queue. Raises if the vendor package is absent."""
-        self._ensure_dog()
+        self._probe_sound(self._ensure_dog())
         self._ensure_action_flow()
 
     # ----------------------------------------------------------------- sensors
@@ -276,17 +300,48 @@ class PidogHAL:
             self._last_touch_ts = now
         return self._last_touch, True
 
+    def _probe_sound(self, dog: Any) -> None:
+        """Name the reason the sound sub-device is unusable, once, at start (#183).
+
+        The vendor constructor prints `sound_direction init ... fail` and swallows whatever raised
+        there, so on a real Pi the only evidence was a `sound_valid: False` snapshot plus a DEBUG
+        traceback per tick. One WARNING that names the attribute and the `pidog` revision is what
+        separates "the sensor is not seated" from "this vendor build has no `ears`".
+        """
+        if getattr(dog, "ears", None) is None:
+            self._record_sound_failure("Pidog has no 'ears' attribute")
+
+    def _record_sound_failure(self, reason: str) -> None:
+        if self._sound_reason is not None:
+            return
+        self._sound_reason = f"{reason} (pidog {_pidog_version()})"
+        logger.warning(
+            "Sound sensor unavailable: %s; sound_valid stays False for this session",
+            self._sound_reason,
+        )
+
     def _read_sound(self, dog: Any) -> tuple[bool, int | None, bool]:
+        if self._sound_reason is not None:
+            return False, None, False
+        ears = getattr(dog, "ears", None)
+        if ears is None:
+            self._record_sound_failure("Pidog has no 'ears' attribute")
+            return False, None, False
         only_on_detect = bool(self._sensor_cfg.get("sound_direction_on_detect", True))
         try:
-            detected = bool(dog.ears.isdetected())
+            detected = bool(ears.isdetected())
+        except AttributeError as exc:
+            # The attribute is there but the method is not: a vendor revision this HAL was not
+            # written against, not a transient bus error. Latch it and report once.
+            self._record_sound_failure(f"{type(exc).__name__}: {exc}")
+            return False, None, False
         except Exception:  # noqa: BLE001
             logger.debug("Sound detect failed", exc_info=True)
             return False, None, False
         if not detected and only_on_detect:
             return False, None, True
         try:
-            direction = int(dog.ears.read())
+            direction = int(ears.read())
         except Exception:  # noqa: BLE001
             logger.debug("Sound direction read failed", exc_info=True)
             return detected, None, False

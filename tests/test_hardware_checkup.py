@@ -106,6 +106,18 @@ def test_a_quiet_room_is_valid_without_a_direction(capsys):
     out = capsys.readouterr().out
     assert "[checkup] sound: detected=False dir=None" in out
     assert "sound=True" in out
+    assert "hint:" not in out, "a healthy sensor has nothing to explain"
+
+
+def test_the_sound_hint_says_where_the_reason_lives(capsys):
+    """#183: the tool cannot know why, so it points at the one line that does."""
+    hal = FakeDogHAL()  # nothing wired: every flag is False, including sound
+
+    assert main(["--skip-motion", "--pause", "0"], hal=hal) == 1
+
+    out = capsys.readouterr().out
+    assert "Sound sensor unavailable" in out
+    assert "#183" in out
 
 
 def test_a_missing_battery_reading_is_reported_and_not_a_failure(capsys):

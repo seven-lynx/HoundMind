@@ -7,6 +7,15 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The HAL says why the sound sensor is unusable, once**: on the bench build, `Pidog` had no `ears`
+  attribute, so `hal/vendor.py::_read_sound` raised into an `except` that logged at DEBUG on every
+  tick and published `sound_valid: False` with no reason - the checkup printed `detected=None dir=None`
+  and a bare `fail` from the vendor constructor (#183). `PidogHAL` now probes for `ears` at `start()`
+  and latches the reason on the first read that fails structurally: one WARNING naming the missing
+  attribute and the installed `pidog` revision, no per-tick traceback, and every later read returns
+  invalid without retrying. A transient bus error still retries at DEBUG as before, because that is
+  not the same fault. `hardware_checkup` adds a `[checkup] hint:` line when `sound=False` pointing at
+  that warning instead of inventing a diagnosis from a boolean (`docs/TOOLS.md`, `HARDWARE_TEST.md`).
 - **The motionless smoke run actually is motionless**: `tools/smoke_test.py` disabled seven modules
   and left `scanning` enabled, so step 3 of the bench ladder swept the head while `HARDWARE_TEST.md`
   promised "nothing can move" - `hal_motors` is a caller of the HAL, not the executor, and
