@@ -41,7 +41,11 @@ include = ["houndmind_ai*", "tools*"]
 # The web app is served by the package, so it has to be *in* the package: a `web/` directory at
 # the repository root is not present after `pip install`, which is exactly the class of bug the
 # packaging check in Phase 1 was added for.
-"houndmind_ai.services" = ["web/*.html", "web/*.js", "web/*.css"]
+#
+# `web/panels/*.js` is listed separately on purpose: a `web/*.js` glob does not recurse, so a panel
+# module would be missing from a built wheel while `pip install -e .` kept working - the failure
+# would only appear on the device, after a wheel install, as a 404 on one panel.
+"houndmind_ai.services" = ["web/*.html", "web/*.js", "web/*.css", "web/panels/*.js"]
 
 [tool.ruff]
 target-version = "py311"

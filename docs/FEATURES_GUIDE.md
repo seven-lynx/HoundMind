@@ -934,6 +934,19 @@ as specified in `docs/CONTROL_API.md`:
 | Diagnostics | `GET /api/v1/logs`, `/support-bundle` | `admin` |
 | Web app | `GET /` and `/static/*` | same origin, token in the browser |
 
+**The web app covers every route above.** `GET /` serves thirteen panels: Overview (subject posture,
+sonar/battery/temperature/loop instruments, the "why" line behind the last decision), Drive (hold to
+walk with the deadman drawn as a renewing ring, mode, one supervised step at a chosen speed), Tricks
+(the repertoire grouped by action class, locomotion behind an arm switch), Routines (run, dry-run,
+refused files), Places (teach, forget, walk, `at_anchor`), People (admin), Camera (ticket stream and
+still), Decisions, History (audit, attached clients, pairing window), Modules (per-module `tick_ms`
+and the reason it is not running), Config (live keys only), Calibration (read-only probes) and Logs
+(tail, filter, support bundle). A route with no panel is a feature only an SSH session can use, so
+`tests/test_webapp_coverage.py` fails when a route in `ROUTES` is called by no panel and named in no
+reasoned exclusion. A panel whose route needs a scope the token lacks says so instead of failing
+blank: `people`, `logs` and `support-bundle` need `admin`, and pairing grants `state:read`, `move`
+and `config`.
+
 **The token.** Generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token` with mode 0600. It is never in `config/settings.jsonc`, never in a log
 line and never in this repository. There is no token-generator script to run: the runtime creates
