@@ -7,6 +7,15 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The log filter looks past the last page**: the Logs panel filtered the lines it had fetched, so a
+  filter that matched nothing recent showed an empty table even when the older line was there (#171).
+  `GET /api/v1/logs` now takes `level=` (one of `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`, anything
+  else is a `400` carrying the accepted set) and `contains=` (case-insensitive substring), and applies
+  them while walking backwards through the file in 64 KiB chunks — stopping at the first `count`
+  matches or at a 4 MiB budget. The response gains `filtered` and `truncated`: `lines: []` with
+  `truncated: true` means "no match in the last 4 MiB", which is a different answer from "no match in
+  the log" and is now distinguishable. The unfiltered path is still one 64 KiB read from the end, and
+  `contains` also matches a traceback's continuation lines, while `level` keeps record lines only.
 - **A client can ask what its token may do, before a request fails**: the web app inferred its scopes
   from `403` responses, so the Config, Logs and People panels could only explain a refusal after
   making the call that produced one (#168). `GET /api/v1/whoami` answers with the caller's `device`

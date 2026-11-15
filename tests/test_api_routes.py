@@ -461,6 +461,93 @@ def test_logs_tails_the_configured_file(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_logs_find_a_line_older_than_the_tail_window(tmp_path) -> None:
+    """The filter this route exists for: the match is outside the last N lines, and it is found (#171).
+
+    The file is ~180 KB, so the match is also more than one 64 KiB chunk back: a single-chunk read
+    would miss it and answer "no lines match" - the lie the panel used to tell.
+    """
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        log_path = tmp_path / "houndmind.log"
+        records = [
+            '{"timestamp": "2026-11-15T00:00:00Z", "level": "ERROR", '
+            '"logger": "houndmind_ai.hal", "message": "servo bus timeout SENTINEL"}'
+        ]
+        records += [
+            f'{{"level": "INFO", "logger": "houndmind_ai.core", "message": "tick {index} '
+            + "padding " * 12
+            + '"}'
+            for index in range(1500)
+        ]
+        log_path.write_text("\n".join(records) + "\n", "utf-8")
+        plane.context.set(
+            "settings", {"logging": {"enable_file": True, "log_file_name": str(log_path)}}
+        )
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            tail_only = await client.get(f"{API_PREFIX}/logs?tail=2", headers=headers)
+            by_level = await client.get(f"{API_PREFIX}/logs?level=ERROR", headers=headers)
+            by_text = await client.get(f"{API_PREFIX}/logs?contains=sentinel", headers=headers)
+            quiet = await client.get(f"{API_PREFIX}/logs?level=DEBUG", headers=headers)
+            tail_body = await tail_only.json()
+            level_body = await by_level.json()
+            text_body = await by_text.json()
+            quiet_body = await quiet.json()
+
+        assert "SENTINEL" not in tail_body["lines"]
+        assert level_body["filtered"] is True
+        assert level_body["truncated"] is False, "180 KB is inside the budget: the walk is complete"
+        assert len(level_body["lines"]) == 1
+        assert "servo bus timeout" in level_body["lines"][0]
+        # `contains` is case-insensitive and searches the whole line, not just the message.
+        assert len(text_body["lines"]) == 1
+        # Nothing matched, and the response says the search was exhaustive rather than truncated.
+        assert quiet_body == {"lines": [], "filtered": True, "truncated": False}
+
+    asyncio.run(scenario())
+
+
+def test_logs_says_when_the_filter_stopped_at_its_budget(tmp_path) -> None:
+    """An empty answer is only honest with the window it covered: 4 MiB is the budget (#171)."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        log_path = tmp_path / "houndmind.log"
+        old = '{"level": "ERROR", "logger": "houndmind_ai.hal", "message": "the very first record"}'
+        filler = '{"level": "INFO", "logger": "houndmind_ai.core", "message": "padding"}'
+        # 5 MiB of INFO after the ERROR puts the only match outside the scan budget.
+        log_path.write_text(old + "\n" + "\n".join([filler] * 60000) + "\n", "utf-8")
+        plane.context.set(
+            "settings", {"logging": {"enable_file": True, "log_file_name": str(log_path)}}
+        )
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/logs?level=ERROR", headers=headers)
+            body = await response.json()
+
+        assert log_path.stat().st_size > 4 * 1024 * 1024
+        assert body["lines"] == []
+        assert body["truncated"] is True, "the scan stopped at its budget; 'no match' would be a lie"
+
+    asyncio.run(scenario())
+
+
+def test_logs_refuse_a_level_it_does_not_emit(tmp_path) -> None:
+    """A misspelled filter and an empty result are different answers, so this is a 400 (#171)."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/logs?level=LOUD", headers=headers)
+            body = await response.json()
+
+        assert response.status == 400
+        assert body["error"] == "bad_request"
+        assert "CRITICAL" in body["detail"], "the message carries the accepted set"
+
+    asyncio.run(scenario())
+
+
 def test_the_support_bundle_carries_state_and_no_secret(tmp_path) -> None:
     """The bundle is the maintainer's whole view of the device; it must not carry credentials.
 
