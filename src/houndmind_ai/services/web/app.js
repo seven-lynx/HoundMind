@@ -15,6 +15,26 @@ import { stopAllMotion } from "./panels/drive.js";
 
 const $ = (id) => document.getElementById(id);
 
+/**
+ * Attach a handler, or say why not.
+ *
+ * The markup and these modules ship together, but a browser can hold an older `index.html` - and the
+ * failure then is a `TypeError` at module scope, so *no* handler is attached and every button on the
+ * page silently does nothing. From the outside that is indistinguishable from a dead device. A
+ * missing id is reported once here, and the boot guard at the bottom of this file says what to do.
+ */
+const missing = new Set();
+
+function bind(id, event, handler) {
+  const node = $(id);
+  if (!node) {
+    missing.add(id);
+    console.warn(`houndmind: #${id} is not in this document - is the page stale?`);
+    return;
+  }
+  node.addEventListener(event, handler);
+}
+
 const byId = new Map(panels.map((panel) => [panel.id, panel]));
 const mounted = new Map();
 let current = null;
@@ -38,7 +58,7 @@ function signOut(message) {
   showConnect(message || "");
 }
 
-$("token-form").addEventListener("submit", (event) => {
+bind("token-form", "submit", (event) => {
   event.preventDefault();
   const value = $("token-input").value.trim();
   if (!value) return;
@@ -47,7 +67,7 @@ $("token-form").addEventListener("submit", (event) => {
   boot();
 });
 
-$("pair-form").addEventListener("submit", async (event) => {
+bind("pair-form", "submit", async (event) => {
   event.preventDefault();
   const code = $("code-input").value.trim();
   const client_name = $("name-input").value.trim() || "web";
@@ -71,7 +91,7 @@ $("pair-form").addEventListener("submit", async (event) => {
   }
 });
 
-$("sign-out").addEventListener("click", () => signOut(""));
+bind("sign-out", "click", () => signOut(""));
 
 // ------------------------------------------------------------------ socket
 
@@ -408,12 +428,12 @@ function runPalette(index) {
   if (item) item.run();
 }
 
-$("palette-input").addEventListener("input", (event) => {
+bind("palette-input", "input", (event) => {
   paletteIndex = 0;
   renderPalette(event.target.value);
 });
 
-$("palette-input").addEventListener("keydown", (event) => {
+bind("palette-input", "keydown", (event) => {
   if (event.key === "ArrowDown") {
     event.preventDefault();
     paletteIndex = Math.min(paletteIndex + 1, paletteItems.length - 1);
@@ -462,6 +482,24 @@ async function boot() {
   } catch (err) {
     /* the connection badge already reports whether the plane answers */
   }
+}
+
+// A document without the console is a stale `index.html`, not a broken device - and the person
+// looking at it usually has no console open, because the console is the page. Say it in the page.
+if (!$("connect") || !$("shell") || !$("token-form")) {
+  document.body.innerHTML = `
+    <section class="connect">
+      <div class="connect-card">
+        <p class="eyebrow">HoundMind</p>
+        <h1 class="connect-title">This page is out of date</h1>
+        <p class="hint">The page the browser loaded does not match the script that came with it, so
+        nothing on it can work. Reload with <strong>Ctrl+Shift+R</strong> (Cmd+Shift+R on a Mac).
+        The server now sends <span class="mono">Cache-Control: no-cache</span> on this page, so a
+        reload is enough from here on.</p>
+        <p class="hint mono">missing: ${[...missing].join(", ") || "the connect screen"}</p>
+      </div>
+    </section>`;
+  throw new Error("stale document: the console markup is missing");
 }
 
 boot();

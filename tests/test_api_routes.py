@@ -554,9 +554,13 @@ def test_the_web_app_serves_versioned_assets_and_revalidates(tmp_path, monkeypat
     different URL after an upgrade; `no-cache` is the belt that makes even an unversioned request ask
     the server. `_asset_version` is patched because a working tree has no installed distribution
     metadata — the fallback the helper documents, and the reason a test may not read it live.
+
+    The **document** revalidates too, and that half was missing long enough to bite: an old
+    `index.html` kept by heuristic freshness ran a new `app.js` against ids it no longer had, and
+    every button on the connect screen silently stopped working.
     """
 
-    async def scenario() -> tuple[int, str, int, str]:
+    async def scenario() -> tuple[int, str, int, str, str]:
         plane = make_plane(tmp_path)
         monkeypatch.setattr(api_module, "_asset_version", lambda: "9.9.9")
         async with TestClient(TestServer(create_app(plane))) as client:
@@ -564,12 +568,17 @@ def test_the_web_app_serves_versioned_assets_and_revalidates(tmp_path, monkeypat
             html = await index.text()
             script = await client.get("/static/app.js")
             cache = script.headers.get("Cache-Control", "")
-            return index.status, html, script.status, cache
+            document_cache = index.headers.get("Cache-Control", "")
+            return index.status, html, script.status, cache, document_cache
 
-    status, html, script_status, cache = asyncio.run(scenario())
+    status, html, script_status, cache, document_cache = asyncio.run(scenario())
 
     assert status == 200
     assert "/static/app.js?v=9.9.9" in html, "the script URL must carry the version"
     assert "/static/style.css?v=9.9.9" in html, "the stylesheet URL must carry the version"
     assert script_status == 200
     assert "no-cache" in cache, f"assets must revalidate, got Cache-Control={cache!r}"
+    assert "no-cache" in document_cache, (
+        f"the document must revalidate too, else a stale index.html runs new JavaScript,"
+        f" got Cache-Control={document_cache!r}"
+    )
