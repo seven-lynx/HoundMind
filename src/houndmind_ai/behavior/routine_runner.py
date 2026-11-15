@@ -35,9 +35,9 @@ from houndmind_ai.kernel.actions import repertoire_from_settings
 from houndmind_ai.kernel.commands import Source
 from houndmind_ai.kernel.routine import Routine
 from houndmind_ai.kernel.routine_store import (
-    DEFAULT_ROUTINES_DIR,
     RoutineStore,
     StoreReport,
+    routines_dir,
 )
 
 __all__ = ["RUN_STATES", "RoutineRun", "RoutineRunnerModule"]
@@ -59,11 +59,12 @@ _SETTLE = "settle"
 
 
 def _safe_dir(context) -> str:
-    """`settings.routines.dir`, or the documented default. Anything else is the default."""
-    settings = context.get("settings") or {}
-    routines = settings.get("routines") if isinstance(settings, dict) else None
-    raw = routines.get("dir") if isinstance(routines, dict) else None
-    return raw if isinstance(raw, str) and raw.strip() else DEFAULT_ROUTINES_DIR
+    """`settings.routines.dir`, or the documented default.
+
+    Delegates to `kernel/routine_store.py::routines_dir` so the runner and `POST /routines` cannot
+    answer "where do routines live" differently (#172).
+    """
+    return routines_dir(context.get("settings"))
 
 
 def _ack(request: dict) -> None:
@@ -138,6 +139,10 @@ class RoutineRunnerModule(Module):
         self.store = RoutineStore(directory)
         self.report = self.store.load(repertoire_from_settings(context.get("settings")))
         context.set("routine_report", self.report)
+        # Published so `POST /routines` writes into the store this runner reads (#172): one store, one
+        # directory, the same rule `place_store` follows. The runner stays the only reader of the
+        # catalogue; the API only adds a file.
+        context.set("routine_store", self.store)
         context.set("routine_run", None)
         if self.report.refused:
             # Quarantined, not fatal: the runtime boots with a broken file on disk and the report

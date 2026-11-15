@@ -48,6 +48,23 @@ export const routines = {
         <p class="error" id="rt-error" role="alert"></p>
       </div>
       <div id="rt-refusals"></div>
+      <div class="card">
+        <h3>Write a routine</h3>
+        <p class="hint">Saved as <span class="mono">&lt;id&gt;.json</span> in the directory above, judged
+        by the loader's own validation — a refused save names the step to fix. The runner reads that
+        directory at start, so a new routine is playable after a restart.</p>
+        <form id="rt-form">
+          <textarea id="rt-json" rows="12" spellcheck="false"
+            style="width:100%;font-family:ui-monospace,monospace;font-size:.8rem"></textarea>
+          <div class="row" style="justify-content:space-between;margin-top:.5rem">
+            <label style="margin:0"><input id="rt-replace" type="checkbox" style="width:auto;margin:0">
+              replace an existing file</label>
+            <button type="submit" class="primary">Save</button>
+          </div>
+        </form>
+        <p class="hint" id="rt-saved"></p>
+        <div id="rt-problems"></div>
+      </div>
       <div class="card"><h3>In progress</h3><div id="rt-current"><div class="empty">nothing is running</div></div></div>`;
 
     const list = root.querySelector("#rt-list");
@@ -56,6 +73,24 @@ export const routines = {
     const refusalsBox = root.querySelector("#rt-refusals");
     const current = root.querySelector("#rt-current");
     const stopButton = root.querySelector("#rt-stop");
+    const form = root.querySelector("#rt-form");
+    const editor = root.querySelector("#rt-json");
+    const replaceBox = root.querySelector("#rt-replace");
+    const savedBox = root.querySelector("#rt-saved");
+    const problemsBox = root.querySelector("#rt-problems");
+
+    // A legal routine, so the box starts as something that would be accepted if it is sent as-is.
+    editor.value = JSON.stringify(
+      {
+        id: "new_routine",
+        name: "New routine",
+        version: 1,
+        allow_locomotion: false,
+        steps: [{ action: "sit" }, { action: "wag_tail" }],
+      },
+      null,
+      2
+    );
 
     async function start(id, dry) {
       error.textContent = "";
@@ -69,6 +104,41 @@ export const routines = {
         error.textContent = errorText(err);
       }
     }
+
+    function problemList(found) {
+      const items = (found || [])
+        .map((problem) => esc((problem && problem.message) || String(problem)))
+        .join("</li><li>");
+      return items ? `<ul class="hint"><li>${items}</li></ul>` : "";
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      error.textContent = "";
+      savedBox.textContent = "";
+      problemsBox.innerHTML = "";
+      let draft;
+      try {
+        draft = JSON.parse(editor.value);
+      } catch (err) {
+        // The editor is text, so the first thing that can be wrong is the JSON itself, and saying so
+        // beats a 400 whose message is about a missing `steps`.
+        problemsBox.innerHTML = `<p class="error">that is not JSON: ${esc(err.message)}</p>`;
+        return;
+      }
+      const replace = Boolean(replaceBox.checked);
+      try {
+        const payload = await api(`/routines${replace ? "?replace=true" : ""}`, {
+          method: "POST",
+          body: JSON.stringify(draft),
+        });
+        savedBox.textContent = `saved to ${payload.path} — the runner loads it on the next start`;
+        await load();
+      } catch (err) {
+        error.textContent = errorText(err);
+        problemsBox.innerHTML = problemList(err.payload && err.payload.problems);
+      }
+    });
 
     function render(payload) {
       const items = payload.routines || [];
