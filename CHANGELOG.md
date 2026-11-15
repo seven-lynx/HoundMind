@@ -7,6 +7,16 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A routine can be written from the browser**: `POST /api/v1/routines` saves one routine file into
+  `settings.routines.dir` — the same directory the runner reads, resolved by one function now
+  (`kernel/routine_store.py::routines_dir`, which `behavior/routine_runner.py` also delegates to) —
+  judged by the loader's own `check_routine`, so a save it accepts cannot be a file the loader
+  refuses (#172). **Creating and replacing are different requests**: an id already on disk is `409`
+  unless `?replace=true`, and an id another file declares is always refused, because a second file
+  with one id is refused at load. The write is atomic (temp file, then rename) and the directory is
+  created on first use. The answer carries `reload_required: true`: the runner reads the directory
+  once at start, so a written routine is playable after the next start — making that immediate is
+  #196. The Routines panel gains an editor with the loader's own refusals shown inline.
 - **A live config change survives the process**: `PATCH /api/v1/config` answered `persisted: false`
   and the edit died with the runtime (#174, #128). It now writes the value into the `settings.jsonc`
   the runtime read — `core/config.py::Config.path`, set by `load_config` — and both happen or neither

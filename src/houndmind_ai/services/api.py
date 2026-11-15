@@ -46,7 +46,7 @@ from houndmind_ai.kernel.config_schema import Problem, validate_settings_section
 from houndmind_ai.kernel.decisions import DecisionRing
 from houndmind_ai.kernel.place import slug
 from houndmind_ai.kernel.place_store import PlaceStore
-from houndmind_ai.kernel.routine_store import StoreReport
+from houndmind_ai.kernel.routine_store import RoutineConflict, RoutineStore, StoreReport
 from houndmind_ai.services.auth import (
     AuthError,
     Authorizer,
@@ -736,6 +736,16 @@ def _routine_state(plane: ControlPlane) -> dict[str, object] | None:
     return to_dict() if callable(to_dict) else None
 
 
+def _routine_store(plane: ControlPlane) -> RoutineStore | None:
+    """The store the runner published, or None when no runner is loaded (#172).
+
+    The API never builds its own: the runner's store is the one whose directory the catalogue came
+    from, and a second store over the same path would be a second opinion about what is claimed.
+    """
+    store = plane.context.get("routine_store")
+    return store if isinstance(store, RoutineStore) else None
+
+
 async def _routines_list(request: web.Request) -> web.Response:
     plane = _plane(request)
     report = plane.context.get("routine_report")
@@ -753,6 +763,56 @@ async def _routines_list(request: web.Request) -> web.Response:
             },
             "current": _routine_state(plane),
         }
+    )
+
+
+async def _routines_create(request: web.Request) -> web.Response:
+    """Create or replace one routine file (#172).
+
+    The document is validated by `check_routine` inside `RoutineStore.save` - the same function the
+    loader runs - so an accepted routine is one the loader would accept too, locomotion opt-in and
+    action names included.
+
+    Creation and replacement are different requests: an id already on disk is a `409` unless
+    `?replace=true`, because the directory is user data and a form that silently overwrites it loses
+    somebody else's work with no undo.
+
+    `reload_required: true` is the honest half of this route. The runner loads the directory **once**
+    at start (`behavior/routine_runner.py`), so a routine written now is playable after the next
+    start; making it immediate needs a reload trigger in the decision loop (#196).
+    """
+    plane = _plane(request)
+    store = _routine_store(plane)
+    if store is None:
+        return web.json_response(
+            {"error": "unavailable", "detail": "the routine runner is not running"}, status=503
+        )
+    replace = str(request.query.get("replace", "")).strip().lower() in {"1", "true", "yes"}
+    document = await _json_body(request)
+    try:
+        saved, problems = store.save(
+            document,
+            repertoire_from_settings(plane.context.get("settings")),
+            replace=replace,
+        )
+    except RoutineConflict as exc:
+        return web.json_response({"error": "conflict", "detail": exc.message}, status=409)
+    if saved is None:
+        return web.json_response(
+            {
+                "error": "bad_request",
+                "detail": "the routine was refused",
+                "problems": [_problem_dict(problem) for problem in problems],
+            },
+            status=400,
+        )
+    return web.json_response(
+        {
+            "routine": saved,
+            "path": str(store.directory / f"{saved['id']}.json"),
+            "reload_required": True,
+        },
+        status=201,
     )
 
 
@@ -1667,6 +1727,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/routines", "state:read", _routines_list),
+    ("POST", "/routines", "config", _routines_create),
     ("GET", "/places", "state:read", _places_list),
     ("GET", "/people", "admin", _people_list),
     ("POST", "/people", "admin", _people_enroll),

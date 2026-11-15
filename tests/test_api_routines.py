@@ -59,7 +59,10 @@ def plane_for(
 
     settings = load_config().settings
     context = DummyContext(settings)
-    context.set("routine_report", RoutineStore(directory).load(repertoire_from_settings(settings)))
+    store = RoutineStore(directory)
+    context.set("routine_report", store.load(repertoire_from_settings(settings)))
+    # The runner publishes both (#172), and `POST /routines` writes through the store it published.
+    context.set("routine_store", store)
     api_settings = ApiSettings(
         host="127.0.0.1",
         port=0,
@@ -368,3 +371,119 @@ def test_a_stop_without_a_runner_leaves_no_flag_behind(tmp_path) -> None:
         assert plane.context.get("routine_stop") is None
 
     asyncio.run(scenario())
+
+DRAFT = {
+    "id": "evening",
+    "name": "Evening",
+    "version": 1,
+    "allow_locomotion": False,
+    "steps": [{"action": "sit"}, {"action": "wag_tail"}],
+}
+
+
+def test_a_routine_can_be_written_and_says_it_needs_a_restart(tmp_path) -> None:
+    """#172: authoring over HTTP, judged by the loader's own validation."""
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, {"calm": CALM})
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/routines", headers=auth(plane), json=DRAFT
+            )
+            body = await response.json()
+            listed = await (await client.get(f"{API_PREFIX}/routines", headers=auth(plane))).json()
+
+        written = tmp_path / "routines" / "evening.json"
+        assert response.status == 201
+        assert body["routine"]["id"] == "evening"
+        assert body["path"].endswith("evening.json")
+        assert body["reload_required"] is True
+        assert json.loads(written.read_text(encoding="utf-8"))["steps"] == DRAFT["steps"]
+        # The catalogue is what the runner loaded at start, so it does not grow by itself.
+        assert [routine["id"] for routine in listed["routines"]] == ["calm"]
+
+    asyncio.run(scenario())
+
+
+def test_an_invalid_routine_comes_back_as_the_loaders_problems(tmp_path) -> None:
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, {"calm": CALM})
+        bad = dict(DRAFT, id="broken_one", steps=[{"action": "sitt"}])
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/routines", headers=auth(plane), json=bad
+            )
+            body = await response.json()
+
+        assert response.status == 400
+        assert body["error"] == "bad_request"
+        assert body["problems"], "a refusal a client can show a human"
+        assert not (tmp_path / "routines" / "broken_one.json").exists()
+
+    asyncio.run(scenario())
+
+
+def test_writing_an_id_that_already_exists_needs_replace(tmp_path) -> None:
+    """The directory is user data: a silent overwrite loses someone's work with no undo."""
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, {"calm": CALM})
+        async with TestClient(TestServer(create_app(plane))) as client:
+            refused = await client.post(
+                f"{API_PREFIX}/routines",
+                headers=auth(plane),
+                json=dict(DRAFT, id="calm"),
+            )
+            replaced = await client.post(
+                f"{API_PREFIX}/routines?replace=true",
+                headers=auth(plane),
+                json=dict(DRAFT, id="calm"),
+            )
+            refused_body = await refused.json()
+
+        assert refused.status == 409
+        assert refused_body["error"] == "conflict"
+        assert "replace=true" in refused_body["detail"]
+        assert replaced.status == 201
+
+    asyncio.run(scenario())
+
+
+def test_an_id_another_file_declares_is_refused_even_with_replace(tmp_path) -> None:
+    """A second file with one id is refused at load, so writing it only moves the problem.
+
+    The other file sorts first, so it is the one `load` keeps and the one the id belongs to; the
+    route must not write a rival `calm.json` beside it.
+    """
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, {"calm": CALM})
+        (tmp_path / "routines" / "aaa_first.json").write_text(
+            json.dumps({"id": "calm", "steps": [{"action": "sit"}]}), encoding="utf-8"
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/routines?replace=true",
+                headers=auth(plane),
+                json=dict(DRAFT, id="calm"),
+            )
+            body = await response.json()
+
+        assert response.status == 409
+        assert "aaa_first.json" in body["detail"]
+
+    asyncio.run(scenario())
+
+
+def test_writing_without_a_runner_is_a_503(tmp_path) -> None:
+    async def scenario() -> None:
+        plane = plane_for(tmp_path, {"calm": CALM})
+        plane.context.set("routine_store", None)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/routines", headers=auth(plane), json=DRAFT
+            )
+            body = await response.json()
+
+        assert response.status == 503
+        assert body["error"] == "unavailable"
+
+    asyncio.run(scenario())
+

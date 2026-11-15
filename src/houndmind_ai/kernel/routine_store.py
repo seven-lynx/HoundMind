@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,8 +44,10 @@ from houndmind_ai.kernel.routine import Routine, check_routine, parse_routine
 __all__ = [
     "DEFAULT_ROUTINES_DIR",
     "MAX_FILE_BYTES",
+    "RoutineConflict",
     "RoutineStore",
     "StoreReport",
+    "routines_dir",
 ]
 
 logger = logging.getLogger(__name__)
@@ -59,6 +62,32 @@ DEFAULT_ROUTINES_DIR = "~/.houndmind/routines"
 MAX_FILE_BYTES = 256 * 1024
 
 _SUFFIX = ".json"
+
+
+def routines_dir(settings: object) -> str:
+    """`settings.routines.dir`, or the documented default.
+
+    One answer to "where do routines live", because two sides need it: the runner that loads them
+    (`behavior/routine_runner.py`, one read at start) and the route that writes one (#172). A routine
+    a browser saved into a directory the runner does not read would look like a lost save.
+    """
+    table = settings if isinstance(settings, dict) else {}
+    routines = table.get("routines")
+    raw = routines.get("dir") if isinstance(routines, dict) else None
+    return raw if isinstance(raw, str) and raw.strip() else DEFAULT_ROUTINES_DIR
+
+
+class RoutineConflict(Exception):
+    """An id is already claimed on disk and `replace` was not set (#172).
+
+    Raised rather than returned as a `Problem`, because a conflict is not a complaint about the
+    document: the same bytes would be accepted under a different id. The route needs the two apart
+    to answer 409 and 400, and inferring it from a problem's path would misfire on a genuinely bad id.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
 
 
 @dataclass(frozen=True)
@@ -104,11 +133,15 @@ class RoutineStore:
         directory: str | Path = DEFAULT_ROUTINES_DIR,
         *,
         read_text: Callable[[Path], str] | None = None,
+        write_text: Callable[[Path, str], None] | None = None,
     ) -> None:
         # `~` is expanded once, here: a store built from config should never carry a literal tilde
         # into a log line or an error message.
         self.directory = Path(directory).expanduser()
         self._read_text = read_text or _read_utf8
+        # The write seam exists for the same reason the read one does: a permission denied or a full
+        # disk is not something a test can provoke portably (#172).
+        self._write_text = write_text or _write_utf8
 
     def load(self, repertoire: Repertoire) -> StoreReport:
         """Validate and parse every `.json` file, keeping the good ones and reporting the rest.
@@ -178,6 +211,76 @@ class RoutineStore:
 
     # ----------------------------------------------------------------- internals
 
+    def save(
+        self,
+        document: object,
+        repertoire: Repertoire,
+        *,
+        replace: bool = False,
+    ) -> tuple[dict[str, object] | None, tuple[Problem, ...]]:
+        """Write one routine file, or return the reasons it was refused (#172).
+
+        The document is judged by `check_routine` — the same function `load` runs — so a routine this
+        route accepts cannot be one the runner refuses at start-up, locomotion included: a step the
+        repertoire does not admit is refused here, not at the first tick that tries to run it.
+
+        **Creating and replacing are different requests.** An id already on disk is a `RoutineConflict`
+        unless `replace` is set, because the directory is user data and a form that silently
+        overwrites a hand-written file loses work with no undo. An id another *file* declares is always
+        a conflict: writing it would produce the duplicate `load` refuses, which only moves the problem
+        somewhere harder to see.
+
+        One writer is assumed - the control plane, on the event loop. The runner only reads, and it
+        reads once at start, so there is no read-modify-write pair to lock.
+        """
+        if not isinstance(document, dict):
+            return None, (Problem("routine", "expected a table with a 'steps' list"),)
+        problems = check_routine(document, repertoire)
+        if problems:
+            return None, tuple(problems)
+
+        routine_id = str(document.get("id") or "")
+        target = self.directory / f"{routine_id}{_SUFFIX}"
+        owner = self._id_owners().get(routine_id)
+        if owner is not None and owner != target:
+            raise RoutineConflict(
+                f"{routine_id!r} is already declared by {owner.name}; two files with one id are "
+                "refused at load"
+            )
+        if (owner is not None or target.exists()) and not replace:
+            raise RoutineConflict(
+                f"{target.name} already exists; send ?replace=true to overwrite it"
+            )
+
+        payload = json.dumps(document, indent=2) + "\n"
+        if len(payload.encode("utf-8")) > MAX_FILE_BYTES:
+            return None, (
+                Problem("routine", f"the written file would exceed {MAX_FILE_BYTES} bytes"),
+            )
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True)
+            # A temp name that does not end in `.json`, so a load running at the same time never sees
+            # a half-written routine: the rename is the moment it appears.
+            temp = target.with_name(target.name + ".tmp")
+            self._write_text(temp, payload)
+            os.replace(temp, target)
+        except OSError as exc:
+            return None, (Problem("routine", f"could not be written: {exc}"),)
+        logger.info("Routine %s written to %s", routine_id, target)
+        return dict(document), ()
+
+    def _id_owners(self) -> dict[str, Path]:
+        """Which file declares which id, as far as the files that load can tell."""
+        owners: dict[str, Path] = {}
+        for path in self._files():
+            document, _problems = self._read_document(path)
+            if not isinstance(document, Mapping):
+                continue
+            identifier = document.get("id")
+            if isinstance(identifier, str) and identifier.strip():
+                owners.setdefault(identifier, path)
+        return owners
+
     def _files(self) -> tuple[Path, ...]:
         """Every candidate file, sorted. An unlistable directory starts the runtime empty."""
         try:
@@ -227,3 +330,8 @@ def _read_utf8(path: Path) -> str:
     otherwise fail with a confusing "Expecting value: line 1 column 1".
     """
     return path.read_text(encoding="utf-8-sig")
+
+
+def _write_utf8(path: Path, text: str) -> None:
+    """Write UTF-8 with LF endings: reading tolerates a BOM, but nothing here should add one."""
+    path.write_text(text, encoding="utf-8", newline="\n")

@@ -19,8 +19,10 @@ from houndmind_ai.kernel.actions import Repertoire, repertoire_from_settings
 from houndmind_ai.kernel.routine_store import (
     DEFAULT_ROUTINES_DIR,
     MAX_FILE_BYTES,
+    RoutineConflict,
     RoutineStore,
     StoreReport,
+    routines_dir,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -301,3 +303,71 @@ def test_an_empty_report_answers_every_question() -> None:
     assert report.ids() == ()
     assert report.refused == 0
     assert report.get("anything") is None
+
+# ------------------------------------------------------------- writing one (#172)
+
+
+def test_a_saved_routine_loads_back(tmp_path: Path) -> None:
+    store = RoutineStore(tmp_path)
+
+    saved, problems = store.save(document(), shipped())
+
+    assert problems == () and saved is not None
+    assert (tmp_path / "morning_greeting.json").exists()
+    reloaded = store.load(shipped())
+    assert reloaded.ids() == ("morning_greeting",)
+    assert reloaded.refused == 0, "a file this route wrote must not need quarantining"
+    assert reloaded.routines["morning_greeting"].steps[1].action == "sit"
+
+
+def test_an_invalid_routine_is_refused_and_nothing_is_written(tmp_path: Path) -> None:
+    store = RoutineStore(tmp_path)
+
+    saved, problems = store.save(document(steps=[{"action": "sitt"}]), shipped())
+
+    assert saved is None
+    assert problems and problems[0].path.startswith("routine.steps")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_existing_file_is_a_conflict_unless_replace(tmp_path: Path) -> None:
+    """The directory is user data, and `place()` is what a person would have written by hand."""
+    store = RoutineStore(tmp_path)
+    store.save(document(), shipped())
+
+    with pytest.raises(RoutineConflict):
+        store.save(document(name="Different"), shipped())
+
+    saved, problems = store.save(document(name="Different"), shipped(), replace=True)
+    assert problems == () and saved is not None
+    assert "Different" in (tmp_path / "morning_greeting.json").read_text(encoding="utf-8")
+
+
+def test_an_id_another_file_declares_is_refused_even_with_replace(tmp_path: Path) -> None:
+    store = RoutineStore(tmp_path)
+    place(tmp_path, "handwritten.json", document())
+
+    with pytest.raises(RoutineConflict) as caught:
+        store.save(document(), shipped(), replace=True)
+
+    assert "handwritten.json" in str(caught.value)
+    assert not (tmp_path / "morning_greeting.json").exists()
+
+
+def test_saving_creates_the_directory_and_leaves_no_temp_file(tmp_path: Path) -> None:
+    directory = tmp_path / "not-yet" / "routines"
+    store = RoutineStore(directory)
+
+    saved, _problems = store.save(document(), shipped())
+
+    assert saved is not None
+    assert [entry.name for entry in directory.iterdir()] == ["morning_greeting.json"]
+
+
+def test_the_directory_answer_comes_from_settings_or_the_default() -> None:
+    """One answer, used by the runner and by the route that writes (#172)."""
+    assert routines_dir({}) == DEFAULT_ROUTINES_DIR
+    assert routines_dir({"routines": {"dir": "/tmp/routines"}}) == "/tmp/routines"
+    assert routines_dir({"routines": {"dir": "   "}}) == DEFAULT_ROUTINES_DIR
+    assert routines_dir(None) == DEFAULT_ROUTINES_DIR
+

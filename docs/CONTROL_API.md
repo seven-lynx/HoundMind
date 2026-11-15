@@ -117,6 +117,7 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
+| `POST` | `/api/v1/routines` | `config` | write one routine file, judged by the loader's own `check_routine`; `?replace=true` to overwrite ([§3](#3-commands)) |
 | `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress ([§8](#8-places)) |
 | `GET` | `/api/v1/people` | `admin` | enrolled people: ids and names only, never an embedding ([§9](#9-people)) |
 | `POST` | `/api/v1/people` | `admin` | teach one face: `202` with the handle to poll; a refusal lands in `last_enroll` ([§9](#9-people)) |
@@ -299,6 +300,35 @@ A routine is a JSON file of steps the runner loaded at boot — one file per rou
 `settings.routines.dir` (`FEATURES_GUIDE.md` [§7](FEATURES_GUIDE.md#7-behavior)). These routes expose what the dog **loaded**, not
 what is on disk right now: a file added since boot appears after a restart, and a file the validator
 refused is listed with the reason instead of being hidden.
+
+`POST /api/v1/routines` — `config` — writes one file, and it is the same validator that judges it:
+
+```json
+{
+  "id": "morning_greeting", "name": "Morning greeting", "version": 1,
+  "allow_locomotion": false,
+  "steps": [ { "action": "sound", "params": { "name": "woohoo" } }, { "action": "sit" } ]
+}
+```
+
+`201` — the file is written atomically and named `<id>.json`:
+
+```json
+{ "routine": { …as sent… }, "path": "/home/pi/.houndmind/routines/morning_greeting.json",
+  "reload_required": true }
+```
+
+- **`400`** — the document is not a legal routine; `problems[]` is the loader's own list (unknown
+  action, a locomotion step without the opt-in, a missing `steps`, too many steps).
+- **`409`** — the id is already claimed. Creating and replacing are different requests: an existing
+  `<id>.json` needs `?replace=true`, and an id **another** file declares is always refused, because a
+  second file with that id is refused at load.
+- **`503`** — no runner is loaded, so there is no directory to write into.
+
+**`reload_required` is not decoration.** The runner reads the directory once at start, so a routine
+written now is playable after the next start: `GET /routines` and `POST /routines/{id}/run` still
+describe and run what was loaded. Making a fresh file playable immediately is a separate change to
+the decision loop, tracked on #196.
 
 `GET /api/v1/routines` — `state:read`:
 

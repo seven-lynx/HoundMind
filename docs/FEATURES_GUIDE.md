@@ -361,11 +361,15 @@ than stopping the runtime.
 
 | Key | Default | What it does |
 |---|---|---|
-| `settings.routines.dir` | `~/.houndmind/routines` | Directory the routine runner reads. `~` is expanded at startup; a missing directory is an empty list, not an error, and the dog never creates or writes it. |
+| `settings.routines.dir` | `~/.houndmind/routines` | Directory the routine runner reads and `POST /routines` writes into. `~` is expanded at startup; a missing directory is an empty list, not an error, and it is created only when a routine is written. |
 
-Two routes expose them: `GET /api/v1/routines` lists what the runner loaded and which files it
-refused, and `POST /api/v1/routines/{id}/run` starts one, optionally as a rehearsal
-(`{"dry_run": true}`). Both shapes, and the four status codes, are in `docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands).
+Three routes expose them: `GET /api/v1/routines` lists what the runner loaded and which files it
+refused, `POST /api/v1/routines` writes one file judged by that same loader validation
+(`?replace=true` to overwrite an existing id), and `POST /api/v1/routines/{id}/run` starts one,
+optionally as a rehearsal (`{"dry_run": true}`). All the shapes and status codes are in
+`docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands). A written routine carries
+`reload_required: true`: the runner reads the directory once at start, so the new file is playable
+after the next start.
 
 The run in progress is also in every state snapshot (`state.routines`, the same object the route calls
 `current`) and is pushed as a `routine` event whenever it moves — a new step, a new state, a veto — so
