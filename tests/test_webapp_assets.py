@@ -44,3 +44,54 @@ def test_the_elements_that_rely_on_hidden_still_set_their_own_display() -> None:
     """
     css = STYLE.read_text(encoding="utf-8")
     assert ".connect {" in css and ".shell {" in css
+
+
+# ------------------------------------------------------------- themes (#178)
+
+_TOKEN = re.compile(r"(--[\w-]+)\s*:\s*([^;]+);")
+_LIGHT_OPENER = r':root\[data-theme="light"\]\s*\{'
+
+
+def _block(css: str, opener: str) -> str:
+    """The body of the first rule matching `opener`."""
+    match = re.search(opener, css)
+    assert match is not None, f"no rule matching {opener!r} in style.css"
+    start = match.end()
+    return css[start : css.index("}", start)]
+
+
+def _tokens(block: str) -> dict[str, str]:
+    return {match.group(1): match.group(2).strip() for match in _TOKEN.finditer(block)}
+
+
+def test_every_dark_colour_token_has_a_light_value() -> None:
+    """One token missing from the light block is one component in the wrong palette (#178).
+
+    Invisible in review, because the dark block is the one people read: a rule that uses a token the
+    light theme never restates silently inherits a near-black value on a white page.
+    """
+    css = STYLE.read_text(encoding="utf-8")
+    dark = _tokens(_block(css, r":root\s*\{"))
+    light = _tokens(_block(css, _LIGHT_OPENER))
+
+    colours = {name for name, value in dark.items() if value.startswith("#")}
+    assert len(colours) >= 10, "the dark block has no colour tokens: has the stylesheet moved?"
+    assert colours <= set(light), f"light is missing {sorted(colours - set(light))}"
+
+
+def test_components_take_their_colours_from_tokens() -> None:
+    """A literal hex in a component rule is a rule that ignores the theme (#178)."""
+    css = STYLE.read_text(encoding="utf-8")
+    # Comments are stripped first: a comment that explains a contrast ratio names colours, and it is
+    # not a rule.
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.DOTALL)
+    without_tokens = css
+    for opener in (r":root\s*\{", _LIGHT_OPENER):
+        match = re.search(opener, without_tokens)
+        assert match is not None
+        end = without_tokens.index("}", match.end()) + 1
+        without_tokens = without_tokens[: match.start()] + without_tokens[end:]
+
+    literals = re.findall(r"#[0-9a-fA-F]{3,8}\b", without_tokens)
+    assert literals == [], f"component colours must be tokens, found {literals}"
+

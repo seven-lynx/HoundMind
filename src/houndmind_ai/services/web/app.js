@@ -10,7 +10,7 @@
 // Pi's WiFi.
 
 import { panels } from "./panels/index.js";
-import { PANEL_KEY, api, clockTime, esc, getToken, setToken, store } from "./lib.js";
+import { PANEL_KEY, api, clockTime, esc, getToken, setTheme, setToken, store } from "./lib.js";
 import { stopAllMotion } from "./panels/drive.js";
 
 const $ = (id) => document.getElementById(id);
@@ -92,6 +92,24 @@ bind("pair-form", "submit", async (event) => {
 });
 
 bind("sign-out", "click", () => signOut(""));
+
+// ---- theme (#178). `lib.js` applies the stored-or-OS choice at import time; this only keeps the
+// button's word in step with what is showing, and flips it.
+function renderThemeButton() {
+  const button = $("theme-toggle");
+  if (!button) return;
+  const theme = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  button.textContent = theme;
+  button.setAttribute("aria-label", `theme: ${theme}; press to switch`);
+}
+
+bind("theme-toggle", "click", () => {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  setTheme(next);
+  renderThemeButton();
+});
+
+renderThemeButton();
 
 // ------------------------------------------------------------------ socket
 
