@@ -8,6 +8,9 @@
 
 export const TOKEN_KEY = "houndmind.token";
 export const PANEL_KEY = "houndmind.panel";
+// Light or dark, remembered across tabs and restarts (#178). The token is per-tab
+// (`sessionStorage`); a theme is a preference about the person, not about the session.
+export const THEME_KEY = "houndmind.theme";
 
 // The server's deadman. The client renews faster than this, and the gap is the safety margin.
 export const TTL_MS = 300;
@@ -25,6 +28,49 @@ export function setToken(value) {
   if (value) sessionStorage.setItem(TOKEN_KEY, value);
   else sessionStorage.removeItem(TOKEN_KEY);
 }
+
+// ------------------------------------------------------------------ theme
+
+/**
+ * The theme to show: the stored choice, or what the OS says (#178).
+ *
+ * `prefers-color-scheme` is the default rather than a third state - a console with no opinion is one
+ * the user has already expressed to their operating system - and the stored value wins over it,
+ * because a deliberate switch must survive a change of ambient light.
+ */
+export function resolveTheme() {
+  try {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+  } catch (err) {
+    // Storage refused (private mode, or a browser that blocks it): the OS preference still works.
+  }
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
+    ? "light"
+    : "dark";
+}
+
+/** Set `data-theme` on `<html>`, which is the only thing the stylesheet keys off. */
+export function applyTheme(theme) {
+  const chosen = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = chosen;
+  return chosen;
+}
+
+/** Apply and remember. A refused write still applies for this tab. */
+export function setTheme(theme) {
+  const chosen = applyTheme(theme);
+  try {
+    localStorage.setItem(THEME_KEY, chosen);
+  } catch (err) {
+    // Nothing to do: the theme is applied, it just will not outlive the tab.
+  }
+  return chosen;
+}
+
+// At import time, before `app.js` renders: applying a theme after the first paint flashes the wrong
+// palette, and on a slow Pi that flash is long enough to read as a bug.
+applyTheme(resolveTheme());
 
 // ------------------------------------------------------------------ api
 

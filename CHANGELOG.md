@@ -7,6 +7,16 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The console has a light theme**: dark-first and still the default when the OS says nothing, but
+  `prefers-color-scheme: light` now selects a light palette and the header's theme button switches
+  either way and remembers the choice (`houndmind.theme` in `localStorage`), because a deliberate
+  switch must outlive a change of ambient light (#178). The palette is **tokens only**: twenty dark
+  literals that had accumulated in component rules (`#2a2013` buttons, `#1b2530` inputs, the dog's
+  fills, the log well) became semantic custom properties, so the light block restates values and not
+  one component rule. Contrast was checked for the surfaces each token lands on — the accent is the
+  case that matters: shipped `--amber` is 1.9:1 on white, so light uses `#9c600f` (5.1:1), with
+  `--muted` at 5.6:1 and `--rose`/`--teal`/`--violet` between 5 and 6.5:1. The theme is applied when
+  `lib.js` loads, before the first render, so no wrong-palette flash on a slow Pi.
 - **The occupancy grid is visible**: `mapping` has kept a hit histogram per cell since P3 and no client
   could see it (#175). `GET /api/v1/map` returns `[ix, iy, hits]` cells plus `cell_size_cm`, `count`
   and `truncated`, in **the mapper's own indices** (`ix` to the dog's left, `iy` forward) so nothing

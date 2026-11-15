@@ -959,6 +959,13 @@ reasoned exclusion. A panel whose route needs a scope the token lacks says so in
 blank: `people`, `logs` and `support-bundle` need `admin`, and pairing grants `state:read`, `move`
 and `config`.
 
+**Light or dark.** The console is dark-first and follows the OS when nobody has said otherwise; the
+header's theme button switches to a light palette and remembers the choice in `localStorage`
+(`houndmind.theme`), because a deliberate switch must survive a change of ambient light. Both palettes
+are colour tokens in `style.css` and nothing else: a component rule that used a literal hex would
+ignore the theme, so `tests/test_webapp_assets.py` fails if one appears or if the light block stops
+restating a dark token.
+
 **The token.** Generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token` with mode 0600. It is never in `config/settings.jsonc`, never in a log
 line and never in this repository. There is no token-generator script to run: the runtime creates

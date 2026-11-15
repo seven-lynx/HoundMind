@@ -24,9 +24,80 @@
   --teal: #3fbfa0;
   --rose: #e0555e;
   --violet: #8b7bf0;
+  /* The literals the dark palette grew, given names so one light block can restate them (#178).
+   * Naming them is the whole trick: a theme that had to re-declare twenty component rules would be
+   * two stylesheets, and the second one is always the one that goes stale. */
+  --glow: #16222b;
+  --elev-0: #141c24;
+  --elev-1: #161f27;
+  --elev-2: #1b2530;
+  --elev-3: #1d2833;
+  --elev-4: #223040;
+  --well: #0c1218;
+  --track: #101820;
+  --border-soft: #1a232c;
+  --scrim: #05080bcc;
+  --shadow: #000;
+  --amber-deep: #b8732a;
+  --amber-tint: #2a2013;
+  --amber-tint-2: #2b1d13;
+  --amber-ink: #ffd9a0;
+  --rose-tint: #2b1418;
+  --rose-line: #5a2a2e;
+  --rose-ink: #ffb3b8;
+  --teal-line: #24544a;
+  --dog-body: #223140;
+  --dog-head: #2a3c4d;
+  --dog-leg: #1b2836;
+  --grid-line: #131b22;
   --radius: 10px;
   --rail-w: 208px;
   --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
+}
+
+/* Light, chosen in the header or inherited from the OS (#178). Every value here is a colour token:
+ * nothing below rewrites a component, so the two themes cannot drift apart. Contrast was checked
+ * against the surfaces these land on - `--amber` is the dark end of the accent (#9c600f is 5.1:1 on
+ * white, and the shipped `#f0a53a` would be 1.9:1), `--muted` is 5.6:1, `--rose`/`--teal`/`--violet`
+ * are 5-6.5:1. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ink: #f6f4ef;
+  --ink-2: #efebe2;
+  --panel: #ffffff;
+  --panel-2: #f8f6f1;
+  --line: #ddd7ca;
+  --line-2: #c8c0b0;
+  --text: #1b2027;
+  --muted: #5b6572;
+  --amber: #9c600f;
+  --amber-dim: #e2cfae;
+  --teal: #147a63;
+  --rose: #b2333c;
+  --violet: #5a4ac2;
+  --glow: #fbf9f3;
+  --elev-0: #f4f1ea;
+  --elev-1: #efece4;
+  --elev-2: #f2eee5;
+  --elev-3: #e9e4d8;
+  --elev-4: #e2dccd;
+  --well: #f7f5f0;
+  --track: #f0ece2;
+  --border-soft: #e4dfd4;
+  --scrim: #00000066;
+  --shadow: #b9b0a0;
+  --amber-deep: #c8862a;
+  --amber-tint: #fdf0d8;
+  --amber-tint-2: #fbf4e4;
+  --amber-ink: #6b4708;
+  --rose-tint: #fdecee;
+  --rose-line: #e8b6bb;
+  --rose-ink: #8f1f27;
+  --teal-line: #9fd8c9;
+  --dog-body: #dfd8ca;
+  --dog-head: #cfc7b6;
+  --dog-leg: #e8e2d6;
+  --grid-line: #eae5da;
 }
 
 * { box-sizing: border-box; }
@@ -45,7 +116,7 @@ html, body { height: 100%; }
 body {
   margin: 0;
   background:
-    radial-gradient(1200px 600px at 78% -10%, #16222b 0%, transparent 60%),
+    radial-gradient(1200px 600px at 78% -10%, var(--glow) 0%, transparent 60%),
     var(--ink);
   color: var(--text);
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -83,7 +154,7 @@ a { color: var(--amber); }
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 1.6rem;
-  box-shadow: 0 24px 60px -30px #000;
+  box-shadow: 0 24px 60px -30px var(--shadow);
 }
 
 .connect-title { font-size: 1.5rem; letter-spacing: -.01em; margin-bottom: .2rem; }
@@ -153,8 +224,8 @@ a { color: var(--amber); }
   width: 18px;
   height: 18px;
   border-radius: 4px 4px 9px 9px;
-  background: linear-gradient(160deg, var(--amber), #b8732a);
-  box-shadow: 0 0 0 1px #000 inset, 0 0 12px -2px var(--amber);
+  background: linear-gradient(160deg, var(--amber), var(--amber-deep));
+  box-shadow: 0 0 0 1px var(--shadow) inset, 0 0 12px -2px var(--amber);
   position: relative;
 }
 .mark::before,
@@ -179,11 +250,11 @@ a { color: var(--amber); }
   grid-area: banner;
   padding: .45rem 1.1rem;
   font-size: .86rem;
-  background: #2b1d13;
+  background: var(--amber-tint-2);
   border-bottom: 1px solid var(--amber-dim);
-  color: #ffd9a0;
+  color: var(--amber-ink);
 }
-.banner[data-tone="bad"] { background: #2b1418; border-bottom-color: #5a2a2e; color: #ffb3b8; }
+.banner[data-tone="bad"] { background: var(--rose-tint); border-bottom-color: var(--rose-line); color: var(--rose-ink); }
 .banner strong { font-weight: 600; }
 
 /* ---------------------------------------------------------------- rail */
@@ -216,7 +287,7 @@ a { color: var(--amber); }
 }
 .nav-item:hover { background: var(--panel); color: var(--text); }
 .nav-item[aria-current="true"] {
-  background: linear-gradient(90deg, #1d2833, transparent);
+  background: linear-gradient(90deg, var(--elev-3), transparent);
   border-left-color: var(--amber);
   color: var(--text);
 }
@@ -290,7 +361,7 @@ button, .btn {
   padding: .45rem .85rem;
   border-radius: 8px;
   border: 1px solid var(--line-2);
-  background: #1b2530;
+  background: var(--elev-2);
   color: var(--text);
   font: inherit;
   font-size: .88rem;
@@ -299,9 +370,9 @@ button, .btn {
 }
 button:hover { border-color: var(--amber); }
 button:disabled { opacity: .45; cursor: not-allowed; border-color: var(--line); }
-button.primary { background: #2a2013; border-color: var(--amber-dim); color: #ffd9a0; }
+button.primary { background: var(--amber-tint); border-color: var(--amber-dim); color: var(--amber-ink); }
 button.primary:hover { border-color: var(--amber); }
-button.danger { border-color: #5a2a2e; color: #ffb3b8; }
+button.danger { border-color: var(--rose-line); color: var(--rose-ink); }
 button.danger:hover { border-color: var(--rose); }
 button.ghost { background: transparent; border-color: var(--line); color: var(--muted); }
 button.tiny { padding: .25rem .55rem; font-size: .8rem; }
@@ -316,7 +387,7 @@ input, select, textarea {
   padding: .45rem .55rem;
   border-radius: 7px;
   border: 1px solid var(--line);
-  background: #0c1218;
+  background: var(--well);
   color: var(--text);
   font: inherit;
   font-size: .9rem;
@@ -340,10 +411,10 @@ th {
   padding: .35rem .5rem;
   border-bottom: 1px solid var(--line);
 }
-td { padding: .4rem .5rem; border-bottom: 1px solid #1a232c; vertical-align: top; }
+td { padding: .4rem .5rem; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 tr:last-child td { border-bottom: 0; }
-tbody tr:hover { background: #161f27; }
+tbody tr:hover { background: var(--elev-1); }
 
 .empty {
   color: var(--muted);
@@ -363,8 +434,8 @@ tbody tr:hover { background: #161f27; }
   min-height: 250px;
   border-radius: 12px;
   background:
-    radial-gradient(circle at 50% 62%, #1b2833 0%, transparent 62%),
-    repeating-linear-gradient(0deg, transparent 0 23px, #131b22 23px 24px);
+    radial-gradient(circle at 50% 62%, var(--elev-3) 0%, transparent 62%),
+    repeating-linear-gradient(0deg, transparent 0 23px, var(--grid-line) 23px 24px);
   border: 1px solid var(--line);
   overflow: hidden;
 }
@@ -381,9 +452,9 @@ tbody tr:hover { background: #161f27; }
 
 /* The legs are children of one group; the posture is a class on the container. Both animations
    carry information: the gait says "the runtime is moving the dog", the stance names the pose. */
-.dog-body { fill: #223140; stroke: var(--line-2); stroke-width: 1; }
-.dog-head { fill: #2a3c4d; stroke: var(--line-2); stroke-width: 1; }
-.dog-leg  { fill: #1b2836; stroke: var(--line-2); stroke-width: 1; transform-box: fill-box; transform-origin: top center; }
+.dog-body { fill: var(--dog-body); stroke: var(--line-2); stroke-width: 1; }
+.dog-head { fill: var(--dog-head); stroke: var(--line-2); stroke-width: 1; }
+.dog-leg  { fill: var(--dog-leg); stroke: var(--line-2); stroke-width: 1; transform-box: fill-box; transform-origin: top center; }
 .dog-tail { stroke: var(--line-2); stroke-width: 3; fill: none; stroke-linecap: round; }
 .dog-eye  { fill: var(--amber); }
 .dog-collar { stroke: var(--amber); stroke-width: 2; fill: none; opacity: .85; }
@@ -406,7 +477,7 @@ tbody tr:hover { background: #161f27; }
 .gauge .track {
   height: 6px;
   border-radius: 999px;
-  background: #101820;
+  background: var(--track);
   overflow: hidden;
   border: 1px solid var(--line);
 }
@@ -426,7 +497,7 @@ tbody tr:hover { background: #161f27; }
   border: 1px solid var(--line);
   border-left: 3px solid var(--violet);
   border-radius: 8px;
-  background: #141c24;
+  background: var(--elev-0);
   font-size: .88rem;
 }
 .why[data-tone="veto"] { border-left-color: var(--rose); }
@@ -450,10 +521,10 @@ tbody tr:hover { background: #161f27; }
 }
 .pad.up { grid-area: 1 / 2; }
 .pad.left { grid-area: 2 / 1; }
-.pad.stop { grid-area: 2 / 2; border-color: #5a2a2e; color: #ffb3b8; }
+.pad.stop { grid-area: 2 / 2; border-color: var(--rose-line); color: var(--rose-ink); }
 .pad.right { grid-area: 2 / 3; }
 .pad.down { grid-area: 3 / 2; }
-.pad.active { border-color: var(--amber); background: #2a2013; color: #ffd9a0; }
+.pad.active { border-color: var(--amber); background: var(--amber-tint); color: var(--amber-ink); }
 
 /* The deadman, drawn. Each renewal restarts a 200ms ring inside a 300ms TTL, so a stopped ring
    means the client stopped renewing - readable before the dog moves, not after. */
@@ -515,8 +586,8 @@ tbody tr:hover { background: #161f27; }
   color: var(--muted);
   white-space: nowrap;
 }
-.ticker-list li[data-tone="veto"] { border-color: #5a2a2e; color: #ffb3b8; }
-.ticker-list li[data-tone="ok"] { border-color: #24544a; color: var(--teal); }
+.ticker-list li[data-tone="veto"] { border-color: var(--rose-line); color: var(--rose-ink); }
+.ticker-list li[data-tone="ok"] { border-color: var(--teal-line); color: var(--teal); }
 .ticker-list li:first-child { color: var(--text); }
 
 /* ---------------------------------------------------------------- palette */
@@ -529,7 +600,7 @@ tbody tr:hover { background: #161f27; }
   align-content: start;
   justify-items: center;
   padding-top: 14vh;
-  background: #05080bcc;
+  background: var(--scrim);
   backdrop-filter: blur(3px);
 }
 .palette input { width: min(560px, 90vw); font-size: 1rem; padding: .7rem .8rem; }
@@ -544,7 +615,7 @@ tbody tr:hover { background: #161f27; }
   overflow: hidden;
 }
 .palette-list li { padding: .5rem .8rem; cursor: pointer; font-size: .9rem; }
-.palette-list li[aria-selected="true"] { background: #223040; color: var(--text); }
+.palette-list li[aria-selected="true"] { background: var(--elev-4); color: var(--text); }
 .palette-list li .kind { float: right; color: var(--muted); font-size: .78rem; }
 
 /* ---------------------------------------------------------------- responsive */
@@ -579,7 +650,7 @@ tbody tr:hover { background: #161f27; }
     padding: .4rem .56rem;
     font-size: .84rem;
   }
-  .nav-item[aria-current="true"] { border-left: 0; border-bottom-color: var(--amber); background: #1d2833; }
+  .nav-item[aria-current="true"] { border-left: 0; border-bottom-color: var(--amber); background: var(--elev-3); }
   .stage { padding: 0.9rem .8rem 1rem; }
   .topbar { padding: .55rem .8rem; }
   .brand-name { display: none; }
