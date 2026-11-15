@@ -224,7 +224,8 @@ Two rules that hold whatever that document says:
 
 - Read-only first: `python -m tools.hardware_checkup --skip-motion`, then
   `python -m tools.smoke_test`. Neither can move the dog — on a checkup, leaving `--skip-motion`
-  off *is* a motion run.
+  off *is* a motion run, and the smoke test disables `scanning` as well as the motors because it
+  drives the head itself (#184).
 - `--include-motion` only with clearance around the dog and a hand on the power.
 
 What still has to be judged by a human, because no command here asserts it: obstacle avoidance

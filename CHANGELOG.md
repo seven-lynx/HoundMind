@@ -7,6 +7,17 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The motionless smoke run actually is motionless**: `tools/smoke_test.py` disabled seven modules
+  and left `scanning` enabled, so step 3 of the bench ladder swept the head while `HARDWARE_TEST.md`
+  promised "nothing can move" - `hal_motors` is a caller of the HAL, not the executor, and
+  `navigation/scanning.py` drives the head itself (#184). `MOTIONLESS_MODULES` now includes
+  `scanning`, the run prints the set it disabled, and `scan_latest`/`mapping_openings` report
+  `SKIPPED` with the reason instead of `MISSING`: a scan needs the head and `mapping` publishes from a
+  scan, so neither can exist in this mode, and a run that passed only by asking for impossible keys
+  was never a pass. The exit code keys off `sensor_reading` (motionless) or all three
+  (`--include-motion`). `main(argv, hal)` takes the HAL like `hardware_checkup` does, so
+  `tests/test_smoke_test.py` can build the tool's own module list on `FakeDogHAL` and assert it
+  reaches the HAL with no action at all - the claim is now a test rather than a sentence.
 - **The web app is a client for the whole control plane, not a third of it**: the bundled app
   (`services/web/`) covered 8 of the 32 routes in `ROUTES`, so routines, places, people, decisions,
   history, modules, config, calibration, logs, pairing and the camera were reachable only by curl.

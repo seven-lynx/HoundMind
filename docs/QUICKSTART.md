@@ -43,7 +43,7 @@ python -m tools.installer_verify
 # 3. Read every sensor once. --skip-motion is what makes this safe to run anywhere.
 python -m tools.hardware_checkup --skip-motion
 
-# 4. Run the loop for a few seconds with motors disabled: sensors, scan, mapping.
+# 4. Run the loop with every moving module disabled. Sensors only: a scan needs the head.
 python -m tools.smoke_test
 
 # 5. Start the runtime.

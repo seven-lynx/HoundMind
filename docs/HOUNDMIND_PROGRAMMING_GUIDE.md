@@ -456,7 +456,8 @@ Because the interlock is always live, the bench procedure is about the *dog*, no
 
 1. `python -m tools.hardware_checkup --skip-motion` — validates sensors with no movement at all.
 2. Copy `config/settings.jsonc` to a bench file and set `modules.safety.enabled = true` there.
-3. `python -m tools.smoke_test --cycles 3 --tick-hz 5` — sensors, scan and mapping, no motion.
+3. `python -m tools.smoke_test --cycles 3 --tick-hz 5` — the loop and the sensors, no motion
+   (`scan_latest` and `mapping_openings` need `--include-motion`).
 4. Only then run with movement, dog on blocks or held, and one hand on `Ctrl-C`.
 5. Enable `modules.balance` last, and only after the IMU calibration looks sane.
 

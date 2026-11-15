@@ -193,35 +193,51 @@ A missed ultrasonic echo on carpet or a soft surface is normal and is **not** a 
 python -m tools.smoke_test
 ```
 
-This runs the real runtime for 20 cycles at 5 Hz and then reports whether three things came out of
-it. It disables `hal_motors`, `navigation`, `behavior`, `watchdog`, `safety`, `vision` and `voice`
-(`src/tools/smoke_test.py:39-51`), so **nothing can move** — and nothing in the safety stack runs
-either, which is the reason step 3 says nothing about safety. Steps 2 and 6 own that.
+This runs the real runtime for 20 cycles at 5 Hz and then reports what came out of it. It disables
+every module that can move the dog and **prints the list it used**, so the run states its own
+guarantee instead of asking you to trust a sentence:
+
+`behavior, hal_motors, navigation, safety, scanning, vision, voice, watchdog`
+
+`scanning` is in that set because it drives the head straight through the HAL rather than through
+`hal_motors` (`navigation/scanning.py:178-182`) - with it left enabled this step swept the head while
+this page said nothing could move (#184). `safety` and `watchdog` are off here too, and that is the
+reason step 3 says nothing about either: steps 2 and 6 own them, and step 2 proved the readings this
+step only re-checks.
+
+Watch the dog anyway. `tests/test_smoke_test.py` is what makes the claim testable - it builds this
+tool's module list on the fake HAL and fails if any action reaches it - but a run you did not watch is
+still a run you did not watch.
 
 Expected:
 
 ```
 [smoke] sensor_reading: OK
-[smoke] scan_latest: OK
-[smoke] mapping_openings: OK
+[smoke] scan_latest: SKIPPED (scanning is disabled in the motionless run)
+[smoke] mapping_openings: SKIPPED (nothing to consume without a scan)
+[smoke] disabled: behavior, hal_motors, navigation, safety, scanning, vision, voice, watchdog
 [smoke] PASS
 ```
+
+Two of the three keys read `SKIPPED`, and that is a pass in this mode rather than a shrug: a scan
+needs the head, and `mapping` publishes from a scan, so neither can exist in a run with no motion.
+`--include-motion` is where the sensor-to-scan-to-mapping chain is actually exercised.
 
 | Flag | Default | Use it when |
 |---|---|---|
 | `--cycles N` | 20 | a slow Pi 4 needs fewer; a stutter needs more |
 | `--tick-hz N` | 5 | you want to see the loop at its configured rate |
 | `--config path` | `config/settings.jsonc` | you are testing a different profile |
-| `--include-motion` | **off** | step 6 only, with clearance and a yes |
+| `--include-motion` | **off** | step 6 only, with clearance and a yes - it is the only mode that moves the head |
 
 | `MISSING` on | The key never appeared, so look at | Most likely |
 |---|---|---|
 | `sensor_reading` | `hal_sensors` and the `hal` module under it | the HAL did not construct — `logs/houndmind.log` has the reason |
-| `scan_latest` | `scanning` | the head servo or the scan interval; step 2 already proved the sensor |
-| `mapping_openings` | `mapping` | the module is disabled in `config/settings.jsonc`, or the scan never produced a reading |
+| `scan_latest` | `scanning`, under `--include-motion` only | no scan ran at all, or the head move raised — `logs/houndmind.log` carries the vendor error (#184) |
+| `mapping_openings` | `mapping`, under `--include-motion` only | the module is disabled in `config/settings.jsonc`, or the scan never produced a reading |
 
-`[smoke] FAIL` and exit 1 means at least one of the three was missing — read the three lines
-above it, not the last one.
+`[smoke] FAIL` and exit 1 means `sensor_reading` was missing in the motionless mode, or that one of
+the three was missing under `--include-motion` — read the lines above it, not the last one.
 
 ## 7. Step 4 — The control plane, live
 
@@ -339,8 +355,8 @@ Find the symptom, take the next step — not a different one.
 | `[checkup] pidog unavailable` and exit code 2 | the vendor package is not in this venv | `docs/INSTALL.md` [§3](INSTALL.md#3-install-sunfounder-pidog-libraries-into-the-same-python-environment) — `pidog` is cloned, not on PyPI |
 | `distance_cm: None`, everything else green | no sample yet (re-run, #108) or no echo from a soft or angled surface | re-run step 2 against a hard flat surface at arm's length before suspecting the transducer |
 | Step 2 passes, `sensor_reading: MISSING` in step 3 | the tool and the HAL read through different paths | the `hal`/`hal_sensors` module is `disabled` with a reason — `/api/v1/modules` or the log names it |
-| `[smoke] FAIL` only on `scan_latest` | `scanning` produced no reading | `/api/v1/modules` names a disabled reason; step 6 tells you whether the head moves at all |
-| `[smoke] FAIL` only on `mapping_openings` | `mapping` disabled or no scan to consume | `config/settings.jsonc` → `modules.mapping.enabled` |
+| `[smoke] FAIL` only on `scan_latest` (with `--include-motion`) | `scanning` produced no reading | `/api/v1/modules` names a disabled reason; `logs/houndmind.log` carries the vendor error from the head move (#184) |
+| `[smoke] FAIL` only on `mapping_openings` (with `--include-motion`) | `mapping` disabled or no scan to consume | `config/settings.jsonc` → `modules.mapping.enabled` |
 | `401` on `/api/v1/state` | missing or foreign bearer token | `cat ~/.houndmind/api_token` **stays on the device** — send it in the header, never into a report |
 | `Connection refused` on `:8420` | the API module is off, or on another host/port | `/api/v1/meta` from the Pi itself first; then `api.host` / `api.port`, and `https://` if `api.tls_enabled` is on |
 | `Address already in use` | an earlier runtime is still running | `pkill -f houndmind_ai`, then start once |
