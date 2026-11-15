@@ -30,6 +30,7 @@ from typing import Any
 
 from aiohttp import web
 
+from houndmind_ai.core.logging_setup import log_file_path
 from houndmind_ai.kernel.actions import repertoire_from_settings
 from houndmind_ai.kernel.commands import (
     DEFAULT_MODE,
@@ -60,7 +61,7 @@ from houndmind_ai.services.camera import CameraService
 from houndmind_ai.services.sessions import SessionRegistry
 from houndmind_ai.services.settings import ApiSettings
 from houndmind_ai.services.state import build_modules, build_state, redact_config
-from houndmind_ai.services.stream import EventHub
+from houndmind_ai.services.stream import EventHub, LogTail
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,9 @@ class ControlPlane:
             authorizer=self.authorizer,
             sessions=self.sessions,
             snapshot=self.snapshot,
+            # The live log channel (#170). Injected so the hub stays a pure fan-out: it reads no
+            # settings and opens no files of its own.
+            log_lines=LogTail(self.context).read_new,
             state_hz=settings.state_hz,
             link_loss_s=settings.link_loss_s,
             on_link_loss=self._on_link_loss,
@@ -1219,17 +1223,12 @@ async def _logs(request: web.Request) -> web.Response:
 
 
 def _log_path(plane: ControlPlane) -> Path | None:
-    """The configured log file, or None when file logging is switched off."""
-    settings = plane.context.get("settings") or {}
-    logging_settings = settings.get("logging", {}) if isinstance(settings, dict) else {}
-    logging_settings = logging_settings if isinstance(logging_settings, dict) else {}
-    if not logging_settings.get("enable_file", True):
-        return None
-    name = logging_settings.get("log_file_name") or "logs/houndmind.log"
-    path = Path(str(name))
-    if not path.is_absolute():
-        path = Path(__file__).resolve().parents[3] / path
-    return path
+    """The configured log file, or None when file logging is switched off.
+
+    The resolution lives in `core/logging_setup.py::log_file_path` because the live tail on the
+    WebSocket reads the same file (#170), and two answers to "which file" is one too many.
+    """
+    return log_file_path(plane.context.get("settings"))
 
 
 def _tail_lines(

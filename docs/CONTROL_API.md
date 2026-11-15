@@ -469,21 +469,31 @@ Module states: `ok`, `degraded` (enabled but not started), `disabled` (a normal,
 
 ```
 GET /api/v1/events            (Upgrade: websocket)
-→ client sends: { "type": "hello", "token": "<device_token>" }
-← server sends: { "type": "welcome", "data": { "scopes": [...], "device": "<name>", "session": {...} } }
+→ client sends: { "type": "hello", "token": "<device_token>", "logs": true }
+← server sends: { "type": "welcome", "data": { "scopes": [...], "device": "<name>", "session": {...}, "logs": <bool> } }
 ```
 
-Nothing sent before `hello` is answered, and a failed `hello` closes the socket.
+Nothing sent before `hello` is answered, and a failed `hello` closes the socket. `logs` is optional
+and asks for the live log channel; `welcome.logs` says whether it was granted.
 
 Server frames:
 
 | `type` | Payload | When |
 |---|---|---|
-| `welcome` | `data`: `scopes`, `device`, `session` | once, after a successful `hello` |
+| `welcome` | `data`: `scopes`, `device`, `session`, `logs` | once, after a successful `hello` |
 | `state` | `data`: the [§4](#4-state-snapshot) snapshot | `api.state_hz` (default 10 Hz) |
 | `event` | `data`: `{ "name", "data", "ts" }` | on transition |
+| `log` | `data`: `{ "lines": [...] }`, newest batch only | only while the socket asked for `logs` and holds `admin` (#170) |
 | `pong` | `ts` | in reply to a client `ping` |
 | `error` | `error` (code), `detail` (optional) | on a rejected message, or `superseded` |
+
+The `log` channel carries the same data as `GET /api/v1/logs`, read from the same file, covering the
+lines written since the socket connected. It is granted only to a token holding `admin`; a token
+without it keeps its socket and gets `welcome.logs: false`, because taking telemetry away from a
+paired phone to punish it for asking about logs would be the wrong trade. `log` frames are
+**droppable**: the newest batch replaces an undelivered one, so a client that cannot keep up loses
+lines rather than being disconnected — the opposite rule to `event`, and the reason the two classes
+are separate.
 
 Client frames: `{"type": "hello", "token": "..."}` then `{"type": "ping"}`. Anything else is an
 `error` with code `bad_request`.
@@ -507,10 +517,10 @@ Client rules:
 
 - **Send `ping` every 2 s.** No ping for `api.link_loss_s` (default 6 s) and the server treats the
   client as gone and stops its command, publishing `command_expired` with `reason: "link_loss"`.
-- **Backpressure is drop-oldest for `state`, fatal for `event`.** A slow client silently skips `state`
-  frames; a client that cannot absorb 64 queued event frames is disconnected, because losing
-  `command_vetoed` is how a user ends up shouting at a dog that is refusing to move for a reason
-  nobody told them.
+- **Backpressure is drop-oldest for `state` and `log`, fatal for `event`.** A slow client silently
+  skips `state` frames and loses `log` lines (newest batch wins); a client that cannot absorb 64
+  queued event frames is disconnected, because losing `command_vetoed` is how a user ends up shouting
+  at a dog that is refusing to move for a reason nobody told them.
 - **One socket per token.** A second connection with the same token evicts the first, which receives
   `error` / `superseded` so the UI can explain it.
 

@@ -928,7 +928,7 @@ as specified in `docs/CONTROL_API.md`:
 | State snapshot | `GET /api/v1/state` | `state:read` |
 | Module list | `GET /api/v1/modules` | `state:read` |
 | Decisions | `GET /api/v1/decisions` | `state:read` |
-| Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame |
+| Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame; `hello.logs` adds droppable live log lines (`admin`) |
 | Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?ticket=`) |
 | Places | `GET`/`POST`/`DELETE /api/v1/places`, `POST /places/{id}/go` | `state:read` / `config` / `move` |
 | People | `GET /api/v1/people`, `DELETE /api/v1/people/{id}` | `admin` — ids and names only, never an embedding |

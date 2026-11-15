@@ -101,6 +101,9 @@ export const store = {
   state: null,
   health: "connecting", // connecting | live | stale | offline
   events: [],
+  // Live log lines from the `log` frame class (#170), bounded by the app. Empty means "no live
+  // channel" - the Logs panel then falls back to polling `GET /api/v1/logs`.
+  logLines: [],
   rings: emptyRings(),
   subs: new Set(),
 
