@@ -14,9 +14,11 @@ import re
 import zipfile
 from pathlib import Path
 
+import json5
 from aiohttp.test_utils import TestClient, TestServer
 
 from houndmind_ai.calibration.workflow import CalibrationModule
+from houndmind_ai.core.config import load_config
 from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.hal.iface import LEG_SERVO_NAMES
 from houndmind_ai.kernel.commands import CommandBus
@@ -426,6 +428,97 @@ def test_an_unknown_path_is_a_404(tmp_path) -> None:
         async with TestClient(TestServer(create_app(plane))) as client:
             response = await client.get(f"{API_PREFIX}/nope")
             assert response.status == 404
+
+    asyncio.run(scenario())
+
+
+def plane_with_config(tmp_path) -> tuple[ControlPlane, Path]:
+    """A plane whose context carries the shipped settings file, copied into the test's directory.
+
+    This is the shape the runtime produces: `Config.path` is the file that was read, so `PATCH /config`
+    can persist into it (#174). The copy leaves the shipped file untouched.
+    """
+    target = tmp_path / "settings.jsonc"
+    target.write_text(
+        (REPO_ROOT / "config" / "settings.jsonc").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    config = load_config(target)
+    context = DummyContext()
+    context.set("config", config)
+    context.set("settings", config.settings)
+    settings = ApiSettings(
+        host="127.0.0.1",
+        port=0,
+        token_path=str(tmp_path / "api_token"),
+        pairing_enabled=True,
+    )
+    return ControlPlane(context, settings, CommandBus()), target
+
+
+def test_a_live_config_write_persists_into_the_settings_file(tmp_path) -> None:
+    """#174: a live edit that dies with the process is a setting the user thinks they changed."""
+    async def scenario() -> None:
+        plane, target = plane_with_config(tmp_path)
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        before = target.read_text(encoding="utf-8")
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/config", headers=headers, json={"led.brightness": 0.4}
+            )
+            body = await response.json()
+
+        after = target.read_text(encoding="utf-8")
+        assert response.status == 200
+        assert body["persisted"] is True
+        assert body["applied"] == {"led.brightness": 0.4}
+        assert json5.loads(after)["settings"]["led"]["brightness"] == 0.4
+        assert after.count("//") == before.count("//"), "the comments are the documentation"
+        assert plane.context.get("settings")["led"]["brightness"] == 0.4
+
+    asyncio.run(scenario())
+
+
+def test_a_live_config_write_refuses_a_file_edited_since_boot(tmp_path) -> None:
+    """G1: the edit made on the device wins, and neither the file nor the live table is touched."""
+    async def scenario() -> None:
+        plane, target = plane_with_config(tmp_path)
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        # Same length as `0.7`, so only the digest can tell this apart from an untouched file.
+        target.write_text(
+            target.read_text(encoding="utf-8").replace('"brightness": 0.7', '"brightness": 0.6'),
+            encoding="utf-8",
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/config", headers=headers, json={"led.brightness": 0.4}
+            )
+            body = await response.json()
+
+        assert response.status == 409
+        assert body["error"] == "conflict"
+        assert "changed on disk" in body["detail"]
+        assert body["applied"] == {} and body["persisted"] is False
+        assert plane.context.get("settings")["led"]["brightness"] == 0.7, "nothing was applied"
+        assert '"brightness": 0.6' in target.read_text(encoding="utf-8"), "the edit survived"
+
+    asyncio.run(scenario())
+
+
+def test_a_live_config_write_without_a_file_applies_in_memory(tmp_path) -> None:
+    """A `Config` built in code has no path, and the answer has to say the change is not on disk."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        plane.context.set("settings", {"led": {"brightness": 0.7}})
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.patch(
+                f"{API_PREFIX}/config", headers=headers, json={"led.brightness": 0.4}
+            )
+            body = await response.json()
+
+        assert response.status == 200
+        assert body["persisted"] is False
+        assert plane.context.get("settings")["led"]["brightness"] == 0.4
 
     asyncio.run(scenario())
 

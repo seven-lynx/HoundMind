@@ -162,8 +162,22 @@ section schema (`kernel/config_schema.py::validate_settings_section`), so a `400
 `invalid: [{key, problems: [{path, message, hint}]}]` and nothing is stored. A value that got through
 would otherwise fail the module that reads it on every tick, which is a worse version of the same bug.
 
-The change is applied **in memory only**. Every response carries `persisted: false`, and a restart
-reloads `config/settings.jsonc` — so a live edit is a session-scoped override, not a new default.
+The change is **persisted into `config/settings.jsonc`** (#174) when the runtime read one, and both
+happen or neither does: the write goes in first, and only then is the live table updated. The edit is
+surgical — the value's bytes are replaced and every comment in the file survives — so the file still
+reads as the document it was. A response carries `persisted: true` when the file was written and
+`persisted: false` only for a runtime with no settings file (a `Config` built in code), which then
+applies in memory as before.
+
+Three refusals are specific to this:
+
+- `409 conflict`, `detail` naming the file, when `settings.jsonc` changed on disk since the runtime
+  started. The edit made on the device wins; restart to pick it up, then send the change again. The
+  runtime does not overwrite an edit it did not make.
+- `409 conflict` when a live key is not **written** in the file (it exists only as a default). Add the
+  key there once; the writer will not invent a line and guess its indentation.
+- `500 internal` if the rewrite would not load or would not land on the asked-for value. Nothing is
+  written in that case: the rewritten text is proved before it replaces the file.
 
 **Reserved, not implemented in v1:** `POST /api/v1/update`. There is no route for face
 enrollment or SLAM map download; both are runtime-context commands (see `FEATURES_GUIDE.md`).
@@ -537,6 +551,7 @@ Client rules:
 | 403 | `forbidden` | token lacks the scope | do not retry |
 | 404 | `not_found` | unknown path | — |
 | 409 | `vetoed` | interlock or mode refused (`veto`, `detail`) | show the reason to the user |
+| 409 | `conflict` | `settings.jsonc` changed on disk since boot, or the key is not written there (#174) | restart the runtime, or edit the file |
 | 429 | `rate_limited` | pairing attempts or command queue | honour `Retry-After` |
 | 503 | `unavailable` | the runtime did not answer, or the log file is absent | show module detail |
 | 500 | `internal` | a bug | ask for a support bundle |

@@ -58,6 +58,11 @@ from houndmind_ai.services.auth import (
     TokenStore,
 )
 from houndmind_ai.services.camera import CameraService
+from houndmind_ai.services.config_writer import (
+    ConfigWriteError,
+    stamp_of,
+    write_settings_values,
+)
 from houndmind_ai.services.sessions import SessionRegistry
 from houndmind_ai.services.settings import ApiSettings
 from houndmind_ai.services.state import build_modules, build_state, redact_config
@@ -160,8 +165,31 @@ class ControlPlane:
             on_link_loss=self._on_link_loss,
             clock=self._clock,
         )
+        # #174: the settings file the runtime read, and its stamp when this plane came up. A `Config`
+        # built by hand carries no path, so `PATCH /config` then answers `persisted: false` instead of
+        # inventing a file to write.
+        config = self.context.get("config")
+        self._config_path: Path | None = getattr(config, "path", None)
+        self._config_stamp = stamp_of(self._config_path)
 
     # ---- state -------------------------------------------------------------
+
+    @property
+    def config_path(self) -> Path | None:
+        """The `settings.jsonc` this runtime read, when there was one."""
+        return self._config_path
+
+    def persist_config(self, updates: dict[str, object]) -> None:
+        """Write live keys into the settings file, or raise `ConfigWriteError` (#174).
+
+        The stamp is the file's state when this process last read or wrote it, so an edit made on the
+        device after boot is refused rather than overwritten (G1).
+        """
+        if self._config_path is None:
+            raise ConfigWriteError("the runtime has no settings file to write to", status=409)
+        self._config_stamp = write_settings_values(
+            self._config_path, updates, expected_stamp=self._config_stamp
+        )
 
     def ensure_token(self) -> None:
         """Create the token file on first start. The value is never returned or logged."""
@@ -1069,7 +1097,9 @@ async def _config_patch(request: web.Request) -> web.Response:
     if not isinstance(settings, dict):
         raise AuthError("unavailable", "no settings are loaded", status=503)
 
-    applied: dict[str, object] = {}
+    # Validate everything before writing anything: a PATCH is one edit, and half of it landing is how
+    # a client ends up unsure what the dog is running.
+    pending: list[tuple[str, str, dict[str, object], object]] = []
     rejected: list[str] = []
     invalid: list[dict[str, object]] = []
     for key, value in body.items():
@@ -1099,8 +1129,7 @@ async def _config_patch(request: web.Request) -> web.Response:
                 }
             )
             continue
-        settings[section] = updated
-        applied[dotted] = value
+        pending.append((dotted, section, updated, value))
 
     if invalid:
         return web.json_response(
@@ -1125,10 +1154,36 @@ async def _config_patch(request: web.Request) -> web.Response:
             },
             status=400,
         )
-    # `persisted` is explicit because it is not true: the change lives in this process only, and a
-    # restart reloads `config/settings.jsonc` (#128).
+
+    # Persist first (#174): a refused write has to leave the live table untouched, so the file and the
+    # running process cannot end up disagreeing about what the dog is running. `persisted: false`
+    # then means what it says - a runtime with no settings file (a `Config` built by hand) applies in
+    # memory only, and the answer says so.
+    persisted = False
+    if plane.config_path is not None and pending:
+        try:
+            plane.persist_config(
+                {dotted: value for dotted, _section, _updated, value in pending}
+            )
+        except ConfigWriteError as exc:
+            return web.json_response(
+                {
+                    "error": "conflict",
+                    "detail": exc.detail,
+                    "applied": {},
+                    "live_keys": list(LIVE_CONFIG_KEYS),
+                    "persisted": False,
+                },
+                status=exc.status,
+            )
+        persisted = True
+
+    applied: dict[str, object] = {}
+    for dotted, section, updated, value in pending:
+        settings[section] = updated
+        applied[dotted] = value
     return web.json_response(
-        {"applied": applied, "live_keys": list(LIVE_CONFIG_KEYS), "persisted": False}
+        {"applied": applied, "live_keys": list(LIVE_CONFIG_KEYS), "persisted": persisted}
     )
 
 

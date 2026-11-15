@@ -933,7 +933,7 @@ as specified in `docs/CONTROL_API.md`:
 | Places | `GET`/`POST`/`DELETE`/`PATCH /api/v1/places[/{id}]`, `POST /places/{id}/go` | `state:read` / `config` / `move` |
 | People | `GET /api/v1/people`, `DELETE /api/v1/people/{id}` | `admin` — ids and names only, never an embedding |
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
-| Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration`, `POST /calibration/run` | `config` |
+| Config | `GET`/`PATCH /api/v1/config` (live keys persist into `settings.jsonc`), `GET /api/v1/calibration`, `POST /calibration/run` | `config` |
 | History | `GET /api/v1/history` | `state:read` |
 | Diagnostics | `GET /api/v1/logs` (`?level=` / `?contains=` filtered server-side), `/support-bundle` | `admin` |
 | Web app | `GET /` and `/static/*` | same origin, token in the browser |
