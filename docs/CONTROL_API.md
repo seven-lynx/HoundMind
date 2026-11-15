@@ -114,6 +114,7 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
 | `GET` | `/api/v1/whoami` | any valid token | the caller's `device` name, `scopes` and `kind` — the same shape as the `welcome` frame, so a client can say what its token cannot do before a request fails (#168) |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
+| `GET` | `/api/v1/scan` | `state:read` | the last head sweep verbatim — `mode` plus `forward`/`right`/`left`, or `mode` plus `angles` `{yaw: cm}`; `{"scan": null}` before the first one (#169) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
@@ -420,6 +421,7 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "state": "running", "dry_run": false, "action": "sit", "veto": null, "detail": null,
     "started_at": 4212.3
   },
+  "scan": { "mode": "sweep", "timestamp": 4211.9, "samples": 9 },
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "temp_c": 61.4, "mem_used_pct": 51.0 } },
   "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [], "exempt": { "api": "exempt by settings.watchdog.ignore_modules" } },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 },
@@ -447,6 +449,13 @@ cadences over the same object.
 is live, whereas the WS `routine` event ([§5](#5-websocket)) fires only when the run *moves*: a new step, a new state,
 or a new veto. `started_at` is on the same monotonic clock as `ts`, so `ts - started_at` is how long
 the run has been going - a duration, not a wall-clock moment to display.
+
+`scan` is the **summary** of the last head sweep: `mode` (`sweep` or `three_way`), the reading's
+`timestamp` (epoch seconds, from the scanner) and how many bearings it holds. It is `null` until the
+scanner has finished its first sweep, and stays `null` while `modules.scanning` is off. The bearings
+themselves are **not** here: a sweep is one reading per angle — up to 181 — and this snapshot is sent
+at `api.state_hz` to every client, so the samples live behind `GET /api/v1/scan` and a client fetches
+them when `timestamp` moves (#169).
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
 `navigation`, `routine`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode

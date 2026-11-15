@@ -1,7 +1,7 @@
 // Overview: one living subject, the instruments around it, and the sentence that explains the last
 // decision. This is the panel a person leaves open.
 
-import { esc, facts, fmt, gauge, spark, toneFor } from "../lib.js";
+import { api, errorText, esc, facts, fmt, gauge, spark, toneFor } from "../lib.js";
 
 const DOG = `
 <svg viewBox="0 0 220 140" role="img" aria-label="The dog, in its current posture">
@@ -78,6 +78,15 @@ export const overview = {
       <div class="why" id="ov-why" data-tone="">
         <span class="kicker">why</span><span id="ov-why-text">waiting for the first frame…</span>
       </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <h3 style="margin:0">Head sweep</h3>
+          <span class="chip" id="ov-scan-mode">no scan</span>
+        </div>
+        <svg id="ov-radar" viewBox="-110 -108 220 118" role="img"
+          aria-label="The last head sweep, drawn as a polar plot with the nose at the top"></svg>
+        <p class="hint" id="ov-scan-note"></p>
+      </div>
       <div class="grid two">
         <div class="card"><h3>Body</h3><div id="ov-body"></div></div>
         <div class="card"><h3>Runtime</h3><div id="ov-runtime"></div></div>
@@ -91,6 +100,69 @@ export const overview = {
     const whyText = root.querySelector("#ov-why-text");
     const body = root.querySelector("#ov-body");
     const runtime = root.querySelector("#ov-runtime");
+    const radar = root.querySelector("#ov-radar");
+    const scanMode = root.querySelector("#ov-scan-mode");
+    const scanNote = root.querySelector("#ov-scan-note");
+
+    // The snapshot carries `scan` as a summary (#169): mode, timestamp and a sample count. The
+    // bearings are a separate read, fetched only when that timestamp moves - a sweep is up to 181
+    // numbers, and the snapshot arrives at the state rate.
+    let scanStamp = null;
+
+    function polar(scan) {
+      const range = 200;
+      const rings = [50, 100, 150, 200]
+        .map(
+          (cm) =>
+            `<circle r="${((cm / range) * 100).toFixed(0)}" fill="none" stroke="var(--line-2)" stroke-width="1"/>`
+        )
+        .join("");
+      const dots = Object.entries(scan.angles || {})
+        .filter(([, cm]) => Number.isFinite(Number(cm)))
+        .map(([yaw, cm]) => {
+          // A compass bearing, with the nose up: yaw 0 is straight ahead, yaw 90 is to the right.
+          const angle = (Number(yaw) * Math.PI) / 180;
+          const radius = (Math.min(Math.max(Number(cm), 0), range) / range) * 100;
+          const x = Math.sin(angle) * radius;
+          const y = -Math.cos(angle) * radius;
+          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" fill="var(--amber)"/>`;
+        })
+        .join("");
+      return `${rings}<line x1="0" y1="0" x2="0" y2="-100" stroke="var(--line-2)"/>${dots}`;
+    }
+
+    async function refreshScan(stamp) {
+      if (stamp === scanStamp) return;
+      scanStamp = stamp;
+      try {
+        const payload = await api("/scan");
+        const scan = payload.scan;
+        if (!scan) {
+          scanMode.textContent = "no scan";
+          radar.innerHTML = "";
+          scanNote.textContent = "";
+          return;
+        }
+        if (scan.mode === "sweep" && scan.angles) {
+          const count = Object.keys(scan.angles).length;
+          scanMode.textContent = `${count} bearing${count === 1 ? "" : "s"}`;
+          radar.innerHTML = polar(scan);
+          scanNote.textContent = "rings at 50, 100, 150 and 200 cm; the nose points up";
+        } else {
+          // A three-way scan has no angles to plot, so the numbers are shown as measured rather
+          // than placed at an angle the server never reported.
+          scanMode.textContent = scan.mode;
+          radar.innerHTML = "";
+          scanNote.textContent = `forward ${fmt(scan.forward, "cm")} · right ${fmt(
+            scan.right,
+            "cm"
+          )} · left ${fmt(scan.left, "cm")}`;
+        }
+      } catch (err) {
+        radar.innerHTML = "";
+        scanNote.textContent = errorText(err);
+      }
+    }
 
     return {
       update(source) {
@@ -107,6 +179,18 @@ export const overview = {
         const supervisor = snapshot.supervisor || {};
         const counts = snapshot.modules || {};
         const nav = snapshot.nav || {};
+
+        // Re-fetch the bearings only when the scan changed; the summary in the snapshot exists so a
+        // 10 Hz telemetry stream does not carry a 181-number sweep (#169).
+        const scan = snapshot.scan;
+        if (scan && typeof scan.timestamp === "number") {
+          refreshScan(scan.timestamp);
+        } else if (scanStamp !== null) {
+          scanStamp = null;
+          scanMode.textContent = "no scan";
+          radar.innerHTML = "";
+          scanNote.textContent = "";
+        }
 
         const look = stance(snapshot);
         subject.className = `subject ${look.cls}`;

@@ -488,6 +488,23 @@ async def _state(request: web.Request) -> web.Response:
     return web.json_response(_plane(request).snapshot())
 
 
+async def _scan(request: web.Request) -> web.Response:
+    """The last head sweep, verbatim (#169).
+
+    A dedicated read rather than a field of the snapshot: a sweep holds one bearing per angle, and
+    the snapshot is sent at `api.state_hz` to every client. `state.scan` carries the summary (mode,
+    timestamp, sample count), so a client fetches this only when the scan actually changed.
+
+    `{"scan": null}` before the first scan, and `200` either way: "no scan yet" is an answer, not a
+    failure, and the scanner being disabled is visible in `/modules`.
+    """
+    latest = _plane(request).context.get("scan_latest")
+    return web.json_response(
+        {"scan": latest if isinstance(latest, dict) else None},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 async def _modules(request: web.Request) -> web.Response:
     return web.json_response(build_modules(_plane(request).context))
 
@@ -1724,6 +1741,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/health", None, _health),
     ("GET", "/whoami", ANY_SCOPE, _whoami),
     ("GET", "/state", "state:read", _state),
+    ("GET", "/scan", "state:read", _scan),
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/routines", "state:read", _routines_list),

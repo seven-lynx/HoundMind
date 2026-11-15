@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The head sweep is visible**: `GET /api/v1/state` gained a `scan` summary — `mode`, `timestamp`
+  and a bearing count — and `GET /api/v1/scan` returns the reading itself, `{"scan": null}` before the
+  first one (#169). The samples are deliberately **not** in the snapshot: a sweep holds one reading
+  per angle (up to 181 at `scan_step_deg: 1`) and the snapshot is sent at `api.state_hz` to every
+  client, so the summary is what tells a client whether to fetch. The Overview panel draws the sweep
+  as a polar plot with the nose up (rings at 50/100/150/200 cm), re-fetching only when the timestamp
+  moves; a `three_way` scan has no angles, so its forward/right/left readings are shown as measured
+  rather than placed at an angle the server never reported.
 - **A routine can be written from the browser**: `POST /api/v1/routines` saves one routine file into
   `settings.routines.dir` — the same directory the runner reads, resolved by one function now
   (`kernel/routine_store.py::routines_dir`, which `behavior/routine_runner.py` also delegates to) —

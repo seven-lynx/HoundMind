@@ -236,6 +236,34 @@ def _routines(context) -> dict[str, Any] | None:
     return to_dict() if callable(to_dict) else None
 
 
+def _scan(context) -> dict[str, object] | None:
+    """The last head sweep, summarised (#169). Absent until a scan has run.
+
+    The **bearings are not here on purpose**. A sweep holds one reading per angle - up to 181 at
+    `scan_step_deg: 1` - and this snapshot is a latest-value channel sent at `api.state_hz` to every
+    client. Publishing the samples here would cost tens of kilobytes a second for a reading that
+    changes once per `scan_interval_s`. So the snapshot carries what a client needs in order to
+    decide whether to fetch `GET /api/v1/scan`, which returns the reading verbatim.
+
+    `None` rather than an empty block, for the same reason `decision` is: "no scan yet" and "a scan
+    that measured nothing" are different answers, and a radar drawing zeros invents obstacles.
+    """
+    latest = context.get("scan_latest")
+    if not isinstance(latest, dict):
+        return None
+    mode = latest.get("mode")
+    timestamp = _number(latest.get("timestamp"))
+    if not isinstance(mode, str) or not mode or timestamp is None:
+        return None
+    angles = latest.get("angles")
+    if isinstance(angles, dict):
+        return {"mode": mode, "timestamp": timestamp, "samples": len(angles)}
+    # `three_way` has no angles: it is forward, right and left, and a bearing that failed to read is
+    # absent rather than zero.
+    bearings = [key for key in ("forward", "right", "left") if _number(latest.get(key)) is not None]
+    return {"mode": mode, "timestamp": timestamp, "samples": len(bearings)}
+
+
 def build_state(context, *, now: float | None = None) -> dict[str, object]:
     """The full snapshot. ``now`` is the caller's monotonic clock, used for ``since_s``."""
     clock = 0.0 if now is None else now
@@ -250,6 +278,7 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "safety": _safety(context),
         "nav": _nav(context),
         "decision": _decision(context),
+        "scan": _scan(context),
         "routines": _routines(context),
         "health": build_health(context),
         "supervisor": build_supervisor(context),
