@@ -7,6 +7,21 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The web app is a client for the whole control plane, not a third of it**: the bundled app
+  (`services/web/`) covered 8 of the 32 routes in `ROUTES`, so routines, places, people, decisions,
+  history, modules, config, calibration, logs, pairing and the camera were reachable only by curl.
+  It is now thirteen panels over all 32 - a rail, an instrument cluster around a posture avatar that
+  reads `actuators`/`decision`, the deadman drawn as a renewing ring on the hold-to-walk pad, a
+  supervised one-step control (`speed`/`steps`) for the motion bench, and an event ticker fed by the
+  `event` frames. `services/web/app.js` is the entry point, `lib.js` the shared store/API/formatters,
+  `panels/*.js` one module per panel; `index.html` and `style.css` are rewritten around dark-first
+  tokens with no external asset (the device serves a LAN that may have no internet). The client keeps
+  its own ring buffers, so sparklines cost no route. `tests/test_webapp_coverage.py` fails when a
+  route is called by no panel and named in no reasoned exclusion, so the gap cannot reopen silently.
+  Every panel renders `403` (scope), `503` (module off), `409` (in flight) and `429` from the
+  server's own `detail`; `*_valid: false` still renders `—`; a redacted config leaf is never offered
+  as an input; `PATCH /config` says `persisted: false` out loud. `ruff` clean, `pytest` 1022 passed /
+  2 skipped, `mypy` 96 files (Python 3.14.5, tooling evidence only).
 - **The navigator and the watchdog agree about what a stale scan is** (#22): a sweep at the shipped
   settings takes ~2.6 s while `navigation.scan_stale_s` shipped as 0.8 s, so `_scan_open_space`
   rejected every healthy reading and then fell back to `scan_service.latest()` with no timestamp

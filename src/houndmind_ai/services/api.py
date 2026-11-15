@@ -1220,9 +1220,14 @@ async def _index(request: web.Request) -> web.Response:
         html = index.read_text(encoding="utf-8")
     except OSError:
         return web.json_response(missing, status=404)
+    # `no-cache` on the document as well as on the assets (#102, one level up): the markup and the
+    # module that reads it ship together, so a browser that keeps an old `index.html` runs new
+    # JavaScript against ids that no longer exist. That is not a slow load - it is a `TypeError` at
+    # module scope and a page whose buttons do nothing, which reads as a broken device.
     return web.Response(
         text=html.replace(_ASSET_VERSION_PLACEHOLDER, _asset_version()),
         content_type="text/html",
+        headers={"Cache-Control": "no-cache"},
     )
 
 
