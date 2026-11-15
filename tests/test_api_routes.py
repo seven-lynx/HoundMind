@@ -832,3 +832,68 @@ def test_the_scan_route_answers_null_before_the_first_sweep(tmp_path) -> None:
         assert state["scan"] == {"mode": "sweep", "timestamp": 4211.9, "samples": 3}
 
     asyncio.run(scenario())
+
+
+def test_the_map_route_reports_nothing_until_a_cell_is_filled(tmp_path) -> None:
+    """`map: null` is an answer; `grid_enabled` says whether waiting will ever help (#175)."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            empty = await client.get(f"{API_PREFIX}/map", headers=headers)
+            empty_body = await empty.json()
+
+            plane.context.set("settings", {"mapping": {"grid_enabled": False}})
+            disabled = await client.get(f"{API_PREFIX}/map", headers=headers)
+            disabled_body = await disabled.json()
+
+        assert empty.status == 200 and empty_body == {"map": None, "grid_enabled": True}
+        assert disabled_body == {"map": None, "grid_enabled": False}
+
+    asyncio.run(scenario())
+
+
+def test_the_map_route_answers_in_the_mappers_own_grid_indices(tmp_path) -> None:
+    """`ix` is the dog's left and `iy` its forward: the client scales, it does not re-project."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        plane.context.set("settings", {"mapping": {"cell_size_cm": 5}})
+        plane.context.set(
+            "mapping_state",
+            {"grid": {"cells": {"0,3": 2, "-1,4": 1, "not-a-cell": 9}}},
+        )
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/map", headers=headers)
+            body = await response.json()
+
+        assert response.status == 200
+        assert body["map"] == {
+            "cell_size_cm": 5.0,
+            "cells": [[0, 3, 2], [-1, 4, 1]],
+            "count": 2,
+            "truncated": False,
+        }, "a key that is not `ix,iy` is skipped, not fatal"
+
+    asyncio.run(scenario())
+
+
+def test_the_map_route_caps_the_cells_and_keeps_the_strongest(tmp_path) -> None:
+    """An empty corner of a truncated map is not unmapped space, so the cap has to be visible."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        plane.context.set(
+            "mapping_state",
+            {"grid": {"cells": {f"{ix},0": ix + 1 for ix in range(4100)}}},
+        )
+        headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            body = await (await client.get(f"{API_PREFIX}/map", headers=headers)).json()
+
+        assert body["map"]["count"] == 4100
+        assert body["map"]["truncated"] is True
+        assert len(body["map"]["cells"]) == 4000
+        # Hits run 1..4100, so keeping the strongest means dropping the lowest hundred.
+        assert min(cell[2] for cell in body["map"]["cells"]) == 101
+
+    asyncio.run(scenario())

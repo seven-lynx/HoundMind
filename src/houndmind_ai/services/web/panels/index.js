@@ -14,6 +14,7 @@ import { people } from "./people.js";
 import { camera } from "./camera.js";
 import { decisions } from "./decisions.js";
 import { history } from "./history.js";
+import { map } from "./map.js";
 import { modules } from "./modules.js";
 import { logs } from "./logs.js";
 import { config, calibration } from "./setup.js";
@@ -28,6 +29,7 @@ export const panels = [
   camera,
   decisions,
   history,
+  map,
   modules,
   config,
   calibration,

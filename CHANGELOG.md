@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The occupancy grid is visible**: `mapping` has kept a hit histogram per cell since P3 and no client
+  could see it (#175). `GET /api/v1/map` returns `[ix, iy, hits]` cells plus `cell_size_cm`, `count`
+  and `truncated`, in **the mapper's own indices** (`ix` to the dog's left, `iy` forward) so nothing
+  re-derives a projection the producer could disagree with. The list is capped at 4000 cells and
+  keeps the most-hit ones: `truncated: true` with `count` says the rest is on the device, because an
+  empty corner of a truncated map is not unmapped space. `{"map": null}` means no cell has been
+  filled, and `grid_enabled` says whether waiting will help. The web app gains a fourteenth panel —
+  a canvas renderer with the nose up, the dog at its origin, and intensity by hit count.
 - **The head sweep is visible**: `GET /api/v1/state` gained a `scan` summary — `mode`, `timestamp`
   and a bearing count — and `GET /api/v1/scan` returns the reading itself, `{"scan": null}` before the
   first one (#169). The samples are deliberately **not** in the snapshot: a sweep holds one reading

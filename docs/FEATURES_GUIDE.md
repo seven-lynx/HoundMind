@@ -931,6 +931,7 @@ as specified in `docs/CONTROL_API.md`:
 | Caller identity | `GET /api/v1/whoami` | any valid token — the caller's `device`, `scopes` and `kind`, the same shape as the socket's `welcome` frame |
 | State snapshot | `GET /api/v1/state` | `state:read` |
 | Head sweep | `GET /api/v1/scan` | `state:read` — the last sweep's bearings; `state.scan` carries the summary so a client fetches only when it changed |
+| Map | `GET /api/v1/map` | `state:read` — occupancy cells in the mapper's own grid coordinates, capped with a `truncated` flag |
 | Module list | `GET /api/v1/modules` | `state:read` |
 | Decisions | `GET /api/v1/decisions` | `state:read` |
 | Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame; `hello.logs` adds droppable live log lines (`admin`) |
@@ -943,12 +944,14 @@ as specified in `docs/CONTROL_API.md`:
 | Diagnostics | `GET /api/v1/logs` (`?level=` / `?contains=` filtered server-side), `/support-bundle` | `admin` |
 | Web app | `GET /` and `/static/*` | same origin, token in the browser |
 
-**The web app covers every route above.** `GET /` serves thirteen panels: Overview (subject posture,
-sonar/battery/temperature/loop instruments, the "why" line behind the last decision), Drive (hold to
+**The web app covers every route above.** `GET /` serves fourteen panels: Overview (subject posture,
+sonar/battery/temperature/loop instruments, the "why" line behind the last decision, the head-sweep
+radar), Drive (hold to
 walk with the deadman drawn as a renewing ring, mode, one supervised step at a chosen speed), Tricks
 (the repertoire grouped by action class, locomotion behind an arm switch), Routines (run, dry-run,
-refused files), Places (teach, forget, walk, `at_anchor`), People (admin), Camera (ticket stream and
-still), Decisions, History (audit, attached clients, pairing window), Modules (per-module `tick_ms`
+refused files, the writer), Places (teach, forget, walk, `at_anchor`), People (admin), Camera (ticket stream and
+still), Decisions, History (audit, attached clients, pairing window), Map (the occupancy grid, drawn
+from `GET /map`), Modules (per-module `tick_ms`
 and the reason it is not running), Config (live keys only), Calibration (read-only probes) and Logs
 (tail, filter, support bundle). A route with no panel is a feature only an SSH session can use, so
 `tests/test_webapp_coverage.py` fails when a route in `ROUTES` is called by no panel and named in no

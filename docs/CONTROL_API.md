@@ -115,6 +115,7 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/whoami` | any valid token | the caller's `device` name, `scopes` and `kind` — the same shape as the `welcome` frame, so a client can say what its token cannot do before a request fails (#168) |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
 | `GET` | `/api/v1/scan` | `state:read` | the last head sweep verbatim — `mode` plus `forward`/`right`/`left`, or `mode` plus `angles` `{yaw: cm}`; `{"scan": null}` before the first one (#169) |
+| `GET` | `/api/v1/map` | `state:read` | the occupancy grid as `[ix, iy, hits]` cells with `cell_size_cm`, `count` and `truncated`; `{"map": null}` when no cell has been filled (#175) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
@@ -158,6 +159,14 @@ file, so `lines: []` means "no match in that window", not "no match in the log".
 a `400` carrying the accepted set, because a misspelled filter and an empty result are different
 answers. A traceback's continuation lines carry no level, so `level` keeps record lines only; `contains`
 still matches them.
+
+The `map` response is `{"map": {"cell_size_cm", "cells", "count", "truncated"}, "grid_enabled"}`.
+Cells are `[ix, iy, hits]` **in the mapper's own cell indices** — `ix` grows to the dog's left, `iy`
+forward, exactly what `mapping/mapper.py::_ingest_into_grid` writes — so a client scales them by
+`cell_size_cm` and does not re-derive a projection the producer might disagree with. The list is
+capped at 4000 cells and keeps the ones with the most hits; `count` is the uncapped total and
+`truncated: true` means "the rest is on the device, not in this response", because an empty corner of
+a truncated map is not unmapped space.
 
 A value the config **file** would have rejected is refused too: the write is checked against the same
 section schema (`kernel/config_schema.py::validate_settings_section`), so a `400` carries
