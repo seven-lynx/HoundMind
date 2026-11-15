@@ -924,6 +924,7 @@ as specified in `docs/CONTROL_API.md`:
 |---|---|---|
 | Liveness | `GET /api/v1/health` | none |
 | Identity | `GET /api/v1/meta` | none |
+| Caller identity | `GET /api/v1/whoami` | any valid token — the caller's `device`, `scopes` and `kind`, the same shape as the socket's `welcome` frame |
 | State snapshot | `GET /api/v1/state` | `state:read` |
 | Module list | `GET /api/v1/modules` | `state:read` |
 | Decisions | `GET /api/v1/decisions` | `state:read` |
