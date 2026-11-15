@@ -37,7 +37,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from houndmind_ai.kernel.config_schema import Problem
@@ -266,6 +266,82 @@ class PlaceStore:
         remaining = tuple(place for place in report.places if place.id != victim.id)
         self.save(remaining, keep_original=report.refused > 0)
         return victim, ()
+
+    def update(
+        self,
+        place_id: str,
+        *,
+        name: str | None = None,
+        heading_deg: float | None = None,
+        distance_cm: float | None = None,
+        anchor: str | None = None,
+    ) -> tuple[Place | None, tuple[Problem, ...]]:
+        """Correct one place and persist it, or return the reasons it was refused (#173).
+
+        Only the fields that were passed change, and **the id does not follow the name**: goals and
+        the navigator address a place by id, so renaming "kitchen" to "galley" must not strand a walk
+        that is already under way. The name is the human handle; the id is the one part of a place
+        that is not allowed to move.
+
+        The candidate is judged by the same document validator `load` and `add` use, so a rename onto
+        an existing name is refused with the same `Problem` a second `add` would produce, and there is
+        no second rule to keep in step.
+        """
+        with self._write_lock:
+            return self._update(
+                place_id,
+                name=name,
+                heading_deg=heading_deg,
+                distance_cm=distance_cm,
+                anchor=anchor,
+            )
+
+    def _update(
+        self,
+        place_id: str,
+        *,
+        name: str | None,
+        heading_deg: float | None,
+        distance_cm: float | None,
+        anchor: str | None,
+    ) -> tuple[Place | None, tuple[Problem, ...]]:
+        """The unlocked body of `update`; call `update`."""
+        report = self.load()
+        wanted = place_id.strip() if isinstance(place_id, str) else ""
+        target = report.get(wanted) if wanted else None
+        if target is None and wanted:
+            # A name is accepted here for the same reason `remove` accepts one: the caller is wrong
+            # about the handle, not about which place they mean.
+            target = report.by_name(wanted)
+        if target is None:
+            return None, (Problem("places", f"no place with id or name {place_id!r}"),)
+
+        corrected = target
+        if name is not None:
+            corrected = replace(corrected, name=name.strip())
+        if heading_deg is not None:
+            corrected = replace(corrected, heading_deg=heading_deg)
+        if distance_cm is not None:
+            corrected = replace(corrected, distance_cm=distance_cm)
+        if anchor is not None:
+            corrected = replace(
+                corrected, anchor=anchor.strip() if anchor.strip() else DEFAULT_ANCHOR
+            )
+        if corrected == target:
+            # A no-op edit is still a 200: the client asked for a state the file already has, and
+            # writing the same bytes back would only churn `created_ts`-adjacent metadata.
+            return target, ()
+
+        updated = tuple(
+            corrected if place.id == target.id else place for place in report.places
+        )
+        document = [place.to_dict() for place in updated]
+        problems = check_places_document(document)
+        if problems:
+            return None, tuple(problems)
+
+        self.save(updated, keep_original=report.refused > 0)
+        return corrected, ()
 
     def record_visit(
         self,

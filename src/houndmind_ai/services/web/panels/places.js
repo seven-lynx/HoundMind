@@ -68,6 +68,7 @@ export const places = {
               <td class="num">${fmt(place.confidence)}</td>
               <td class="num">
                 <button class="tiny primary" data-go="${esc(id)}">Go</button>
+                <button class="tiny" data-rename="${esc(id)}" data-name="${esc(place.name || id)}">Rename</button>
                 <button class="tiny danger" data-del="${esc(id)}">Forget</button>
               </td>
             </tr>`;
@@ -86,6 +87,11 @@ export const places = {
         });
         list.querySelectorAll("button[data-del]").forEach((button) => {
           button.addEventListener("click", () => forget(button.dataset.del));
+        });
+        list.querySelectorAll("button[data-rename]").forEach((button) => {
+          button.addEventListener("click", () =>
+            rename(button.dataset.rename, button.dataset.name)
+          );
         });
       }
       problemsBox.innerHTML =
@@ -119,6 +125,25 @@ export const places = {
       error.textContent = "";
       try {
         await api(`/places/${encodeURIComponent(id)}`, { method: "DELETE" });
+        await load();
+      } catch (err) {
+        error.textContent = errorText(err);
+      }
+    }
+
+    async function rename(id, current) {
+      error.textContent = "";
+      // One field, one edit: the browser's own dialog is a smaller surface than a second form that
+      // would duplicate the create form and still only send a name. Cancelling it edits nothing.
+      const name = window.prompt(`Rename ${id}`, current || "");
+      if (name === null) return;
+      const trimmed = name.trim();
+      if (!trimmed || trimmed === current) return;
+      try {
+        await api(`/places/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: trimmed }),
+        });
         await load();
       } catch (err) {
         error.textContent = errorText(err);

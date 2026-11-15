@@ -931,6 +931,71 @@ async def _place_delete(request: web.Request) -> web.Response:
     return web.json_response({"removed": removed.to_dict(), "path": str(store.path)})
 
 
+async def _place_update(request: web.Request) -> web.Response:
+    """Correct one place: a typo in the name, a heading measured wrong (#173).
+
+    `id` is neither editable nor derived from the new name. Goals and the navigator address a place
+    by id, so a rename must not move the handle out from under a walk that is already under way.
+    An empty body is a 400 rather than a no-op: a PATCH that changes nothing is how a client comes to
+    believe it edited something.
+    """
+    plane = _plane(request)
+    store = _place_store(plane)
+    if store is None:
+        return _no_places()
+    wanted = str(request.match_info.get("id") or "").strip()
+
+    body = await _json_body(request)
+    if "id" in body:
+        return _bad_place(
+            "id cannot be changed; delete the place and create it under the new name"
+        )
+    name = body.get("name")
+    if name is not None and (not isinstance(name, str) or not name.strip()):
+        return _bad_place("name must be a non-empty string")
+    heading = None
+    if "heading_deg" in body:
+        heading = _number(body.get("heading_deg"))
+        if heading is None:
+            return _bad_place("heading_deg must be a number")
+    distance = None
+    if "distance_cm" in body:
+        distance = _number(body.get("distance_cm"))
+        if distance is None:
+            return _bad_place("distance_cm must be a number")
+    anchor = None
+    if "anchor" in body:
+        if not isinstance(body.get("anchor"), str):
+            return _bad_place("anchor must be a string")
+        anchor = str(body.get("anchor"))
+    if name is None and heading is None and distance is None and anchor is None:
+        return _bad_place("give at least one of name, heading_deg, distance_cm or anchor")
+
+    # Resolve the handle here, so a 404 does not depend on how the store words a refusal: the store
+    # owns the validation problems, and this owns "there is no such place".
+    report = store.load()
+    if not (report.get(wanted) or report.by_name(wanted)):
+        return _place_not_found(store, wanted, f"no place with id or name {wanted!r}")
+
+    place, problems = store.update(
+        wanted,
+        name=name,
+        heading_deg=heading,
+        distance_cm=distance,
+        anchor=anchor,
+    )
+    if place is None:
+        return web.json_response(
+            {
+                "error": "bad_request",
+                "detail": "the edit was refused",
+                "problems": [_problem_dict(problem) for problem in problems],
+            },
+            status=400,
+        )
+    return web.json_response({"place": place.to_dict(), "path": str(store.path)})
+
+
 async def _place_go(request: web.Request) -> web.Response:
     """Ask the navigator to walk to one place. The API asks; the navigator and the interlock decide.
 
@@ -1562,6 +1627,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("POST", "/routines/{id}/run", "move", _routine_run),
     ("POST", "/places", "config", _places_create),
     ("DELETE", "/places/{id}", "config", _place_delete),
+    ("PATCH", "/places/{id}", "config", _place_update),
     ("DELETE", "/people/{id}", "admin", _people_delete),
     ("POST", "/places/{id}/go", "move", _place_go),
     ("GET", "/mode", "state:read", _mode_get),

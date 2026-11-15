@@ -930,7 +930,7 @@ as specified in `docs/CONTROL_API.md`:
 | Decisions | `GET /api/v1/decisions` | `state:read` |
 | Telemetry stream | `GET /api/v1/events` (WebSocket) | token in the `hello` frame; `hello.logs` adds droppable live log lines (`admin`) |
 | Camera | `GET /api/v1/camera/stream`, `/camera/snapshot` | `state:read` (`?ticket=`) |
-| Places | `GET`/`POST`/`DELETE /api/v1/places`, `POST /places/{id}/go` | `state:read` / `config` / `move` |
+| Places | `GET`/`POST`/`DELETE`/`PATCH /api/v1/places[/{id}]`, `POST /places/{id}/go` | `state:read` / `config` / `move` |
 | People | `GET /api/v1/people`, `DELETE /api/v1/people/{id}` | `admin` — ids and names only, never an embedding |
 | Motion | `POST /api/v1/command`, `/stop`, `/mode` | `move` |
 | Config | `GET`/`PATCH /api/v1/config`, `GET /api/v1/calibration`, `POST /calibration/run` | `config` |

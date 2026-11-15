@@ -422,3 +422,90 @@ def test_the_store_persists_a_visit_once_and_names_an_unknown_place(tmp_path: Pa
     missing, refusal = places.record_visit("garage", arrived=True)
     assert missing is None and refusal, "an unknown handle is a reason, never a silent success"
 
+
+# ------------------------------------------------------------- correcting one (#173)
+
+
+def test_a_rename_keeps_the_id_and_everything_the_file_measured(tmp_path: Path) -> None:
+    """The id is the handle goals use: it must not follow a corrected name."""
+    places = store(tmp_path)
+    places.add("kitchen", heading_deg=92.0, distance_cm=310.0)
+    places.record_visit("kitchen", arrived=True)
+
+    corrected, problems = places.update("kitchen", name="galley")
+
+    assert problems == ()
+    assert corrected is not None
+    assert corrected.id == "kitchen", "a rename must not move the id out from under a goal"
+    assert corrected.name == "galley"
+    assert corrected.visits == 1, "what the file measured about the place is not part of the name"
+    reloaded = places.load().get("kitchen")
+    assert reloaded is not None and reloaded.name == "galley"
+
+
+def test_only_the_fields_passed_change(tmp_path: Path) -> None:
+    places = store(tmp_path)
+    places.add("kitchen", heading_deg=92.0, distance_cm=310.0, confidence=0.5)
+
+    corrected, _ = places.update("kitchen", heading_deg=-45.0)
+
+    assert corrected is not None
+    assert corrected.heading_deg == -45.0
+    assert corrected.distance_cm == 310.0 and corrected.confidence == 0.5
+
+
+def test_a_rename_onto_an_existing_name_is_refused_and_the_file_is_untouched(tmp_path: Path) -> None:
+    """The duplicate rule is the document validator's, not a second copy of it in `update`."""
+    places = store(tmp_path)
+    places.add("kitchen", heading_deg=0.0, distance_cm=100.0)
+    places.add("hall", heading_deg=90.0, distance_cm=200.0)
+    before = (tmp_path / "places.json").read_text(encoding="utf-8")
+
+    corrected, problems = places.update("kitchen", name="hall")
+
+    assert corrected is None
+    assert problems and "hall" in problems[0].message
+    assert (tmp_path / "places.json").read_text(encoding="utf-8") == before
+
+
+def test_an_impossible_heading_is_refused(tmp_path: Path) -> None:
+    places = store(tmp_path)
+    places.add("kitchen", heading_deg=0.0, distance_cm=100.0)
+
+    corrected, problems = places.update("kitchen", heading_deg=999.0)
+
+    assert corrected is None
+    assert problems and "heading_deg" in problems[0].path
+
+
+def test_an_unknown_handle_is_a_reason_not_a_silent_write(tmp_path: Path) -> None:
+    places = store(tmp_path)
+    places.add("kitchen", heading_deg=0.0, distance_cm=100.0)
+
+    corrected, problems = places.update("garage", name="shed")
+
+    assert corrected is None
+    assert problems and "garage" in problems[0].message
+
+
+def test_a_name_may_address_the_place_a_patch_corrects(tmp_path: Path) -> None:
+    """Same rule as `remove`: the caller is wrong about the handle, not about the place."""
+    places = store(tmp_path)
+    places.add("kitchen", heading_deg=0.0, distance_cm=100.0)
+
+    corrected, problems = places.update("Kitchen", name="galley")
+
+    assert problems == ()
+    assert corrected is not None and corrected.id == "kitchen" and corrected.name == "galley"
+
+
+def test_an_edit_that_changes_nothing_writes_nothing(tmp_path: Path) -> None:
+    places = store(tmp_path)
+    places.add("kitchen", heading_deg=0.0, distance_cm=100.0)
+    before = (tmp_path / "places.json").read_text(encoding="utf-8")
+
+    corrected, problems = places.update("kitchen", name="kitchen")
+
+    assert problems == () and corrected is not None
+    assert (tmp_path / "places.json").read_text(encoding="utf-8") == before
+
