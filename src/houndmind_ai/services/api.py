@@ -1625,6 +1625,32 @@ async def _index(request: web.Request) -> web.Response:
     )
 
 
+async def _service_worker(request: web.Request) -> web.Response:
+    """The console's service worker, served from the **root** so its scope can cover the document.
+
+    A worker's scope defaults to the directory it was served from, so `/static/sw.js` would only
+    control `/static/` and could not answer for `/`. `Service-Worker-Allowed` widens the scope, and a
+    same-origin script fetch is the only thing this route ever serves (#176).
+
+    Unauthenticated like the assets it caches: it is static JavaScript, and a token would have to be
+    in the URL or the script, which is exactly what the camera-ticket work removed.
+    """
+    plane = _plane(request)
+    path = plane.static_root / "sw.js"
+    missing = {"error": "not_found", "detail": "no service worker is bundled with this build"}
+    if not path.is_file():
+        return web.json_response(missing, status=404)
+    try:
+        body = path.read_text(encoding="utf-8")
+    except OSError:
+        return web.json_response(missing, status=404)
+    return web.Response(
+        text=body,
+        content_type="text/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
+
+
 async def _static_cache_headers(request: web.Request, response: web.StreamResponse) -> None:
     """`no-cache` on the web app's assets: revalidate, do not silently reuse (#102).
 
@@ -1857,6 +1883,9 @@ def create_app(plane: ControlPlane) -> web.Application:
             router.add_route(method, route, _authed(scope)(handler))
 
     router.add_get("/", _index)
+    # At the root, not under `/static/`: a worker's scope defaults to its own directory, and the app
+    # shell it caches is the document at `/` (#176).
+    router.add_get("/sw.js", _service_worker)
     if plane.static_root.is_dir():
         # `add_static` refuses to serve outside the directory it was given, so the web app
         # cannot be used to read `/etc/shadow` by asking for `../../etc/shadow`.

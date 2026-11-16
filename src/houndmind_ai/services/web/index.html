@@ -3,8 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="dark">
+<!-- `color-scheme` is set by CSS, on `:root` and on `[data-theme="light"]`: a meta tag here would
+     pin the browser's own widgets to one palette while the page switched to the other (#178). -->
 <meta name="theme-color" content="#0b1014">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <title>HoundMind</title>
 <link rel="stylesheet" href="/static/style.css?v=__VERSION__">
 </head>
@@ -51,6 +54,7 @@
       <span id="mode-badge" class="chip chip-mode">mode —</span>
       <span id="link-badge" class="chip chip-link" data-link="connecting">connecting</span>
       <button id="theme-toggle" class="ghost" title="Light or dark, remembered in this browser">dark</button>
+      <button id="notify-toggle" class="ghost" hidden title="Desktop notifications for safety events">notify off</button>
       <button id="sign-out" class="ghost" title="Forget the token in this tab">Disconnect</button>
     </div>
   </header>

@@ -7,6 +7,24 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **Safety events can raise a desktop notification, when the user asks for one**: a `notify` button in
+  the header, shown only in a secure context, prompts for permission **on the click and never on load**,
+  and then lets `command_vetoed`, `command_expired` and `safety_action` raise a notification — the same
+  three events the ticker tints as vetoes (#177). The ticker still records every event, and the dog's
+  own stop path is on the device: the notification is an extra signal, never the mechanism. A browser
+  that refuses permission leaves the button reading `notify blocked`; on plain http the button is
+  hidden, because the prompt would be refused anyway.
+- **The console can be installed, where the browser allows it**: `manifest.webmanifest`, an SVG icon and
+  a service worker make the page installable to a home screen and reloadable while the device is briefly
+  away (#176). All three are gated on a **secure context**: on the shipped plain-http LAN the manifest is
+  ignored and `/sw.js` is never registered, because a worker there would only error — `docs/INSTALL.md`
+  and `CONTROL_API.md` §1 now document `api.tls_enabled: true` as the path to it, and the default stays
+  off. The worker is **network-first** for everything it handles and never touches `/api/`: online the
+  browser always gets the current `app.js` (the document is `no-cache` for exactly that reason), and a
+  cached `/state` would be a console showing a dog that is not there. `/sw.js` is served from the root
+  with `Service-Worker-Allowed: /`, since a worker under `/static/` could not control `/`. The manifest
+  and icon were added to `package-data`, because a wheel without them is a console that silently is not
+  installable.
 - **The console has a light theme**: dark-first and still the default when the OS says nothing, but
   `prefers-color-scheme: light` now selects a light palette and the header's theme button switches
   either way and remembers the choice (`houndmind.theme` in `localStorage`), because a deliberate

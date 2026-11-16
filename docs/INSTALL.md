@@ -365,6 +365,21 @@ The certificate is self-signed, so each client trusts it once:
 `GET /api/v1/meta` reports `"scheme"` (`"http"` or `"https"`) so a client can tell a wrong-scheme
 attempt from a wrong host.
 
+### Why you want TLS on: the installable console and its notifications
+
+A **secure context** (`https://`, or `localhost`) is a browser requirement for three things the console
+does when it can, and skips when it cannot (#176, #177):
+
+| Feature | Needs | On plain http |
+|---|---|---|
+| Installable app (`manifest.webmanifest`, service worker) | secure context | the manifest is ignored, `/sw.js` is never registered, the console works normally |
+| App shell cached for a reload while offline | secure context | nothing is cached; a reload needs the device |
+| Desktop notifications for safety events | secure context **and** permission | no permission prompt is offered; the event ticker still shows every event |
+
+Nothing turns this on for you, and nothing needs to: `tls_enabled: false` is still the default because
+a self-signed certificate has to be trusted by every client before it is useful, and the trust steps
+above are the user's. Turning it on is what makes the console installable to a phone's home screen.
+
 ## Feature Guide
 See [FEATURES_GUIDE.md](FEATURES_GUIDE.md) for what each feature does, how to use it, and how to disable it.
 

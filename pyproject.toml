@@ -45,7 +45,17 @@ include = ["houndmind_ai*", "tools*"]
 # `web/panels/*.js` is listed separately on purpose: a `web/*.js` glob does not recurse, so a panel
 # module would be missing from a built wheel while `pip install -e .` kept working - the failure
 # would only appear on the device, after a wheel install, as a 404 on one panel.
-"houndmind_ai.services" = ["web/*.html", "web/*.js", "web/*.css", "web/panels/*.js"]
+#
+# `webmanifest` and `svg` joined the list with the PWA (#176): the manifest and the icon are what make
+# the console installable, and a wheel without them is a console that silently is not.
+"houndmind_ai.services" = [
+    "web/*.html",
+    "web/*.js",
+    "web/*.css",
+    "web/*.webmanifest",
+    "web/*.svg",
+    "web/panels/*.js",
+]
 
 [tool.ruff]
 target-version = "py311"
