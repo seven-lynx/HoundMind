@@ -13,6 +13,7 @@ from houndmind_ai.behavior.routine_runner import RoutineRunnerModule
 from houndmind_ai.board.detect import BoardInfo, detect
 from houndmind_ai.calibration.workflow import CalibrationModule
 from houndmind_ai.core.config import load_config
+from houndmind_ai.core.instance import BusBusy, RunLock
 from houndmind_ai.core.logging_setup import setup_logging
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.iface import DogHAL
@@ -162,6 +163,15 @@ def main() -> None:
     context_filter = setup_logging((config.settings or {}).get("logging", {}))
     runtime = HoundMindRuntime(config, build_modules(config))
 
+    # One process may own the servo bus (#213): a second one blocks inside `Pidog()` with no output
+    # at all, which read as a hung tool for 150 s on the bench.
+    lock = RunLock()
+    try:
+        lock.acquire("runtime")
+    except BusBusy as exc:
+        logger.error("%s; stop it before starting another", exc)
+        raise SystemExit(3) from None
+
     # Bind the runtime context dict into logging so runtime keys (tick, module statuses)
     # flow into all log records automatically. Use hostname as a fallback device id.
     try:
@@ -185,7 +195,10 @@ def main() -> None:
     )
     context_filter.set_context_source(runtime.context.get)
 
-    runtime.run()
+    try:
+        runtime.run()
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

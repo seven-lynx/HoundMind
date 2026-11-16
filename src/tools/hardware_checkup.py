@@ -3,7 +3,7 @@
 Hardware comes from :class:`~houndmind_ai.hal.iface.DogHAL` - `PidogHAL` on a dog, a fake in a
 test - so the checkup reads the conditioned snapshot the runtime reads instead of opening a
 `Pidog()` of its own (#11). The exit code is the verdict (#109): 0 when every sensor answered, 1
-when one did not, 2 when no dog could be opened at all.
+when one did not, 2 when no dog could be opened at all, 3 when another process owns the servo bus.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from houndmind_ai.core.instance import BusBusy, RunLock
 from houndmind_ai.hal.iface import DogHAL, SensorSnapshot
 
 __all__ = ["MOTION_STEPS", "describe", "main", "run_checkup"]
@@ -180,7 +181,17 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
     args = parser.parse_args(argv)
 
     owned = hal is None
+    lock: RunLock | None = None
     if hal is None:
+        # One process may own the servo bus (#213): a second `Pidog()` blocks on the bus the first
+        # one holds, with no output at all, so this says who has it and exits 3 rather than hanging.
+        lock = RunLock()
+        try:
+            lock.acquire("hardware_checkup")
+        except BusBusy as exc:
+            print(f"[checkup] {exc}", file=sys.stderr)
+            print("[checkup] stop it first: systemctl stop houndmind", file=sys.stderr)
+            return 3
         # Imported here, not at module scope: the vendor package is only needed on a dog, and a
         # missing one must read as a reportable failure rather than an import traceback.
         from houndmind_ai.hal.vendor import PidogHAL
@@ -202,6 +213,8 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
                 hal.close()
             except Exception:  # noqa: BLE001 - nothing left to recover at exit
                 print("[checkup] close failed", file=sys.stderr)
+            if lock is not None:
+                lock.release()
     return 0 if sensors_ok else 1
 
 

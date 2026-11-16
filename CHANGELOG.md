@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A second process no longer hangs on the servo bus**: the runtime entry point and the two tools
+  that open the vendor HAL now take an exclusive lock on `~/.houndmind/run.lock`
+  (`core/instance.py`), and a second owner exits 3 saying who has it -
+  `the servo bus is owned by pid 1234 (runtime)` - instead of blocking inside `Pidog()` with no
+  output at all, which is what a checkup run against a live runtime looked like for 150 s on the
+  bench. The lock is an advisory file lock, so a killed process cannot leave a stale owner behind,
+  and a tool handed a `FakeDogHAL` takes nothing, which keeps the tests off the home directory (#213).
 - **SIGTERM stops the dog cleanly**: `HoundMindRuntime` installed no signal handler, and Python
   terminates on SIGTERM without unwinding, so `finally: self.stop()` never ran - the HAL stayed open
   and the servos stayed energised. SIGTERM and SIGHUP now set a stop flag that the loop reads at the
