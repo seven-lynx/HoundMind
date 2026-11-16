@@ -136,7 +136,8 @@ motion, vision and voice set disabled — each run settled 60 s, two 30 s CPU wi
 So the control plane is worth **~12.5 MB of RSS**, and its CPU cost sits inside the noise of a
 workload already spending a third of a core on sensor polling. Three WebSocket clients on one token
 add ~3.4 points of CPU — but only one of them streams, because the contract allows one socket per
-token and evicts the rest with `error: superseded` (§4, and `services/stream.py`).
+token and evicts the rest with `error: superseded` ([§4](#4-commands-and-events), and
+`services/stream.py`).
 
 Two numbers this table does **not** have: concurrent WS clients (needs one paired token each) and
 MJPEG viewers (needs frames, so needs the camera). Re-measure before changing the shape — lazy import,
