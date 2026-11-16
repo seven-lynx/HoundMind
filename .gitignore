@@ -31,5 +31,12 @@ build/
 logs/
 *.log
 
+# What `scripts/install_houndmind.sh` writes into the checkout
+# `.cache/` holds the SunFounder clones and RTAB-Map build tree; `models/` holds the OpenCV model
+# files `tools/download_opencv_models.py` fetches. Both are generated, both are large, and neither is
+# something a `git add -A` after an install should be able to commit.
+.cache/
+models/
+
 # Generated/pinned mirror files
 requirements-filtered.txt
