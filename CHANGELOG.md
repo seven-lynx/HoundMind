@@ -14,6 +14,10 @@ Current Release: v2026.01.18
   once, since `vision_pi4` now ships off). Every check is silent where its tool does not exist, so a
   workstation or container sees nothing. `tests/test_installer_preflight.py` covers the parsing and
   the two outcomes without hardware.
+- **`--preset full` no longer spends an hour building RTAB-Map for nothing**: the build used to be
+  implied by `full` on a Pi 4/5, and its Python bindings cannot be installed any more (#181), so the
+  compile delivered nothing and made a full install take an hour longer than the docs promised.
+  `--build-rtabmap` is now the only way to trigger it, which is what `INSTALL.md` already said.
 - **`full` no longer lists a package that cannot install, so `full` verifies clean**: `rtabmap-py` is
   not on PyPI and upstream `introlab/rtabmap` no longer ships the `python/` bindings source, so the
   extra could never produce it - it only made `pip install -e .[full]` fail and

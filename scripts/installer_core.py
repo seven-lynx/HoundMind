@@ -806,10 +806,11 @@ def main() -> int:
     preset = resolve_preset(pi_class, args.preset)
 
     req = repo_root / "requirements-lite.txt"
-    # Auto-build RTAB-Map for a Pi 4/5 full preset, or when explicitly requested.
-    should_build_rtabmap = args.build_rtabmap or (
-        pi_class in ("pi4", "pi5") and preset == "full"
-    )
+    # RTAB-Map is only built when it is asked for. It used to be implied by `--preset full` on a
+    # Pi 4/5, which spent the better part of an hour compiling a library whose Python bindings can no
+    # longer be installed (#181) - so the build delivered nothing and the install took an hour longer
+    # than the docs promised.
+    should_build_rtabmap = args.build_rtabmap
     # Allow explicit opt-out
     if args.no_rtabmap:
         should_build_rtabmap = False
