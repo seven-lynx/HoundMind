@@ -8,12 +8,13 @@ list with the sanctioned fake and prove the promise instead of asserting it in p
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from houndmind_ai.core.config import load_config
 from houndmind_ai.hal.fake import FakeDogHAL
-from tools.smoke_test import MOTIONLESS_MODULES, main
+from tools.smoke_test import MOTIONLESS_MODULES, _disable_modules, main
 
 REPO_CONFIG = Path(__file__).resolve().parents[1] / "config" / "settings.jsonc"
 
@@ -89,3 +90,34 @@ def test_no_reading_from_the_hal_fails_the_run(headless, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "[smoke] sensor_reading: MISSING" in out
     assert "[smoke] FAIL" in out
+
+
+def test_the_camera_module_that_actually_starts_is_in_the_motionless_set():
+    """`vision_pi4` is what `main.build_registry` registers for the Pi 4 camera (#205).
+
+    The set named `vision`, which on a Pi 4 is disabled anyway; the module that opened the camera
+    started on every run and logged its `Picamera2 unavailable` line from inside a run reporting
+    vision as off.
+    """
+    assert "vision_pi4" in MOTIONLESS_MODULES
+    assert "vision" in MOTIONLESS_MODULES
+
+
+def test_a_name_with_no_module_behind_it_is_reported_not_ignored():
+    """The miss was silent in both directions, so no test could see it (#205)."""
+    config = SimpleNamespace(modules={"vision": SimpleNamespace(enabled=True)})
+
+    disabled, missing = _disable_modules(config, frozenset({"vision", "vision_pi4"}))
+
+    assert disabled == ["vision"]
+    assert missing == ["vision_pi4"]
+
+
+def test_the_shipped_config_declares_every_motionless_module():
+    """A phantom name in the set would print a guarantee about nothing."""
+    config = load_config(REPO_CONFIG)
+
+    disabled, missing = _disable_modules(config, MOTIONLESS_MODULES)
+
+    assert missing == []
+    assert set(disabled) == set(MOTIONLESS_MODULES)
