@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import signal
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 
 from houndmind_ai.kernel.state import StateStore
@@ -11,6 +13,10 @@ from .config import Config
 from .module import Module, ModuleError
 
 logger = logging.getLogger(__name__)
+
+# Signals that mean "stop, in order". `systemctl stop` sends SIGTERM; a closing SSH session sends
+# SIGHUP. Both used to end the process without unwinding (#212).
+_STOP_SIGNALS = ("SIGTERM", "SIGHUP")
 
 
 class RuntimeContext:
@@ -52,6 +58,72 @@ class HoundMindRuntime:
         # Generate a per-runtime trace id for correlating logs and telemetry.
         trace_id = uuid.uuid4().hex
         self.context.set("trace_id", trace_id)
+        # Set from a signal handler, so the loop ends on a tick boundary and `stop()` still runs
+        # (#212). A raised exception would not do: `tick()` catches `Exception` per module, so a
+        # stop raised mid-tick would be logged as that module's failure and the loop would carry on.
+        self._stop_requested = False
+        self._stop_reason: str | None = None
+
+    # ---- stopping ----------------------------------------------------------
+
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop_requested
+
+    @property
+    def stop_reason(self) -> str | None:
+        return self._stop_reason
+
+    def request_stop(self, reason: str) -> None:
+        """Finish the tick in progress, then shut down.
+
+        Safe from a signal handler and from any thread: it assigns two attributes and the loop
+        re-reads the flag at the top of every iteration. The first reason wins, because the second
+        signal is usually the impatience of whoever sent the first one.
+        """
+        if not self._stop_requested:
+            self._stop_reason = reason
+        self._stop_requested = True
+
+    def _install_stop_signals(self) -> Callable[[], None]:
+        """Route SIGTERM and SIGHUP to `request_stop`, and hand back the undo (#212).
+
+        Python terminates on SIGTERM without unwinding, so `finally: self.stop()` never ran: the
+        HAL was never closed and the servos were never relaxed. That matters the moment the
+        runtime is supervised, because `systemctl stop` sends SIGTERM by default.
+
+        Handlers can only be installed from the main thread. Anywhere else this leaves the process
+        untouched - an embedding own its own signal policy - and the returned function is a no-op.
+        """
+        previous: list[tuple[int, object]] = []
+
+        def make_handler(name: str) -> Callable[[int, object], None]:
+            def handler(signum: int, _frame: object) -> None:
+                self.request_stop(f"{name} received")
+
+            return handler
+
+        for name in _STOP_SIGNALS:
+            signum = getattr(signal, name, None)
+            if signum is None:
+                continue
+            try:
+                old = signal.getsignal(signum)
+                signal.signal(signum, make_handler(name))
+            except (ValueError, OSError):
+                # Not the main thread, or a platform that will not take this signal.
+                logger.debug("Cannot install a %s handler here", name)
+                break
+            previous.append((signum, old))
+
+        def restore() -> None:
+            for signum, old in previous:
+                try:
+                    signal.signal(signum, old)  # type: ignore[arg-type]
+                except (ValueError, OSError, TypeError):
+                    logger.debug("Could not restore the handler for signal %s", signum)
+
+        return restore
 
     def start(self) -> None:
         for module in self.modules:
@@ -190,6 +262,19 @@ class HoundMindRuntime:
             return
 
     def run(self) -> None:
+        """Run the loop until something asks it to stop, then shut down either way.
+
+        The handlers go in here rather than in `main()` so every entry point gets them -
+        `tools/smoke_test.py` builds a runtime directly, and a SIGTERM to that run has the same
+        reason to close the HAL gracefully (#212).
+        """
+        restore_signals = self._install_stop_signals()
+        try:
+            self._run_loop()
+        finally:
+            restore_signals()
+
+    def _run_loop(self) -> None:
         self.start()
         loop_hz = max(1, self.config.loop.tick_hz)
         delay = 1.0 / loop_hz
@@ -198,7 +283,7 @@ class HoundMindRuntime:
         ema_tick_s: float | None = None
         ema_interval_s: float | None = None
         try:
-            while True:
+            while not self._stop_requested:
                 start = time.time()
                 self.context.set("tick_ts", start)
                 # `CONTEXT_FIELDS` whitelists this into every JSON record, and it was the one field
@@ -254,6 +339,8 @@ class HoundMindRuntime:
         except KeyboardInterrupt:
             logger.warning("Runtime interrupted by user")
         finally:
+            if self._stop_requested:
+                logger.warning("Runtime stopping: %s", self._stop_reason or "stop requested")
             self.stop()
 
 

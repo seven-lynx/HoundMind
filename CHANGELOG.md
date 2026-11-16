@@ -7,6 +7,11 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **SIGTERM stops the dog cleanly**: `HoundMindRuntime` installed no signal handler, and Python
+  terminates on SIGTERM without unwinding, so `finally: self.stop()` never ran - the HAL stayed open
+  and the servos stayed energised. SIGTERM and SIGHUP now set a stop flag that the loop reads at the
+  top of each tick, so the tick in progress finishes and `stop()` runs; `request_stop()` is public,
+  Ctrl+C keeps its own path, and the shutdown log says which one arrived (#212).
 - **A journald recipe that survives a power cut**: `HARDWARE_TEST.md` section 2.1 now carries the
   drop-in (`Storage=persistent` under `journald.conf.d/`) with the commands that verify it, because
   this image ships `Storage=volatile` and `mkdir /var/log/journal` alone leaves the journal in a
