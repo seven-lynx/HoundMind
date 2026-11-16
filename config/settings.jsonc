@@ -14,7 +14,10 @@
         "max_cycles": null
       },
       "modules": {
-        "vision_pi4": {"enabled": true},
+        // Off until `python -c "import picamera2"` succeeds inside the venv (#215). The binding is
+        // a Debian package (`python3-picamera2`), not a wheel, so an image without it left this
+        // module logging `Picamera2 unavailable` on every start while claiming to be enabled.
+        "vision_pi4": {"enabled": false},
         "face_recognition": {"enabled": false},
         "semantic_labeler": {"enabled": false},
         "slam_pi4": {"enabled": false}
@@ -38,7 +41,8 @@
         "max_cycles": null
       },
       "modules": {
-        "vision_pi4": {"enabled": true},
+        // Same reason as `pi4`: the camera binding has to be importable first (#215).
+        "vision_pi4": {"enabled": false},
         "face_recognition": {"enabled": false},
         "semantic_labeler": {"enabled": false},
         "slam_pi4": {"enabled": false}

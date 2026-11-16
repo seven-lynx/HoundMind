@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The camera stack is installed, visible to the venv, and off until it works**: `python3-picamera2`
+  joined the apt list, new venvs are created with `--system-site-packages` so a Debian-provided
+  binding is importable at all (an existing venv without it gets a one-line warning with the recreate
+  command), and `installer_verify` reports `picamera2` - failing only on a machine with a Pi boot
+  config, because no workstation can have it. `vision_pi4` now ships **off** in both `pi4` and `pi5`,
+  which is what `README.md` already claimed: enabling it without the binding only produced
+  `Picamera2 unavailable` on every start (#215).
 - **The installer answers "can I use Trixie?" in one line**: this release supports Raspberry Pi OS
   Bookworm 64-bit, and the installer now reads `VERSION_CODENAME` from `/etc/os-release` and refuses
   anything else before it touches the venv or apt - the interpreter check could not catch Trixie,

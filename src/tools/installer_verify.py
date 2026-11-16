@@ -96,6 +96,17 @@ def main():
                 check_import("sounddevice"),
             ]
         )
+        # The camera binding is a Debian package and only exists on a Pi (#215). On a workstation a
+        # `full` install cannot have it, so it is reported and only counts on a machine with a Pi
+        # boot config - otherwise every dev box would verify as broken.
+        picamera_ok = check_import("picamera2")
+        if picamera_ok:
+            print("picamera2: camera stack available (`vision_pi4` may be enabled)")
+        elif Path("/boot/firmware/config.txt").exists():
+            print("picamera2: MISSING - `vision_pi4` must stay disabled (docs/INSTALL.md)")
+            heavy_ok = False
+        else:
+            print("picamera2: not applicable (no Pi boot config on this machine)")
 
     if py_ok and req_ok and pidog_ok and houndmind_ok and heavy_ok:
         print("Installer check: OK")

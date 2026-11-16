@@ -787,8 +787,16 @@ person. The last person to go leaves LBPH untrained — faces are still detected
 recognition, the semantic labeler and SLAM) and `vision_frame_jpeg` (encoded bytes, served by the
 control plane's camera routes) for other modules.
 
+**Ships off**, and stays off until the binding is importable: `picamera2` is a Debian package
+(`python3-picamera2`), not a wheel, so a venv that cannot see it logs `Picamera2 unavailable` on
+every start while claiming to be enabled (#215). Prove it first, inside the venv:
+
+```bash
+python -c "import picamera2"    # must succeed before the next step
+```
+
 **Enable:**
-- `modules.vision_pi4.enabled = true`
+- `modules.vision_pi4.enabled = true` (in the `pi4` profile, or your own settings file)
 - `settings.vision_pi4.backend = "picamera2"` (or `"opencv"` fallback)
 
 **Camera stream:** there is no dedicated stream port. With this module enabled, the control plane
