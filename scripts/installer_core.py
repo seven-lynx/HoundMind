@@ -429,13 +429,48 @@ def install_service_unit(repo_root: Path, python: Path) -> int:
     return code
 
 
+def _default_remote_branch(dest: Path) -> str | None:
+    """The remote's own default branch, asked rather than assumed.
+
+    `origin/master` used to be hardcoded for every clone with no explicit branch, and SunFounder
+    renamed `pidog`'s default to `main`: the reset then failed with `fatal: ambiguous argument
+    'origin/master': unknown revision`, and the installer exited 128 halfway through installing the
+    dog - after `vilib`, before `pidog`, before the package itself.
+    """
+    head = subprocess.run(
+        ["git", "-C", str(dest), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if head.returncode == 0:
+        name = head.stdout.strip()
+        if name.startswith("origin/"):
+            return name.split("/", 1)[1]
+    for candidate in ("master", "main"):
+        probe = subprocess.run(
+            ["git", "-C", str(dest), "rev-parse", "--verify", f"origin/{candidate}"],
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode == 0:
+            return candidate
+    return None
+
+
 def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int:
     if dest.exists():
         code = run(["git", "-C", str(dest), "fetch", "--all", "--prune"])
         if code != 0:
             return code
-        target = f"origin/{branch}" if branch else "origin/master"
-        return run(["git", "-C", str(dest), "reset", "--hard", target])
+        target_branch = branch or _default_remote_branch(dest)
+        if target_branch is None:
+            print(
+                f"Cannot tell which branch of {repo_url} is the default: {dest} has no "
+                "origin/HEAD and neither origin/master nor origin/main exists. Delete the cached "
+                "clone and re-run."
+            )
+            return 1
+        return run(["git", "-C", str(dest), "reset", "--hard", f"origin/{target_branch}"])
     cmd = ["git", "clone", "--depth", "1"]
     if branch:
         cmd += ["-b", branch]
