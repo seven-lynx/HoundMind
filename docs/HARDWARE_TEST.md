@@ -81,6 +81,33 @@ replace it, and do not start step 6. A Pi 4 under the PiDog pack's regulator dra
 partly discharged pack can supply through the HAT, and a brown-out costs the SD card as well as the
 run (#185).
 
+### 2.1 Keep the previous boot's log
+
+A brown-out is diagnosed from the log of the boot that died, and on this image that log is gone
+before you can read it: `/etc/systemd/journald.conf` ships `Storage=volatile`, which keeps the
+journal in `/run/log/journal` — a tmpfs. `sudo mkdir -p /var/log/journal` does **not** change that,
+and `journalctl` then reports a plausible 8 MB of disk usage that only ever lived in RAM.
+
+The recipe that survives a power cut is a drop-in:
+
+```bash
+sudo mkdir -p /etc/systemd/journald.conf.d /var/log/journal
+printf "[Journal]\nStorage=persistent\n" | sudo tee /etc/systemd/journald.conf.d/99-houndmind-persistent.conf
+sudo systemctl restart systemd-journald
+sudo journalctl --flush
+ls /var/log/journal          # a machine-id directory appears
+journalctl --list-boots      # two entries after the next reboot
+```
+
+`systemd-analyze cat-config systemd/journald.conf` then shows `Storage=volatile` from the shipped
+file followed by `Storage=persistent` from the drop-in, and the later one wins (#209).
+
+**Persistent is not instantaneous.** journald flushes every `SyncIntervalSec` (5 minutes by
+default), so the final seconds of a hard cut can still be missing — on the bench dog the last
+flushed entry was eight minutes before a reset. Keep `vcgencmd get_throttled` and a fixed-rate
+sampler CSV on disk as the primary instruments for a power test, and use the journal as
+corroboration.
+
 **Software setup.**
 
 ```bash
