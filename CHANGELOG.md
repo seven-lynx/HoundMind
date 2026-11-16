@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **SPI is a documented prerequisite, because the sound sensor needs it**: `dog.ears` is an SPI device
+  and opens the bus in its constructor, so with SPI off the vendor swallows the exception and the dog
+  reports `sound_valid: false` forever - a dead-sensor symptom with a missing-prerequisite cause, and
+  `hardware_checkup` exited 1 on a correctly assembled dog. `INSTALL.md` now requires **I2C and SPI**
+  with the two `raspi-config nonint` commands, the installer runs them on a Linux host, and the
+  checkup names the missing `/dev/spidev0.0` itself when it is absent (#204).
 - **A second console can read this plane, if the operator names it**: `settings.api.cors_origins`
   (empty by default) is an allowlist. A listed origin gets `Access-Control-Allow-Origin` echoed with
   `Vary: Origin`, and its preflight is answered `204` without a token - a browser never sends

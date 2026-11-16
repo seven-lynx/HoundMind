@@ -231,6 +231,30 @@ def ensure_system_deps_linux() -> int:
     return run(["sudo", "apt-get", "install", "-y"] + pkgs)
 
 
+def ensure_interfaces_linux() -> int:
+    """Enable I2C and SPI, which the HAT and the sound sensor need (#204).
+
+    `raspi-config nonint` is the supported way to flip these on Bookworm, and its numbering is
+    inverted: `0` enables. The change lands in `/boot/firmware/config.txt` and only exists as a
+    `/dev` node after a reboot, which an installer must not do on its own - so this prints the
+    reminder and carries on.
+
+    The sound sensor is an SPI device: with the interface off, `SoundDirection()` raises and
+    `Pidog.__init__` swallows it, so the dog boots, reports `sound_valid: false` forever, and looks
+    like a dead sensor rather than a missing prerequisite.
+    """
+    if shutil.which("raspi-config") is None:
+        print("raspi-config not found; enable I2C and SPI by hand (docs/INSTALL.md, Prerequisites)")
+        return 0
+    for interface in ("i2c", "spi"):
+        code = run(["sudo", "raspi-config", "nonint", f"do_{interface}", "0"])
+        if code != 0:
+            print(f"Could not enable {interface}; enable it by hand (docs/INSTALL.md)")
+            return code
+    print("I2C and SPI enabled; reboot before they exist as /dev nodes")
+    return 0
+
+
 def ensure_rtabmap_deps_linux() -> int:
     """Attempt to install PCL/VTK packages needed by RTAB-Map. Return apt exit code.
 
@@ -575,6 +599,14 @@ def main() -> int:
             print("requirements.txt not found; full preset is unavailable.")
             return 2
         req = full_req
+    # Interfaces first: the HAT needs I2C and the sound sensor needs SPI, and neither is on by
+    # default on a fresh Bookworm image (#204). Before the apt step, so a reboot the operator does
+    # next covers both.
+    if not is_windows():
+        code = ensure_interfaces_linux()
+        if code != 0:
+            return code
+
     # Install system deps early when requested or needed for full installs.
     if not is_windows() and (args.auto_system_deps or preset == "full" or should_build_rtabmap):
         code = ensure_system_deps_linux()

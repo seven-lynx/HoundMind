@@ -85,6 +85,15 @@ def describe(snapshot: SensorSnapshot) -> list[str]:
     ]
 
 
+def _spi_missing() -> bool:
+    """True when this looks like a Pi whose SPI interface was never enabled (#204).
+
+    Both halves matter: no `/dev/spidev0.0` on a Pi (a `config.txt` exists) means the interface is
+    off, while the same absence on a workstation means nothing at all and must not produce a hint.
+    """
+    return not Path("/dev/spidev0.0").exists() and Path("/boot/firmware/config.txt").exists()
+
+
 def _sound_hint(snapshot: SensorSnapshot) -> list[str]:
     """Point at the reason when the sound sensor did not answer (#183).
 
@@ -92,13 +101,24 @@ def _sound_hint(snapshot: SensorSnapshot) -> list[str]:
     this tool cannot name the cause. The HAL logs exactly one `Sound sensor unavailable: ...`
     warning with the attribute and the `pidog` revision, and this line says where to look instead
     of inventing a diagnosis from a boolean.
+
+    The commonest cause on a fresh install is not the sensor at all: it is an SPI interface that was
+    never enabled (#204), so the hint checks the device node and says so rather than sending the
+    reader looking for a dead part.
     """
     if snapshot.sound_valid:
         return []
-    return [
+    hints = [
         '[checkup] hint: the sound sensor did not answer - look for "Sound sensor unavailable" '
         "in the log, which names the attribute and the pidog revision (#183)"
     ]
+    if _spi_missing():
+        hints.append(
+            "[checkup] hint: this Pi has no /dev/spidev0.0 - the sound sensor is an SPI device. "
+            "Enable it with `sudo raspi-config nonint do_spi 0` and reboot (docs/INSTALL.md, "
+            "Prerequisites) (#204)"
+        )
+    return hints
 
 
 def _no_reading(snapshot: SensorSnapshot) -> list[str]:

@@ -120,6 +120,30 @@ def test_the_sound_hint_says_where_the_reason_lives(capsys):
     assert "#183" in out
 
 
+def test_a_pi_without_spidev_is_told_so(capsys, monkeypatch):
+    """#204: SPI off looks like a dead sound sensor, so the hint names the prerequisite."""
+    monkeypatch.setattr("tools.hardware_checkup._spi_missing", lambda: True)
+    hal = FakeDogHAL()
+
+    assert main(["--skip-motion", "--pause", "0"], hal=hal) == 1
+
+    out = capsys.readouterr().out
+    assert "/dev/spidev0.0" in out
+    assert "do_spi" in out
+
+
+def test_a_workstation_gets_no_spi_hint(capsys, monkeypatch):
+    """No `/boot/firmware/config.txt` means this is not a Pi: the missing node says nothing."""
+    monkeypatch.setattr("tools.hardware_checkup._spi_missing", lambda: False)
+    hal = FakeDogHAL()
+
+    assert main(["--skip-motion", "--pause", "0"], hal=hal) == 1
+
+    out = capsys.readouterr().out
+    assert "/dev/spidev0.0" not in out
+    assert "#183" in out
+
+
 def test_a_missing_battery_reading_is_reported_and_not_a_failure(capsys):
     """The sense line is optional: no voltage gets its own line, it does not fail the checkup."""
 
