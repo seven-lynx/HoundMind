@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The control plane's footprint is measured, not assumed**: on the Pi 4 it costs **~12.5 MB of RSS**
+  (60.0 MB with `modules.api.enabled: false`, 72.5 MB with it on) and its CPU cost is inside the noise
+  of a loop already using a third of a core for sensor polling, with `tick_hz_actual 9.99` and
+  `tick_ms 3.93`. `ARCHITECTURE.md` section 3.1 records the table and the two numbers it does not have
+  (concurrent WebSocket clients need one paired token each because of the one-socket-per-token rule;
+  MJPEG viewers need a camera). Lazy import, a separate process and an opt-in server were all on the
+  table and none is justified by these figures (#19).
 - **The camera stack is installed, visible to the venv, and off until it works**: `python3-picamera2`
   joined the apt list, new venvs are created with `--system-site-packages` so a Debian-provided
   binding is importable at all (an existing venv without it gets a one-line warning with the recreate

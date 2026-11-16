@@ -122,6 +122,28 @@ iterating.
 3. Every blocking call is behind an interface the fake can implement instantly, so tests never sleep.
 4. Nothing is `daemon=True` without an owning supervisor entry that can stop and restart it.
 
+### 3.1 What the control plane costs (measured, #19)
+
+The HTTP stack runs in the same process as the loop, so its footprint is the loop's problem. Measured
+on the small edition — Pi 4B (8 GB), Bookworm 64-bit, Python 3.11.2, 15 modules loaded with the
+motion, vision and voice set disabled — each run settled 60 s, two 30 s CPU windows:
+
+| `modules.api.enabled` | RSS | CPU | Loop |
+|---|---|---|---|
+| `false` | 60.0 MB | 33.5 %, 32.2 % | — |
+| `true`  | 72.5 MB | 31.1 %, 40.5 % | `tick_hz_actual 9.99`, `tick_ms 3.93` |
+
+So the control plane is worth **~12.5 MB of RSS**, and its CPU cost sits inside the noise of a
+workload already spending a third of a core on sensor polling. Three WebSocket clients on one token
+add ~3.4 points of CPU — but only one of them streams, because the contract allows one socket per
+token and evicts the rest with `error: superseded` ([§4](#4-commands-and-events), and
+`services/stream.py`).
+
+Two numbers this table does **not** have: concurrent WS clients (needs one paired token each) and
+MJPEG viewers (needs frames, so needs the camera). Re-measure before changing the shape — lazy import,
+a separate process or an opt-in server were all considered and none of them is justified by these
+figures.
+
 ---
 
 ## 4. Commands and events
