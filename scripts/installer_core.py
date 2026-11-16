@@ -302,6 +302,104 @@ def ensure_interfaces_linux() -> int:
     return 0
 
 
+# What a full install needs before it is worth starting. The venv plus wheels is roughly 1.5 GB and
+# the RTAB-Map build tree adds more when `--build-rtabmap` is used, so 2 GB free is the point below
+# which the run is more likely to fill the card than to finish.
+MIN_FREE_GB = 2.0
+
+
+def free_gb(path: Path) -> float | None:
+    """Free space at `path` in GiB, or None when it cannot be measured."""
+    try:
+        usage = shutil.disk_usage(str(path))
+    except OSError:
+        return None
+    return usage.free / (1024**3)
+
+
+def throttle_warning(raw: str | None) -> str | None:
+    """The under-voltage sentence for a `vcgencmd get_throttled` reading, or None when it is clean.
+
+    Bits 16-18 say the condition *has occurred* since boot and are sticky for the life of that boot,
+    which is why a reading taken straight after a reboot is meaningful (`docs/HARDWARE_TEST.md`
+    section 2, #185). A browned-out pack does not fail an install - it makes the install the last
+    thing the card sees - so this is a warning, not a refusal.
+    """
+    text = (raw or "").strip().lower()
+    if "=" in text:
+        text = text.split("=", 1)[1].strip()
+    if not text.startswith("0x"):
+        return None
+    try:
+        value = int(text, 16)
+    except ValueError:
+        return None
+    sticky = value & 0x70000
+    if not sticky:
+        return None
+    names = []
+    if sticky & 0x10000:
+        names.append("under-voltage")
+    if sticky & 0x20000:
+        names.append("ARM frequency capping")
+    if sticky & 0x40000:
+        names.append("throttling")
+    return (
+        "this boot recorded "
+        + ", ".join(names)
+        + " - charge or replace the pack before a long install, and before any motion"
+    )
+
+
+def camera_present() -> bool:
+    """Whether libcamera exposed a camera node. A warning only: `vision_pi4` ships off."""
+    dev = Path("/dev")
+    return any(dev.glob("video*")) or any(dev.glob("media*"))
+
+
+def preflight(repo_root: Path) -> int:
+    """Say what this machine looks like before anything is downloaded (REL P1-S4).
+
+    Returns 0 to continue and 2 to stop. Only free space stops a run: a throttled pack or a missing
+    camera changes what the user should expect from the install, not whether it is possible, and
+    refusing on either would block a legitimate headless install.
+
+    Every check is silent where its tool does not exist - `vcgencmd` and `/dev/video*` are Pi things,
+    so a container or a workstation sees nothing, the same rule the OS gate follows.
+    """
+    problems: list[str] = []
+
+    free = free_gb(repo_root)
+    if free is not None:
+        print(f"Free space: {free:.1f} GB at {repo_root}")
+        if free < MIN_FREE_GB:
+            problems.append(
+                f"only {free:.1f} GB free; a full install wants about {MIN_FREE_GB:.0f} GB"
+            )
+
+    vcgencmd = shutil.which("vcgencmd")
+    if vcgencmd is not None:
+        reading = subprocess.run(
+            [vcgencmd, "get_throttled"], capture_output=True, text=True
+        ).stdout
+        warning = throttle_warning(reading)
+        if warning:
+            print(f"Power: {warning}")
+
+    if Path("/boot/firmware/config.txt").exists() and not camera_present():
+        print(
+            "Camera: no /dev/video* node - `vision_pi4` will stay off. "
+            "Check the ribbon and `libcamera-hello --list-cameras`."
+        )
+
+    if problems:
+        for problem in problems:
+            print(f"Preflight: {problem}")
+        return 2
+    print("Preflight: OK")
+    return 0
+
+
 def ensure_rtabmap_deps_linux() -> int:
     """Attempt to install PCL/VTK packages needed by RTAB-Map. Return apt exit code.
 
@@ -611,9 +709,18 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # Pure path arithmetic, so it can come before the gates that need to talk about it.
+    repo_root = Path(__file__).resolve().parents[1]
+
     # The OS gate comes first: a refusal costs one line, and finding out after the venv and the apt
     # packages have been written is a mess to undo (#2).
     code = ensure_supported_os(args.allow_unsupported_os)
+    if code != 0:
+        return code
+
+    # Then say what the machine looks like before anything is downloaded: free space, pack health and
+    # whether a camera is actually there (REL P1-S4).
+    code = preflight(repo_root)
     if code != 0:
         return code
 
@@ -625,7 +732,6 @@ def main() -> int:
         )
         return 2
 
-    repo_root = Path(__file__).resolve().parents[1]
     venv_path = repo_root / args.venv
 
     # Create cache root early so temporary files and cloned repos can be stored
