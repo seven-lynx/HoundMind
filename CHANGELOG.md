@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A reboot can now be explained**: `~/.houndmind/session.json` is written when a session starts and
+  removed when it stops cleanly, so the next start can say how the last one ended - `Previous run
+  (pid 1187, started ...) did not stop cleanly`, or, when the boot id changed, `Previous session ...
+  ended with a reboot; get_throttled=0x50000`. The throttle bits are read only in that case, because
+  16-18 are sticky for the life of the boot and are the under-voltage fingerprint. `/state` carries
+  the same facts in a new `session` block: `previous_ending` is `null` when the last session closed
+  itself, because a clean stop removes the marker rather than writing a fourth value. It reports and
+  never resumes - motion still does not survive a restart (#214).
 - **A second process no longer hangs on the servo bus**: the runtime entry point and the two tools
   that open the vendor HAL now take an exclusive lock on `~/.houndmind/run.lock`
   (`core/instance.py`), and a second owner exits 3 saying who has it -
