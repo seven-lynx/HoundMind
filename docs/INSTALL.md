@@ -128,7 +128,7 @@ Optional flags:
 - `--preset auto|lite|full` (default `auto`: Pi 4 -> `full`, Pi 5 -> `lite`; an explicit choice wins on every board)
 
 Additional installer flags (new):
-- `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make` and requires system build deps and `sudo`). Useful for Pi 4/5 full installs.
+- `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make`, needs system build deps and `sudo`, and takes the better part of an hour on a Pi 4). It is the **only** way that build happens: `--preset full` no longer implies it, because the Python bindings can no longer be installed (#181), so the build produced nothing but time spent. Leave it off unless you are deliberately experimenting with the C++ library.
 - `--no-rtabmap`: explicitly skip any RTAB‑Map build/install during this run (useful when you want the full preset but will install RTAB‑Map later by hand).
 - `--auto-system-deps`: automatically install system packages via `apt` (needed before building heavy native dependencies).
 
