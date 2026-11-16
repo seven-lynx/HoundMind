@@ -38,6 +38,12 @@ ROBOT_HAT_PROBE = "from robot_hat import Robot, Pin, Ultrasonic, utils, Music, I
 # never installed at all (#180). `pyaudio` arrives from `requirements.txt` on the full preset.
 ROBOT_HAT_DEPS = ("smbus2", "lgpio", "pyaudio", "pygame")
 
+# `robot_hat/tts.py`, `robot_hat/llm.py` and `robot_hat/stt.py` are one-line re-exports of
+# `sunfounder_voice_assistant`, a SunFounder git package that is not on PyPI - the vendor's own
+# installer carries it in `CUSTOM_INSTALL_LIST` (`robot-hat/install.py:153-155`). Nothing installed it,
+# so every vendor voice and every LLM client raised ImportError on a stock image (#246).
+VOICE_ASSISTANT_REPO = "https://github.com/sunfounder/sunfounder-voice-assistant.git"
+
 
 
 def run(cmd: list[str]) -> int:
@@ -260,6 +266,15 @@ def ensure_system_deps_linux() -> int:
         "libx264-dev",
         "libgtk-3-dev",
         "libasound2-dev",
+        # `robot_hat/device.py:148-156` primes the I2S amp with `play` (sox) before it enables the
+        # speaker, `espeak`/`espeak-ng` is what the eSpeak engine and pyttsx3 shell out to, and
+        # `libsox-fmt-mp3` is what EdgeTTS needs to convert the MP3 it fetches (#246, #249). With any
+        # of them missing a working speaker still produces no speech.
+        "sox",
+        "libsox-fmt-mp3",
+        "alsa-utils",
+        "espeak-ng",
+        "espeak",
         "libportaudio2",
         "portaudio19-dev",
         "libboost-all-dev",
@@ -699,6 +714,7 @@ def main() -> int:
         "--vilib-repo", default="https://github.com/sunfounder/vilib.git"
     )
     parser.add_argument("--vilib-branch", default="picamera2")
+    parser.add_argument("--voice-assistant-repo", default=VOICE_ASSISTANT_REPO)
     parser.add_argument(
         "--run-i2samp", action="store_true", help="Run i2samp.sh after installing pidog"
     )
@@ -1018,6 +1034,28 @@ def main() -> int:
                         return code
             else:
                 print("PiDog library detected; skipping PiDog install.")
+
+    # The vendor voice stack. Outside the pidog branch on purpose: a dog that already has `pidog`
+    # skips that whole block above, and it still needs this - `robot_hat.tts`, `llm` and `stt` are
+    # one-line re-exports of it, so without the package every TTS/STT/LLM class raises ImportError
+    # (#246). Voice ships off by default, so a failure here is reported and the install continues
+    # rather than failing an install the core does not need.
+    if not is_windows() and missing_modules(python, ("sunfounder_voice_assistant",)):
+        voice_assistant_path = cache_root / "sunfounder-voice-assistant"
+        code = clone_or_update(args.voice_assistant_repo, voice_assistant_path)
+        if code != 0:
+            print(
+                "Could not clone sunfounder-voice-assistant: the vendor voice (Piper/EdgeTTS/eSpeak) "
+                "and the LLM clients will be unavailable. The rest of the install continues; "
+                "voice ships disabled, and pyttsx3 needs `espeak-ng`."
+            )
+        else:
+            code = run([str(pip), "install", str(voice_assistant_path)])
+            if code != 0 or missing_modules(python, ("sunfounder_voice_assistant",)):
+                print(
+                    "sunfounder-voice-assistant did not install cleanly, so the vendor voice and the "
+                    "LLM clients stay unavailable. The rest of the install continues."
+                )
 
     code = run([str(pip), "install", "-e", str(repo_root)])
     if code != 0:

@@ -232,6 +232,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Vision (legacy vilib)          | Disabled    | Opt-in, legacy camera                 |
 | Voice (legacy input)           | Disabled    | Opt-in, legacy voice                  |
 | Voice Assistant (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
+| Assistant (language model)     | Disabled    | Opt-in; cloud API now, a LAN box later; `modules.assistant` + `settings.assistant` |
 | Face Recognition (Pi4)         | Disabled    | Opt-in, requires Pi4                  |
 | Pi4 Vision Feed (Pi4)          | Disabled    | Opt-in, requires Pi4                  |
 | Semantic Labeler (Pi4)         | Disabled    | Opt-in, requires Pi4                  |

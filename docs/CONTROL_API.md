@@ -87,8 +87,21 @@ device list is client-side only; nothing about it is sent anywhere.
 **Device token** — generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token`, directory `0700`, file `0600`. It is never in `config/settings.jsonc`,
 never in a log line, and never in this repository. The web app does not receive it automatically: on
-first load it shows a token field and you paste it once (`services/web/index.html`). On the device,
-`cat ~/.houndmind/api_token`.
+first load it shows a token field and you paste it once (`services/web/index.html`). Read it on the
+device, and paste exactly what this prints:
+
+```bash
+# the web console's token field takes this string
+grep -m1 . ~/.houndmind/api_token
+
+# and confirm it is still private: expect "600" and the path
+stat -c '%a %n' ~/.houndmind/api_token
+```
+
+`grep -m1 .` rather than `cat`: the file has no trailing newline, and this prints the token as one
+pasteable line. Do not paste the output into an issue, a chat window or a screenshot - on port 8420
+that string is the whole security boundary.
+
 
 **Pairing** — for the Android app and for a second browser:
 

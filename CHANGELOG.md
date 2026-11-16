@@ -8,7 +8,51 @@ Current Release: v2026.11.16
 
 ## [Unreleased]
 
-Nothing yet — the next release starts here.
+### Added
+
+- **A language model behind the voice** (`modules.assistant` + `settings.assistant`, off by default).
+  An utterance the phrase map does not own is handed to a model and the reply is spoken by the TTS
+  engine; the module writes text only - no `behavior_override`, no `motion_command`, no intent - so a
+  model can never move the dog. `backend: "openai_compatible"` covers a cloud provider and a box on the
+  LAN (Ollama, `llama-server`, LM Studio) on the same code, which is what makes the local case a config
+  change rather than a second implementation. The key comes from `api_key_env` or a 0600
+  `api_key_path`, never from the tracked config; requests run on a worker thread with a timeout, a rate
+  limit and a failure budget that disables the module rather than the loop. `docs/SECURITY.md` §8
+  records that prompts leave the device when a cloud `base_url` is configured.
+
+### Changed
+
+- `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
+  instead of raising `Model not set` on every utterance, and the model download stays out of a tick
+  nobody asked for (#249).
+- `docs/CONTROL_API.md` and `docs/FEATURES_GUIDE.md` now show the command that reads the web console's
+  token (`grep -m1 . ~/.houndmind/api_token`) and the one that checks its mode, instead of naming the
+  file and stopping there. `docs/INSTALL.md` lists the three voice switches and what the vendor voice
+  stack needs.
+
+### Fixed
+
+- **The shipped voice could never speak** (#245). `optional/voice.py` held the `pidog` *module* rather
+  than a `Pidog()` instance, and `Pidog.speak(name, volume=100)` resolves a preset sound *file* by name
+  rather than speaking text, so `tts.backend: "pidog"` had no path to a sentence. TTS now drives the
+  vendor engines - `robot_hat.tts.Piper`, `EdgeTTS`, `Espeak`, `Pico2Wave` - through `say(text)`, builds
+  each engine once and caches it, and keeps the #8 rule that a named backend never borrows another one.
+  `pidog` remains valid as the compatibility name for that vendor path; the shipped default is `auto`.
+- **The vendor voice stack's own dependencies were never installed** (#246). `robot_hat.tts`,
+  `robot_hat.llm` and `robot_hat.stt` are one-line re-exports of `sunfounder_voice_assistant`, a
+  SunFounder git package, so on a stock install every vendor voice and every LLM client raised
+  `ModuleNotFoundError`. The installer now clones and installs it - including when `pidog` is already
+  present, because that branch skips the vendor block - and adds `sox`, `alsa-utils` and `espeak-ng`,
+  without which `enable_speaker()` cannot prime the I2S amplifier and `pyttsx3` has no engine.
+- **`auto` could not reach a vendor engine without raising first** (#249). Piper needs
+  `set_model(...)` before `say()`, and `edge` needs `libsox-fmt-mp3` to convert the MP3 it fetches, so
+  `auto` paid a traceback per engine per utterance before eSpeak spoke. The installer now adds
+  `libsox-fmt-mp3` and the `espeak` compatibility package as well, and Piper is opted into through its
+  model key.
+- **`slam_pi4` was documented as disabling itself and did not** (#247). With `backend: "rtabmap"` and no
+  bindings the module logged a single INFO line and kept running the gyro stub; `FEATURES_GUIDE.md` §23
+  and `config/settings.jsonc` said it switched itself off. Both now describe the fallback, and the
+  fallback is logged at WARNING.
 
 ## [v2026.11.16] - 2026-11-16
 

@@ -219,6 +219,12 @@
       "enabled": false,
       "required": false
     },
+    "assistant": {
+      // Cloud or LAN language model (disabled by default). It answers questions through the voice
+      // module and cannot command motion - the phrase map still owns every command.
+      "enabled": false,
+      "required": false
+    },
     "voice": {
       // Voice interaction modules (disabled until tested).
       "enabled": false,
@@ -392,6 +398,34 @@
       }
     },
     // =====================================================================
+    // ASSISTANT (language model: a cloud API now, a box on the LAN later)
+    // =====================================================================
+    "assistant": {
+      // Off in both places by default: here and `modules.assistant`.
+      "enabled": false,
+      // "openai_compatible" speaks the OpenAI chat-completions API, which is why a local model is
+      // a config change rather than a second implementation - Ollama, llama.cpp's `llama-server`
+      // and LM Studio all expose `/v1/chat/completions`. "none" keeps the block inert.
+      "backend": "none",
+      // Cloud: "https://api.openai.com/v1" (or an OpenRouter / Groq base URL).
+      // Local: "http://<this-pc-on-the-lan>:11434/v1" with "model": "qwen3.5:4b".
+      "base_url": "",
+      "model": "",
+      // Spoken aloud, so brevity is a feature. It must never claim the dog can do something it
+      // cannot, and it never commands motion - the phrase map in `voice_assistant` owns commands.
+      "system_prompt": "You are the voice of a small robot dog. Answer in one or two short sentences, plainly, and never claim you can do something you cannot.",
+      "max_tokens": 256,
+      // A dead link must cost the answer, not the tick: the worker gives up after this, and the
+      // module disables itself after `max_failures` consecutive failures.
+      "timeout_s": 8.0,
+      "requests_per_minute": 10,
+      "max_failures": 3,
+      // The key is never in this file - this repo publishes its config. Set the environment
+      // variable, or write the key into a 0600 file; the environment wins when both exist.
+      "api_key_env": "LLM_API_KEY",
+      "api_key_path": "~/.houndmind/llm_key"
+    },
+    // =====================================================================
     // VOICE ASSISTANT (Pi4 optional)
     // =====================================================================
     "voice_assistant": {
@@ -405,11 +439,19 @@
         "vosk_model_path": ""
       },
       // Text-to-speech settings. `enabled: false` keeps the module silent even when it
-      // answers a question. `backend` picks the voice: "auto" tries the PiDog speaker first
-      // and falls back to pyttsx3, while "pidog" and "pyttsx3" each disable the other path.
+      // answers a question. `backend` picks the voice: the vendor engines speak through the Robot
+      // HAT speaker - "piper" (offline neural), "edge" (network), "espeak", "pico2wave" - and
+      // "auto" walks those and then falls back to pyttsx3. "pidog" is kept as the compatibility
+      // name for that vendor path; naming one engine disables every other path. The vendor engines
+      // need `sunfounder-voice-assistant` (installed by the installer), pyttsx3 needs `espeak-ng`,
+      // and both need the HAT speaker (#245, #246).
       "tts": {
         "enabled": false,
-        "backend": "pidog"
+        "backend": "auto",
+        // Piper's model, downloaded into `~/.piper_models/` on first use (offline neural voice,
+        // the best fit for a dog with no network). Empty means "skip Piper" - without a model Piper
+        // cannot speak, and `auto` moves on to the next engine instead (#249).
+        "piper_model": ""
       },
       // Map phrases to PiDog actions.
       "command_map": {
@@ -459,8 +501,9 @@
         "enabled": false,
         // Backend: "stub" (default), "rtabmap" (for full SLAM). The `rtabmap` backend needs the
         // `rtabmap` bindings, which are not on PyPI and no longer have source upstream, so nothing
-        // in a normal install provides them: with this backend the module disables itself and says
-        // so. `stub` integrates the gyro - it is dead reckoning, not visual SLAM (#181).
+        // in a normal install provides them: with this backend and no bindings the module logs a
+        // warning and falls back to `stub` (dead reckoning, reported by /state), rather than
+        // disabling itself. `stub` integrates the gyro - it is dead reckoning, not visual SLAM (#181).
         "backend": "stub",
         // Main SLAM update interval (seconds)
         "interval_s": 0.2,

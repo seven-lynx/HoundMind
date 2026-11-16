@@ -10,6 +10,15 @@ from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
 
+# `robot_hat.tts` class per backend name. Each is constructed with no arguments and driven with
+# `say(text)`; the vendor examples are `examples/tts_*.py` in the robot-hat tree.
+_VENDOR_TTS_CLASSES = {
+    "piper": "Piper",
+    "edge": "EdgeTTS",
+    "espeak": "Espeak",
+    "pico2wave": "Pico2Wave",
+}
+
 
 class VoiceModule(Module):
     """Voice module with STT (VOSK or SpeechRecognition) and TTS (pidog or pyttsx3).
@@ -32,9 +41,18 @@ class VoiceModule(Module):
     - stt.backend: auto|vosk|speech_recognition
     - stt.vosk_model_path: path to VOSK model directory (optional)
     - tts.enabled: bool (false = never speak)
-    - tts.backend: auto|pyttsx3|pidog, where `auto` tries pidog first and then pyttsx3
-      while a named backend disables the other path
+    - tts.backend: auto|pidog|piper|edge|espeak|pico2wave|pyttsx3. The vendor engines
+      (`piper`, `edge`, `espeak`, `pico2wave`) speak through the Robot HAT speaker: they are
+      `robot_hat.tts` classes, which also switch the amplifier on. `pidog` is kept as the name of that
+      vendor path - `Pidog.speak()` plays preset sound *files* by name and cannot speak a sentence
+      (#245). `auto` walks the vendor engines and then falls back to `pyttsx3`, while a named backend
+      never borrows another engine.
     """
+
+    # The vendor engines, in the order `auto` and `pidog` try them. Each name maps to a
+    # `robot_hat.tts` class that is constructed with no arguments and driven with `say(text)`
+    # (vendor `examples/tts_piper.py`, `tts_edge.py`, `tts_espeak.py`).
+    VENDOR_TTS = ("piper", "edge", "espeak", "pico2wave")
 
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
@@ -46,20 +64,16 @@ class VoiceModule(Module):
         self._stt_thread: threading.Thread | None = None
         self._stt_stop = threading.Event()
         self._tts_engine: Any | None = None
-        self._pidog: Any | None = None
+        # One entry per vendor engine name: the instance, or None when it could not be built. Cached
+        # so a missing dependency is reported once instead of on every utterance (#245).
+        self._vendor_engines: dict[str, Any] = {}
 
     def start(self, context) -> None:
         if not self.status.enabled:
             return
 
-        # pidog is optional; if present it may provide robot TTS and other helpers
-        try:
-            import pidog  # type: ignore[import-not-found]
-
-            self._pidog = pidog
-        except Exception:
-            self._pidog = None
-
+        # No vendor import here on purpose: the TTS engines are built on first use, so a lite install
+        # without `robot_hat` costs one log line rather than a failed start.
         self.available = True
         context.set("voice", {"status": "ready"})
 
@@ -82,6 +96,13 @@ class VoiceModule(Module):
             return None
 
         now = time.time()
+        # An asynchronous answer (the assistant) is spoken the moment it lands, and outside the
+        # command cooldown: the user has already waited for it.
+        reply = context.get("assistant_reply")
+        if isinstance(reply, str) and reply.strip():
+            context.set("assistant_reply", None)
+            self._speak(reply, context)
+
         cooldown = float(settings.get("cooldown_s", 1.0))
         if now - self._last_command_ts < cooldown:
             return None
@@ -159,29 +180,31 @@ class VoiceModule(Module):
         handler = context.get("voice_question_handler")
         try:
             # If it's a question (ends with ?) or handler is present, forward
-            if (isinstance(text, str) and text.strip().endswith("?")) or callable(handler):
-                if callable(handler):
-                    try:
-                        resp = handler(text)
-                    except Exception:
-                        logger.exception("voice_question_handler failed")
-                        resp = None
-                else:
+            if not ((isinstance(text, str) and text.strip().endswith("?")) or callable(handler)):
+                return
+            if callable(handler):
+                try:
+                    resp = handler(text)
+                except Exception:
+                    logger.exception("voice_question_handler failed")
                     resp = None
                 if isinstance(resp, str) and resp.strip():
                     self._speak(resp, context)
-                else:
-                    # default fallback: echo
-                    self._speak(f"I heard: {text}", context)
+                # A handler that answers asynchronously publishes `assistant_reply`; echoing
+                # "I heard: ..." here would talk over it.
+                return
+            # No handler: the echo is the only answer the dog can give.
+            self._speak(f"I heard: {text}", context)
         except Exception:
             logger.exception("Failed handling utterance")
 
     def _speak(self, text: str, context) -> None:
         """Speak `text` with the engine `settings.voice_assistant.tts` selects.
 
-        `enabled: false` is a no-op. `backend: auto` keeps the historical order - the vendor
-        voice first, pyttsx3 second - while a named backend disables the other path, so a
-        missing PiDog speaker cannot turn into an unexpected local voice.
+        `enabled: false` is a no-op. The vendor engines speak through the Robot HAT speaker and turn
+        the amplifier on themselves; `pyttsx3` is the local fallback. `auto` tries the vendor engines
+        first and then the local one, while a named backend disables every other path - so a missing
+        speaker is a dropped answer, not an unexpected local voice (#8).
         """
         settings = (context.get("settings") or {}).get("voice_assistant", {})
         tts_cfg = settings.get("tts", {}) or {}
@@ -189,18 +212,21 @@ class VoiceModule(Module):
             logger.debug("TTS disabled by settings; dropping utterance")
             return
 
-        backend = tts_cfg.get("backend", "auto")
+        backend = str(tts_cfg.get("backend", "auto"))
+        piper_model = str(tts_cfg.get("piper_model", "") or "")
 
-        if backend in ("auto", "pidog"):
+        for name in self._tts_chain(backend):
+            engine = self._vendor_tts(name, piper_model)
+            if engine is None:
+                continue
             try:
-                if self._pidog is not None and hasattr(self._pidog, "speak"):
-                    try:
-                        self._pidog.speak(text)
-                        return
-                    except Exception:
-                        logger.exception("pidog.speak failed")
+                engine.say(text)
+                return
             except Exception:
-                logger.exception("pidog TTS check failed")
+                logger.exception("TTS backend %s failed to speak", name)
+                if backend not in ("auto", "pidog"):
+                    # A named backend does not borrow another engine (#8).
+                    return
 
         if backend in ("auto", "pyttsx3"):
             try:
@@ -215,6 +241,51 @@ class VoiceModule(Module):
                 logger.exception("pyttsx3 TTS failed")
 
         logger.info("TTS not available to speak: %s", text)
+
+    def _tts_chain(self, backend: str) -> tuple[str, ...]:
+        """The vendor engines to try, in order, for `backend`.
+
+        `auto` and the compatibility name `pidog` both mean the vendor path; any other value names
+        one engine. `pyttsx3` is not a vendor engine and therefore yields no names here.
+        """
+        if backend in ("auto", "pidog"):
+            return self.VENDOR_TTS
+        if backend in self.VENDOR_TTS:
+            return (backend,)
+        return ()
+
+    def _vendor_tts(self, name: str, piper_model: str = "") -> Any | None:
+        """The vendor engine `name`, built once, or None when it is unavailable.
+
+        `robot_hat.tts` wraps `sunfounder_voice_assistant` and calls `enable_speaker()`, which is what
+        raises the Robot HAT amplifier (GPIO 20). A lite install has neither, so the missing case is
+        the common one: it is cached and logged at INFO once, not raised per utterance (#245, #246).
+
+        Piper is skipped unless `tts.piper_model` names a model: without one its `say()` raises
+        `Model not set`, and `set_model` downloads the weights on first use - not something a tick
+        should start by surprise.
+        """
+        if name in self._vendor_engines:
+            return self._vendor_engines[name]
+        self._vendor_engines[name] = None
+        if name == "piper" and not piper_model:
+            logger.info("TTS backend piper skipped: set settings.voice_assistant.tts.piper_model")
+            return None
+        try:
+            import robot_hat.tts as vendor_tts  # type: ignore[import-not-found]
+
+            cls = getattr(vendor_tts, _VENDOR_TTS_CLASSES[name], None)
+            if cls is None:
+                logger.info("TTS backend %s is not in this robot_hat; skipping", name)
+                return None
+            engine = cls()
+            if name == "piper":
+                engine.set_model(piper_model)
+        except Exception as exc:
+            logger.info("TTS backend %s unavailable: %s", name, exc)
+            return None
+        self._vendor_engines[name] = engine
+        return engine
 
     def _stt_loop(self, context) -> None:
         """Background STT loop. Supports VOSK if available, otherwise SpeechRecognition.

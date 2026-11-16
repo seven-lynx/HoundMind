@@ -262,6 +262,7 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("behavior", "energy_bias_start", 1.5),
     ("vision_pi4", "backend", "webcam"),
     ("voice_assistant", "stt", []),
+    ("assistant", "backend", "magic"),
     ("face_recognition", "backend", "magic"),
     ("semantic_labeler", "input_width", 0),
     ("slam_pi4", "rtabmap", "on"),
