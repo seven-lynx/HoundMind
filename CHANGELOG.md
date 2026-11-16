@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The install guide leads with the path people actually take, and there is a new bring-up guide**:
+  `INSTALL.md` gains a "Headless over SSH" section (eight steps, each linking down), a "What ships
+  enabled" table (18 of 30 modules, and why the safety stack is not one of them), and the guided
+  install now lists what the installer really does - OS gate, preflight, I2C/SPI, the venv with
+  `--system-site-packages`, the service - with `--no-service` and `--allow-unsupported-os` in the flag
+  list. New `docs/SSH_INSTALL_AND_BRINGUP.md` walks the same path with the traps that cost bench time
+  (`origin/master`, `pyaudio` on lite, `/tmp` cleared at boot, a lagging SSH path, the servo-bus exit
+  3), and `HARDWARE_TEST.md` §10 carries the three installer failures as runbook rows.
 - **The installer says what the machine looks like before it downloads anything** (REL P1-S4): free
   space at the checkout (refuses below 2 GB, the one thing that genuinely stops a full install),
   `vcgencmd get_throttled` bits 16-18 (warns with what the boot recorded, because a browned-out pack

@@ -14,6 +14,7 @@ are doing; do not read the whole directory.
 |---|---|---|
 | Go from a flashed SD card to a running dog, safely, in ten minutes | [`QUICKSTART.md`](QUICKSTART.md) | guide |
 | Install HoundMind on a Pi and get it running | [`INSTALL.md`](INSTALL.md) | guide |
+| Install over SSH with no monitor on the dog, and the traps that cost time | [`SSH_INSTALL_AND_BRINGUP.md`](SSH_INSTALL_AND_BRINGUP.md) | guide |
 | Run the full hardware test on a dog, step by step | [`HARDWARE_TEST.md`](HARDWARE_TEST.md) | guide |
 | Know what a feature does and how to turn it off | [`FEATURES_GUIDE.md`](FEATURES_GUIDE.md) | reference |
 | Write code against the runtime (modules, context keys, config sections) | [`HOUNDMIND_PROGRAMMING_GUIDE.md`](HOUNDMIND_PROGRAMMING_GUIDE.md) | guide |
