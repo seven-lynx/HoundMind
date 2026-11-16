@@ -853,9 +853,11 @@ async def _routines_create(request: web.Request) -> web.Response:
     `?replace=true`, because the directory is user data and a form that silently overwrites it loses
     somebody else's work with no undo.
 
-    `reload_required: true` is the honest half of this route. The runner loads the directory **once**
-    at start (`behavior/routine_runner.py`), so a routine written now is playable after the next
-    start; making it immediate needs a reload trigger in the decision loop (#196).
+    `reload_required` used to be the honest half of this route: the runner reads the directory once,
+    so a routine written now only became playable after the next start (#196). It no longer is - the
+    write sets `routine_reload`, the runner re-reads the directory on its next tick, and `GET
+    /routines` and `POST /routines/{id}/run` follow immediately. A run already in flight keeps the
+    steps it started with.
     """
     plane = _plane(request)
     store = _routine_store(plane)
@@ -882,11 +884,14 @@ async def _routines_create(request: web.Request) -> web.Response:
             },
             status=400,
         )
+    # The runner re-reads the directory on its next tick, which is what makes the write playable
+    # without a restart (#196). Set after the file is on disk, so a reload cannot race the save.
+    plane.context.set("routine_reload", True)
     return web.json_response(
         {
             "routine": saved,
             "path": str(store.directory / f"{saved['id']}.json"),
-            "reload_required": True,
+            "reload_required": False,
         },
         status=201,
     )

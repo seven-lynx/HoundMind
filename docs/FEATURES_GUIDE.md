@@ -367,9 +367,10 @@ Three routes expose them: `GET /api/v1/routines` lists what the runner loaded an
 refused, `POST /api/v1/routines` writes one file judged by that same loader validation
 (`?replace=true` to overwrite an existing id), and `POST /api/v1/routines/{id}/run` starts one,
 optionally as a rehearsal (`{"dry_run": true}`). All the shapes and status codes are in
-`docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands). A written routine carries
-`reload_required: true`: the runner reads the directory once at start, so the new file is playable
-after the next start.
+`docs/CONTROL_API.md` [§3](CONTROL_API.md#3-commands). A written routine is **playable immediately**:
+the route asks the runner to re-read the directory on its next tick, so the new file appears in
+`GET /routines` and can be run without a restart. If a run is already in flight the reload waits for
+it to finish, so the walk in progress keeps the steps it started with.
 
 The run in progress is also in every state snapshot (`state.routines`, the same object the route calls
 `current`) and is pushed as a `routine` event whenever it moves — a new step, a new state, a veto — so
