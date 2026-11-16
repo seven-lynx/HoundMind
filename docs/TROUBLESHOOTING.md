@@ -31,6 +31,7 @@ does not answer it, the last column names the document that will.
 | `python -m tools.installer_verify` prints `Python: 3.10 -> UNSUPPORTED`, or the installer exits 2 naming 3.11-3.13 | the interpreter is outside the range `pyproject.toml` declares | install 3.11-3.13 (Bookworm ships 3.11) or name one with `PYTHON=python3.13 bash scripts/install_houndmind.sh` |
 | `from robot_hat import device` fails, or the installer exits 2 saying `robot_hat` is not importable | the cloned `robot-hat` is older than 2.5.x, or its own sub-dependencies are missing | re-clone `2.5.x`; the installer probes `Robot, Pin, Ultrasonic, utils, Music, I2C` and names what is missing (`docs/pidog/ROBOTHAT.md` [§1.3](pidog/ROBOTHAT.md#13-which-version-is-installed)) |
 | `pip` refuses the package on 3.10, or a `wheel`/`gcc`/`dlib` build fails | interpreter too old, or no wheel for this OS | Bookworm 64-bit (3.11), or `--preset lite` if you do not need the heavy stack |
+| the installer stops on `origin/master`, on `missing module(s): pyaudio`, or warns about `--system-site-packages` | three installer traps that all look like something else | [`SSH_INSTALL_AND_BRINGUP.md` §9](SSH_INSTALL_AND_BRINGUP.md#9-the-traps) has the cause and the fix for each, and `HARDWARE_TEST.md` [§10](HARDWARE_TEST.md#10-when-something-fails) carries them as runbook rows |
 
 ## 2. Start-up
 

@@ -10,11 +10,14 @@ longer supported. PackMind and CanineCore are now a single system.
 
 ## Contents
 
+- [Headless over SSH: the path most people take](#headless-over-ssh-the-path-most-people-take) — clone,
+  install, enable the service, verify, open the console
 - [Supported boards](#supported-boards) — Pi 4 and 5 only, and the HAT version rule
 - [Python](#python) — 3.11–3.13, and what refuses what
 - [Prerequisites](#prerequisites)
 - [Recommended: Guided Install (Beginner-Friendly)](#recommended-guided-install-beginner-friendly)
 - [Manual Install (Step-by-Step, Advanced)](#manual-install-step-by-step-advanced)
+- [What ships enabled](#what-ships-enabled)
 - [Bench checklist (before calling a build done)](#bench-checklist-before-calling-a-build-done)
 - [Troubleshooting & Support Bundles](#troubleshooting--support-bundles)
 - [Run](#run)
@@ -23,6 +26,37 @@ longer supported. PackMind and CanineCore are now a single system.
 - [Fallback: Run the Official PiDog Software](#fallback-run-the-official-pidog-software)
 - [Notes](#notes)
 - [PiDog & Dependency Installation (Official)](#pidog--dependency-installation-official)
+
+---
+
+## Headless over SSH: the path most people take
+
+A PiDog does not need a monitor: the console is a web page served by the dog. The whole path is eight
+steps, and each one links to the detail further down.
+
+| # | Step | Command / where |
+|---|---|---|
+| 1 | Flash **Bookworm 64-bit**, boot with the 40-pin HAT seated, and get on the network | `ssh pi@<address>` |
+| 2 | Enable **I2C and SPI**, then reboot - the sound sensor is an SPI device and is dead without it | `sudo raspi-config nonint do_i2c 0`, `sudo raspi-config nonint do_spi 0`, [Prerequisites](#prerequisites) |
+| 3 | Clone and install | `git clone https://github.com/seven-lynx/HoundMind.git ~/HoundMind && cd ~/HoundMind && bash scripts/install_houndmind.sh` |
+| 4 | Read the preflight - free space, pack health, camera | printed before anything downloads; `Preflight: OK` is the normal line |
+| 5 | Start the service and check the logs | `sudo systemctl start houndmind`, `journalctl -u houndmind -n 50` |
+| 6 | Prove the sensors without moving the dog | `python -m tools.hardware_checkup --skip-motion` - exit 0 and four valid flags |
+| 7 | Open the console from your laptop | `http://<pi-address>:8420`, then paste the token from `~/.houndmind/api_token` |
+| 8 | Optional: TLS so the console is installable, and the phone notifications | [TLS for the control plane](#tls-for-the-control-plane-optional) |
+
+Two things that surprise people, both measured on a bench dog:
+
+- **The service resumes; motion never does.** After a reboot the modules come back and the dog stays
+  still. `motion_command` and the intent board are context-only and every intent expires, so a gait
+  cannot survive a restart and a routine mid-run is lost rather than replayed.
+- **A second process cannot open the dog.** The runtime holds `~/.houndmind/run.lock`; a tool started
+  while it runs exits **3** with `the servo bus is owned by pid N (runtime)` instead of hanging. That
+  is the answer to "why did `hardware_checkup` print nothing?", not a dead tool.
+
+A longer walk-through, including the traps that cost real bench time (`origin/master`, `pyaudio` on
+the lite preset, `/tmp` being wiped at boot, the journald `Storage=volatile` default), is
+[`SSH_INSTALL_AND_BRINGUP.md`](SSH_INSTALL_AND_BRINGUP.md).
 
 ---
 
@@ -99,10 +133,17 @@ python3 --version
 ## Recommended: Guided Install (Beginner-Friendly)
 
 The installer script will:
-1) Create a local virtual environment (unless you skip it).
-2) Install system packages needed for PiDog (Linux only, uses `sudo`).
-3) Install SunFounder dependencies (`robot-hat`, `vilib`, `pidog`) **into the same environment**.
-4) Install HoundMind and verify imports.
+1. **Refuse an OS it was not validated on** - Bookworm 64-bit - before anything is written
+   (`--allow-unsupported-os` overrides that for a maintainer).
+2. Print a **preflight**: free space (it refuses under 2 GB), pack health from
+   `vcgencmd get_throttled`, and whether a camera node exists.
+3. Enable **I2C and SPI**, and install the apt packages the HAT, the camera binding and the audio
+   stack need.
+4. Create the venv with **`--system-site-packages`**, so Debian-provided bindings (`picamera2`) are
+   importable at all.
+5. Install SunFounder dependencies (`robot-hat`, `vilib`, `pidog`) **into the same environment**.
+6. Install HoundMind, then install and **enable** `houndmind.service` (`--no-service` skips it).
+7. Verify the imports, and the camera binding on a Pi, ending at `Installer check: OK`.
 
 ### Board detection
 - **Pi 4 and Pi 5**: both honour `--preset`. With `--preset auto` (the default) a Pi 4 installs
@@ -126,6 +167,9 @@ Optional flags:
 - `--skip-pidog` (skip SunFounder install if already done)
 - `--run-i2samp` (runs the PiDog audio setup script)
 - `--preset auto|lite|full` (default `auto`: Pi 4 -> `full`, Pi 5 -> `lite`; an explicit choice wins on every board)
+- `--no-service` (do not install or enable `houndmind.service`; the unit is still in the tree at
+  `packaging/systemd/houndmind.service`)
+- `--allow-unsupported-os` (continue on a release other than Bookworm; not supported, for maintainers)
 
 Additional installer flags (new):
 - `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make`, needs system build deps and `sudo`, and takes the better part of an hour on a Pi 4). It is the **only** way that build happens: `--preset full` no longer implies it, because the Python bindings can no longer be installed (#181), so the build produced nothing but time spent. Leave it off unless you are deliberately experimenting with the C++ library.
@@ -232,6 +276,26 @@ it comes from the `python3-picamera2` Debian package, and the venv has to be cre
 `--system-site-packages` to see it (the installer does that). If the import fails, leave
 `modules.vision_pi4.enabled` at `false` — enabling it only buys a `Picamera2 unavailable` line on
 every start (#215).
+
+## What ships enabled
+
+The shipped `config/settings.jsonc` starts **18 of the 30 modules**. This is what a fresh install does
+before you change anything; `GET /api/v1/modules` is the live answer, and `docs/FEATURES_GUIDE.md`
+says how to turn each one off.
+
+| State | Modules |
+|---|---|
+| **On** | `hal`, `hal_sensors`, `hal_motors`, `motion_gateway`, `api`, `perception`, `scanning`, `navigation`, `orientation`, `mapping`, `behavior`, `attention`, `routine_runner`, `place_navigator`, `event_log`, `decision_log`, `led_manager`, `watchdog` |
+| **Off** | `safety`, `health`, `sensor_health`, `balance`, `calibration`, `vision`, `vision_pi4`, `voice`, `face_recognition`, `semantic_labeler`, `slam_pi4`, `energy_emotion` |
+
+Two things worth knowing about that list:
+
+- **The safety stack is off on purpose** in this build - `safety`, `health`, `sensor_health` and
+  `balance` are the four that need a soak on a real dog before they are anybody's default, and #26 is
+  that soak. `watchdog` is on and holds motion; the *interlock* is always on and is not a module.
+- **`slam_pi4` cannot be enabled usefully yet**: the `rtabmap` backend's bindings are not installable
+  and the `stub` backend is dead reckoning, not visual SLAM
+  (`FEATURES_GUIDE.md` [§23](FEATURES_GUIDE.md#23-slam-pi4), #181).
 
 ## Bench checklist (before calling a build done)
 
