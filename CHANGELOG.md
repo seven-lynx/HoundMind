@@ -4,9 +4,40 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 
-Current Release: v2026.01.18
+Current Release: v2026.11.16
 
 ## [Unreleased]
+
+Nothing yet — the next release starts here.
+
+## [v2026.11.16] - 2026-11-16
+
+### Notes
+
+This release is the one that can be installed, supervised and stopped cleanly. It closes out ten
+months of work with no release: the tree could not be installed from scratch on a Pi until its final
+week (two installer defects each killed a fresh run before `pidog`), and there was no service unit, no
+single-instance guard and no record of how a session ended. All of that is now in the tree and was
+verified on a Pi 4B with a PiDog — motionless, except where a step needed the servo bus.
+
+**Not tested, and said so rather than implied otherwise:**
+
+- **Pi 5** (#33) — the `pi5` profile ships the same cadence and enablement as `pi4` because nothing has
+  been measured on that board.
+- **Vision** (`vision`, `vision_pi4`, `face_recognition`, `semantic_labeler`) — off by default, and
+  never run against a camera from the application. `picamera2` now installs and imports (#215); the
+  modules themselves have no device verdict.
+- **Voice** (`voice`) — off by default, and no audio path has ever been identified on a dog: mic,
+  speaker, I2S state and an STT model are all unverified (#240).
+- **SLAM** (`slam_pi4`) — **not available**. The `rtabmap` backend needs bindings that cannot be
+  installed, and the `stub` backend is gyro dead reckoning, not visual SLAM. The backend decision is
+  #181.
+- **The safety stack** (`safety`, `health`, `sensor_health`, `balance`) — off by default. The soak that
+  would justify flipping it is #26, together with the 30-minute patrol.
+- **Two numbers the footprint table does not have** (#19): concurrent WebSocket clients (the contract
+  is one socket per token) and MJPEG viewers (which need a camera).
+
+### Highlights
 - **The install guide leads with the path people actually take, and there is a new bring-up guide**:
   `INSTALL.md` gains a "Headless over SSH" section (eight steps, each linking down), a "What ships
   enabled" table (18 of 30 modules, and why the safety stack is not one of them), and the guided
@@ -1143,7 +1174,7 @@ Current Release: v2026.01.18
 - `settings.logging.console_level` is an accepted key, so the console can be quieter than the
   file without editing code.
 
-### Changed
+### Changed (continued)
 - **One owner for the servo bus.** `PidogHAL` now serialises `read`, `sample_distance`, `action`
   and `stop` on one re-entrant lock. The loop's motors, the scan worker and the attention module
   were three callers of an I2C bus and a vendor action queue that is not thread-safe; two of them
@@ -1244,7 +1275,7 @@ Current Release: v2026.01.18
   all. Jobs, order and interpreter are unchanged: this widens the trigger, it does not relax the
   gate.
 
-### Fixed
+### Fixed (continued)
 - A client command that sat in a tunnel can no longer execute on arrival: the deadman starts
   when the device receives it, and an expired command is refused by the interlock.
 - **The placeholder vision inference thread is gone.** `vision_pi4` started a background thread on
@@ -1258,7 +1289,7 @@ Current Release: v2026.01.18
   `src/houndmind_ai/` (L-03). The remaining prints are `src/tools/` device CLIs, where stdout is
   the interface.
 
-### Removed
+### Removed (continued)
 - `safety/service_watchdog.py`, `modules.service_watchdog` and `settings.service_watchdog`. The
   restart policy lives in `kernel/supervisor.py`, driven by `settings.watchdog`.
 - `settings.watchdog.recovery_mode`, `recovery_behavior`, `recovery_action`, `restart_modules` and
@@ -1296,7 +1327,7 @@ Current Release: v2026.01.18
   (`navigation.gentle_recovery_stuck_count`, `navigation.gentle_recovery_cooldown_s`) was read
   by the module but missing from the file, and is now shipped.
 
-### Fixed
+### Fixed (continued 2)
 - `python -m houndmind_ai` no longer dies with `ModuleNotFoundError: cv2` on an install without
   OpenCV, which included the installer's own lite fallback.
 - `loop.max_cycles` defaults to `null`; a fresh install used to run for two seconds and exit.
