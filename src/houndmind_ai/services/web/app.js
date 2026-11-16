@@ -121,6 +121,65 @@ bind("theme-toggle", "click", () => {
 
 renderThemeButton();
 
+// ---- safety notifications (#177). A second signal, never the only one: the ticker shows every event
+// whether or not the browser allows a notification, and the dog's own stop path is on the device.
+// `Notification` needs a secure context, so on plain http the button stays hidden and nothing asks for
+// permission.
+function notificationSupported() {
+  return window.isSecureContext && "Notification" in window;
+}
+
+function renderNotifyButton() {
+  const button = $("notify-toggle");
+  if (!button) return;
+  if (!notificationSupported()) {
+    // Hiding it is the honest state: the browser would refuse the prompt, and a button that cannot
+    // work is worse than no button.
+    button.hidden = true;
+    return;
+  }
+  const state = Notification.permission;
+  button.hidden = false;
+  button.disabled = state === "denied";
+  button.textContent =
+    state === "granted" ? "notify on" : state === "denied" ? "notify blocked" : "notify off";
+  button.title =
+    state === "denied"
+      ? "this browser has blocked notifications for this site; enable them in its settings"
+      : state === "granted"
+      ? "desktop notifications are on for safety events"
+      : "show a desktop notification for safety events (e-stop, tilt, a veto)";
+}
+
+bind("notify-toggle", "click", async () => {
+  if (!notificationSupported() || Notification.permission === "granted") return;
+  try {
+    // Asked for on a click, never on load: a prompt nobody understood is a prompt nobody grants.
+    await Notification.requestPermission();
+  } catch (err) {
+    /* an older browser wants a callback; the label reports whatever it decided */
+  }
+  renderNotifyButton();
+});
+
+function notifySafety(name, data) {
+  if (!notificationSupported() || Notification.permission !== "granted") return;
+  // Only the events the ticker tints as vetoes: a notification for every routine step would train the
+  // user to dismiss the one that mattered.
+  if (toneForEvent(name) !== "veto") return;
+  const detail = summarize({ name, data });
+  try {
+    new Notification(`HoundMind: ${name.replace(/_/g, " ")}`, {
+      body: detail || "see the event ticker",
+      tag: "houndmind-safety",
+    });
+  } catch (err) {
+    /* a refused notification must not take the event path with it */
+  }
+}
+
+renderNotifyButton();
+
 // ------------------------------------------------------------------ socket
 
 function teardownSocket() {
@@ -211,6 +270,9 @@ function connect() {
     } else if (frame.type === "event") {
       const payload = frame.data || {};
       store.event(payload.name || "event", payload.data || {});
+      // A safety event gets a desktop notification when the user asked for one. The ticker has
+      // already recorded it either way (#177).
+      notifySafety(payload.name || "event", payload.data || {});
     } else if (frame.type === "error") {
       // `unauthorized` means this token is not welcome: asking again will not help.
       if (frame.error === "unauthorized" || frame.error === "bad_token") {

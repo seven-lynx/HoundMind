@@ -973,6 +973,13 @@ registered, which is every default install — the TLS section of `docs/INSTALL.
 that, and the default stays off. The worker is network-first and never caches `/api/`, so the current
 `app.js` is always what a browser gets while the device answers.
 
+**Safety notifications are opt-in, and never the only signal.** With a secure context the header shows
+a `notify` button; the permission prompt happens on that click and never on load, and the button says
+`notify blocked` if the browser refuses. When granted, `command_vetoed`, `command_expired` and
+`safety_action` raise a desktop notification — the same three the ticker tints as vetoes. The ticker
+records every event regardless, and the dog's own stop path is on the device: a notification is an
+extra signal, not the safety mechanism.
+
 **The token.** Generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token` with mode 0600. It is never in `config/settings.jsonc`, never in a log
 line and never in this repository. There is no token-generator script to run: the runtime creates

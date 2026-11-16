@@ -18,8 +18,10 @@ import re
 from pathlib import Path
 
 __all__ = [
+    "test_a_notification_is_never_the_only_signal",
     "test_components_take_their_colours_from_tokens",
     "test_every_dark_colour_token_has_a_light_value",
+    "test_notifications_are_asked_for_on_a_click_and_checked_before_use",
     "test_the_manifest_points_at_an_icon_that_exists",
     "test_the_stylesheet_honours_the_hidden_attribute",
     "test_the_worker_is_registered_only_in_a_secure_context",
@@ -133,4 +135,36 @@ def test_the_worker_never_caches_the_api() -> None:
     worker = (WEB / "sw.js").read_text(encoding="utf-8")
 
     assert 'url.pathname.startsWith("/api/")' in worker
+
+# ------------------------------------------------------------- notifications (#177)
+
+
+def test_notifications_are_asked_for_on_a_click_and_checked_before_use() -> None:
+    """A permission prompt on load is the one nobody grants; a notification without permission throws."""
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+
+    request = app.index("Notification.requestPermission")
+    construct = app.index("new Notification(")
+    assert request < construct, "the prompt must be reachable before anything notifies"
+    assert app.count("Notification.requestPermission") == 1, (
+        "one place asks: a prompt that fires from several paths is a prompt that fires on load"
+    )
+    # The one ask is inside the button's click handler, not at startup.
+    assert app.rindex('bind("notify-toggle", "click"', 0, request) < request
+    assert 'Notification.permission !== "granted"' in app, (
+        "constructing without permission throws on every event"
+    )
+    assert "isSecureContext" in app, "Notification needs a secure context; plain http must not ask"
+
+
+def test_a_notification_is_never_the_only_signal() -> None:
+    """The ticker records every event whether or not a notification is allowed."""
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+
+    branch = app[app.index('frame.type === "event"') :]
+    branch = branch[: branch.index("} else if")]
+    assert "store.event(" in branch
+    assert branch.index("store.event(") < branch.index("notifySafety("), (
+        "record it first: the notification is the extra signal, not the record"
+    )
 
