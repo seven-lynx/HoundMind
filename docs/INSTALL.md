@@ -182,7 +182,7 @@ sudo apt-get install -y \
 
 Notes:
 - `face_recognition` requires `dlib` which typically needs `cmake` and a C++ toolchain; installing the packages above will make building `dlib` much smoother.
-- RTAB-Map (`rtabmap-py`) is often built from source on a Pi 4/5; see `scripts/install_rtabmap_pi4.md` for detailed RTAB-Map build steps.
+- **SLAM is not part of `full`.** `rtabmap-py` is not on PyPI and upstream no longer ships the Python bindings source, so nothing in this tree can install it: `slam_pi4` ships off and reports itself unavailable. If you want to try the manual build, `scripts/install_rtabmap_pi4.md` has the steps and the known failure; the backend decision is tracked as #181.
 - On Raspberry Pi OS Trixie (Python 3.13) the installer refuses to run: this release supports Bookworm only, because that is what the kernel, camera stack and vendor bindings were validated against. Reimage with Bookworm 64-bit rather than fighting the wheels.
 
 ### 3) Install SunFounder PiDog libraries into the same Python environment
@@ -259,7 +259,7 @@ If you run into install or runtime issues, follow this checklist to gather infor
    - Ensure HoundMind is installed into the same environment where you run tests/commands: `python -m pip install -e .`.
    - When running tests or scripts directly from the repo, set `PYTHONPATH=src` or use the editable install above.
 
-- **Build failures for heavy packages (OpenCV, dlib/face_recognition, rtabmap-py):**
+- **Build failures for heavy packages (OpenCV, dlib/face_recognition, vosk):**
    - Use Raspberry Pi OS Bookworm (Python 3.11): it is the only supported release, and the installer refuses others. Bookworm is also where the prebuilt wheels are.
    - Use the **lite** preset if you don't need vision/voice: `python -m pip install -r requirements-lite.txt`.
    - Install the system build packages listed earlier before attempting `pip install` for heavy packages.
