@@ -334,6 +334,46 @@ def _plane(request: web.Request) -> ControlPlane:
     return request.app[_PLANE]
 
 
+_CORS_ALLOW_HEADERS = "Authorization, Content-Type"
+_CORS_ALLOW_METHODS = "GET, POST, PATCH, DELETE, OPTIONS"
+
+
+def _with_cors(response: web.StreamResponse, origin: str | None) -> web.StreamResponse:
+    """Attach the CORS headers. `Vary` goes on even when the origin is not allowed.
+
+    A cache that keyed a response without `Vary: Origin` would hand one origin's allowed answer to a
+    different one, which is the same hole with a longer path to it.
+    """
+    response.headers["Vary"] = "Origin"
+    if origin is not None:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Headers"] = _CORS_ALLOW_HEADERS
+        response.headers["Access-Control-Allow-Methods"] = _CORS_ALLOW_METHODS
+        response.headers["Access-Control-Max-Age"] = "600"
+    return response
+
+
+@web.middleware
+async def _cors(request: web.Request, handler):
+    """Answer a listed console's cross-origin request, and nothing else (#202).
+
+    The token is still the boundary: this only decides which *pages* may read a response they
+    already hold a token for. `settings.api.cors_origins` is empty by default, so a plain install
+    behaves exactly as before and answers no cross-origin read at all.
+
+    A preflight is answered here rather than by a route, because a browser sends `OPTIONS` without
+    `Authorization` - a preflight that had to pass the token check could never pass.
+    """
+    allowed = _plane(request).settings.cors_origins
+    if not allowed:
+        return await handler(request)
+    origin = request.headers.get("Origin")
+    matched = origin if origin in allowed else None
+    if request.method == "OPTIONS" and matched is not None:
+        return _with_cors(web.Response(status=204), matched)
+    return _with_cors(await handler(request), matched)
+
+
 @web.middleware
 async def _errors(request: web.Request, handler):
     """Turn every failure into the contract's `{error, detail}` envelope.
@@ -1871,7 +1911,7 @@ API_PREFIX = "/api/v1"
 
 def create_app(plane: ControlPlane) -> web.Application:
     """Build the aiohttp application. Binding a port is the caller's job (`ControlPlaneModule`)."""
-    app = web.Application(middlewares=[_errors], client_max_size=64 * 1024)
+    app = web.Application(middlewares=[_cors, _errors], client_max_size=64 * 1024)
     app[_PLANE] = plane
     router = app.router
 

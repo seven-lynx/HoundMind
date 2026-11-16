@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A second console can read this plane, if the operator names it**: `settings.api.cors_origins`
+  (empty by default) is an allowlist. A listed origin gets `Access-Control-Allow-Origin` echoed with
+  `Vary: Origin`, and its preflight is answered `204` without a token - a browser never sends
+  `Authorization` on an `OPTIONS`, so a token-checked preflight could never pass. An unlisted origin
+  gets no header, the response is still served, and the browser refuses to hand it to the page. `*`
+  is ignored rather than honoured, because the token is the boundary and a wildcard would let any
+  page on the LAN read whichever dog it holds a token for. Mixed content is still a wall: both
+  planes need the same scheme (#202).
 - **The battery veto is configurable, in one direction**: the hard motion veto on pack voltage was a
   compiled 6.4 V that no operator could move, and on the bench dog the rail collapsed around 7.5 V
   under servo load - the protection could not fire before the failure it exists to prevent. It is now

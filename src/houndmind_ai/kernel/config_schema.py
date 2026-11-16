@@ -1053,6 +1053,10 @@ _API = Section(
         # degrades to a log line rather than a boot failure when multicast is blocked.
         "discovery_enabled": Bool(),
         "discovery_name": StrSpec(),
+        # Cross-origin reads for a second console on another origin (#202). Empty by default; an
+        # origin named here is echoed back, and a `*` entry is ignored rather than honoured, because
+        # it would let any page on the LAN read a plane whose token it happens to hold.
+        "cors_origins": ListOf(StrSpec()),
     }
 )
 
