@@ -52,6 +52,7 @@ does not answer it, the last column names the document that will.
 | a checkup prints `[checkup] pidog unavailable` and exits 2 | the vendor package is not in this venv | `docs/INSTALL.md` [§3](INSTALL.md#3-install-sunfounder-pidog-libraries-into-the-same-python-environment) — `pidog` is cloned, not on PyPI |
 | a checkup exits 1 and prints `no reading from:` | at least one sensor did not answer | check the HAT is seated and I2C is on, then re-run; the named sensor is the one to investigate ([#109](https://github.com/seven-lynx/HoundMind/issues/109)) |
 | `*_valid: false` in `GET /state` | validity flags are published regardless of the badge module | branch on the flag before the value — a number with `valid: false` is not a measurement |
+| `sound_valid: false`, and the log says `Sound sensor unavailable` | the sound sensor is an SPI device (`dog.ears`), so an SPI interface that was never enabled looks exactly like a dead part | `ls /dev/spidev0.0`; if it is missing, `sudo raspi-config nonint do_spi 0` and reboot (`docs/INSTALL.md`, Prerequisites). The checkup now prints this hint itself when the node is absent (#204) |
 | readings that stop updating | the sensor thread stalled, or the watchdog is holding motion | `GET /state` → `watchdog_hold`; see `docs/FEATURES_GUIDE.md` [§10](FEATURES_GUIDE.md#10-watchdog) |
 
 ## 4. Motion

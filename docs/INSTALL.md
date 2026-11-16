@@ -72,10 +72,23 @@ carries the full bit table.
 - If you encounter build failures on newer OS releases (Trixie or later), consider switching to Bookworm or use the `--preset lite` option.
 
 ## Prerequisites
-- Raspberry Pi OS Lite (no desktop environment) with I2C enabled.
+- Raspberry Pi OS Lite (no desktop environment) with **I2C and SPI** enabled. The HAT's devices need
+  I2C; the sound sensor (`dog.ears`) is an SPI device and is dead without it (#204).
 - A Raspberry Pi 4 or 5, with a Robot HAT V5 (or a V4 for a bench test) seated on the 40-pin header.
 - Python 3.11, 3.12 or 3.13 (Bookworm's `python3` is 3.11).
 - Internet access for dependency downloads.
+
+Both interfaces are one command each, and take effect after a reboot:
+
+```bash
+sudo raspi-config nonint do_i2c 0      # 0 enables, 1 disables - the numbering is inverted
+sudo raspi-config nonint do_spi 0
+sudo reboot
+ls /dev/i2c-1 /dev/spidev0.0           # both must exist before the installer runs
+```
+
+The installer runs that pair for you on a Linux host when `raspi-config` is present; it cannot
+reboot the Pi, so it prints the reminder instead.
 
 Check the interpreter the installer will run under:
 
