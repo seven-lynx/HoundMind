@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The hardware checkup no longer tests the supply instead of the servos**: its stand and turn steps
+  asked for `speed: 180`, above anything the product itself does (the vendor's own presets are 65 and
+  98 for the same moves). On the bench dog that drew enough inrush to brown the pack out — two
+  `Undervoltage detected!` episodes, 4 s each, at 7.58 V — while eight minutes of 4-core CPU load at
+  a *lower* pack voltage produced none, which is how the inrush was told apart from a tired pack.
+  The steps now run at 100 and `docs/HARDWARE_TEST.md` section 9 states the speed, so a marginal
+  supply cannot be read as a dead servo (#207).
 - **Several dogs, one console at a time**: the header gained a device picker (#179). It lists the plane
   that served the page plus every device you have added, remembers that list in `localStorage`, and
   **navigates** to the chosen one — `add a device…` asks for its URL once. Navigation rather than
