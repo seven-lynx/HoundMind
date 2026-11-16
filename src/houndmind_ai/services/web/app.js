@@ -10,7 +10,17 @@
 // Pi's WiFi.
 
 import { panels } from "./panels/index.js";
-import { PANEL_KEY, api, clockTime, esc, getToken, setTheme, setToken, store } from "./lib.js";
+import {
+  PANEL_KEY,
+  api,
+  clockTime,
+  esc,
+  getToken,
+  registerServiceWorker,
+  setTheme,
+  setToken,
+  store,
+} from "./lib.js";
 import { stopAllMotion } from "./panels/drive.js";
 
 const $ = (id) => document.getElementById(id);
@@ -576,5 +586,7 @@ if (!$("connect") || !$("shell") || !$("token-form")) {
 }
 
 boot();
+// Registered after the boot guard, so a stale document reports itself instead of a worker caching it.
+registerServiceWorker();
 
 

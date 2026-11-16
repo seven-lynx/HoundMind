@@ -72,6 +72,25 @@ export function setTheme(theme) {
 // palette, and on a slow Pi that flash is long enough to read as a bug.
 applyTheme(resolveTheme());
 
+// ------------------------------------------------------------------ app shell (#176)
+
+/**
+ * Register the service worker, **only in a secure context**.
+ *
+ * A worker needs `https://` or `localhost`; the device serves plain http on the LAN by default
+ * (`settings.api.tls_enabled: false`), so this is a no-op there and the console works exactly as
+ * before. `docs/INSTALL.md` documents turning TLS on as the path to an installable console.
+ *
+ * Failure is swallowed on purpose: a browser that refuses the worker must still get a working console,
+ * because the worker is an optimisation and the control plane is not.
+ */
+export function registerServiceWorker() {
+  if (!window.isSecureContext || !("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+    /* no worker: the console still connects, it just cannot load offline */
+  });
+}
+
 // ------------------------------------------------------------------ api
 
 /**

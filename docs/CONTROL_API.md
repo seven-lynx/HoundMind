@@ -65,6 +65,12 @@ steps for a browser and a phone. A client that cannot be taught to trust it (the
 today) stays on the plaintext path above, with those workarounds. **Do not port-forward 8420 to the
 internet** either way.
 
+**Two console features need that secure context** (#176, #177): the installable app shell (a service
+worker at `/sw.js`, registered only when `window.isSecureContext`) and desktop notifications for
+safety events. On plain http both are skipped rather than broken: no worker is registered, no
+permission is requested, and everything else on this page behaves exactly as documented. `/sw.js` and
+`/static/*` are served without a token, like the assets they are.
+
 **Device token** — generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token`, directory `0700`, file `0600`. It is never in `config/settings.jsonc`,
 never in a log line, and never in this repository. The web app does not receive it automatically: on

@@ -897,3 +897,22 @@ def test_the_map_route_caps_the_cells_and_keeps_the_strongest(tmp_path) -> None:
         assert min(cell[2] for cell in body["map"]["cells"]) == 101
 
     asyncio.run(scenario())
+
+
+def test_the_service_worker_is_served_from_the_root_with_a_wide_scope(tmp_path) -> None:
+    """A worker's scope defaults to its own directory, so `/static/sw.js` could not control `/` (#176)."""
+    async def scenario() -> None:
+        plane = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get("/sw.js")  # no token: it ships with the assets
+            body = await response.text()
+
+        assert response.status == 200
+        assert response.headers["Service-Worker-Allowed"] == "/"
+        assert response.headers["Cache-Control"] == "no-cache"
+        assert "text/javascript" in response.headers["Content-Type"]
+        assert "houndmind-shell" in body and "/api/" in body, (
+            "the worker must cache the shell and must never touch the API"
+        )
+
+    asyncio.run(scenario())

@@ -13,10 +13,18 @@ There is no browser in this suite, so the guard is textual. It fails when the ru
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
-__all__ = ["test_the_stylesheet_honours_the_hidden_attribute"]
+__all__ = [
+    "test_components_take_their_colours_from_tokens",
+    "test_every_dark_colour_token_has_a_light_value",
+    "test_the_manifest_points_at_an_icon_that_exists",
+    "test_the_stylesheet_honours_the_hidden_attribute",
+    "test_the_worker_is_registered_only_in_a_secure_context",
+    "test_the_worker_never_caches_the_api",
+]
 
 WEB = Path(__file__).resolve().parents[1] / "src" / "houndmind_ai" / "services" / "web"
 STYLE = WEB / "style.css"
@@ -94,4 +102,35 @@ def test_components_take_their_colours_from_tokens() -> None:
 
     literals = re.findall(r"#[0-9a-fA-F]{3,8}\b", without_tokens)
     assert literals == [], f"component colours must be tokens, found {literals}"
+
+
+# ------------------------------------------------------------- the app shell (#176)
+
+
+def test_the_manifest_points_at_an_icon_that_exists() -> None:
+    """An installable console with a 404 icon is a console the browser will not install."""
+    manifest = json.loads((WEB / "manifest.webmanifest").read_text(encoding="utf-8"))
+
+    assert manifest["start_url"] == "/" and manifest["scope"] == "/"
+    icons = manifest["icons"]
+    assert icons, "a PWA without an icon is not installable"
+    for icon in icons:
+        relative = icon["src"].removeprefix("/static/")
+        assert (WEB / relative).is_file(), icon["src"]
+
+
+def test_the_worker_is_registered_only_in_a_secure_context() -> None:
+    """`http://<pi>:8420` is not secure, so a worker there would only error (#176)."""
+    lib = (WEB / "lib.js").read_text(encoding="utf-8")
+
+    guard = lib.index("isSecureContext")
+    register = lib.index("navigator.serviceWorker.register")
+    assert guard < register, "the secure-context check must run before the registration"
+
+
+def test_the_worker_never_caches_the_api() -> None:
+    """A cached `/state` is a console showing a dog that is not there."""
+    worker = (WEB / "sw.js").read_text(encoding="utf-8")
+
+    assert 'url.pathname.startsWith("/api/")' in worker
 
