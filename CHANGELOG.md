@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The installer says what the machine looks like before it downloads anything** (REL P1-S4): free
+  space at the checkout (refuses below 2 GB, the one thing that genuinely stops a full install),
+  `vcgencmd get_throttled` bits 16-18 (warns with what the boot recorded, because a browned-out pack
+  is how an install becomes the last thing the card sees), and the absence of a camera node (warns
+  once, since `vision_pi4` now ships off). Every check is silent where its tool does not exist, so a
+  workstation or container sees nothing. `tests/test_installer_preflight.py` covers the parsing and
+  the two outcomes without hardware.
 - **`full` no longer lists a package that cannot install, so `full` verifies clean**: `rtabmap-py` is
   not on PyPI and upstream `introlab/rtabmap` no longer ships the `python/` bindings source, so the
   extra could never produce it - it only made `pip install -e .[full]` fail and
