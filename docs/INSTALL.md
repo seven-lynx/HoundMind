@@ -227,6 +227,12 @@ python -m pip install -r requirements.txt
 python -m tools.installer_verify  # recommended after `pip install -e .` or with `PYTHONPATH=src`
 ```
 
+On a Pi that also reports the camera stack. `picamera2` is the one binding that is **not** a wheel:
+it comes from the `python3-picamera2` Debian package, and the venv has to be created with
+`--system-site-packages` to see it (the installer does that). If the import fails, leave
+`modules.vision_pi4.enabled` at `false` — enabling it only buys a `Picamera2 unavailable` line on
+every start (#215).
+
 ## Bench checklist (before calling a build done)
 
 Nothing on this list can be ticked from a workstation. [`docs/HARDWARE_TEST.md`](HARDWARE_TEST.md)

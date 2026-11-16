@@ -269,6 +269,10 @@ def ensure_system_deps_linux() -> int:
         "libopenni2-dev",
         "libproj-dev",
         "python3-spidev",
+        # The Pi 4/5 camera binding. It is a Debian package, not a wheel, and it is why the venv is
+        # created with `--system-site-packages`: `vision_pi4` imports it, and without it every start
+        # logged `Picamera2 unavailable` while the module stayed enabled (#215).
+        "python3-picamera2",
         "pkg-config",
     ]
     return run(["sudo", "apt-get", "install", "-y"] + pkgs)
@@ -360,6 +364,18 @@ def ensure_pybind11_deps_linux(python: Path, pip: Path) -> int:
         return 0
     print("Failed to install pybind11 via apt or pip.")
     return 1
+
+
+def venv_sees_system_packages(venv_path: Path) -> bool:
+    """Whether this venv was created with `--system-site-packages` (#215)."""
+    try:
+        text = (venv_path / "pyvenv.cfg").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    for line in text.splitlines():
+        if line.lower().replace(" ", "").startswith("include-system-site-packages="):
+            return line.split("=", 1)[1].strip().lower() == "true"
+    return False
 
 
 def install_service_unit(repo_root: Path, python: Path) -> int:
@@ -608,9 +624,18 @@ def main() -> int:
                 shutil.rmtree(venv_path, ignore_errors=True)
 
         if not venv_path.exists():
-            code = run([sys.executable, "-m", "venv", str(venv_path)])
+            # `--system-site-packages` so the venv can see Debian-provided bindings - `picamera2`
+            # above all, which has no wheel on Bookworm (#215). Without it the camera module can
+            # never import, whatever apt installed, and `vision_pi4` logs that on every start.
+            code = run([sys.executable, "-m", "venv", "--system-site-packages", str(venv_path)])
             if code != 0:
                 return code
+        elif not venv_sees_system_packages(venv_path):
+            print(
+                "This venv was created without --system-site-packages, so `import picamera2` will "
+                "fail even when python3-picamera2 is installed (docs/INSTALL.md). Recreate it with: "
+                f"rm -rf {venv_path.name} && bash scripts/install_houndmind.sh"
+            )
         python, pip = venv_paths(venv_path)
     else:
         python = Path(sys.executable)
