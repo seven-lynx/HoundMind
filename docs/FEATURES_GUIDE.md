@@ -697,10 +697,21 @@ crash the runtime.
 
 **Speech output.** The TTS table is honoured, not decorative: `settings.voice_assistant.tts.enabled`
 (ships `false`) is the switch - while it is off the module maps commands and answers questions
-silently. `settings.voice_assistant.tts.backend` picks the voice: `auto` tries the PiDog speaker
-first and falls back to `pyttsx3`, `pidog` uses only the vendor voice, and `pyttsx3` uses only the
-local engine. A named backend never borrows the other one, so a missing vendor speaker is a dropped
-answer rather than an unexpected voice. A config with no `tts` table keeps the `auto` order.
+silently. `settings.voice_assistant.tts.backend` picks the voice. The vendor engines speak through the
+Robot HAT speaker and switch its amplifier on themselves: `piper` (offline neural - the right choice
+for a dog with no network), `edge` (Microsoft's cloud voice, needs network), `espeak` and `pico2wave`.
+`auto` walks those in that order and then falls back to `pyttsx3`, the local engine, which needs
+`espeak-ng`. `pidog` is kept as the compatibility name for the vendor path: `Pidog.speak()` resolves a
+preset sound *file* by name and cannot speak a sentence, so it is not a TTS engine (#245). A named
+backend never borrows another one, so a missing speaker is a dropped answer rather than an unexpected
+voice. A config with no `tts` table keeps the `auto` order.
+
+**What the vendor engines need.** `robot_hat.tts`, `llm` and `stt` are thin wrappers over
+`sunfounder-voice-assistant`, the SunFounder git package the installer now installs; `sox` primes the
+amplifier and `espeak-ng` is the only engine `pyttsx3` can drive on Bookworm. Without the HAT speaker
+enabled - `setup_robot_hat_audio.sh`, then a reboot - every engine constructs, says nothing, and logs
+the failure once (#246).
+
 
 **Enable:**
 - `modules.voice.enabled = true`
@@ -888,7 +899,9 @@ install only `backend` (and `modules.semantic_labeler.enabled`) has to change.
 **Not available in this release.** The RTAB-Map backend needs the `rtabmap` Python bindings, and those
 cannot be installed: `rtabmap-py` is not on PyPI and upstream `introlab/rtabmap` no longer ships the
 `python/` source directory, so `pip` has nothing to build. `full` therefore does not list it and this
-module ships off. With `backend: "rtabmap"` the module disables itself and says why in `/modules`.
+module ships off. With `backend: "rtabmap"` and no bindings the module logs a warning and falls
+back to the gyro stub - it does **not** disable itself, and `/state` reports
+`slam_status.backend: "stub"` (#247).
 
 **What *does* work:** `settings.slam_pi4.backend = "stub"` integrates the gyro into `slam_pose`. That
 is dead reckoning — it is not visual SLAM and it does not build a map, so do not plan a navigation
@@ -1018,9 +1031,21 @@ builds an origin of its own — `tests/test_webapp_assets.py` fails if one start
 line and never in this repository. There is no token-generator script to run: the runtime creates
 the file if it is missing, on the first start of `python -m houndmind_ai`, with the directory `0700`
 and the file `0600`. The installer does not create it, so a fresh install has no token file until
-the runtime has run once. To read it on the device: `cat ~/.houndmind/api_token`. To pair a phone
-or a second browser, open a pairing window and enter the 6-digit code it prints — the code is
-single-use and expires after five minutes.
+the runtime has run once. To read it on the device — the console's token field takes exactly this
+string:
+
+```bash
+# prints the token, so run it on the device rather than a shared shell
+grep -m1 . ~/.houndmind/api_token
+
+# and confirm it is still private: expect "600" and the path
+stat -c '%a %n' ~/.houndmind/api_token
+```
+
+Never paste that output into an issue, a chat or a screenshot. To pair a phone or a second browser,
+open a pairing window and enter the 6-digit code it prints — the code is single-use and expires after
+five minutes.
+
 
 **It is not encrypted by default.** The control plane speaks plain HTTP on port 8420: the token, every
 command and every camera frame travel in the clear. The token is the whole security boundary, so

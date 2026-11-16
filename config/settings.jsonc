@@ -405,11 +405,15 @@
         "vosk_model_path": ""
       },
       // Text-to-speech settings. `enabled: false` keeps the module silent even when it
-      // answers a question. `backend` picks the voice: "auto" tries the PiDog speaker first
-      // and falls back to pyttsx3, while "pidog" and "pyttsx3" each disable the other path.
+      // answers a question. `backend` picks the voice: the vendor engines speak through the Robot
+      // HAT speaker - "piper" (offline neural), "edge" (network), "espeak", "pico2wave" - and
+      // "auto" walks those and then falls back to pyttsx3. "pidog" is kept as the compatibility
+      // name for that vendor path; naming one engine disables every other path. The vendor engines
+      // need `sunfounder-voice-assistant` (installed by the installer), pyttsx3 needs `espeak-ng`,
+      // and both need the HAT speaker (#245, #246).
       "tts": {
         "enabled": false,
-        "backend": "pidog"
+        "backend": "auto"
       },
       // Map phrases to PiDog actions.
       "command_map": {
@@ -459,8 +463,9 @@
         "enabled": false,
         // Backend: "stub" (default), "rtabmap" (for full SLAM). The `rtabmap` backend needs the
         // `rtabmap` bindings, which are not on PyPI and no longer have source upstream, so nothing
-        // in a normal install provides them: with this backend the module disables itself and says
-        // so. `stub` integrates the gyro - it is dead reckoning, not visual SLAM (#181).
+        // in a normal install provides them: with this backend and no bindings the module logs a
+        // warning and falls back to `stub` (dead reckoning, reported by /state), rather than
+        // disabling itself. `stub` integrates the gyro - it is dead reckoning, not visual SLAM (#181).
         "backend": "stub",
         // Main SLAM update interval (seconds)
         "interval_s": 0.2,

@@ -148,7 +148,10 @@ class SlamPi4Module(Module):
                     self._rtabmap_failed = True
                     self._adapter = None
             else:
-                logger.info("RTAB-Map bindings not present; falling back to stub")
+                logger.warning(
+                    "RTAB-Map bindings not present; falling back to the gyro stub, which is dead "
+                    "reckoning and not SLAM (#247)"
+                )
                 self._rtabmap_failed = True
 
         # Fallback to stub

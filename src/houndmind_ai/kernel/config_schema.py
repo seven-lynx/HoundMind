@@ -930,8 +930,10 @@ _VISION_PI4 = Section(
 
 # `optional/voice.py`. The backend names are the ones its docstring documents and the ones the
 # recogniser selection branches on. `tts` is read too: `enabled` gates every utterance, and
-# `backend` picks the engine - `auto` tries the PiDog speaker and then pyttsx3, while an
-# explicit value disables the other path (#8).
+# `backend` picks the engine - the vendor engines speak through the Robot HAT speaker and `auto`
+# falls back to pyttsx3, while an explicit value disables every other path (#8). `pidog` is kept as
+# the compatibility name for the vendor path, because `Pidog.speak()` takes a preset sound name
+# rather than text and could never speak a sentence (#245).
 _VOICE = Section(
     fields={
         "enabled": Bool(),
@@ -946,7 +948,9 @@ _VOICE = Section(
         "tts": Section(
             fields={
                 "enabled": Bool(),
-                "backend": StrSpec(choices=("auto", "pyttsx3", "pidog")),
+                "backend": StrSpec(
+                    choices=("auto", "pidog", "piper", "edge", "espeak", "pico2wave", "pyttsx3")
+                ),
             }
         ),
         "command_map": MapOf(StrSpec()),
