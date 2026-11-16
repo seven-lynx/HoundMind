@@ -27,15 +27,65 @@ and a stale good value cannot authorise it.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from houndmind_ai.hal.iface import SensorSnapshot, as_int
 from houndmind_ai.kernel.actions import Repertoire
 from houndmind_ai.kernel.commands import FORWARD_ACTIONS, ActionClass, Command, Verdict
 
-__all__ = ["Interlock", "InterlockLimits"]
+logger = logging.getLogger(__name__)
+
+__all__ = [
+    "Interlock",
+    "InterlockLimits",
+    "MIN_BATTERY_FLOOR_V",
+    "interlock_limits_from_settings",
+]
+
+# The compiled floor for the battery veto. A 2S pack spans 6.0-8.4 V, so 6.4 V is about 3.2 V per
+# cell - essentially empty - and on the bench dog the rail collapsed long before the veto could fire:
+# `sensors.battery_v` read 7.70 V after a full charge and the kernel logged undervoltage at 7.58 V
+# under servo load (#208). `settings.movement.min_battery_v` may only **raise** this floor, so a
+# config edit can narrow the envelope but never widen it.
+MIN_BATTERY_FLOOR_V = 6.4
+
+
+def interlock_limits_from_settings(settings: Any) -> InterlockLimits:
+    """The envelope this runtime runs with, from settings plus the compiled floor (#208).
+
+    Only the battery floor is configurable, and only upwards. The other four limits stay compiled in:
+    they describe the hardware (`max_speed`, the geometry of the obstacle rule), not the pack a user
+    happens to have fitted.
+
+    A value below the floor - or one that is not a number at all - is replaced by the floor with one
+    warning. The schema refuses such a value at load, so this is the second line of defence for a
+    caller that builds a runtime without validation.
+    """
+    section = settings.get("movement") if isinstance(settings, dict) else None
+    raw = section.get("min_battery_v") if isinstance(section, dict) else None
+    if raw is None:
+        return InterlockLimits()
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "movement.min_battery_v=%r is not a number; using the %.2f V floor",
+            raw,
+            MIN_BATTERY_FLOOR_V,
+        )
+        return InterlockLimits()
+    if value != value or value < MIN_BATTERY_FLOOR_V:
+        logger.warning(
+            "movement.min_battery_v=%r would widen the battery veto; using the %.2f V floor",
+            raw,
+            MIN_BATTERY_FLOOR_V,
+        )
+        return InterlockLimits()
+    return InterlockLimits(min_battery_v=value)
 
 
 @dataclass(frozen=True)
@@ -45,7 +95,7 @@ class InterlockLimits:
     max_speed: int = 200
     emergency_stop_cm: float = 12.0
     tilt_latch_deg: float = 45.0
-    min_battery_v: float = 6.4
+    min_battery_v: float = MIN_BATTERY_FLOOR_V
 
 
 class Interlock:

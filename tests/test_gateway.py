@@ -648,3 +648,14 @@ def test_a_deduplicated_tick_still_publishes_a_fresh_record() -> None:
     assert second["ts"] == 1000.1
     assert second["ts"] != first
     assert second["intent"] == "forward"
+
+
+def test_the_gateway_takes_its_battery_floor_from_the_caller() -> None:
+    """`main.build_registry` passes the configured floor in; the gateway must use it (#208)."""
+    gateway = MotionGatewayModule(
+        "motion_gateway",
+        limits=InterlockLimits(min_battery_v=7.2),
+        board=IntentBoard(),
+    )
+
+    assert gateway.interlock.limits.min_battery_v == 7.2

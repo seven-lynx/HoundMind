@@ -231,6 +231,9 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("sensors", "battery_poll_s", -1),
     ("motors", "min_action_interval_s", "soon"),
     ("movement", "followup_ttl_s", -1),
+    # #208: the battery veto may only be narrowed, so a value under the compiled floor is refused
+    # here rather than clamped silently.
+    ("movement", "min_battery_v", 6.0),
     ("sensor_health", "enabled", "yes"),
     ("watchdog", "max_restarts", "many"),
     ("watchdog", "module_timeout_s", None),

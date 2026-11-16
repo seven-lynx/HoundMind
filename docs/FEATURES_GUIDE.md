@@ -109,6 +109,11 @@ belongs to, on the module's worker rather than the decision loop. It is retracte
 been handed over, and one older than `movement.followup_ttl_s` (ships `1.0`) is dropped instead of
 executed late: a retreat describes the step that just happened, so a stale one is a wrong step.
 
+Every command also passes the interlock's battery veto: nothing that moves runs below
+`movement.min_battery_v`, which ships at the compiled floor of `6.4` V (about 3.2 V per cell on the
+stock 2S pack) and may be **raised** to protect a tired pack — a value under the floor is refused at
+load, because widening this one is how a dog cooks a servo (#208).
+
 **Disable:** `modules.hal_motors.enabled = false`
 
 ---
