@@ -883,12 +883,24 @@ install only `backend` (and `modules.semantic_labeler.enabled`) has to change.
 ---
 
 ## 23) SLAM (Pi4)
-**What it does:** Provides real-time pose and mapping outputs for robust navigation. Supports RTAB-Map (visual/IMU SLAM) as the recommended backend for Pi4/5, with fallback to a safe stub if not available.
+**What it does:** Provides pose and mapping outputs for navigation.
 
-**Enable:**
+**Not available in this release.** The RTAB-Map backend needs the `rtabmap` Python bindings, and those
+cannot be installed: `rtabmap-py` is not on PyPI and upstream `introlab/rtabmap` no longer ships the
+`python/` source directory, so `pip` has nothing to build. `full` therefore does not list it and this
+module ships off. With `backend: "rtabmap"` the module disables itself and says why in `/modules`.
+
+**What *does* work:** `settings.slam_pi4.backend = "stub"` integrates the gyro into `slam_pose`. That
+is dead reckoning — it is not visual SLAM and it does not build a map, so do not plan a navigation
+feature on it.
+
+**Enable (stub only):**
 - `modules.slam_pi4.enabled = true`
-- `settings.slam_pi4.backend = "rtabmap"` (recommended for Pi4/5)
-- See `scripts/install_rtabmap_pi4.md` for RTAB-Map install steps.
+- `settings.slam_pi4.backend = "stub"`
+
+The backend decision — vendor the bindings, or implement SLAM on another engine (`cv2.slam` from
+opencv-contrib, or ORB-SLAM3) — is #181. Manual RTAB-Map build notes, including the known failure,
+are in `scripts/install_rtabmap_pi4.md`.
 
 **Configuration:**
 - `settings.slam_pi4.rtabmap`: RTAB-Map options (database path, frame size, RGB-D, parameters)

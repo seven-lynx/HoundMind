@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **`full` no longer lists a package that cannot install, so `full` verifies clean**: `rtabmap-py` is
+  not on PyPI and upstream `introlab/rtabmap` no longer ships the `python/` bindings source, so the
+  extra could never produce it - it only made `pip install -e .[full]` fail and
+  `installer_verify --preset full` report a permanent FAILED. It is gone from both `pyproject.toml`
+  and `requirements.txt` (the mirror test requires them to agree), `installer_verify --preset full`
+  can now pass, `FEATURES_GUIDE` §23 states that SLAM is **not available** and that the `stub` backend
+  is dead reckoning rather than visual SLAM, and `slam_pi4`'s config comment says the same. The
+  backend decision is #181.
 - **`--preset lite` can install the dog again**: the installer probed `robot_hat` before anything
   installed the four modules that probe depends on, and on the lite preset nothing did - `pyaudio`
   only arrived with `requirements.txt`, the full mirror. A lite install on a Pi therefore ended at

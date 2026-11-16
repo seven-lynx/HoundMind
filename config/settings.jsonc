@@ -457,7 +457,10 @@
     // =====================================================================
     "slam_pi4": {
         "enabled": false,
-        // Backend: "stub" (default), "rtabmap" (for full SLAM)
+        // Backend: "stub" (default), "rtabmap" (for full SLAM). The `rtabmap` backend needs the
+        // `rtabmap` bindings, which are not on PyPI and no longer have source upstream, so nothing
+        // in a normal install provides them: with this backend the module disables itself and says
+        // so. `stub` integrates the gyro - it is dead reckoning, not visual SLAM (#181).
         "backend": "stub",
         // Main SLAM update interval (seconds)
         "interval_s": 0.2,
