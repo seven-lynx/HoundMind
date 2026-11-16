@@ -69,7 +69,7 @@ carries the full bit table.
 - The installer creates the virtualenv with the interpreter it runs under. To force one:
   `PYTHON=python3.11 bash scripts/install_houndmind.sh`.
 - If an existing `.venv` was created with an unsupported or different Python minor version, the installer will automatically recreate it to keep the environment consistent.
-- If you encounter build failures on newer OS releases (Trixie or later), consider switching to Bookworm or use the `--preset lite` option.
+- If you encounter build failures on newer OS releases (Trixie or later), switch to Bookworm: this release supports **Bookworm 64-bit only**, and the installer refuses any other release with one line (`--allow-unsupported-os` overrides it for a maintainer who wants to see how far it gets).
 
 ## Prerequisites
 - Raspberry Pi OS Lite (no desktop environment) with **I2C and SPI** enabled. The HAT's devices need
@@ -183,7 +183,7 @@ sudo apt-get install -y \
 Notes:
 - `face_recognition` requires `dlib` which typically needs `cmake` and a C++ toolchain; installing the packages above will make building `dlib` much smoother.
 - RTAB-Map (`rtabmap-py`) is often built from source on a Pi 4/5; see `scripts/install_rtabmap_pi4.md` for detailed RTAB-Map build steps.
-- On Raspberry Pi OS Trixie (Python 3.13), many packages (e.g., `face_recognition`, `pyaudio`) may not have wheels yet. If you hit build errors, use Bookworm (Python 3.11) or install the **lite** preset.
+- On Raspberry Pi OS Trixie (Python 3.13) the installer refuses to run: this release supports Bookworm only, because that is what the kernel, camera stack and vendor bindings were validated against. Reimage with Bookworm 64-bit rather than fighting the wheels.
 
 ### 3) Install SunFounder PiDog libraries into the same Python environment
 
@@ -254,7 +254,7 @@ If you run into install or runtime issues, follow this checklist to gather infor
    - When running tests or scripts directly from the repo, set `PYTHONPATH=src` or use the editable install above.
 
 - **Build failures for heavy packages (OpenCV, dlib/face_recognition, rtabmap-py):**
-   - Prefer Raspberry Pi OS Bookworm (Python 3.11) for prebuilt wheels. On newer OS (Trixie/Python 3.13+) many wheels may be missing.
+   - Use Raspberry Pi OS Bookworm (Python 3.11): it is the only supported release, and the installer refuses others. Bookworm is also where the prebuilt wheels are.
    - Use the **lite** preset if you don't need vision/voice: `python -m pip install -r requirements-lite.txt`.
    - Install the system build packages listed earlier before attempting `pip install` for heavy packages.
 

@@ -76,6 +76,49 @@ def board_rules() -> ModuleType:
     return _BOARD_RULES
 
 
+# What this release was validated against. Trixie ships Python 3.13, which the declared range
+# allows, so the interpreter check cannot catch it: the kernel, the camera stack and the vendor
+# bindings are what differ, and a half-installed Trixie is worse than a refusal (#2).
+SUPPORTED_CODENAMES = ("bookworm",)
+
+
+def os_codename() -> str | None:
+    """`VERSION_CODENAME` from `/etc/os-release`, or None off a Debian-family system."""
+    try:
+        text = Path("/etc/os-release").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if line.startswith("VERSION_CODENAME="):
+            value = line.split("=", 1)[1].strip().strip('"').strip("'").lower()
+            return value or None
+    return None
+
+
+def ensure_supported_os(allow_unsupported: bool = False) -> int:
+    """Refuse an unsupported distribution release with one line, before anything is downloaded.
+
+    The answer to "can I use Trixie?" is a sentence, not a stack trace halfway through an install.
+    A workstation or a container has no `/etc/os-release` codename, and that is not a failure - the
+    check only speaks when it recognises a release this project does not support.
+    """
+    codename = os_codename()
+    if codename is None or codename in SUPPORTED_CODENAMES:
+        return 0
+    if allow_unsupported:
+        print(
+            f"Warning: {codename} is not a supported release "
+            f"({', '.join(SUPPORTED_CODENAMES)} only); continuing because you asked."
+        )
+        return 0
+    print(
+        f"Unsupported OS: {codename}. This release supports Raspberry Pi OS "
+        f"{', '.join(SUPPORTED_CODENAMES)} 64-bit only - see docs/INSTALL.md. "
+        "Re-run with --allow-unsupported-os to try anyway."
+    )
+    return 2
+
+
 def detect_pi_class(model: str | None = None) -> str:
     """Return 'pi4', 'pi5', 'unsupported' or 'unknown' from the device-tree model.
 
@@ -510,7 +553,18 @@ def main() -> int:
     parser.add_argument(
         "--run-i2samp", action="store_true", help="Run i2samp.sh after installing pidog"
     )
+    parser.add_argument(
+        "--allow-unsupported-os",
+        action="store_true",
+        help="Continue on a release other than Bookworm (not supported; for maintainers)",
+    )
     args = parser.parse_args()
+
+    # The OS gate comes first: a refusal costs one line, and finding out after the venv and the apt
+    # packages have been written is a mess to undo (#2).
+    code = ensure_supported_os(args.allow_unsupported_os)
+    if code != 0:
+        return code
 
     if sys.version_info < (3, 11) or sys.version_info >= (3, 14):
         print(
