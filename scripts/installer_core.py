@@ -429,13 +429,48 @@ def install_service_unit(repo_root: Path, python: Path) -> int:
     return code
 
 
+def _default_remote_branch(dest: Path) -> str | None:
+    """The remote's own default branch, asked rather than assumed.
+
+    `origin/master` used to be hardcoded for every clone with no explicit branch, and SunFounder
+    renamed `pidog`'s default to `main`: the reset then failed with `fatal: ambiguous argument
+    'origin/master': unknown revision`, and the installer exited 128 halfway through installing the
+    dog - after `vilib`, before `pidog`, before the package itself.
+    """
+    head = subprocess.run(
+        ["git", "-C", str(dest), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if head.returncode == 0:
+        name = head.stdout.strip()
+        if name.startswith("origin/"):
+            return name.split("/", 1)[1]
+    for candidate in ("master", "main"):
+        probe = subprocess.run(
+            ["git", "-C", str(dest), "rev-parse", "--verify", f"origin/{candidate}"],
+            capture_output=True,
+            text=True,
+        )
+        if probe.returncode == 0:
+            return candidate
+    return None
+
+
 def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int:
     if dest.exists():
         code = run(["git", "-C", str(dest), "fetch", "--all", "--prune"])
         if code != 0:
             return code
-        target = f"origin/{branch}" if branch else "origin/master"
-        return run(["git", "-C", str(dest), "reset", "--hard", target])
+        target_branch = branch or _default_remote_branch(dest)
+        if target_branch is None:
+            print(
+                f"Cannot tell which branch of {repo_url} is the default: {dest} has no "
+                "origin/HEAD and neither origin/master nor origin/main exists. Delete the cached "
+                "clone and re-run."
+            )
+            return 1
+        return run(["git", "-C", str(dest), "reset", "--hard", f"origin/{target_branch}"])
     cmd = ["git", "clone", "--depth", "1"]
     if branch:
         cmd += ["-b", branch]
@@ -813,6 +848,27 @@ def main() -> int:
                 if code != 0:
                     return code
 
+                # The probe imports `robot_hat/__init__.py`, which gates its exports on these four,
+                # so they have to be importable *before* it runs. On the lite preset nothing else
+                # installs them - `pyaudio` only ever arrived with `requirements.txt`, the full
+                # mirror - so a `--preset lite` run of this installer died here with "missing
+                # module(s): pyaudio" and never installed pidog, vilib, the package or the service.
+                # `pip install` is what makes the probe a test of the vendor tree rather than of the
+                # preset (#180).
+                absent = missing_modules(python, ROBOT_HAT_DEPS)
+                if absent:
+                    print(f"Installing the modules `robot_hat` needs to import: {', '.join(absent)}")
+                    code = run([str(pip), "install", *absent])
+                    if code != 0:
+                        print(
+                            "Could not install "
+                            + ", ".join(absent)
+                            + ". On Bookworm `pyaudio` needs `portaudio19-dev`; install the system "
+                            "dependencies (`--auto-system-deps`) and re-run."
+                        )
+                        return code
+                    absent = missing_modules(python, ROBOT_HAT_DEPS)
+
                 # Installed is not the same as usable: `robot_hat/__init__.py` exposes the classes
                 # `pidog` imports only when smbus2, lgpio, pyaudio and pygame are importable, and a
                 # pre-2.5 tree never exposes `robot_hat.device`. Failing here names the missing
@@ -820,7 +876,6 @@ def main() -> int:
                 # (#114).
                 code = run([str(python), "-c", ROBOT_HAT_PROBE])
                 if code != 0:
-                    absent = missing_modules(python, ROBOT_HAT_DEPS)
                     reason = (
                         f"missing module(s): {', '.join(absent)}. "
                         if absent

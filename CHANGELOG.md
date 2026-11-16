@@ -7,6 +7,18 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **`--preset lite` can install the dog again**: the installer probed `robot_hat` before anything
+  installed the four modules that probe depends on, and on the lite preset nothing did - `pyaudio`
+  only arrived with `requirements.txt`, the full mirror. A lite install on a Pi therefore ended at
+  "missing module(s): pyaudio", blamed the cloned branch, and returned 2 with no `pidog`, no `vilib`,
+  no `pip install -e .` and no service unit. The four are installed before the probe now, and a
+  `pyaudio` build failure names `portaudio19-dev` instead of the branch (#180).
+- **The installer no longer assumes `master`**: `clone_or_update` reset every cached clone to
+  `origin/master` when no branch was named, and SunFounder renamed `pidog`'s default to `main`, so a
+  fresh install died with `fatal: ambiguous argument 'origin/master'` and exit 128 - after `vilib`,
+  before `pidog`. It now asks the clone what `origin/HEAD` is, falling back to whichever of
+  `origin/master` and `origin/main` exists, and says which one it could not find instead of printing
+  git's own error.
 - **The control plane's footprint is measured, not assumed**: on the Pi 4 it costs **~12.5 MB of RSS**
   (60.0 MB with `modules.api.enabled: false`, 72.5 MB with it on) and its CPU cost is inside the noise
   of a loop already using a third of a core for sensor polling, with `tick_hz_actual 9.99` and
