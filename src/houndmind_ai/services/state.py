@@ -33,6 +33,32 @@ def _mode(context) -> str:
     return mode if isinstance(mode, str) and mode in RUNTIME_MODES else DEFAULT_MODE
 
 
+def _session(context) -> dict[str, object] | None:
+    """How this session started, and how the last one ended (#214).
+
+    A missing block means nothing recorded it - a runtime built by a tool or a test rather than by
+    `main()`. That is `null`, not a fabricated clean start. `previous_ending` is `null` when the
+    last session closed itself, because the marker is removed on a clean stop and absence *is* the
+    clean case.
+    """
+    block = _table(context.get("session"))
+    if not block:
+        return None
+    ending = block.get("previous_ending")
+    pid = block.get("previous_pid")
+    throttled = block.get("throttled")
+    trace_id = block.get("trace_id")
+    return {
+        "started_at": _number(block.get("started_at")),
+        "trace_id": trace_id if isinstance(trace_id, str) else None,
+        "previous_ending": ending if isinstance(ending, str) else None,
+        "previous_started_at": _number(block.get("previous_started_at")),
+        "previous_pid": pid if isinstance(pid, int) and not isinstance(pid, bool) else None,
+        "boot_changed": bool(block.get("boot_changed", False)),
+        "throttled": throttled if isinstance(throttled, str) else None,
+    }
+
+
 def _sensors(context) -> dict[str, object]:
     reading = context.get("sensor_reading")
     tilt = _table(context.get("tilt_warning"))
@@ -290,6 +316,7 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "supervisor": build_supervisor(context),
         "modules": counts,
         "perf": _perf(context),
+        "session": _session(context),
     }
 
 

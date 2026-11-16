@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import socket
+import time
 from pathlib import Path
 
 from houndmind_ai.act.gateway import MotionGatewayModule
@@ -13,7 +15,7 @@ from houndmind_ai.behavior.routine_runner import RoutineRunnerModule
 from houndmind_ai.board.detect import BoardInfo, detect
 from houndmind_ai.calibration.workflow import CalibrationModule
 from houndmind_ai.core.config import load_config
-from houndmind_ai.core.instance import BusBusy, RunLock
+from houndmind_ai.core.instance import BusBusy, RunLock, SessionMarker
 from houndmind_ai.core.logging_setup import setup_logging
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.iface import DogHAL
@@ -172,6 +174,20 @@ def main() -> None:
         logger.error("%s; stop it before starting another", exc)
         raise SystemExit(3) from None
 
+    # Only after the lock: a second start that is about to be refused must not overwrite the marker
+    # of the session that is still running (#214). The marker answers "how did the last one end",
+    # so it is written by the process that is actually going to run.
+    started_at = time.time()
+    trace_id = runtime.context.get("trace_id")
+    if not isinstance(trace_id, str):
+        trace_id = None
+    session = SessionMarker()
+    previous = session.begin(pid=os.getpid(), trace_id=trace_id, started_at=started_at)
+    session_block: dict[str, object] = {"started_at": started_at, "trace_id": trace_id}
+    if previous is not None:
+        session_block.update(previous.to_dict())
+    runtime.context.set("session", session_block)
+
     # Bind the runtime context dict into logging so runtime keys (tick, module statuses)
     # flow into all log records automatically. Use hostname as a fallback device id.
     try:
@@ -198,6 +214,9 @@ def main() -> None:
     try:
         runtime.run()
     finally:
+        # A clean stop removes the marker; leaving it would make the next start report this session
+        # as a crash (#214).
+        session.end()
         lock.release()
 
 

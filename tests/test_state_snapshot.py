@@ -288,3 +288,55 @@ def test_a_tilt_table_still_counts_as_a_valid_imu() -> None:
 def test_no_imu_reading_and_no_tilt_is_invalid() -> None:
     """Absence is absence: neither source spoke, so the client is told the IMU did not answer."""
     assert build_state(RuntimeContext(), now=0.0)["sensors"]["imu_valid"] is False
+
+
+def test_no_session_block_is_null_not_a_clean_start() -> None:
+    """A runtime built without a `SessionMarker` recorded nothing (#214).
+
+    Reporting that as a clean start would be inventing evidence, so it is null.
+    """
+    assert build_state(RuntimeContext(), now=0.0)["session"] is None
+
+
+def test_the_session_block_reports_how_the_last_run_ended() -> None:
+    context = RuntimeContext()
+    context.set(
+        "session",
+        {
+            "started_at": 100.0,
+            "trace_id": "abc",
+            "previous_ending": "reboot",
+            "previous_started_at": 50.0,
+            "previous_pid": 4242,
+            "boot_changed": True,
+            "throttled": "0x50000",
+        },
+    )
+
+    assert build_state(context, now=200.0)["session"] == {
+        "started_at": 100.0,
+        "trace_id": "abc",
+        "previous_ending": "reboot",
+        "previous_started_at": 50.0,
+        "previous_pid": 4242,
+        "boot_changed": True,
+        "throttled": "0x50000",
+    }
+
+
+def test_a_malformed_session_block_is_normalised_not_trusted() -> None:
+    context = RuntimeContext()
+    context.set(
+        "session",
+        {"started_at": "yesterday", "trace_id": 7, "previous_pid": True, "boot_changed": 1},
+    )
+
+    assert build_state(context, now=0.0)["session"] == {
+        "started_at": None,
+        "trace_id": None,
+        "previous_ending": None,
+        "previous_started_at": None,
+        "previous_pid": None,
+        "boot_changed": True,
+        "throttled": None,
+    }

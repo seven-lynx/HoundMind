@@ -446,7 +446,8 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
   "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "temp_c": 61.4, "mem_used_pct": 51.0 } },
   "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [], "exempt": { "api": "exempt by settings.watchdog.ignore_modules" } },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 },
-  "perf": { "tick_hz_target": 5, "tick_hz_actual": 4.98, "tick_ms": 41.2, "tick_overrun_ms": 0.0, "loop_delay_ms": 200.0 }
+  "perf": { "tick_hz_target": 5, "tick_hz_actual": 4.98, "tick_ms": 41.2, "tick_overrun_ms": 0.0, "loop_delay_ms": 200.0 },
+  "session": { "started_at": 4212.0, "trace_id": "trace123", "previous_ending": "reboot", "previous_started_at": 4000.1, "previous_pid": 1187, "boot_changed": true, "throttled": "0x50000" }
 }
 ```
 
@@ -477,6 +478,17 @@ scanner has finished its first sweep, and stays `null` while `modules.scanning` 
 themselves are **not** here: a sweep is one reading per angle — up to 181 — and this snapshot is sent
 at `api.state_hz` to every client, so the samples live behind `GET /api/v1/scan` and a client fetches
 them when `timestamp` moves (#169).
+
+`session` is how this run started and how the one before it ended (#214). `started_at` is epoch
+seconds, because it describes a moment in the past rather than a point on this stream's clock;
+`previous_ending` is `unclean` (the process died, the machine did not), `reboot` (the machine went
+away under it) or `unknown` (a marker no build could attribute), and it is **`null` when the last
+session closed itself** - a clean stop removes the marker, so absence is the clean case rather than
+a fourth value. `boot_changed` and `throttled` are only filled in for a reboot: `throttled` is
+`vcgencmd get_throttled` read *at start*, and bits 16-18 are sticky for the life of the boot, which
+is what makes it an under-voltage fingerprint. The block is `null` when nothing recorded a session
+- a tool or a test that built a runtime without `main()`. It reports; it never resumes: motion does
+not survive a restart.
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
 `navigation`, `routine`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode
