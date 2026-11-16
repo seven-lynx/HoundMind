@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The motionless smoke run is motionless on a Pi 4 as well**: `tools/smoke_test.py` disabled
+  `vision` but not `vision_pi4`, the module `main.build_registry` actually registers for the Pi 4
+  camera - so the camera opened and logged its `Picamera2 unavailable` line from inside a run that
+  printed `vision` as off. The run now prints the names it really switched off and calls out any
+  name the shipped config does not declare, so the next drift between this set and the registry is
+  visible instead of silent (#205).
 - **`/state` reports the IMU the HAL read, not the safety module's derived table**: `imu_valid` was
   taken from `tilt_warning`, a key only `safety/supervisor.py` writes, and `safety` ships disabled
   — so the flag read `false` on every default install while the accelerometer was answering (the
