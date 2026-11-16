@@ -813,6 +813,27 @@ def main() -> int:
                 if code != 0:
                     return code
 
+                # The probe imports `robot_hat/__init__.py`, which gates its exports on these four,
+                # so they have to be importable *before* it runs. On the lite preset nothing else
+                # installs them - `pyaudio` only ever arrived with `requirements.txt`, the full
+                # mirror - so a `--preset lite` run of this installer died here with "missing
+                # module(s): pyaudio" and never installed pidog, vilib, the package or the service.
+                # `pip install` is what makes the probe a test of the vendor tree rather than of the
+                # preset (#180).
+                absent = missing_modules(python, ROBOT_HAT_DEPS)
+                if absent:
+                    print(f"Installing the modules `robot_hat` needs to import: {', '.join(absent)}")
+                    code = run([str(pip), "install", *absent])
+                    if code != 0:
+                        print(
+                            "Could not install "
+                            + ", ".join(absent)
+                            + ". On Bookworm `pyaudio` needs `portaudio19-dev`; install the system "
+                            "dependencies (`--auto-system-deps`) and re-run."
+                        )
+                        return code
+                    absent = missing_modules(python, ROBOT_HAT_DEPS)
+
                 # Installed is not the same as usable: `robot_hat/__init__.py` exposes the classes
                 # `pidog` imports only when smbus2, lgpio, pyaudio and pygame are importable, and a
                 # pre-2.5 tree never exposes `robot_hat.device`. Failing here names the missing
@@ -820,7 +841,6 @@ def main() -> int:
                 # (#114).
                 code = run([str(python), "-c", ROBOT_HAT_PROBE])
                 if code != 0:
-                    absent = missing_modules(python, ROBOT_HAT_DEPS)
                     reason = (
                         f"missing module(s): {', '.join(absent)}. "
                         if absent

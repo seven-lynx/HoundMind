@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **`--preset lite` can install the dog again**: the installer probes `robot_hat` before anything
+  installs the four modules that probe depends on, and on the lite preset nothing ever did -
+  `pyaudio` only arrived with `requirements.txt`, the full mirror. So a lite install on a Pi got as
+  far as "robot-hat installed, but `pidog` would not be able to import it: missing module(s):
+  pyaudio", blamed the cloned branch, and returned 2 with no `pidog`, no `vilib`, no `pip install -e
+  .`, no service unit. The four are now installed before the probe, and a `pyaudio` build failure says
+  it needs `portaudio19-dev` instead of blaming the branch (#180).
 - **The control plane's footprint is measured, not assumed**: on the Pi 4 it costs **~12.5 MB of RSS**
   (60.0 MB with `modules.api.enabled: false`, 72.5 MB with it on) and its CPU cost is inside the noise
   of a loop already using a third of a core for sensor polling, with `tick_hz_actual 9.99` and
