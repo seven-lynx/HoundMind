@@ -21,13 +21,15 @@ __all__ = ["MOTION_STEPS", "describe", "main", "run_checkup"]
 # The motion sequence in HAL vocabulary, in the order the bench checklist expects
 # (`docs/HARDWARE_TEST.md` section 9): stand, both turns, then the head sweep and back to centre.
 # `wait` makes each step complete before the next begins, as the old direct vendor calls did.
-# `speed` is deliberately below the vendor's own maximum. At 180 the leg steps pull enough inrush
-# to brown out the stock pack's 5 V rail - two `Undervoltage detected!` episodes on the bench dog -
-# so the run measures the supply instead of the servos it is here to check (#207).
+# `speed` is the vendor's own rate for these moves, not the maximum. At 180 the leg steps pull
+# enough inrush to brown out the stock pack's 5 V rail - two `Undervoltage detected!` episodes on the
+# bench dog - and even 100 sat on the edge (one 6 s episode in two runs on the charger). The vendor's
+# action presets use 65 for `stand` and 98 for the turns, so the checkup now asks for what the
+# product asks for, and measures the servos instead of the supply (#207).
 MOTION_STEPS: tuple[tuple[str, dict[str, Any]], ...] = (
-    ("stand", {"speed": 100, "steps": 1, "wait": True}),
-    ("turn_left", {"speed": 100, "steps": 1, "wait": True}),
-    ("turn_right", {"speed": 100, "steps": 1, "wait": True}),
+    ("stand", {"speed": 65, "steps": 1, "wait": True}),
+    ("turn_left", {"speed": 98, "steps": 1, "wait": True}),
+    ("turn_right", {"speed": 98, "steps": 1, "wait": True}),
     ("head", {"yaw": -30.0, "speed": 70, "wait": True}),
     ("head", {"yaw": 30.0, "speed": 70, "wait": True}),
     ("head", {"yaw": 0.0, "speed": 70, "wait": True}),
