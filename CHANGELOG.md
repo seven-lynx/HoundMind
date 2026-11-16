@@ -7,6 +7,15 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **Several dogs, one console at a time**: the header gained a device picker (#179). It lists the plane
+  that served the page plus every device you have added, remembers that list in `localStorage`, and
+  **navigates** to the chosen one — `add a device…` asks for its URL once. Navigation rather than
+  in-place switching is the whole design: a second dog is a second origin, so an in-place `fetch`
+  would need CORS on every route and would fail outright on mixed content the moment one dog has TLS
+  on. The token rule is unchanged and now reads correctly per device: each origin has its own
+  `sessionStorage`, so a token never travels between dogs and never leaves the tab. A panel that
+  hardcoded an origin would silently ignore the picker, so `tests/test_webapp_assets.py` fails if one
+  ever does.
 - **Safety events can raise a desktop notification, when the user asks for one**: a `notify` button in
   the header, shown only in a secure context, prompts for permission **on the click and never on load**,
   and then lets `command_vetoed`, `command_expired` and `safety_action` raise a notification — the same

@@ -11,6 +11,11 @@ export const PANEL_KEY = "houndmind.panel";
 // Light or dark, remembered across tabs and restarts (#178). The token is per-tab
 // (`sessionStorage`); a theme is a preference about the person, not about the session.
 export const THEME_KEY = "houndmind.theme";
+// The dogs this browser knows about (#179). A *list of URLs*, not a live connection: choosing one
+// navigates the tab, so each device serves its own console and the token for it stays in that
+// origin's `sessionStorage`. Storage is per-origin, which is what makes the token per-device here
+// without a second key or a second rule.
+export const DEVICES_KEY = "houndmind.devices";
 
 // The server's deadman. The client renews faster than this, and the gap is the safety margin.
 export const TTL_MS = 300;
@@ -89,6 +94,82 @@ export function registerServiceWorker() {
   navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
     /* no worker: the console still connects, it just cannot load offline */
   });
+}
+
+// ------------------------------------------------------------------ devices (#179)
+
+/** `http(s)://host[:port]` from anything a user might paste, or `""` when it is not one. */
+export function normalizeOrigin(value) {
+  const raw = String(value || "").trim().replace(/\/+$/, "");
+  if (!raw) return "";
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (err) {
+    return "";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+  // `http://dog:8420/api/v1/state` is a route, not a device: the console lives at the origin root.
+  return `${parsed.protocol}//${parsed.host}`;
+}
+
+/** The origin that served this page — always a valid device, and the default choice. */
+export function currentOrigin() {
+  return `${location.protocol}//${location.host}`;
+}
+
+/**
+ * The remembered devices, this one excluded.
+ *
+ * `localStorage` rather than `sessionStorage`: which dogs exist is a fact about the person's setup,
+ * and losing it on every tab would make the picker useless. Nothing secret is stored here — the
+ * tokens live in each origin's own `sessionStorage`.
+ */
+export function getDevices() {
+  let stored = [];
+  try {
+    stored = JSON.parse(localStorage.getItem(DEVICES_KEY) || "[]");
+  } catch (err) {
+    stored = [];
+  }
+  if (!Array.isArray(stored)) return [];
+  const here = currentOrigin();
+  const seen = new Set();
+  const devices = [];
+  for (const entry of stored) {
+    const origin = normalizeOrigin(entry && entry.origin);
+    if (!origin || origin === here || seen.has(origin)) continue;
+    seen.add(origin);
+    devices.push({ origin, label: String((entry && entry.label) || "") });
+  }
+  return devices;
+}
+
+/** Add or update one device. Returns the list, so a caller can re-render from it. */
+export function rememberDevice(origin, label = "") {
+  const clean = normalizeOrigin(origin);
+  if (!clean) return getDevices();
+  const devices = getDevices().filter((device) => device.origin !== clean);
+  devices.push({ origin: clean, label: String(label || "") });
+  devices.sort((left, right) => left.origin.localeCompare(right.origin));
+  try {
+    localStorage.setItem(DEVICES_KEY, JSON.stringify(devices));
+  } catch (err) {
+    // A refused write still returns the in-memory list; the picker would just not survive a reload.
+  }
+  return devices;
+}
+
+/** Forget one device. This one is not stored, so forgetting it is a no-op. */
+export function forgetDevice(origin) {
+  const clean = normalizeOrigin(origin);
+  const devices = getDevices().filter((device) => device.origin !== clean);
+  try {
+    localStorage.setItem(DEVICES_KEY, JSON.stringify(devices));
+  } catch (err) {
+    // Same as above: the in-memory answer is still right for this page.
+  }
+  return devices;
 }
 
 // ------------------------------------------------------------------ api

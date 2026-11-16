@@ -14,9 +14,13 @@ import {
   PANEL_KEY,
   api,
   clockTime,
+  currentOrigin,
   esc,
+  getDevices,
   getToken,
+  normalizeOrigin,
   registerServiceWorker,
+  rememberDevice,
   setTheme,
   setToken,
   store,
@@ -179,6 +183,62 @@ function notifySafety(name, data) {
 }
 
 renderNotifyButton();
+
+// ---- devices (#179). The console is served *by* the plane it controls, so a second dog is a second
+// origin, and switching is a navigation rather than a cross-origin fetch. That keeps the token where
+// it already lives - each origin's own `sessionStorage` - and needs no CORS on either side; in-place
+// switching would need CORS and would break on mixed content when only one dog has TLS (#202).
+function renderDevicePicker() {
+  const picker = $("device-picker");
+  if (!picker) return;
+  const here = currentOrigin();
+  const rows = [{ origin: here, label: "this device" }].concat(getDevices());
+  picker.innerHTML =
+    rows
+      .map(
+        (device) =>
+          `<option value="${esc(device.origin)}">${esc(
+            device.label || device.origin.replace(/^https?:\/\//, "")
+          )}</option>`
+      )
+      .join("") + `<option value="__add">add a device…</option>`;
+  picker.value = here;
+}
+
+function addDevice() {
+  const typed = window.prompt("URL of the other dog's console", "http://");
+  renderDevicePicker(); // whatever happens next, the picker must show the truth again
+  if (typed === null) return;
+  const origin = normalizeOrigin(typed);
+  if (!origin) {
+    // A rare path, and the message has to be unmissable: an invalid URL would otherwise look like a
+    // picker that did nothing.
+    window.alert("That is not an http:// or https:// address.");
+    return;
+  }
+  rememberDevice(origin);
+  // A full navigation, not a fetch: the other dog's own console and bundle load, and its token field
+  // comes with them.
+  location.assign(`${origin}/`);
+}
+
+bind("device-picker", "change", () => {
+  const picker = $("device-picker");
+  const value = picker.value;
+  if (value === "__add") {
+    addDevice();
+    return;
+  }
+  if (!value || value === currentOrigin()) {
+    renderDevicePicker();
+    return;
+  }
+  // No `stopAllMotion()` here: leaving the page closes the socket and the server's deadman expires
+  // the command. A goodbye fetch would be one more thing to fail on a link that is going away.
+  location.assign(`${value}/`);
+});
+
+renderDevicePicker();
 
 // ------------------------------------------------------------------ socket
 

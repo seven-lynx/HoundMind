@@ -71,6 +71,12 @@ safety events. On plain http both are skipped rather than broken: no worker is r
 permission is requested, and everything else on this page behaves exactly as documented. `/sw.js` and
 `/static/*` are served without a token, like the assets they are.
 
+**One console, one origin.** The app is served by the plane it controls, so a second dog is a second
+origin and the header's device picker *navigates* to it (#179). That is deliberate: talking to another
+plane in place would be a cross-origin request — the WebSocket would connect but every `GET` would be
+blocked without `Access-Control-Allow-Origin`, and an `https://` console cannot call an `http://` plane
+at all (#202). The remembered device list is client-side only; nothing about it is sent anywhere.
+
 **Device token** — generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token`, directory `0700`, file `0600`. It is never in `config/settings.jsonc`,
 never in a log line, and never in this repository. The web app does not receive it automatically: on

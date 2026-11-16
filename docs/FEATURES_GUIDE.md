@@ -980,6 +980,13 @@ a `notify` button; the permission prompt happens on that click and never on load
 records every event regardless, and the dog's own stop path is on the device: a notification is an
 extra signal, not the safety mechanism.
 
+**Several dogs, one console at a time.** The header's picker lists the device this page was served by
+plus the ones you have added, and choosing one navigates the tab to that dog's console — `add a
+device…` asks for its URL once. Each device is a different origin, so each keeps its own token in its
+own `sessionStorage`: switching back asks for that token again in a new tab, and that is the same
+per-tab rule as before rather than a new one. Nothing about the list leaves the browser, and no panel
+builds an origin of its own — `tests/test_webapp_assets.py` fails if one starts to.
+
 **The token.** Generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token` with mode 0600. It is never in `config/settings.jsonc`, never in a log
 line and never in this repository. There is no token-generator script to run: the runtime creates

@@ -168,3 +168,42 @@ def test_a_notification_is_never_the_only_signal() -> None:
         "record it first: the notification is the extra signal, not the record"
     )
 
+
+# ------------------------------------------------------------- devices (#179)
+
+
+def test_switching_devices_is_a_navigation_not_a_cross_origin_fetch() -> None:
+    """A second dog is a second origin: `fetch` there needs CORS, a navigation does not (#179)."""
+    app = (WEB / "app.js").read_text(encoding="utf-8")
+
+    section = app[app.index("// ---- devices (#179)") :]
+    section = section[: section.index("// ------------------------------------------------------------------ socket")]
+    assert "location.assign(" in section, "switching must load that device's own console"
+    assert "fetch(" not in section, (
+        "an in-place fetch would be blocked without CORS, and by mixed content when only one dog "
+        "has TLS"
+    )
+    assert "__add" in section, "the picker needs a way to add a device at all"
+
+
+def test_the_device_list_is_remembered_and_the_token_is_not() -> None:
+    """A device list survives a reload; a credential does not leave the tab."""
+    lib = (WEB / "lib.js").read_text(encoding="utf-8")
+
+    assert 'DEVICES_KEY = "houndmind.devices"' in lib
+    devices = lib[lib.index("export function getDevices") :]
+    assert "localStorage.getItem(DEVICES_KEY)" in devices
+    token = lib[lib.index("export function getToken") : lib.index("export function setToken")]
+    assert "sessionStorage" in token, "the token rule from before #179 still holds"
+
+
+def test_no_panel_builds_an_origin_of_its_own() -> None:
+    """A panel that hardcodes an origin ignores whichever device the console is pointed at."""
+    offenders = []
+    for panel in sorted((WEB / "panels").glob("*.js")):
+        text = panel.read_text(encoding="utf-8")
+        for needle in ("http://", "https://", "location.origin", "location.host"):
+            if needle in text:
+                offenders.append(f"{panel.name}: {needle}")
+    assert offenders == [], f"panels must stay relative: {offenders}"
+

@@ -11,6 +11,9 @@
 //   - Everything else is **network first**, cache second. Online, the browser always gets the current
 //     `app.js` - the document is served `no-cache` for exactly that reason - and the cache only
 //     answers when the network does not.
+//
+// A worker belongs to one origin, and so does the console: switching to another dog is a navigation to
+// that dog's own origin, where that dog's worker answers (#179).
 
 const CACHE = "houndmind-shell-v1";
 const SHELL = ["/", "/static/index.html", "/static/icon.svg", "/static/manifest.webmanifest"];
