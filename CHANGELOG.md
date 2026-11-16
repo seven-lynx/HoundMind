@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A journald recipe that survives a power cut**: `HARDWARE_TEST.md` section 2.1 now carries the
+  drop-in (`Storage=persistent` under `journald.conf.d/`) with the commands that verify it, because
+  this image ships `Storage=volatile` and `mkdir /var/log/journal` alone leaves the journal in a
+  tmpfs while `journalctl` reports a plausible 8 MB of disk usage. Persistent is not instant either:
+  `SyncIntervalSec` still loses the last minutes, so `get_throttled` and a fixed-rate sampler CSV
+  stay the primary instruments and the journal is corroboration (#209).
 - **What the USB-C charge port actually powers, and what it does not**: `docs/pidog/HARDWARE.md`
   section 4.1 now records the bench measurement - the charger carries the Pi at idle but not the
   servo bus, it does not cleanly bypass the pack, `sensors.battery_v` reads the input rail (8.29 V)
