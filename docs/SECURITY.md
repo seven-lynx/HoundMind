@@ -110,6 +110,18 @@ trust that file or pin it — there is no CA behind it and no domain name.
 No route serves `/face/`, and no bundle member contains an embedding — the roster returns names and
 ids only.
 
+**The assistant is the one outbound call in the tree.** With `modules.assistant` enabled and a cloud
+`base_url`, every utterance the phrase map does not own - plus `settings.assistant.system_prompt` - is
+sent to that provider, and whatever the household said to the dog goes with it. That is a deliberate
+choice, not a leak, but it has to be a deliberate choice:
+
+- Point `base_url` at a box on the LAN (`http://<your-pc>:11434/v1`) and nothing leaves the network.
+- The key lives in the `api_key_env` variable or the 0600 `api_key_path` file. There is no key field in
+  `config/settings.jsonc`, because this repository publishes its config.
+- The device token is never sent to a provider: the assistant does not hold it and has no route access.
+- `vision_in` ships off. With it on, a camera frame would leave the device too - treat that as a
+  separate decision with its own paragraph here before anyone flips it.
+
 ## 9. Checklist before it leaves the bench
 
 - [ ] Device token present at `~/.houndmind/api_token`, mode 0600.

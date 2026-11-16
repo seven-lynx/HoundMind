@@ -928,6 +928,25 @@ _VISION_PI4 = Section(
     }
 )
 
+# `optional/assistant.py` - a language model behind the voice question handler. The credential is
+# deliberately absent: `api_key_env` names an environment variable and `api_key_path` a 0600 file, so
+# a key cannot be typed into this tracked config.
+_ASSISTANT = Section(
+    fields={
+        "enabled": Bool(),
+        "backend": StrSpec(choices=("none", "openai_compatible")),
+        "base_url": StrSpec(),
+        "model": StrSpec(),
+        "system_prompt": StrSpec(),
+        "max_tokens": IntSpec(minimum=1),
+        "timeout_s": _POSITIVE,
+        "requests_per_minute": IntSpec(minimum=0),
+        "max_failures": IntSpec(minimum=1),
+        "api_key_env": StrSpec(),
+        "api_key_path": StrSpec(),
+    }
+)
+
 # `optional/voice.py`. The backend names are the ones its docstring documents and the ones the
 # recogniser selection branches on. `tts` is read too: `enabled` gates every utterance, and
 # `backend` picks the engine - the vendor engines speak through the Robot HAT speaker and `auto`
@@ -1075,6 +1094,7 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "balance": _BALANCE,
     "battery": _BATTERY,
     "behavior": _BEHAVIOR,
+    "assistant": _ASSISTANT,
     "calibration": _CALIBRATION,
     "device": _DEVICE,
     "emotion": _EMOTION,

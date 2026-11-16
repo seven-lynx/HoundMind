@@ -96,6 +96,13 @@ class VoiceModule(Module):
             return None
 
         now = time.time()
+        # An asynchronous answer (the assistant) is spoken the moment it lands, and outside the
+        # command cooldown: the user has already waited for it.
+        reply = context.get("assistant_reply")
+        if isinstance(reply, str) and reply.strip():
+            context.set("assistant_reply", None)
+            self._speak(reply, context)
+
         cooldown = float(settings.get("cooldown_s", 1.0))
         if now - self._last_command_ts < cooldown:
             return None
@@ -173,20 +180,21 @@ class VoiceModule(Module):
         handler = context.get("voice_question_handler")
         try:
             # If it's a question (ends with ?) or handler is present, forward
-            if (isinstance(text, str) and text.strip().endswith("?")) or callable(handler):
-                if callable(handler):
-                    try:
-                        resp = handler(text)
-                    except Exception:
-                        logger.exception("voice_question_handler failed")
-                        resp = None
-                else:
+            if not ((isinstance(text, str) and text.strip().endswith("?")) or callable(handler)):
+                return
+            if callable(handler):
+                try:
+                    resp = handler(text)
+                except Exception:
+                    logger.exception("voice_question_handler failed")
                     resp = None
                 if isinstance(resp, str) and resp.strip():
                     self._speak(resp, context)
-                else:
-                    # default fallback: echo
-                    self._speak(f"I heard: {text}", context)
+                # A handler that answers asynchronously publishes `assistant_reply`; echoing
+                # "I heard: ..." here would talk over it.
+                return
+            # No handler: the echo is the only answer the dog can give.
+            self._speak(f"I heard: {text}", context)
         except Exception:
             logger.exception("Failed handling utterance")
 

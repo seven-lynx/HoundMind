@@ -716,6 +716,26 @@ amplifier, `espeak`/`espeak-ng` is what the eSpeak engine and `pyttsx3` shell ou
 `setup_robot_hat_audio.sh`, then a reboot - every engine constructs, says nothing, and logs the failure
 once (#246, #249).
 
+**The assistant: a language model, cloud or LAN (off by default).** `modules.assistant` plus
+`settings.assistant` put a model behind the `voice_question_handler` seam that `voice` already
+documents: an utterance the phrase map does not own is passed to the model, and the reply is spoken by
+the TTS engine above. It is **text in, text out** - the module writes neither `behavior_override` nor
+`motion_command` nor an intent, so a model can never move the dog, and the phrase map still runs first
+("sit" never reaches it).
+
+`settings.assistant.backend` is `openai_compatible`: any endpoint that speaks the OpenAI
+chat-completions API. `base_url: "https://api.openai.com/v1"` for a cloud provider, or
+`"http://<your-pc>:11434/v1"` for a model on the LAN - Ollama, llama.cpp's `llama-server` and LM Studio
+all expose it, so the local case is a config change rather than a second implementation.
+`backend: "none"` keeps the block inert.
+
+The key is never in `config/settings.jsonc`: set the environment variable named by `api_key_env`
+(default `LLM_API_KEY`), or write the key into the 0600 file named by `api_key_path`
+(default `~/.houndmind/llm_key`); the environment wins when both exist. Requests run on a worker thread,
+carry `timeout_s`, are spaced by `requests_per_minute`, and the module disables itself after
+`max_failures` consecutive failures - a dead link costs the answer, never the tick. **Prompts leave the
+device** when a cloud `base_url` is configured; see [SECURITY.md](SECURITY.md).
+
 **Enable:**
 - `modules.voice.enabled = true`
 - `settings.voice_assistant.enabled = true`

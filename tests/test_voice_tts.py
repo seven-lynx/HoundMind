@@ -13,6 +13,7 @@ another engine, and the vendor engines are `robot_hat.tts` objects driven with `
 from __future__ import annotations
 
 import sys
+import time
 import types
 
 from houndmind_ai.core.runtime import RuntimeContext
@@ -246,3 +247,47 @@ def test_a_config_without_the_tts_table_keeps_the_auto_chain(monkeypatch) -> Non
 
     # No `piper_model` either, so Piper is skipped and the chain falls to the next engine.
     assert transcript.said == [("EdgeTTS", UTTERANCE)]
+
+
+def test_an_assistant_reply_is_spoken_even_inside_the_command_cooldown(monkeypatch) -> None:
+    """`assistant_reply` answers a question the user already waited for, so no cooldown gate."""
+    transcript = install_vendor(monkeypatch)
+    vm = module()
+    ctx = RuntimeContext()
+    ctx.set(
+        "settings",
+        {
+            "voice_assistant": {
+                "enabled": True,
+                "cooldown_s": 30.0,
+                "tts": {"enabled": True, "backend": "espeak"},
+            }
+        },
+    )
+    vm._last_command_ts = time.time()  # a command just ran: the cooldown is live
+    ctx.set("assistant_reply", "Woof.")
+
+    vm.tick(ctx)
+
+    assert transcript.said == [("Espeak", "Woof.")]
+    assert ctx.get("assistant_reply") is None
+
+
+def test_an_async_handler_is_not_talked_over_by_the_echo(monkeypatch) -> None:
+    """A handler that answers later must not also get "I heard: ..." spoken over it."""
+    transcript = install_vendor(monkeypatch)
+    vm = module()
+    ctx = context(enabled=True, backend="espeak")
+    heard: list[str] = []
+
+    def handler(text: str) -> str:
+        heard.append(text)
+        return ""
+
+    ctx.set("voice_question_handler", handler)
+    ctx.set("voice_text", "hello?")
+
+    vm.tick(ctx)
+
+    assert heard == ["hello?"]
+    assert transcript.said == []

@@ -219,6 +219,12 @@
       "enabled": false,
       "required": false
     },
+    "assistant": {
+      // Cloud or LAN language model (disabled by default). It answers questions through the voice
+      // module and cannot command motion - the phrase map still owns every command.
+      "enabled": false,
+      "required": false
+    },
     "voice": {
       // Voice interaction modules (disabled until tested).
       "enabled": false,
@@ -390,6 +396,34 @@
         "mean": [0.0, 0.0, 0.0],
         "std": [1.0, 1.0, 1.0]
       }
+    },
+    // =====================================================================
+    // ASSISTANT (language model: a cloud API now, a box on the LAN later)
+    // =====================================================================
+    "assistant": {
+      // Off in both places by default: here and `modules.assistant`.
+      "enabled": false,
+      // "openai_compatible" speaks the OpenAI chat-completions API, which is why a local model is
+      // a config change rather than a second implementation - Ollama, llama.cpp's `llama-server`
+      // and LM Studio all expose `/v1/chat/completions`. "none" keeps the block inert.
+      "backend": "none",
+      // Cloud: "https://api.openai.com/v1" (or an OpenRouter / Groq base URL).
+      // Local: "http://<this-pc-on-the-lan>:11434/v1" with "model": "qwen3.5:4b".
+      "base_url": "",
+      "model": "",
+      // Spoken aloud, so brevity is a feature. It must never claim the dog can do something it
+      // cannot, and it never commands motion - the phrase map in `voice_assistant` owns commands.
+      "system_prompt": "You are the voice of a small robot dog. Answer in one or two short sentences, plainly, and never claim you can do something you cannot.",
+      "max_tokens": 256,
+      // A dead link must cost the answer, not the tick: the worker gives up after this, and the
+      // module disables itself after `max_failures` consecutive failures.
+      "timeout_s": 8.0,
+      "requests_per_minute": 10,
+      "max_failures": 3,
+      // The key is never in this file - this repo publishes its config. Set the environment
+      // variable, or write the key into a 0600 file; the environment wins when both exist.
+      "api_key_env": "LLM_API_KEY",
+      "api_key_path": "~/.houndmind/llm_key"
     },
     // =====================================================================
     // VOICE ASSISTANT (Pi4 optional)

@@ -8,6 +8,18 @@ Current Release: v2026.11.16
 
 ## [Unreleased]
 
+### Added
+
+- **A language model behind the voice** (`modules.assistant` + `settings.assistant`, off by default).
+  An utterance the phrase map does not own is handed to a model and the reply is spoken by the TTS
+  engine; the module writes text only - no `behavior_override`, no `motion_command`, no intent - so a
+  model can never move the dog. `backend: "openai_compatible"` covers a cloud provider and a box on the
+  LAN (Ollama, `llama-server`, LM Studio) on the same code, which is what makes the local case a config
+  change rather than a second implementation. The key comes from `api_key_env` or a 0600
+  `api_key_path`, never from the tracked config; requests run on a worker thread with a timeout, a rate
+  limit and a failure budget that disables the module rather than the loop. `docs/SECURITY.md` §8
+  records that prompts leave the device when a cloud `base_url` is configured.
+
 ### Changed
 
 - `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped

@@ -34,6 +34,7 @@ from houndmind_ai.navigation.obstacle_avoidance import ObstacleAvoidanceModule
 from houndmind_ai.navigation.orientation import OrientationModule
 from houndmind_ai.navigation.place_navigator import PlaceNavigatorModule
 from houndmind_ai.navigation.scanning import ScanningModule
+from houndmind_ai.optional.assistant import AssistantModule
 from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
 from houndmind_ai.optional.face_recognition import FaceRecognitionModule
 from houndmind_ai.optional.semantic_labeler import SemanticLabelerModule
@@ -124,6 +125,10 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(EnergyEmotionModule("energy_emotion", **cfg("energy_emotion")), [Capability.BEHAVIOUR])
     registry.register(VisionModule("vision", **cfg("vision")), [Capability.VISION])
     registry.register(VisionPi4Module("vision_pi4", **cfg("vision_pi4")), [Capability.VISION])
+    # The assistant registers `voice_question_handler`, so it is registered before the module that
+    # calls it. It declares no capability: a capability names what a module produces, and "answers"
+    # is not one of them - claiming AUDIO would make `provider(AUDIO)` ambiguous with `voice`.
+    registry.register(AssistantModule("assistant", **cfg("assistant")))
     registry.register(VoiceModule("voice", **cfg("voice")), [Capability.AUDIO])
     registry.register(FaceRecognitionModule("face_recognition", **cfg("face_recognition")), [Capability.VISION])
     registry.register(SemanticLabelerModule("semantic_labeler", **cfg("semantic_labeler")), [Capability.VISION])
