@@ -51,6 +51,27 @@ def _as_float(value: Any, default: float, minimum: float, maximum: float) -> flo
     return max(minimum, min(number, maximum))
 
 
+def _as_origins(value: Any) -> tuple[str, ...]:
+    """A list of origins, trimmed, without the wildcard (#202).
+
+    `*` is dropped rather than honoured: with `Access-Control-Allow-Origin: *` and no credentials a
+    browser lets *any* page read the response, which would hand a LAN visitor the dog the operator's
+    tab happens to hold a token for. An origin is either named or not allowed at all.
+    """
+    if not isinstance(value, (list, tuple)):
+        return ()
+    origins: list[str] = []
+    for entry in value:
+        if not isinstance(entry, str):
+            continue
+        origin = entry.strip().rstrip("/")
+        if not origin or origin == "*":
+            continue
+        if origin not in origins:
+            origins.append(origin)
+    return tuple(origins)
+
+
 @dataclass(frozen=True)
 class ApiSettings:
     """Everything the control plane needs to open one port."""
@@ -84,6 +105,10 @@ class ApiSettings:
     # public information - nothing in it is absent from the unauthenticated `/meta` payload.
     discovery_enabled: bool = True
     discovery_name: str = "houndmind"
+    # CORS (#202). Empty by default: no page from another origin may read this plane. An entry is
+    # the operator saying "that console is mine", and the token is still the boundary - `*` is never
+    # accepted, because it would let any page on the LAN read whichever dog it holds a token for.
+    cors_origins: tuple[str, ...] = ()
 
     @classmethod
     def from_settings(cls, settings: Mapping[str, Any] | None) -> ApiSettings:
@@ -115,4 +140,5 @@ class ApiSettings:
             log_tail=_as_int(raw.get("log_tail"), cls.log_tail, 1, 5000),
             discovery_enabled=_as_bool(raw.get("discovery_enabled"), cls.discovery_enabled),
             discovery_name=_as_str(raw.get("discovery_name"), cls.discovery_name),
+            cors_origins=_as_origins(raw.get("cors_origins")),
         )

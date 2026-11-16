@@ -1243,7 +1243,13 @@
       // a network that blocks multicast costs one log line and the address still works.
       "discovery_enabled": true,
       // The instance name a client sees, so two dogs on one LAN stay distinguishable.
-      "discovery_name": "houndmind"
+      "discovery_name": "houndmind",
+      // Cross-origin reads (#202). Empty means no page from another origin may read this plane -
+      // the shipped default, and what a single-console install wants. Add an origin (scheme, host,
+      // port, no trailing slash) to let that console fetch from here in place; the token is still
+      // the boundary, and `*` is ignored rather than honoured. Mixed content still applies: an
+      // https page cannot call an http plane, so put both on the same scheme.
+      "cors_origins": []
     }
   }
 }

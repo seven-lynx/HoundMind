@@ -71,11 +71,18 @@ safety events. On plain http both are skipped rather than broken: no worker is r
 permission is requested, and everything else on this page behaves exactly as documented. `/sw.js` and
 `/static/*` are served without a token, like the assets they are.
 
-**One console, one origin.** The app is served by the plane it controls, so a second dog is a second
-origin and the header's device picker *navigates* to it (#179). That is deliberate: talking to another
-plane in place would be a cross-origin request — the WebSocket would connect but every `GET` would be
-blocked without `Access-Control-Allow-Origin`, and an `https://` console cannot call an `http://` plane
-at all (#202). The remembered device list is client-side only; nothing about it is sent anywhere.
+**One console, one origin — or an allowlist.** The app is served by the plane it controls, so a second
+dog is a second origin and the header's device picker *navigates* to it (#179). Navigating needs no
+policy at all, which is why it shipped first. Talking to another plane **in place** is now possible
+too, but only when the operator says so: `settings.api.cors_origins` (empty by default) names the
+origins whose pages may read this plane, and a request from a listed origin gets
+`Access-Control-Allow-Origin` echoed back with `Vary: Origin`; a preflight `OPTIONS` is answered
+`204` without a token, because a browser never sends `Authorization` on one. An origin that is not
+listed gets no header at all — the response is still served, the browser simply refuses to hand it
+to the page (#202). `*` is **ignored**, not honoured: the token is the boundary, and a wildcard would
+let any page on the LAN read whichever dog it holds a token for. Mixed content is still a hard wall:
+an `https://` console cannot call an `http://` plane, so put both on the same scheme. The remembered
+device list is client-side only; nothing about it is sent anywhere.
 
 **Device token** — generated on first start by `services/auth.py::TokenStore` and written to
 `~/.houndmind/api_token`, directory `0700`, file `0600`. It is never in `config/settings.jsonc`,
