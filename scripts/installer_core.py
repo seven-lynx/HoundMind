@@ -267,11 +267,14 @@ def ensure_system_deps_linux() -> int:
         "libgtk-3-dev",
         "libasound2-dev",
         # `robot_hat/device.py:148-156` primes the I2S amp with `play` (sox) before it enables the
-        # speaker, and `espeak-ng` is the only engine `pyttsx3` can drive on Bookworm. With neither,
-        # a working speaker still produces no speech (#246).
+        # speaker, `espeak`/`espeak-ng` is what the eSpeak engine and pyttsx3 shell out to, and
+        # `libsox-fmt-mp3` is what EdgeTTS needs to convert the MP3 it fetches (#246, #249). With any
+        # of them missing a working speaker still produces no speech.
         "sox",
+        "libsox-fmt-mp3",
         "alsa-utils",
         "espeak-ng",
+        "espeak",
         "libportaudio2",
         "portaudio19-dev",
         "libboost-all-dev",

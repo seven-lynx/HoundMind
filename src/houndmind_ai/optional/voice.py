@@ -205,9 +205,10 @@ class VoiceModule(Module):
             return
 
         backend = str(tts_cfg.get("backend", "auto"))
+        piper_model = str(tts_cfg.get("piper_model", "") or "")
 
         for name in self._tts_chain(backend):
-            engine = self._vendor_tts(name)
+            engine = self._vendor_tts(name, piper_model)
             if engine is None:
                 continue
             try:
@@ -245,16 +246,23 @@ class VoiceModule(Module):
             return (backend,)
         return ()
 
-    def _vendor_tts(self, name: str) -> Any | None:
+    def _vendor_tts(self, name: str, piper_model: str = "") -> Any | None:
         """The vendor engine `name`, built once, or None when it is unavailable.
 
         `robot_hat.tts` wraps `sunfounder_voice_assistant` and calls `enable_speaker()`, which is what
         raises the Robot HAT amplifier (GPIO 20). A lite install has neither, so the missing case is
         the common one: it is cached and logged at INFO once, not raised per utterance (#245, #246).
+
+        Piper is skipped unless `tts.piper_model` names a model: without one its `say()` raises
+        `Model not set`, and `set_model` downloads the weights on first use - not something a tick
+        should start by surprise.
         """
         if name in self._vendor_engines:
             return self._vendor_engines[name]
         self._vendor_engines[name] = None
+        if name == "piper" and not piper_model:
+            logger.info("TTS backend piper skipped: set settings.voice_assistant.tts.piper_model")
+            return None
         try:
             import robot_hat.tts as vendor_tts  # type: ignore[import-not-found]
 
@@ -263,6 +271,8 @@ class VoiceModule(Module):
                 logger.info("TTS backend %s is not in this robot_hat; skipping", name)
                 return None
             engine = cls()
+            if name == "piper":
+                engine.set_model(piper_model)
         except Exception as exc:
             logger.info("TTS backend %s unavailable: %s", name, exc)
             return None

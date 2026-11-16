@@ -10,6 +10,9 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
+  instead of raising `Model not set` on every utterance, and the model download stays out of a tick
+  nobody asked for (#249).
 - `docs/CONTROL_API.md` and `docs/FEATURES_GUIDE.md` now show the command that reads the web console's
   token (`grep -m1 . ~/.houndmind/api_token`) and the one that checks its mode, instead of naming the
   file and stopping there. `docs/INSTALL.md` lists the three voice switches and what the vendor voice
@@ -29,6 +32,11 @@ Current Release: v2026.11.16
   `ModuleNotFoundError`. The installer now clones and installs it - including when `pidog` is already
   present, because that branch skips the vendor block - and adds `sox`, `alsa-utils` and `espeak-ng`,
   without which `enable_speaker()` cannot prime the I2S amplifier and `pyttsx3` has no engine.
+- **`auto` could not reach a vendor engine without raising first** (#249). Piper needs
+  `set_model(...)` before `say()`, and `edge` needs `libsox-fmt-mp3` to convert the MP3 it fetches, so
+  `auto` paid a traceback per engine per utterance before eSpeak spoke. The installer now adds
+  `libsox-fmt-mp3` and the `espeak` compatibility package as well, and Piper is opted into through its
+  model key.
 - **`slam_pi4` was documented as disabling itself and did not** (#247). With `backend: "rtabmap"` and no
   bindings the module logged a single INFO line and kept running the gyro stub; `FEATURES_GUIDE.md` §23
   and `config/settings.jsonc` said it switched itself off. Both now describe the fallback, and the

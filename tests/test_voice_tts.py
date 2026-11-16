@@ -25,11 +25,12 @@ VENDOR_CLASSES = ("Piper", "EdgeTTS", "Espeak", "Pico2Wave")
 
 
 class Transcript:
-    """What the fake engines saw: which were built, and what was said through them."""
+    """What the fake engines saw: which were built, what was said, and which models were set."""
 
     def __init__(self) -> None:
         self.built: list[str] = []
         self.said: list[tuple[str, str]] = []
+        self.models: list[tuple[str, str]] = []
 
 
 class FakeEngine:
@@ -75,6 +76,9 @@ def install_vendor(
                     if name in failing:
                         raise RuntimeError(f"{name} could not speak")
                     transcript.said.append((name, text))
+
+                def set_model(self, model: str) -> None:
+                    transcript.models.append((name, model))
 
             Engine.__name__ = name
             return Engine
@@ -139,14 +143,28 @@ def test_a_disabled_table_keeps_the_module_silent(monkeypatch) -> None:
 
 
 def test_auto_speaks_through_the_first_vendor_engine(monkeypatch) -> None:
-    """`auto` is the vendor-first order the docstring promises."""
+    """`auto` is the vendor-first order the docstring promises, once Piper has a model."""
+    transcript = install_vendor(monkeypatch)
+    engine = install_pyttsx3(monkeypatch)
+    vm = module()
+
+    hear_a_question(vm, context(backend="auto", piper_model="en_US-amy-low"))
+
+    assert transcript.said == [("Piper", UTTERANCE)]
+    assert transcript.models == [("Piper", "en_US-amy-low")]
+    assert engine.said == []
+
+
+def test_piper_is_skipped_while_no_model_is_configured(monkeypatch) -> None:
+    """#249: without `piper_model` Piper cannot speak, so `auto` moves on instead of raising."""
     transcript = install_vendor(monkeypatch)
     engine = install_pyttsx3(monkeypatch)
     vm = module()
 
     hear_a_question(vm, context(backend="auto"))
 
-    assert transcript.said == [("Piper", UTTERANCE)]
+    assert transcript.built == ["EdgeTTS"]
+    assert transcript.said == [("EdgeTTS", UTTERANCE)]
     assert engine.said == []
 
 
@@ -163,7 +181,7 @@ def test_pidog_uses_the_vendor_speaker_and_never_the_preset_sound_api(monkeypatc
     monkeypatch.setitem(sys.modules, "pidog", pidog_module)
     vm = module()
 
-    hear_a_question(vm, context(backend="pidog"))
+    hear_a_question(vm, context(backend="pidog", piper_model="en_US-amy-low"))
 
     assert transcript.said == [("Piper", UTTERANCE)]
 
@@ -210,9 +228,9 @@ def test_a_broken_vendor_engine_is_probed_once(monkeypatch) -> None:
     engine = install_pyttsx3(monkeypatch)
     vm = module()
 
-    hear_a_question(vm, context(backend="auto"))
+    hear_a_question(vm, context(backend="auto", piper_model="en_US-amy-low"))
     vm._last_command_ts = 0.0
-    hear_a_question(vm, context(backend="auto"))
+    hear_a_question(vm, context(backend="auto", piper_model="en_US-amy-low"))
 
     assert transcript.built.count("Piper") == 1
     assert transcript.said == [("EdgeTTS", UTTERANCE), ("EdgeTTS", UTTERANCE)]
@@ -226,4 +244,5 @@ def test_a_config_without_the_tts_table_keeps_the_auto_chain(monkeypatch) -> Non
 
     hear_a_question(vm, context())
 
-    assert transcript.said == [("Piper", UTTERANCE)]
+    # No `piper_model` either, so Piper is skipped and the chain falls to the next engine.
+    assert transcript.said == [("EdgeTTS", UTTERANCE)]

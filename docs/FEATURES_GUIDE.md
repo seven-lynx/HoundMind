@@ -701,16 +701,20 @@ silently. `settings.voice_assistant.tts.backend` picks the voice. The vendor eng
 Robot HAT speaker and switch its amplifier on themselves: `piper` (offline neural - the right choice
 for a dog with no network), `edge` (Microsoft's cloud voice, needs network), `espeak` and `pico2wave`.
 `auto` walks those in that order and then falls back to `pyttsx3`, the local engine, which needs
-`espeak-ng`. `pidog` is kept as the compatibility name for the vendor path: `Pidog.speak()` resolves a
+`espeak-ng`. Piper needs a model before it can speak: set `settings.voice_assistant.tts.piper_model`
+(for example `en_US-amy-low`, downloaded into `~/.piper_models/` on first use). While that key is empty
+Piper is skipped rather than raising on every utterance (#249). `pidog` is kept as the compatibility
+name for the vendor path: `Pidog.speak()` resolves a
 preset sound *file* by name and cannot speak a sentence, so it is not a TTS engine (#245). A named
 backend never borrows another one, so a missing speaker is a dropped answer rather than an unexpected
 voice. A config with no `tts` table keeps the `auto` order.
 
 **What the vendor engines need.** `robot_hat.tts`, `llm` and `stt` are thin wrappers over
 `sunfounder-voice-assistant`, the SunFounder git package the installer now installs; `sox` primes the
-amplifier and `espeak-ng` is the only engine `pyttsx3` can drive on Bookworm. Without the HAT speaker
-enabled - `setup_robot_hat_audio.sh`, then a reboot - every engine constructs, says nothing, and logs
-the failure once (#246).
+amplifier, `espeak`/`espeak-ng` is what the eSpeak engine and `pyttsx3` shell out to, and
+`libsox-fmt-mp3` is what `edge` needs to convert the MP3 it fetches. Without the HAT speaker enabled -
+`setup_robot_hat_audio.sh`, then a reboot - every engine constructs, says nothing, and logs the failure
+once (#246, #249).
 
 
 **Enable:**

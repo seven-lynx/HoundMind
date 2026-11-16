@@ -413,7 +413,11 @@
       // and both need the HAT speaker (#245, #246).
       "tts": {
         "enabled": false,
-        "backend": "auto"
+        "backend": "auto",
+        // Piper's model, downloaded into `~/.piper_models/` on first use (offline neural voice,
+        // the best fit for a dog with no network). Empty means "skip Piper" - without a model Piper
+        // cannot speak, and `auto` moves on to the next engine instead (#249).
+        "piper_model": ""
       },
       // Map phrases to PiDog actions.
       "command_map": {

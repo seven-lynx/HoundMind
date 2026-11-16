@@ -951,6 +951,9 @@ _VOICE = Section(
                 "backend": StrSpec(
                     choices=("auto", "pidog", "piper", "edge", "espeak", "pico2wave", "pyttsx3")
                 ),
+                # Piper needs a model before it can speak; the engine is skipped while this is
+                # empty rather than raising `Model not set` on every utterance (#249).
+                "piper_model": StrSpec(),
             }
         ),
         "command_map": MapOf(StrSpec()),
