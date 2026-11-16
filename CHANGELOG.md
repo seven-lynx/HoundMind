@@ -38,6 +38,12 @@ verified on a Pi 4B with a PiDog — motionless, except where a step needed the 
   is one socket per token) and MJPEG viewers (which need a camera).
 
 ### Highlights
+- **The verifier can read a pin**: `installer_verify` split a requirement line on `==` and `>=` only,
+  so once the mirror started pinning `numpy<2` and `opencv-contrib-python<4.12` (#242) it imported
+  `numpy<2` and reported an installed package as MISSING - `Installer check: FAILED` on a full install
+  that was actually complete. It now strips any specifier operator, and
+  `tests/test_installer_verify.py` asserts both the parsing and that every pin this repo ships parses
+  to a real package.
 - **`full` installs can use their own camera now**: `requirements.txt` and the `full` extra pin
   `numpy<2` with `opencv-contrib-python<4.12`. Bookworm's `python3-picamera2` is compiled against
   system numpy 1.24, the venv shadows it with whatever pip installed, and numpy 2 made

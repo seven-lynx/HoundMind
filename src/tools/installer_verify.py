@@ -6,6 +6,7 @@ Run this on the target device to validate basic Python and dependency expectatio
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -42,6 +43,16 @@ IMPORT_NAME_MAP = {
 }
 
 
+def package_name(line: str) -> str:
+    """The distribution name of a requirement line, without its version specifier.
+
+    Splitting on `==` and `>=` alone left every other operator glued to the name, so the verifier
+    tried to import `numpy<2` and reported a package that was installed as MISSING - after the
+    mirror started pinning `numpy<2` and `opencv-contrib-python<4.12` for the picamera2 ABI (#242).
+    """
+    return re.split(r"[<>=!~]", line, maxsplit=1)[0].strip()
+
+
 def check_requirements(req_path: Path):
     if not req_path.exists():
         print(f"Requirements file not found: {req_path}")
@@ -51,7 +62,7 @@ def check_requirements(req_path: Path):
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        pkg = line.split("==")[0].split(">=")[0].strip()
+        pkg = package_name(line)
         import_name = IMPORT_NAME_MAP.get(pkg, pkg)
         try:
             __import__(import_name)
