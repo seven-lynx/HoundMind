@@ -465,6 +465,10 @@ Never widen `emergency_stop_cm`, `tilt_latch_deg` or `min_battery_v` to make a t
 `InterlockLimits` precisely so they are not editable from config, and if you find yourself wanting to
 change them, the sensor is probably lying to you — check `device` validity instead.
 
+The one exception runs the other way: `settings.movement.min_battery_v` may be **raised** to protect
+a pack you know is tired (the loader refuses anything under 6.4 V, #208). Narrowing the envelope is a
+decision about your hardware; widening it is a decision about your servos.
+
 ---
 
 ## 9. Calibration workflow

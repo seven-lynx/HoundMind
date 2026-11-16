@@ -646,7 +646,13 @@
       "speed_turn_fast": 220,
       // How long a navigation retreat stays worth running. It describes the step that just
       // happened, so a stale one is dropped instead of executed late on a dead observation.
-      "followup_ttl_s": 1.0
+      "followup_ttl_s": 1.0,
+      // The hard veto on pack voltage: no gait, posture or locomotion below this. The stock 2S
+      // pack spans 6.0-8.4 V and browns out under servo load around 7.5 V, so 6.4 V is the floor
+      // this build ships (about 3.2 V per cell - essentially empty). You may RAISE it to protect a
+      // tired pack; the loader refuses anything below 6.4 V, because widening this one is the way a
+      // dog breaks a servo. See `docs/ARCHITECTURE.md` section 5.
+      "min_battery_v": 6.4
     },
     // =====================================================================
     // ORIENTATION (IMU heading integration)

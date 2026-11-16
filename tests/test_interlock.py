@@ -6,9 +6,16 @@ clock is injected, so nothing sleeps and nothing moves.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
-from houndmind_ai.act.interlock import Interlock, InterlockLimits
+from houndmind_ai.act.interlock import (
+    MIN_BATTERY_FLOOR_V,
+    Interlock,
+    InterlockLimits,
+    interlock_limits_from_settings,
+)
 from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.kernel.actions import build_repertoire
 from houndmind_ai.kernel.commands import Command, Source
@@ -300,3 +307,46 @@ def test_the_locomotion_floor_survives_a_config_that_tries_to_weaken_it() -> Non
     verdict = interlock.evaluate(Command("forward", issued_at=clock()), dog.read())
     assert verdict.accepted is False
     assert verdict.veto == "obstacle"
+
+
+# -------------------------------------- the one configurable limit (#208)
+
+
+def test_the_battery_floor_defaults_to_the_compiled_one() -> None:
+    assert interlock_limits_from_settings({}).min_battery_v == MIN_BATTERY_FLOOR_V
+
+
+def test_an_operator_may_raise_the_floor() -> None:
+    """A tired pack wants a higher floor, and narrowing the envelope is always allowed."""
+    limits = interlock_limits_from_settings({"movement": {"min_battery_v": 7.2}})
+
+    assert limits.min_battery_v == 7.2
+
+
+def test_a_lower_value_cannot_widen_the_veto(caplog) -> None:
+    """The schema refuses it at load; this is the second line of defence (#208)."""
+    with caplog.at_level(logging.WARNING, logger="houndmind_ai.act.interlock"):
+        limits = interlock_limits_from_settings({"movement": {"min_battery_v": 6.0}})
+
+    assert limits.min_battery_v == MIN_BATTERY_FLOOR_V
+    assert any("widen" in record.getMessage() for record in caplog.records)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [None, {}, {"movement": None}, {"movement": {"min_battery_v": "high"}}, {"movement": []}],
+)
+def test_an_unusable_section_still_yields_the_floor(settings) -> None:
+    """A runtime built without validation must not end up with a wider veto by accident."""
+    assert interlock_limits_from_settings(settings).min_battery_v == MIN_BATTERY_FLOOR_V
+
+
+def test_the_other_limits_stay_compiled_in() -> None:
+    """Only the battery floor is config: the rest describe the hardware, not this pack."""
+    limits = interlock_limits_from_settings(
+        {"movement": {"min_battery_v": 7.0, "max_speed": 255, "emergency_stop_cm": 1.0}}
+    )
+
+    assert limits.max_speed == InterlockLimits().max_speed
+    assert limits.emergency_stop_cm == InterlockLimits().emergency_stop_cm
+

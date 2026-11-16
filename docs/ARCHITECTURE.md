@@ -222,7 +222,10 @@ A profile sets cadence and enablement and nothing else: `loop.tick_hz`, `sensors
 `navigation.scan_*` cadence, the `enabled` flag on Pi4/5-only modules, camera backend, and the thermal
 warning thresholds where the board's own behaviour differs. The safety envelope
 (`act/interlock.py::InterlockLimits`: `max_speed`, `emergency_stop_cm`, `tilt_latch_deg`,
-`min_battery_v`) is deliberately **not** user config, so a config edit cannot widen it.
+`min_battery_v`) is deliberately **not** user config, so a config edit cannot widen it — with one
+deliberate exception: `settings.movement.min_battery_v` may be **raised** above the compiled
+`MIN_BATTERY_FLOOR_V` (6.4 V), because raising it only narrows the envelope. The schema's
+`minimum` is that floor, so a lower value is a load error rather than a clamp (#208).
 
 ---
 

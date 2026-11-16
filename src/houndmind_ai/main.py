@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from houndmind_ai.act.gateway import MotionGatewayModule
+from houndmind_ai.act.interlock import interlock_limits_from_settings
 from houndmind_ai.behavior.attention import AttentionModule
 from houndmind_ai.behavior.fsm import BehaviorModule
 from houndmind_ai.behavior.habituation import HabituationModule
@@ -76,7 +77,14 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(HalModule("hal", **cfg("hal"), hal=hal), [Capability.SAFETY])
     registry.register(SensorModule("hal_sensors", **cfg("hal_sensors")), [Capability.SENSORS])
     registry.register(
-        MotionGatewayModule("motion_gateway", **cfg("motion_gateway"), bus=bus),
+        MotionGatewayModule(
+            "motion_gateway",
+            **cfg("motion_gateway"),
+            bus=bus,
+            # The battery floor is the one envelope limit an operator may raise (#208); it can only
+            # narrow the veto, never widen it, because the clamp lives beside the compiled floor.
+            limits=interlock_limits_from_settings(config.settings),
+        ),
         [Capability.SAFETY],
     )
     registry.register(MotorModule("hal_motors", **cfg("hal_motors")), [Capability.MOTION])

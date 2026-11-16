@@ -631,6 +631,11 @@ _MOVEMENT = Section(
         # How long a navigation followup stays worth running (`hal/motors.py`). It describes the step
         # that just happened, so a stale one is dropped rather than executed late.
         "followup_ttl_s": _NON_NEGATIVE,
+        # The hard motion veto on pack voltage (#208). The minimum is the compiled floor in
+        # `act/interlock.py::MIN_BATTERY_FLOOR_V`, on purpose: the key may only *narrow* the
+        # envelope by raising it, so a config edit cannot widen the one safety limit the pack makes
+        # dangerous to widen. A 2S pack spans 6.0-8.4 V, hence the ceiling.
+        "min_battery_v": FloatSpec(minimum=6.4, maximum=8.4),
     }
 )
 

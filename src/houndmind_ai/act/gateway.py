@@ -31,7 +31,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from houndmind_ai.act.interlock import Interlock
+from houndmind_ai.act.interlock import Interlock, InterlockLimits
 from houndmind_ai.core.module import Module
 from houndmind_ai.hal.iface import SensorSnapshot, as_float
 from houndmind_ai.kernel.actions import repertoire_from_settings
@@ -88,13 +88,16 @@ class MotionGatewayModule(Module):
         enabled: bool = True,
         required: bool = False,
         interlock: Interlock | None = None,
+        limits: InterlockLimits | None = None,
         clock: Callable[[], float] | None = None,
         bus: CommandBus | None = None,
         board: IntentBoard | None = None,
     ) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self._clock = clock or time.monotonic
-        self.interlock = interlock or Interlock(now=self._clock)
+        # `limits` is the configurable part of the envelope, and it may only narrow it (#208). An
+        # injected `interlock` wins: a test or an embedding that built one keeps its own clock.
+        self.interlock = interlock or Interlock(limits=limits, now=self._clock)
         # The control plane's inbox. None means "no client can drive this dog".
         self.bus = bus
         # The internal producers' notice board. Created here when a caller does not inject one,

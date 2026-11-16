@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The battery veto is configurable, in one direction**: the hard motion veto on pack voltage was a
+  compiled 6.4 V that no operator could move, and on the bench dog the rail collapsed around 7.5 V
+  under servo load - the protection could not fire before the failure it exists to prevent. It is now
+  `movement.min_battery_v`, and it may only be **raised**: the schema's minimum is the compiled
+  `MIN_BATTERY_FLOOR_V`, so a config edit can narrow the envelope and can never widen it. The other
+  four limits stay compiled in, and `main.build_registry` now actually loads the limits instead of
+  constructing `InterlockLimits()` with bare defaults - the docstring said "loaded from the board
+  profile" and nothing did (#208).
 - **A routine written from the browser is playable straight away**: `POST /routines` sets
   `routine_reload` and the runner re-reads the directory on its next tick, so `GET /routines` and
   `POST /routines/{id}/run` see the new file without a restart - the half of routine authoring that
