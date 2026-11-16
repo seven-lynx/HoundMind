@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **The installer answers "can I use Trixie?" in one line**: this release supports Raspberry Pi OS
+  Bookworm 64-bit, and the installer now reads `VERSION_CODENAME` from `/etc/os-release` and refuses
+  anything else before it touches the venv or apt - the interpreter check could not catch Trixie,
+  because it ships Python 3.13 and the declared range allows that. `--allow-unsupported-os` exists for
+  a maintainer; `INSTALL.md` says the same thing in the three places that used to suggest Trixie
+  "might work with the lite preset". The `pidog>=0.1.0` resolution failure from the original report
+  is already gone: `requirements.txt` stopped listing a package that is cloned from SunFounder (#2).
 - **SPI is a documented prerequisite, because the sound sensor needs it**: `dog.ears` is an SPI device
   and opens the bus in its constructor, so with SPI off the vendor swallows the exception and the dog
   reports `sound_valid: false` forever - a dead-sensor symptom with a missing-prerequisite cause, and
