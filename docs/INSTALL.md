@@ -312,17 +312,42 @@ curl http://<pi-ip>:8420/api/v1/meta
 Turn it off entirely with `"discovery_enabled": false` under `settings.api`; the address still
 works.
 
-### Stopping and restarting
+### The service: what starts at boot
 
-The runtime is a foreground process: it runs until you stop it. **No service unit ships with this
-tree** — there is no `houndmind.service`, so `sudo systemctl restart houndmind` has nothing to
-restart. That is a decision, not an omission: a restart policy for a robot has to say what happens
-to a gait that is halfway through, and no such rule is settled yet.
+The installer writes `/etc/systemd/system/houndmind.service` and enables it, and stops there — the
+runtime starts when you tell it to:
+
+```bash
+sudo systemctl start houndmind      # now, and after every boot from here on
+sudo systemctl status houndmind
+sudo systemctl stop houndmind       # graceful: SIGTERM, the tick finishes, the HAL closes
+sudo systemctl restart houndmind
+```
+
+The unit is in the tree at `packaging/systemd/houndmind.service`, with three placeholders
+(`@HOUNDMIND_USER@`, `@HOUNDMIND_ROOT@`, `@HOUNDMIND_PYTHON@`) that the installer fills from the
+account and checkout it ran with. Passing `--no-service` skips the step; installing it by hand means
+substituting them yourself.
+
+**The service resumes; motion never does.** After a reboot the modules come back and the dog stays
+still: a gait cannot survive a restart, because `motion_command` and the intent board are
+context-only and every intent expires, and a routine that was mid-run is lost rather than replayed.
+The next start says how the previous one ended — `~/.houndmind/session.json`, #214.
+
+A unit that fails three times in a minute stops instead of looping, so a broken `settings.jsonc`
+gives a message rather than a restart storm: `journalctl -u houndmind -n 50`.
+
+Running it in the foreground is still supported, and is the way to watch it:
+
+```bash
+cd ~/HoundMind && source .venv/bin/activate
+python -m houndmind_ai.main
+```
 
 | Task | What to do |
 |---|---|
-| Stop | `Ctrl-C` in the terminal the runtime is running in. The tick finishes and the HAL is closed. |
-| Restart | Stop it, then start it again with the command above. A routine file added or edited since boot is read at this point (`docs/ROUTINES.md`). |
+| Stop | `sudo systemctl stop houndmind`, or `Ctrl-C` in a foreground run. Either way the tick finishes and the HAL is closed. |
+| Restart | `sudo systemctl restart houndmind`. A routine file added or edited since boot is read at this point (`docs/ROUTINES.md`). |
 | Check it is running | `curl http://127.0.0.1:8420/api/v1/health` answers without a token; `GET /api/v1/state` needs one. |
 | Find the token | `~/.houndmind/api_token`, written `0600` on the first start. Read it into a variable — do not paste it into a URL. |
 | Change the port | `settings.api.port` (default `8420`). |

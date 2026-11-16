@@ -7,12 +7,15 @@ Do not call directly; use scripts/install_houndmind.sh.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import getpass
 import importlib.util
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 
@@ -292,6 +295,57 @@ def ensure_pybind11_deps_linux(python: Path, pip: Path) -> int:
     return 1
 
 
+def install_service_unit(repo_root: Path, python: Path) -> int:
+    """Install and enable `houndmind.service` from `packaging/systemd/` (#211).
+
+    The template carries placeholders rather than a hardcoded account, because the checkout path and
+    the interpreter are things only the installer knows. It is `enable`, not `enable --now`: an
+    install is not the moment to open the servo bus, and the operator decides when the dog comes
+    back on its own.
+
+    A machine without systemd is told and skipped - the runtime still starts by hand, and failing an
+    install over a supervision layer would be the wrong trade.
+    """
+    if shutil.which("systemctl") is None:
+        print("systemctl not found; skipping the service unit")
+        return 0
+    template = repo_root / "packaging" / "systemd" / "houndmind.service"
+    if not template.exists():
+        print(f"Service template not found at {template}; skipping the service unit")
+        return 0
+
+    text = template.read_text(encoding="utf-8")
+    text = text.replace("@HOUNDMIND_USER@", getpass.getuser())
+    text = text.replace("@HOUNDMIND_ROOT@", str(repo_root))
+    text = text.replace("@HOUNDMIND_PYTHON@", str(python))
+
+    staged = Path(tempfile.mkstemp(suffix=".service")[1])
+    try:
+        staged.write_text(text, encoding="utf-8")
+        code = run(
+            [
+                "sudo",
+                "install",
+                "-m",
+                "0644",
+                str(staged),
+                "/etc/systemd/system/houndmind.service",
+            ]
+        )
+    finally:
+        with contextlib.suppress(OSError):
+            staged.unlink()
+    if code != 0:
+        return code
+    code = run(["sudo", "systemctl", "daemon-reload"])
+    if code != 0:
+        return code
+    code = run(["sudo", "systemctl", "enable", "houndmind.service"])
+    if code == 0:
+        print("Service installed and enabled; start it with: sudo systemctl start houndmind")
+    return code
+
+
 def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int:
     if dest.exists():
         code = run(["git", "-C", str(dest), "fetch", "--all", "--prune"])
@@ -384,6 +438,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="HoundMind installer (internal core)")
     parser.add_argument("--venv", default=".venv", help="Path to virtualenv")
     parser.add_argument("--skip-venv", action="store_true", help="Skip venv creation")
+    parser.add_argument(
+        "--no-service",
+        action="store_true",
+        help="Do not install or enable houndmind.service",
+    )
     parser.add_argument(
         "--force-recreate-venv",
         action="store_true",
@@ -707,6 +766,12 @@ def main() -> int:
         code = build_rtabmap(cache_root, pip, python)
         if code != 0:
             print("RTAB-Map build/install failed; SLAM support may be unavailable.")
+
+    # Supervision: the unit is what makes "the dog comes back after a reboot" true (#211).
+    if not args.no_service and not is_windows():
+        code = install_service_unit(repo_root, python)
+        if code != 0:
+            return code
 
     # The verifier lives beside the other device CLIs in `src/tools/`; the root `tools/` package
     # it used to sit in was removed, so that candidate was a path nothing could ever create.

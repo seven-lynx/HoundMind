@@ -1,0 +1,38 @@
+# HoundMind runtime, supervised by systemd (#211).
+#
+# The @HOUNDMIND_*@ placeholders are filled in by `scripts/installer_core.py`, which is the only
+# thing that knows the account and the checkout on a given device. Installing it by hand means
+# substituting them yourself:
+#
+#   @HOUNDMIND_USER@    the account that owns the checkout (normally `pi`)
+#   @HOUNDMIND_ROOT@    the checkout directory (normally the home directory plus /HoundMind)
+#   @HOUNDMIND_PYTHON@  the interpreter inside that checkout's venv
+#
+# The rule this unit encodes: **the service resumes, motion never does.** A restart brings the
+# modules back and leaves the dog still, because `motion_command` and the intent board are
+# context-only and every intent expires. A routine that was mid-run is lost, not replayed.
+
+[Unit]
+Description=HoundMind PiDog runtime
+After=network-online.target
+Wants=network-online.target
+# Three failed starts inside a minute stops the unit instead of looping it: a broken config is a
+# person's problem, and restarting it 400 times a minute only hides the message.
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=@HOUNDMIND_USER@
+WorkingDirectory=@HOUNDMIND_ROOT@
+Environment=PYTHONUNBUFFERED=1
+ExecStart=@HOUNDMIND_PYTHON@ -m houndmind_ai.main
+Restart=on-failure
+RestartSec=5
+# SIGTERM is the signal the loop handles (#212); the budget is longer than the runtime's own 5 s
+# module-stop timeout so the HAL gets its chance to close before systemd reaches for SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

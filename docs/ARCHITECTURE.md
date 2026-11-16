@@ -251,6 +251,19 @@ warning thresholds where the board's own behaviour differs. The safety envelope
   emit a *motion* recovery that puts the dog in a pose nobody asked for; the safe recovery from any
   fault is **stop the actuators and report**, not "lie down".
 
+### 8.1 A process restart resumes the runtime, never the motion
+
+`systemd` owns the process (`packaging/systemd/houndmind.service`): SIGTERM ends the loop on a tick
+boundary and closes the HAL (#212), `Restart=on-failure` brings a crashed run back, and three failed
+starts in a minute stop the unit rather than loop it. What comes back after a reboot is the module
+set, the control plane and the sensors.
+
+What does **not** come back is anything that was moving. `motion_command` and the intent board are
+context-only and every intent expires, so a gait cannot survive a restart by construction; a routine
+that was mid-run is lost rather than replayed. That is the rule the restart policy is built on — a
+robot that resumes a trajectory after an unexplained reboot is a robot that moves without being
+asked. The next start reports how the previous one ended instead (`core/instance.py`, #214).
+
 ---
 
 ## 9. Testing strategy
