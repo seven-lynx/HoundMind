@@ -337,7 +337,7 @@ refused is listed with the reason instead of being hidden.
 
 ```json
 { "routine": { …as sent… }, "path": "/home/pi/.houndmind/routines/morning_greeting.json",
-  "reload_required": true }
+  "reload_required": false }
 ```
 
 - **`400`** — the document is not a legal routine; `problems[]` is the loader's own list (unknown
@@ -347,10 +347,12 @@ refused is listed with the reason instead of being hidden.
   second file with that id is refused at load.
 - **`503`** — no runner is loaded, so there is no directory to write into.
 
-**`reload_required` is not decoration.** The runner reads the directory once at start, so a routine
-written now is playable after the next start: `GET /routines` and `POST /routines/{id}/run` still
-describe and run what was loaded. Making a fresh file playable immediately is a separate change to
-the decision loop, tracked on #196.
+**The write is playable immediately.** The route sets `routine_reload`, and the runner re-reads the
+directory on its next tick, so `GET /routines` and `POST /routines/{id}/run` see the new file without
+a restart. `reload_required` stays in the answer as `false` for clients written against the older
+shape. One case is deliberately deferred: if a run is **in flight**, the reload waits until it ends —
+`_advance` looks the routine up every tick, so swapping the catalogue mid-walk would change the steps
+under the run. The request stays set and applies the moment the run finishes (#196).
 
 `GET /api/v1/routines` — `state:read`:
 

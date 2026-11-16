@@ -331,3 +331,56 @@ def test_an_action_inside_the_interval_is_deferred_not_dropped(tmp_path: Path) -
         assert rig.motors.rate_limited == 0
     finally:
         rig.close()
+
+
+# ------------------------------------------- a written routine is playable (#196)
+
+
+def test_a_written_routine_is_playable_without_a_restart(tmp_path: Path) -> None:
+    """`POST /routines` writes the file and sets `routine_reload`; this is the reader."""
+    write_routine(tmp_path, "calm", [{"action": "sit"}])
+    rig = Rig(tmp_path)
+    try:
+        # A file that appears after the runner loaded the directory, exactly what the route leaves.
+        write_routine(tmp_path, "newcomer", [{"action": "wag_tail"}])
+        rig.context.set("routine_reload", True)
+        rig.tick(1)
+
+        report = rig.context.get("routine_report")
+        assert "newcomer" in report.routines
+        # One write is one reload: the request is consumed.
+        assert rig.context.get("routine_reload") is None
+
+        rig.run("newcomer")
+        rig.tick(10)
+        assert rig.acted("wag_tail") == ["wag_tail"]
+        assert rig.state().state == DONE
+    finally:
+        rig.close()
+
+
+def test_a_reload_waits_for_a_run_in_flight(tmp_path: Path) -> None:
+    """`_advance` looks the routine up every tick, so swapping the catalogue mid-walk would change
+    the steps under the run. The request waits instead (#196)."""
+    write_routine(tmp_path, "walk", [{"action": "sit"}, {"action": "wag_tail"}])
+    rig = Rig(tmp_path)
+    try:
+        rig.run("walk")
+        rig.tick(1)
+        assert rig.state().state == RUNNING
+
+        write_routine(tmp_path, "walk", [{"action": "sit"}])
+        rig.context.set("routine_reload", True)
+        rig.tick(1)
+
+        # Deferred, not dropped.
+        assert rig.context.get("routine_reload") is True
+        assert rig.state().total == 2
+
+        rig.tick(10)
+        assert rig.acted("sit", "wag_tail") == ["sit", "wag_tail"]
+        # The queue drains once the run is over.
+        assert rig.context.get("routine_reload") is None
+    finally:
+        rig.close()
+

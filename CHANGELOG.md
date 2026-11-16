@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A routine written from the browser is playable straight away**: `POST /routines` sets
+  `routine_reload` and the runner re-reads the directory on its next tick, so `GET /routines` and
+  `POST /routines/{id}/run` see the new file without a restart - the half of routine authoring that
+  still needed SSH. A run already in flight defers the swap until it ends, because `_advance` looks
+  the routine up every tick and replacing the catalogue mid-walk would change the steps under it; the
+  request stays set and applies the moment the run finishes. `reload_required` now answers `false`,
+  kept only for clients written against the older shape (#196).
 - **A service unit, so the dog comes back after a reboot**: `packaging/systemd/houndmind.service`
   ships in the tree with `@HOUNDMIND_USER@` / `@HOUNDMIND_ROOT@` / `@HOUNDMIND_PYTHON@` filled in by
   the installer, which now installs and enables it (`--no-service` opts out). SIGTERM is the stop

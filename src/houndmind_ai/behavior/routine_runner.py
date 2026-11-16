@@ -159,6 +159,10 @@ class RoutineRunnerModule(Module):
     # ---- the loop ----------------------------------------------------------
 
     def tick(self, context) -> None:
+        if context.get("routine_reload") and self._reload(context):
+            # Cleared only once it happened: a deferred reload stays requested (#196).
+            context.set("routine_reload", None)
+
         request = context.get("routine_request")
         if isinstance(request, dict):
             context.set("routine_request", None)
@@ -168,6 +172,28 @@ class RoutineRunnerModule(Module):
         if run is not None and run.state == RUNNING:
             self._advance(context)
         context.set("routine_run", self.run)
+
+    def _reload(self, context) -> bool:
+        """Re-read the directory because a routine was written while this ran (#196).
+
+        Returns True when the catalogue was swapped, so the caller can clear the request. A run in
+        flight defers it: `_advance` looks the routine up in this report every tick, so replacing the
+        report mid-walk would change the steps under the run - the request stays set and applies
+        when the current run ends.
+        """
+        if self.store is None:
+            return False
+        if self.run is not None and self.run.state == RUNNING:
+            return False
+        self.report = self.store.load(repertoire_from_settings(context.get("settings")))
+        context.set("routine_report", self.report)
+        logger.info(
+            "Routines reloaded from %s: %d loaded, %d refused",
+            self.report.directory,
+            len(self.report.routines),
+            len(self.report.refusals),
+        )
+        return True
 
     def _accept(self, request: dict) -> None:
         """Take one `routine_request`, or say why not. One run at a time, by design.

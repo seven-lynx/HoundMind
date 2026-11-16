@@ -396,9 +396,12 @@ def test_a_routine_can_be_written_and_says_it_needs_a_restart(tmp_path) -> None:
         assert response.status == 201
         assert body["routine"]["id"] == "evening"
         assert body["path"].endswith("evening.json")
-        assert body["reload_required"] is True
+        # Playable without a restart: the route asks the runner to re-read the directory (#196).
+        assert body["reload_required"] is False
+        assert plane.context.get("routine_reload") is True
         assert json.loads(written.read_text(encoding="utf-8"))["steps"] == DRAFT["steps"]
-        # The catalogue is what the runner loaded at start, so it does not grow by itself.
+        # The catalogue this plane loaded at start has not grown by itself: the runner does that on
+        # its next tick, not inside the request.
         assert [routine["id"] for routine in listed["routines"]] == ["calm"]
 
     asyncio.run(scenario())
