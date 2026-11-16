@@ -7,6 +7,12 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **What the USB-C charge port actually powers, and what it does not**: `docs/pidog/HARDWARE.md`
+  section 4.1 now records the bench measurement - the charger carries the Pi at idle but not the
+  servo bus, it does not cleanly bypass the pack, `sensors.battery_v` reads the input rail (8.29 V)
+  when no pack is fitted, and the first `Pidog()` construction on the charger alone took the Pi
+  down. `HARDWARE_TEST.md` section 2 points at it next to the `get_throttled` block, because
+  "plug it into the charger and rerun" is the obvious thing an operator tries (#210).
 - **The motionless smoke run is motionless on a Pi 4 as well**: `tools/smoke_test.py` disabled
   `vision` but not `vision_pi4`, the module `main.build_registry` actually registers for the Pi 4
   camera - so the camera opened and logged its `Picamera2 unavailable` line from inside a run that
