@@ -7,6 +7,14 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **A service unit, so the dog comes back after a reboot**: `packaging/systemd/houndmind.service`
+  ships in the tree with `@HOUNDMIND_USER@` / `@HOUNDMIND_ROOT@` / `@HOUNDMIND_PYTHON@` filled in by
+  the installer, which now installs and enables it (`--no-service` opts out). SIGTERM is the stop
+  signal (#212), `Restart=on-failure` covers a crash, and three failed starts in a minute stop the
+  unit instead of looping it. The rule the policy encodes is written down in `INSTALL.md` and
+  `ARCHITECTURE.md` section 8.1: **the service resumes, motion never does** - `motion_command` and
+  the intent board are context-only and expire, so a gait cannot survive a restart, and a routine
+  mid-run is lost rather than replayed (#211).
 - **A reboot can now be explained**: `~/.houndmind/session.json` is written when a session starts and
   removed when it stops cleanly, so the next start can say how the last one ended - `Previous run
   (pid 1187, started ...) did not stop cleanly`, or, when the boot id changed, `Previous session ...
