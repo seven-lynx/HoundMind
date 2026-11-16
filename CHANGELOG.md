@@ -38,6 +38,13 @@ verified on a Pi 4B with a PiDog — motionless, except where a step needed the 
   is one socket per token) and MJPEG viewers (which need a camera).
 
 ### Highlights
+- **`full` installs can use their own camera now**: `requirements.txt` and the `full` extra pin
+  `numpy<2` with `opencv-contrib-python<4.12`. Bookworm's `python3-picamera2` is compiled against
+  system numpy 1.24, the venv shadows it with whatever pip installed, and numpy 2 made
+  `import picamera2` fail with `numpy.dtype size changed ... Expected 96 from C header, got 88` - so a
+  full install reported `Installer check: FAILED` and could not enable `vision_pi4` at all. Recent
+  OpenCV wheels declare `numpy>=2`, so the opencv pin is the other half: 4.11.0.86 with numpy 1.26.4 is
+  the combination verified on the bench dog (#242).
 - **The install guide leads with the path people actually take, and there is a new bring-up guide**:
   `INSTALL.md` gains a "Headless over SSH" section (eight steps, each linking down), a "What ships
   enabled" table (18 of 30 modules, and why the safety stack is not one of them), and the guided
@@ -61,10 +68,11 @@ verified on a Pi 4B with a PiDog — motionless, except where a step needed the 
   not on PyPI and upstream `introlab/rtabmap` no longer ships the `python/` bindings source, so the
   extra could never produce it - it only made `pip install -e .[full]` fail and
   `installer_verify --preset full` report a permanent FAILED. It is gone from both `pyproject.toml`
-  and `requirements.txt` (the mirror test requires them to agree), `installer_verify --preset full`
-  can now pass, `FEATURES_GUIDE` §23 states that SLAM is **not available** and that the `stub` backend
-  is dead reckoning rather than visual SLAM, and `slam_pi4`'s config comment says the same. The
-  backend decision is #181.
+  and `requirements.txt` (the mirror test requires them to agree), so the FAILED that line guaranteed
+  is gone; a second cause of `--preset full` failing - numpy 2 against Debian's `picamera2` - is fixed
+  in the same release, #242. `FEATURES_GUIDE` §23 states that SLAM is **not available** and that the
+  `stub` backend is dead reckoning rather than visual SLAM, and `slam_pi4`'s config comment says the
+  same. The backend decision is #181.
 - **`--preset lite` can install the dog again**: the installer probed `robot_hat` before anything
   installed the four modules that probe depends on, and on the lite preset nothing did - `pyaudio`
   only arrived with `requirements.txt`, the full mirror. A lite install on a Pi therefore ended at
