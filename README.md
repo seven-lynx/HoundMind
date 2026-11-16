@@ -1,6 +1,6 @@
 # HoundMind (PiDog Unified AI)
 
-Release: v2026.01.18
+Release: v2026.11.16
 
 HoundMind is a unified AI control framework for the SunFounder PiDog. Simulation mode is no longer supported; all features require real PiDog hardware. PackMind and CanineCore are now a single system.
 
