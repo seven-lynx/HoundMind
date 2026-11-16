@@ -6,13 +6,20 @@
 # official SunFounder repo (see scripts/install_houndmind.sh or docs/INSTALL.md).
 
 # Core numeric stack
-numpy
+# numpy is pinned below 2 on purpose: Bookworm's `python3-picamera2` is compiled against system numpy
+# 1.24, and the venv (created with `--system-site-packages` so the binding is visible at all, #215)
+# shadows it. numpy 2.x then makes `import picamera2` fail with `numpy.dtype size changed ... Expected
+# 96 from C header, got 88`, which is a `full` install that cannot use its own camera (#242). numpy
+# keeps ABI compatibility across 1.x, so any 1.x is fine.
+numpy<2
 scipy
 
 # Vision
 # Use contrib build (includes core + extra modules). Avoid installing both opencv-python
 # and opencv-contrib-python at the same time.
-opencv-contrib-python
+# Pinned below 4.12 because 4.12+ declares `numpy>=2`, which undoes the numpy pin above and breaks
+# Debian's `picamera2` again (#242). 4.11.0.86 with numpy 1.26.4 is the pair verified on the bench dog.
+opencv-contrib-python<4.12
 face_recognition
 
 # Audio / speech
