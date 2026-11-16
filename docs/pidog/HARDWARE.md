@@ -163,6 +163,30 @@ A low battery is not a sensor reading you can trust to be steady: servos under l
 rail, and every one of the twelve is a current spike. If you build a battery guard, hold a
 minimum and debounce it over several seconds rather than reacting to one sample.
 
+### 4.1 What the USB-C port powers
+
+The USB-C port is a **charge input, not a power path into the Pi**. Measured on the bench dog
+(2026-11-15, official 5 V/3 A supply, pack unplugged):
+
+| Attempt | Result |
+|---|---|
+| Boot and idle on the charger alone | works — ssh answers, `vcgencmd get_throttled` reads `0x0`, temperature normal |
+| `sensors.battery_v` with no pack fitted | **8.29 V**, the charger rail: the A4 divider is measuring the input, not a cell, so the value is not a state of charge |
+| First `Pidog()` construction (which takes the servo bus) | the Pi **went down**; it came back a minute later, and that boot logged no `Undervoltage detected!` before an orderly shutdown |
+
+Two consequences:
+
+- **Servo motion needs the pack.** The charger carries the Pi at idle and nothing else, and it
+  does not cleanly bypass the pack — so there is no "on mains" configuration on this hardware. A
+  motion test with the pack unplugged is expected to drop the board.
+- **`sensors.battery_v` is meaningless without a pack.** It reads the input rail, so a
+  full-looking number in that state says nothing about the cells. Do not treat it as charge, and
+  do not use it to decide whether the pack is healthy.
+
+This is also why a bench session can produce confusing results at a healthy-looking voltage: with
+the pack in the loop, load still sags the rail, so the reading that matters is the one taken
+while the servos are working, not the one at rest (`HARDWARE_TEST.md` section 2).
+
 ---
 
 ## 5. Bus addresses and GPIO

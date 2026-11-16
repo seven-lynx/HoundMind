@@ -62,6 +62,11 @@ boot** - which is what makes a reading taken straight after a reboot meaningful.
 vcgencmd get_throttled     # 0x0 is clean; anything else is a supply problem, not a code problem
 ```
 
+**On a charger you are not measuring what you think.** The USB-C port carries the Pi at idle and
+not the servo bus, and with no pack fitted `sensors.battery_v` reads the input rail rather than a
+cell. Servo motion needs the pack, so a motion step "on mains" is expected to drop the board — see
+[`pidog/HARDWARE.md` §4.1](pidog/HARDWARE.md#41-what-the-usb-c-port-powers).
+
 | Bit | Mask | Means |
 |---|---|---|
 | 0 | `0x1` | under-voltage right now |
