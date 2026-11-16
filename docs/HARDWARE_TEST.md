@@ -388,6 +388,7 @@ Find the symptom, take the next step — not a different one.
 |---|---|---|
 | Every line in step 2 is `None` and every flag on `valid:` is `False` | the vendor layer did not load, so nothing reached the bus | `python -c "import pidog"`, then check `logs/houndmind.log`; a Pi with I2C disabled fails exactly like this (`sudo raspi-config` → Interface → I2C) |
 | `[checkup] pidog unavailable` and exit code 2 | the vendor package is not in this venv | `docs/INSTALL.md` [§3](INSTALL.md#3-install-sunfounder-pidog-libraries-into-the-same-python-environment) — `pidog` is cloned, not on PyPI |
+| `[checkup] the servo bus is owned by ...` and exit code 3 | another process has the bus open — usually the runtime | `sudo systemctl stop houndmind`, then re-run. The message names the holder (`pid 1234 (runtime)`); nothing is broken, the second process simply did not try to take a bus it could not have (#213) |
 | `distance_cm: None`, everything else green | no sample yet (re-run, #108) or no echo from a soft or angled surface | re-run step 2 against a hard flat surface at arm's length before suspecting the transducer |
 | Step 2 passes, `sensor_reading: MISSING` in step 3 | the tool and the HAL read through different paths | the `hal`/`hal_sensors` module is `disabled` with a reason — `/api/v1/modules` or the log names it |
 | `[smoke] FAIL` only on `scan_latest` (with `--include-motion`) | `scanning` produced no reading | `/api/v1/modules` names a disabled reason; `logs/houndmind.log` carries the vendor error from the head move (#184) |

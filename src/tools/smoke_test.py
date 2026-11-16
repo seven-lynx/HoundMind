@@ -12,8 +12,10 @@ and calls out any name the config does not declare.
 from __future__ import annotations
 
 import argparse
+import sys
 
 from houndmind_ai.core.config import load_config
+from houndmind_ai.core.instance import BusBusy, RunLock
 from houndmind_ai.core.runtime import HoundMindRuntime
 from houndmind_ai.hal.iface import DogHAL
 from houndmind_ai.main import build_modules
@@ -93,8 +95,25 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
     else:
         disabled, missing = [], []
 
-    runtime = HoundMindRuntime(config, build_modules(config, hal=hal))
-    runtime.run()
+    # A run against the real dog owns the servo bus, so it takes the one-instance lock (#213). A
+    # run handed a fake HAL owns nothing: the test suite passes `hal=`, and it must not touch the
+    # home directory or wait on a runtime that is not there.
+    lock: RunLock | None = None
+    if hal is None:
+        lock = RunLock()
+        try:
+            lock.acquire("smoke_test")
+        except BusBusy as exc:
+            print(f"[smoke] {exc}", file=sys.stderr)
+            print("[smoke] stop it first: systemctl stop houndmind", file=sys.stderr)
+            return 3
+
+    try:
+        runtime = HoundMindRuntime(config, build_modules(config, hal=hal))
+        runtime.run()
+    finally:
+        if lock is not None:
+            lock.release()
 
     context = runtime.context
     sensor_ok = context.get("sensor_reading") is not None
