@@ -7,6 +7,13 @@ The format is inspired by Keep a Changelog and adheres to semantic-ish sections.
 Current Release: v2026.01.18
 
 ## [Unreleased]
+- **`/state` reports the IMU the HAL read, not the safety module's derived table**: `imu_valid` was
+  taken from `tilt_warning`, a key only `safety/supervisor.py` writes, and `safety` ships disabled
+  — so the flag read `false` on every default install while the accelerometer was answering (the
+  bench dog printed real acc/gyro values from `hardware_checkup --skip-motion` on the same boot
+  that `/state` called the IMU invalid). It now follows `SensorSnapshot.imu_valid`, and a
+  published attitude still counts, so `HARDWARE_TEST.md` step 4 can be green without turning
+  safety on (#206).
 - **The hardware checkup no longer tests the supply instead of the servos**: its stand and turn steps
   asked for `speed: 180`, above anything the product itself does (the vendor's own presets are 65 and
   98 for the same moves). On the bench dog that drew enough inrush to brown the pack out — two

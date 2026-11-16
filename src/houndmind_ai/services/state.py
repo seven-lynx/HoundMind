@@ -44,6 +44,12 @@ def _sensors(context) -> dict[str, object]:
 
     pitch = _number(tilt.get("pitch"))
     roll = _number(tilt.get("roll"))
+    # Two sources, and either one earns the flag. `tilt_warning` is a *derived* key written in
+    # exactly one place — `safety/supervisor.py` — and `safety` ships disabled, so reading the
+    # table alone called a working IMU invalid on every default install (#206). A producer that
+    # published an attitude must have had a valid IMU to compute it from, hence the OR.
+    attitude_valid = pitch is not None and roll is not None
+    imu_valid = bool(getattr(reading, "imu_valid", False)) or attitude_valid
     return {
         "distance_cm": _number(getattr(reading, "distance_cm", None)),
         "distance_valid": bool(getattr(reading, "distance_valid", False)),
@@ -54,7 +60,7 @@ def _sensors(context) -> dict[str, object]:
         "sound_valid": bool(getattr(reading, "sound_valid", False)),
         "pitch_deg": pitch,
         "roll_deg": roll,
-        "imu_valid": pitch is not None and roll is not None,
+        "imu_valid": imu_valid,
         "battery_v": battery,
         # The battery feed is absent on some builds, so `valid` follows the value.
         "battery_valid": battery is not None,

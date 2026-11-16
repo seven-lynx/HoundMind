@@ -6,6 +6,8 @@ that answer "why did the dog do that" belong here, not in a log the client canno
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from houndmind_ai.behavior.routine_runner import RoutineRun
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.kernel.decisions import DecisionRecord
@@ -250,3 +252,39 @@ def test_a_reading_with_no_mode_or_timestamp_is_not_reported() -> None:
     context.set("scan_latest", {"mode": "", "timestamp": 5.0})
 
     assert build_state(context, now=6.0)["scan"] is None
+
+
+def test_the_imu_flag_follows_the_hal_not_the_tilt_table() -> None:
+    """`tilt_warning` is written only by `safety`, which ships disabled (#206).
+
+    The HAL fills `SensorSnapshot.imu_valid` on a successful read (`hal/vendor.py`), and that is
+    the measurement. A snapshot that consulted the tilt table alone called a working IMU invalid
+    on every default install — the bench dog answered `hardware_checkup --skip-motion` with real
+    acc/gyro values while `/state` reported `imu_valid: false`.
+    """
+    context = RuntimeContext()
+    context.set("sensor_reading", SimpleNamespace(imu_valid=True))
+
+    sensors = build_state(context, now=0.0)["sensors"]
+
+    assert sensors["imu_valid"] is True
+    # The vendor layer does not compute attitude, so the angles stay absent rather than zero.
+    assert sensors["pitch_deg"] is None
+    assert sensors["roll_deg"] is None
+
+
+def test_a_tilt_table_still_counts_as_a_valid_imu() -> None:
+    """The other direction: an attitude that exists was computed from a valid IMU."""
+    context = RuntimeContext()
+    context.set("tilt_warning", {"pitch": 1.5, "roll": -0.5})
+
+    sensors = build_state(context, now=0.0)["sensors"]
+
+    assert sensors["imu_valid"] is True
+    assert sensors["pitch_deg"] == 1.5
+    assert sensors["roll_deg"] == -0.5
+
+
+def test_no_imu_reading_and_no_tilt_is_invalid() -> None:
+    """Absence is absence: neither source spoke, so the client is told the IMU did not answer."""
+    assert build_state(RuntimeContext(), now=0.0)["sensors"]["imu_valid"] is False
