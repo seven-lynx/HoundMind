@@ -50,7 +50,7 @@ if os.name == "nt":  # pragma: no cover - the Windows half of a POSIX-first guar
     def _try_lock(fd: int) -> bool:
         try:
             os.lseek(fd, _LOCK_BYTES, os.SEEK_SET)
-            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
         except OSError:
             return False
         return True
@@ -58,7 +58,7 @@ if os.name == "nt":  # pragma: no cover - the Windows half of a POSIX-first guar
     def _unlock(fd: int) -> None:
         with contextlib.suppress(OSError):
             os.lseek(fd, _LOCK_BYTES, os.SEEK_SET)
-            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
 
 else:
     import fcntl
