@@ -312,8 +312,11 @@ found rather than hardcoding `/dev/video0` anywhere.
 This is the only step that can damage the dog. Say all four of these out loud and get a yes before
 you run either command:
 
-1. **What will move** — stand, both turns, then the head sweep. About three seconds of walking,
-   with 0.6 s between steps.
+1. **What will move** — stand, both turns, then the head sweep. About three seconds of walking, at
+   the vendor's own rates (`speed: 65` for the stand, `98` for the turns), with 0.6 s between steps.
+   Those are deliberately below the kit's maximum: at 180 the leg steps pull enough inrush to brown
+   out the stock pack's 5 V rail, which measures the supply instead of the servos the run is here
+   to check (#207).
 2. **The stop path** — `Ctrl+C`, or lift the dog off its feet.
 3. **Clearance** — open floor, no table legs, nothing breakable within one body length, and the dog
    **off the blocks**.
@@ -326,7 +329,7 @@ python -m tools.hardware_checkup --pause 1.5
 ```
 
 …which runs stand → turn left → turn right → head −30° → head +30° → head centre
-(`src/tools/hardware_checkup.py:24-31`); `--pause` slows it down, and 1.5 s is a better first run
+(`src/tools/hardware_checkup.py:29-36`); `--pause` slows it down, and 1.5 s is a better first run
 than the 0.6 s default. Or the whole loop with motion allowed:
 
 ```bash

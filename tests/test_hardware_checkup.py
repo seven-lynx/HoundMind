@@ -142,7 +142,7 @@ def test_motion_runs_the_documented_sequence_through_the_hal(capsys):
     assert "[checkup] Running minimal motion..." in out
     assert "[checkup] Done." in out
     assert [name for name, _ in hal.calls] == [name for name, _ in MOTION_STEPS]
-    assert hal.calls[0] == ("stand", {"speed": 180, "steps": 1, "wait": True})
+    assert hal.calls[0] == ("stand", {"speed": 65, "steps": 1, "wait": True})
     head_yaws = [params["yaw"] for name, params in hal.calls if name == "head"]
     assert head_yaws == [-30.0, 30.0, 0.0]
     assert hal.closed is False
