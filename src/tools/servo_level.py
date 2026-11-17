@@ -170,11 +170,7 @@ def prerequisite_problem(hal: Any) -> str | None:
     return None
 
 
-def main(
-    argv: list[str] | None = None,
-    hal: Any = None,
-    sleep: Callable[[float], None] = time.sleep,
-) -> int:
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python -m tools.servo_level",
         description="Measure and save the leg trim that makes the dog sit level",
@@ -187,12 +183,10 @@ def main(
     parser.add_argument("--target", type=float, default=TARGET_DEG, help="level enough, in degrees")
     parser.add_argument("--max-trim", type=float, default=MAX_TRIM_DEG, help="refuse beyond this")
     args = parser.parse_args(argv)
+    return args
 
-    if hal is None:
-        from houndmind_ai.hal.vendor import PidogHAL
 
-        hal = PidogHAL(settings={})
-
+def _run(hal: Any, args: argparse.Namespace, sleep: Callable[[float], None]) -> int:
     problem = prerequisite_problem(hal)
     if problem is not None:
         print(f"[level] refusing: {problem}")
@@ -262,6 +256,39 @@ def main(
     for name in LEG_SERVO_NAMES:
         print(f"[level]   {name:<12} {offsets[name]:+6.1f} deg")
     return 0
+
+
+def main(
+    argv: list[str] | None = None,
+    hal: Any = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
+    """Probe and level the dog. `hal` is the injection seam.
+
+    A HAL this tool opened is this tool's to **start and close**: `start()` opens the dog, and a
+    missing `close()` leaves the vendor's sensor threads holding the GPIO pins, so the next run
+    reports `GPIO busy` and loses the sound sensor (seen on the dog, 2026-11-17).
+    """
+    args = _parse_args(argv)
+    owned = hal is None
+    if hal is None:
+        from houndmind_ai.hal.vendor import PidogHAL
+
+        vendor_hal = PidogHAL(settings={})
+        try:
+            vendor_hal.start()
+        except Exception as exc:  # noqa: BLE001 - a missing vendor package is the report
+            print(f"[level] pidog unavailable: {exc}", file=sys.stderr)
+            return 2
+        hal = vendor_hal
+    try:
+        return _run(hal, args, sleep)
+    finally:
+        if owned:
+            try:
+                hal.close()
+            except Exception:  # noqa: BLE001 - nothing left to recover at exit
+                print("[level] close failed", file=sys.stderr)
 
 
 if __name__ == "__main__":

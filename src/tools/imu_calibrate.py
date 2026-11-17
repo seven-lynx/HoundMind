@@ -138,11 +138,7 @@ def _mean(rows: Sequence[Sequence[float]], axis: int) -> float:
     return sum(float(row[axis]) for row in rows) / len(rows)
 
 
-def main(
-    argv: list[str] | None = None,
-    hal: Any = None,
-    prompt: Callable[[str], str] = input,
-) -> int:
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python -m tools.imu_calibrate",
         description="Measure and save the IMU calibration (the dog is rotated by hand)",
@@ -152,12 +148,10 @@ def main(
     parser.add_argument("--seconds", type=float, default=2.0, help="sampling time per pose")
     parser.add_argument("--samples", type=int, default=20, help="samples per pose")
     args = parser.parse_args(argv)
+    return args
 
-    if hal is None:
-        from houndmind_ai.hal.vendor import PidogHAL
 
-        hal = PidogHAL(settings={})
-
+def _run(hal: Any, args: argparse.Namespace, prompt: Callable[[str], str]) -> int:
     if args.reset:
         cleared = bool(hal.reset_imu_calibration())
         print("[imu] stored calibration cleared" if cleared else "[imu] could not clear it")
@@ -239,6 +233,40 @@ def main(
     else:
         print("[imu] saved. The IMU did not answer, so |acc| could not be re-checked")
     return 0
+
+
+def main(
+    argv: list[str] | None = None,
+    hal: Any = None,
+    prompt: Callable[[str], str] = input,
+) -> int:
+    """Measure and save the IMU calibration. `hal` is the injection seam.
+
+    A HAL this tool opened is this tool's to **start and close**. `PidogHAL.start()` is what opens the
+    dog and starts its action queue, and without `close()` the vendor's sensor threads outlive the
+    process and keep the GPIO pins claimed — which is exactly how the next run ended up reporting
+    `GPIO busy` and losing the sound sensor (seen on the dog, 2026-11-17).
+    """
+    args = _parse_args(argv)
+    owned = hal is None
+    if hal is None:
+        from houndmind_ai.hal.vendor import PidogHAL
+
+        vendor_hal = PidogHAL(settings={})
+        try:
+            vendor_hal.start()
+        except Exception as exc:  # noqa: BLE001 - a missing vendor package is the report
+            print(f"[imu] pidog unavailable: {exc}", file=sys.stderr)
+            return 2
+        hal = vendor_hal
+    try:
+        return _run(hal, args, prompt)
+    finally:
+        if owned:
+            try:
+                hal.close()
+            except Exception:  # noqa: BLE001 - nothing left to recover at exit
+                print("[imu] close failed", file=sys.stderr)
 
 
 if __name__ == "__main__":
