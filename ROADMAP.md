@@ -163,7 +163,7 @@ The following checkable tasks cover robustness, observability, and supportabilit
  - [x] Add CI pipeline (GitHub Actions) to run linting, tests, type checks, build, and packaging on PRs
  - [x] Add typing and static checks (`mypy`, `ruff`/`flake8`) and enforce in CI
  - [ ] Pin and manage dependencies, add Dependabot config and guidance for `requirements-lite.txt`
- - [ ] Performance profiling harnesses for hot loops (navigation/scan processing) and document targets
+ - [x] Performance profiling harnesses for hot loops (navigation/scan processing) and document targets (`tools.bench_tick`, `docs/ARCHITECTURE.md` §3.2)
 
 ## Tests (Hardware-validated)
 - [x] Core runtime tests (non-hardware)

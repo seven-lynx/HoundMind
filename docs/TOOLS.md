@@ -25,6 +25,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 14. [`servo_level`](#14-servo_level)
 15. [`audio_check`](#15-audio_check)
 16. [`schema_export`](#16-schema_export)
+17. [`bench_tick`](#17-bench_tick)
 
 ---
 
@@ -45,6 +46,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | The semantic labeler has no model | `download_opencv_models` |
 | Is the RTAB-Map adapter wired up? | `validate_rtabmap_adapter` |
 | Which servo joint is leaning, and what trim is saved? | `calibrate_servos` |
+| Is the loop spending its tick where I think it is? | `bench_tick` |
 
 ## 2. Motion risk
 
@@ -53,7 +55,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `installer_verify` | no |
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
-| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
+| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `bench_tick` | no |
 | `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
 
@@ -426,6 +428,28 @@ An unknown key, a wrong type and an out-of-range number are the three things the
 start, and the document declares exactly those: `additionalProperties: false` where the section is
 strict, the `minimum`/`maximum` of every numeric key, and `null` in the type wherever a key allows
 it. `--indent 0` emits one line for a diff.
+
+## 17. `bench_tick`
+
+Ticks the runtime's own module list on a `FakeDogHAL` and prints p50/p95/max per module plus how
+often each overran the loop budget. It answers "which module is eating the tick", not "how does the
+dog perform": the fake returns instantly, so vendor I2C, camera and audio costs are absent.
+
+```bash
+python -m tools.bench_tick                        # 300 ticks, 30 warmup, shipped config
+python -m tools.bench_tick --ticks 1000 --hz 10   # a longer window at the shipped rate
+python -m tools.bench_tick --disable mapping,scanning --json
+```
+
+`api` is always switched off, because the control plane is the one module that binds a port and a
+service already running would make the run fail on `address in use`. `--disable` adds names, which is
+how one hot path is isolated. The overall `tick` line uses `perf_counter`; the per-module figures are
+the runtime's own `time.time()` measurements, so read a sub-millisecond module as "small", not as a
+precise number.
+
+There is no `--hal` flag and no motion option: nothing this tool starts can move the dog. The
+workstation figures and the empty Pi row live in `docs/ARCHITECTURE.md` section 3.2 - fill the Pi row
+from a run on the dog rather than assuming a workstation number carries over.
 
 ## Adding a tool
 

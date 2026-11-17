@@ -10,6 +10,16 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **`tools.bench_tick` measures where the tick goes** — the runtime already stamped
+  `module_tick_durations` and warned on overruns, but nothing ran a hot path for N ticks and compared
+  it with a written number, so a stutter had no attribution and a regression had no baseline. The
+  tool drives the real registry (`main.build_registry`) on a `FakeDogHAL` and reports p50/p95/max per
+  module plus overruns against `1 / loop.tick_hz`, with `--disable` to isolate one path and `--json`
+  for two runs to diff. `api` is switched off so a bench run can never bind port 8420, and there is
+  no way to hand it a real HAL: these are module code costs, which the tool's docstring and
+  `ARCHITECTURE.md` section 3.2 both say out loud, with the Pi row left empty rather than guessed.
+  Five tests hold the report to the modules that really started, with no wall-clock assertion.
+
 - **A `pet` profile for the dog that is left running** — `profiles` gains `pet`: `loop.tick_hz: 10`
   and the read-only `health` sampler on, everything else inherited. It is a name the guides can
   point at instead of "edit the shipped file and hope", and it deliberately leaves `safety`,
