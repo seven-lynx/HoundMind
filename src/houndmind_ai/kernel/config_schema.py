@@ -942,6 +942,9 @@ _ASSISTANT = Section(
         "timeout_s": _POSITIVE,
         "requests_per_minute": IntSpec(minimum=0),
         "max_failures": IntSpec(minimum=1),
+        # A busy provider is retried this many times before the utterance is dropped; rate limits are
+        # not counted as failures (#250).
+        "max_transient_retries": IntSpec(minimum=0),
         "api_key_env": StrSpec(),
         "api_key_path": StrSpec(),
     }

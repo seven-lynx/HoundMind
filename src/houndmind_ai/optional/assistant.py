@@ -19,6 +19,50 @@ DEFAULT_SYSTEM_PROMPT = (
     "never claim you can do something you cannot."
 )
 
+# A provider that is merely busy is not a broken feature. Free tiers are rate-limited by design - Groq's
+# free plan is 30 requests/minute, OpenRouter's `:free` variants 20 - so three quick 429s in a
+# conversation is normal, and counting them against `max_failures` switched the assistant off for good
+# (#250). These two sets are the classification the retry policy acts on.
+_TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
+_AUTH_STATUS = frozenset({401, 403})
+
+
+class AssistantRequestError(RuntimeError):
+    """A failed call, carrying enough to decide whether it is worth retrying."""
+
+    def __init__(
+        self, message: str, status: int | None = None, retry_after: float | None = None
+    ) -> None:
+        super().__init__(message)
+        self.status = status
+        self.retry_after = retry_after
+
+    @property
+    def transient(self) -> bool:
+        """The provider is busy; the same request may work shortly."""
+        return self.status in _TRANSIENT_STATUS
+
+    @property
+    def fatal(self) -> bool:
+        """The key is wrong or revoked; retrying cannot help."""
+        return self.status in _AUTH_STATUS
+
+
+def _retry_after_seconds(exc: urllib.error.HTTPError) -> float | None:
+    """`Retry-After` in seconds, when the provider sent a plain number.
+
+    A date-formatted value is ignored on purpose - a clock-skewed device would compute a nonsense wait,
+    and a fixed backoff is the safer answer for a dog.
+    """
+    try:
+        raw = exc.headers.get("Retry-After") if exc.headers else None
+        if raw is None:
+            return None
+        value = float(str(raw).strip())
+    except Exception:
+        return None
+    return max(0.0, min(value, 30.0))
+
 
 def _safe_float(value: Any, default: float) -> float:
     try:
@@ -67,6 +111,7 @@ class AssistantModule(Module):
         self._timeout_s = 8.0
         self._min_interval_s = 6.0
         self._max_failures = 3
+        self._max_transient_retries = 3
         self._failures = 0
         self._last_request_ts = 0.0
         # Latest utterance wins: a second question replaces a queued one rather than queueing behind
@@ -108,6 +153,7 @@ class AssistantModule(Module):
         rate = _safe_int(settings.get("requests_per_minute", 10), 10)
         self._min_interval_s = 60.0 / rate if rate > 0 else 0.0
         self._max_failures = _safe_int(settings.get("max_failures", 3), 3)
+        self._max_transient_retries = _safe_int(settings.get("max_transient_retries", 3), 3)
 
         self._context = context
         context.set("voice_question_handler", self.answer)
@@ -156,22 +202,55 @@ class AssistantModule(Module):
             self._pending = None
             if not text:
                 continue
+            reply = self._ask(text)
+            if reply and self._context is not None:
+                self._context.set("assistant_reply", reply)
+
+    def _ask(self, text: str) -> str | None:
+        """One utterance, with the retry policy for a provider that is merely busy (#250).
+
+        A rate limit is not a broken feature: 429/5xx back off and are never counted toward
+        `max_failures`, so a free tier can throttle the dog without switching its voice off. A bad key
+        is hopeless and disables at once; anything else is a real failure and is counted.
+        """
+        for attempt in range(self._max_transient_retries + 1):
             self._wait_for_rate_limit()
             try:
                 reply = self._request(text)
+            except AssistantRequestError as exc:
+                if exc.fatal:
+                    self.disable(f"provider rejected the key (HTTP {exc.status}): {exc}")
+                    return None
+                if exc.transient:
+                    if attempt >= self._max_transient_retries:
+                        logger.warning(
+                            "Assistant dropped an utterance after %d retries: %s", attempt, exc
+                        )
+                        return None
+                    delay = (
+                        exc.retry_after
+                        if exc.retry_after is not None
+                        else min(2.0 * (attempt + 1), 30.0)
+                    )
+                    logger.warning("Assistant busy (HTTP %s); retrying in %.1fs", exc.status, delay)
+                    self._stop.wait(delay)
+                    continue
+                self._count_failure(exc)
+                return None
             except Exception as exc:
-                self._failures += 1
-                logger.warning(
-                    "Assistant request failed (%d/%d): %s", self._failures, self._max_failures, exc
-                )
-                if self._failures >= self._max_failures:
-                    # A dead link must cost the feature, not the runtime: stop calling out.
-                    self.disable(f"{self._failures} consecutive request failures: {exc}")
-                    return
-                continue
+                self._count_failure(exc)
+                return None
             self._failures = 0
-            if reply and self._context is not None:
-                self._context.set("assistant_reply", reply)
+            return reply
+        return None
+
+    def _count_failure(self, exc: Exception) -> None:
+        """A real failure - a timeout, a dead link, a body that made no sense."""
+        self._failures += 1
+        logger.warning("Assistant request failed (%d/%d): %s", self._failures, self._max_failures, exc)
+        if self._failures >= self._max_failures:
+            # A dead link must cost the feature, not the runtime: stop calling out.
+            self.disable(f"{self._failures} consecutive request failures: {exc}")
 
     def _wait_for_rate_limit(self) -> None:
         """Space requests out - a rate limit is a safety feature here, not politeness."""
@@ -214,15 +293,19 @@ class AssistantModule(Module):
                 detail = exc.read().decode("utf-8", "replace")[:200]
             except Exception:
                 detail = ""
-            raise RuntimeError(f"HTTP {exc.code} from {self._base_url}: {detail}") from exc
+            raise AssistantRequestError(
+                f"HTTP {exc.code} from {self._base_url}: {detail}",
+                status=exc.code,
+                retry_after=_retry_after_seconds(exc),
+            ) from exc
 
         choices = payload.get("choices") or []
         if not choices:
-            raise RuntimeError("provider returned no choices")
+            raise AssistantRequestError("provider returned no choices")
         message = choices[0].get("message") or {}
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
-            raise RuntimeError("provider returned an empty message")
+            raise AssistantRequestError("provider returned an empty message")
         return content.strip()
 
     def tick(self, context) -> None:

@@ -420,6 +420,9 @@
       "timeout_s": 8.0,
       "requests_per_minute": 10,
       "max_failures": 3,
+      // A busy provider (429/5xx) is retried this many times, honouring `Retry-After`, and is never
+      // counted against `max_failures`: a free tier throttles the dog, it does not break it (#250).
+      "max_transient_retries": 3,
       // The key is never in this file - this repo publishes its config. Set the environment
       // variable, or write the key into a 0600 file; the environment wins when both exist.
       "api_key_env": "LLM_API_KEY",
