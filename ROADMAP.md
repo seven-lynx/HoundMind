@@ -14,7 +14,7 @@
 
 Purpose: Track completion for each module needed for the PiDog hardware-only build (Pi 4 and Pi 5 editions). Check items as they're implemented and verified on hardware.
 
-Last reconciled 2026-11-12 against `08e8db3`. A box is ticked only with a `file:line`, a test file
+Last reconciled 2026-11-17 against `7c17423`. A box is ticked only with a `file:line`, a test file
 or a commit behind it; an item that needs the dog stays open until its run is recorded, and an item
 whose feature was removed says so rather than disappearing.
 
@@ -78,9 +78,8 @@ whose feature was removed says so rather than disappearing.
 - [x] Gentle recovery after repeated stuck events
 - [x] Clear-path streak to reduce scan jitter when safe
 - [x] Emit compact `navigation_decision` snapshots for tuning
-- [ ] WiFi localization (Pi/Linux scan + AP parsing) for Pi hardware
-- [ ] Fingerprint matching to estimate position from WiFi scans
-- [ ] Fuse WiFi localization with IMU/mapping/vision and publish confidence
+- [x] WiFi localization — **removed**, module and config key alike; a config that names
+  `modules.wifi_localization` is a load-time error by design (`docs/FEATURES_GUIDE.md` §25)
 - [ ] Lost recovery when localization confidence drops
 - [ ] Context-aware patrol/explore behaviors (coverage, recent obstacles, boredom)
 - [ ] Curiosity/goal-seeking bias toward unmapped areas
