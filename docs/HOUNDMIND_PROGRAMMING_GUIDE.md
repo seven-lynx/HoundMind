@@ -321,6 +321,9 @@ the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py
 | `vision_frame_interval_override_s` | `float \| None` — the health monitor asking vision to slow down |
 | `face_recognition_status`, `semantic_status`, `slam_status` | `dict` — `{status, backend}` from each optional module, published by the module itself |
 | `slam_pose` | `dict \| None` — the pose SLAM published last |
+| `odometry` | `dict` — `steps`, `distance_cm`, `travelled_cm`, `x_cm`, `y_cm`, `yaw_deg`, `pose_valid`, `reason`; centimetres along the heading, no encoders |
+| `localization` | `dict` — the chosen pose and why it is the best available: `tier` (`slam`/`dead_reckoning`/`reactive`), `frame`, `pose`, `confidence`, `age_s`, `reason` |
+| `localization_event` | `dict` — one record per change of tier, `{from, to, reason}` |
 | `event_log_report` | `dict` — the event writer's own state (`logging/event_logger.py`) |
 
 **Internal bookkeeping — not a contract**

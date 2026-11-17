@@ -177,7 +177,53 @@ what "stale" means for this board - and the navigator reads the resulting window
 ## 5) Navigation & Obstacle Avoidance
 **What it does:** Makes decisions from scans and triggers safe actions.
 
-**Disable:** `modules.navigation.enabled = false`
+### Localization tiers
+
+The dog cannot always localize itself, so `navigation/localization.py` publishes the best pose it can
+honestly offer and names the reason when that is not the best one available. One key, one ladder:
+
+| Tier | Pose comes from | Falls through to the next when |
+|---|---|---|
+| `slam` | `slam_pose` — rtabmap, or a LAN/remote backend | the backend is absent or `stub`, the slam module has no heartbeat, the pose is older than `slam_max_age_s`, or its confidence is below `slam_min_confidence` |
+| `dead_reckoning` | `navigation/odometry.py`: heading × counted steps | no heading for the steps taken, or the drift confidence decays past `confidence_floor` |
+| `reactive` | nothing — sonar and head scan only | never; this is the floor |
+
+`/api/v1/state` carries it as `localization`:
+
+```json
+{ "tier": "dead_reckoning", "frame": "odometry",
+  "pose": { "x": 118.4, "y": -32.0, "yaw_deg": 92.5 },
+  "confidence": 0.94, "age_s": 6.2, "reason": "no SLAM backend (stub)" }
+```
+
+- **`pose` is `null` at `reactive`**, and that is the point: a client must see "I do not know where I
+  am", never a zero it can mistake for a position.
+- **`frame` says which coordinates those are.** `odometry` is centimetres from where the pose was
+  reset; `slam` is whatever the backend uses (rtabmap reports metres). The two are never mixed in
+  one key without saying which it is.
+- **`reason` is why the tier is not higher**, so "it drifted" and "it fell back" are distinguishable
+  without reading logs. Every change of tier also publishes a `localization_event` once.
+- **`backend: "stub"` is not the `slam` tier.** The stub integrates the gyro and publishes a pose
+  that never leaves the origin; `docs/FEATURES_GUIDE.md` [§23](#23-slam-pi4) says not to build a
+  navigation feature on it, so it is reported as nothing rather than promoted.
+- **Dead reckoning expires by design.** No wheel encoders, and `step_cm` is a calibrated guess
+  (`odometry.step_cm`, default 25 cm), so confidence falls with the metres walked and the seconds
+  since an absolute fix. An absolute fix resets it. When it reaches `confidence_floor` the pose is
+  withdrawn and the dog reports `reactive`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.odometry.step_cm` | `25.0` | Centimetres per issued linear command — a guess until measured |
+| `settings.odometry.track_backward` | `true` | Count `backward` as a signed step |
+| `settings.localization.slam_max_age_s` | `2.0` | A SLAM pose older than this is not believed |
+| `settings.localization.slam_min_confidence` | `0.2` | ...nor one whose own confidence is below this |
+| `settings.localization.dead_reckoning_scale_m` | `10.0` | Metres walked before dead reckoning reaches zero confidence |
+| `settings.localization.dead_reckoning_horizon_s` | `120.0` | Seconds since the last fix before it reaches zero |
+| `settings.localization.confidence_floor` | `0.15` | Below this the pose is withdrawn |
+
+**Disable:** `modules.navigation.enabled = false` (the navigator),
+`modules.localization.enabled = false` (the tier selection), `modules.odometry.enabled = false`
+(the step counter).
 
 ---
 

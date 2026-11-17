@@ -99,6 +99,16 @@
         "enabled": true,
         "required": false
       },
+      "odometry": {
+        // Step odometry: heading x counted steps -> a relative pose. An observer, moves nothing.
+        "enabled": true,
+        "required": false
+      },
+      "localization": {
+        // Picks the best available pose (SLAM -> dead reckoning -> none) and says why it degraded.
+        "enabled": true,
+        "required": false
+      },
     "hal_motors": {
       // Enable motor HAL (ActionFlow + servo actions).
       "enabled": true,
@@ -724,6 +734,33 @@
       "initial_heading_deg": 0.0,
       "turn_tolerance_deg": 5.0,
       "turn_timeout_s": 3.0
+    },
+    // =====================================================================
+    // ODOMETRY (steps -> a relative pose; this dog has no wheel encoders)
+    // =====================================================================
+    "odometry": {
+      // Centimetres per issued linear command. A calibrated guess, not a measurement: drive a
+      // known distance, count the steps, and put the real number here.
+      "step_cm": 25.0,
+      // Count `backward` as a signed step too, or ignore it.
+      "track_backward": true
+    },
+    // =====================================================================
+    // LOCALIZATION (which pose to trust, and when to stop trusting it)
+    // =====================================================================
+    // The ladder is SLAM -> dead reckoning -> no pose, and each rung expires on the numbers below.
+    // A SLAM backend that is absent, `stub`, or quiet simply falls through to the next rung.
+    "localization": {
+      // A SLAM pose older than this is not believed. Measured against the slam module's heartbeat.
+      "slam_max_age_s": 2.0,
+      // A SLAM pose whose own confidence is below this is not believed either.
+      "slam_min_confidence": 0.2,
+      // Dead reckoning reaches confidence 0 after this many metres walked since the last fix...
+      "dead_reckoning_scale_m": 10.0,
+      // ...and after this many seconds since the last fix.
+      "dead_reckoning_horizon_s": 120.0,
+      // Below this confidence the pose is withdrawn: the dog reports `reactive` with no pose.
+      "confidence_floor": 0.15
     },
     // =====================================================================
     // MAPPING

@@ -656,6 +656,29 @@ _ORIENTATION = Section(
     }
 )
 
+# `navigation/odometry.py`. The dog has no encoders, so a step is one issued linear command and
+# `step_cm` is the calibrated constant that turns steps into centimetres. It is a guess until
+# someone measures it, which is why nothing downstream treats the pose as absolute.
+_ODOMETRY = Section(
+    fields={
+        "step_cm": FloatSpec(minimum=0.1, maximum=200.0),
+        "track_backward": Bool(),
+    }
+)
+
+# `navigation/localization.py`. The ladder's expiry rules: how long a SLAM pose stays believable and
+# above what confidence, how far and how long dead reckoning stays believable, and the floor below
+# which the pose is withdrawn entirely and only the reactive tier is left.
+_LOCALIZATION = Section(
+    fields={
+        "slam_max_age_s": _NON_NEGATIVE,
+        "slam_min_confidence": _FRACTION,
+        "dead_reckoning_scale_m": _POSITIVE,
+        "dead_reckoning_horizon_s": _POSITIVE,
+        "confidence_floor": _FRACTION,
+    }
+)
+
 # `calibration/workflow.py` + `hal/motors.py`. `servo_zero_offsets` is user data written by
 # the calibration workflow: signed degrees, never defaulted here. `request` is compared against
 # the four workflow names, so a typo used to produce a silent "unknown" status.
@@ -1105,11 +1128,13 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "face_recognition": _FACE_RECOGNITION,
     "habituation": _HABITUATION,
     "led": _LED,
+    "localization": _LOCALIZATION,
     "logging": _LOGGING,
     "mapping": _MAPPING,
     "motors": _MOTORS,
     "movement": _MOVEMENT,
     "navigation": _NAVIGATION,
+    "odometry": _ODOMETRY,
     "orientation": _ORIENTATION,
     "perception": _PERCEPTION,
     "performance": _PERFORMANCE,

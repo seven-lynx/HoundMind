@@ -296,6 +296,34 @@ def _scan(context) -> dict[str, object] | None:
     return {"mode": mode, "timestamp": timestamp, "samples": len(bearings)}
 
 
+def _localization(context) -> dict[str, object]:
+    """The pose the dog believes it has, and the reason it is the best it can do.
+
+    `tier` is the ladder (`slam` -> `dead_reckoning` -> `reactive`) and `frame` says whether the
+    numbers are SLAM's own coordinates or centimetres from the odometry origin. `pose` is `None`
+    when nothing is trustworthy: that is a fact a client has to see, not a zero it can mistake for
+    a position.
+    """
+    data = _table(context.get("localization"))
+    if not data:
+        return {
+            "tier": None,
+            "frame": None,
+            "pose": None,
+            "confidence": None,
+            "age_s": None,
+            "reason": None,
+        }
+    return {
+        "tier": data.get("tier"),
+        "frame": data.get("frame"),
+        "pose": _table(data.get("pose")) or None,
+        "confidence": _number(data.get("confidence")),
+        "age_s": _number(data.get("age_s")),
+        "reason": data.get("reason"),
+    }
+
+
 def build_state(context, *, now: float | None = None) -> dict[str, object]:
     """The full snapshot. ``now`` is the caller's monotonic clock, used for ``since_s``."""
     clock = 0.0 if now is None else now
@@ -309,6 +337,7 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "actuators": _actuators(context, clock),
         "safety": _safety(context),
         "nav": _nav(context),
+        "localization": _localization(context),
         "decision": _decision(context),
         "scan": _scan(context),
         "routines": _routines(context),

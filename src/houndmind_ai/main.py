@@ -30,7 +30,9 @@ from houndmind_ai.logging.decision_log import DecisionLogModule
 from houndmind_ai.logging.event_logger import EventLoggerModule
 from houndmind_ai.logging.led_manager import LedManagerModule
 from houndmind_ai.mapping.mapper import MappingModule
+from houndmind_ai.navigation.localization import LocalizationModule
 from houndmind_ai.navigation.obstacle_avoidance import ObstacleAvoidanceModule
+from houndmind_ai.navigation.odometry import OdometryModule
 from houndmind_ai.navigation.orientation import OrientationModule
 from houndmind_ai.navigation.place_navigator import PlaceNavigatorModule
 from houndmind_ai.navigation.scanning import ScanningModule
@@ -92,6 +94,13 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(PerceptionModule("perception", **cfg("perception")), [Capability.PERCEPTION])
     registry.register(ScanningModule("scanning", **cfg("scanning")), [Capability.NAVIGATION])
     registry.register(OrientationModule("orientation", **cfg("orientation")), [Capability.NAVIGATION])
+    # Heading first, then the steps walked along it, then the tier that decides whether to trust
+    # either. `slam_pi4` is optional and registers later, so a SLAM pose is consumed on the tick
+    # after the one that produced it - which is why the tier is stale-checked at all.
+    registry.register(OdometryModule("odometry", **cfg("odometry")), [Capability.NAVIGATION])
+    registry.register(
+        LocalizationModule("localization", **cfg("localization")), [Capability.NAVIGATION]
+    )
     registry.register(CalibrationModule("calibration", **cfg("calibration")), [Capability.CALIBRATION])
     registry.register(MappingModule("mapping", **cfg("mapping")), [Capability.MAPPING])
     registry.register(ObstacleAvoidanceModule("navigation", **cfg("navigation")), [Capability.NAVIGATION])

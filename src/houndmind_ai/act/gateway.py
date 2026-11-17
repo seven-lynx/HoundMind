@@ -108,6 +108,10 @@ class MotionGatewayModule(Module):
         self.board = board if board is not None else IntentBoard(clock=self._clock)
         self._last_key: tuple[str, Source, tuple[tuple[str, str], ...]] | None = None
         self._last_verdict: Verdict | None = None
+        #: Increments once per command the gateway really issues. `navigation/odometry.py` counts
+        #: steps from it: a repeated intent is deliberately not republished (see `tick`), so the
+        #: payload's identity alone cannot tell "a new step" from "still walking".
+        self._issued = 0
         self._last_cancelled: frozenset[tuple[str, Source]] = frozenset()
 
     def start(self, context) -> None:
@@ -171,10 +175,12 @@ class MotionGatewayModule(Module):
         if command is None:
             context.set("motion_command", None)
         else:
+            self._issued += 1
             payload = command.to_dict()
             # Hand motors the spelling pidog understands; keep the canonical one for readers.
             payload["action"] = legacy_action(command.action)
             payload["canonical_action"] = command.action
+            payload["seq"] = self._issued
             context.set("motion_command", payload)
         context.set("motion_verdict", verdict.to_dict() if verdict is not None else None)
 

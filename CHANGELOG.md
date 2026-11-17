@@ -20,6 +20,17 @@ Current Release: v2026.11.16
   limit and a failure budget that disables the module rather than the loop. `docs/SECURITY.md` §8
   records that prompts leave the device when a cloud `base_url` is configured.
 
+- **A localization ladder that degrades instead of pretending** (`navigation/odometry.py`,
+  `navigation/localization.py`). One key, `localization`, carries the best pose the dog can honestly
+  offer: `slam` when a real backend is alive and fresh, `dead_reckoning` from heading × counted
+  steps, and `reactive` with **no pose at all** when neither is trustworthy. Each rung expires on
+  numbers — `slam_max_age_s`, `slam_min_confidence`, and a drift confidence that decays with metres
+  walked and seconds since the last absolute fix — `reason` names why the tier is not higher, and
+  every change publishes `localization_event` once. `backend: "stub"` is deliberately *not* the
+  `slam` tier, because its pose never leaves the origin. The gateway now stamps each command it
+  really issues with `seq`, so a step is one issued move rather than one tick, and
+  `GET /api/v1/state` carries `localization` for clients.
+
 ### Changed
 
 - `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
