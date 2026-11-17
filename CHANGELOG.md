@@ -10,6 +10,19 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A client conformance corpus, and the harness that runs it** — three clients read the same contract
+  and nothing tested that they parse the same decisions, so `docs/fixtures/clients/` now holds three
+  recorded streams (`obstacle-veto`, `command-accepted`, `stale-reading`) plus the outcome each one
+  must produce, and `python -m tools.replay_decisions --corpus docs/fixtures/clients` runs every case
+  through the same `ReplaySession` the control plane serves from. The format is contract, so it lives
+  in `docs/CONTROL_API.md` §11 with its six assertion keys, and the corpus refuses anything that would
+  make a case pass without checking: an unknown expectation key, a manifest version this build cannot
+  read, a stream path that leaves the corpus directory, and a log file passed alongside `--corpus`.
+  No dog, no socket, no playback timing — and `stale-reading` exists precisely so a fixture cannot
+  turn an invalid distance into a plausible one. Eight tests, including a round-trip of every fixture
+  line through `DecisionRecord` so a schema change breaks the corpus instead of quietly invalidating
+  it.
+
 - **`tools.bench_tick` measures where the tick goes** — the runtime already stamped
   `module_tick_durations` and warned on overruns, but nothing ran a hot path for N ticks and compared
   it with a written number, so a stutter had no attribution and a regression had no baseline. The

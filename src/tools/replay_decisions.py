@@ -45,11 +45,17 @@ from houndmind_ai.services.module import ControlPlaneModule
 from houndmind_ai.services.settings import DEFAULT_HOST, DEFAULT_PORT, ApiSettings
 
 __all__ = [
+    "CORPUS_VERSION",
+    "CorpusCase",
+    "EXPECTATION_KEYS",
     "MAX_DELTA_S",
     "ReplaySensors",
     "ReplaySession",
+    "check_case",
+    "load_corpus",
     "load_records",
     "main",
+    "run_corpus",
     "schedule",
     "sensors_from_record",
     "summarize",
@@ -58,6 +64,23 @@ __all__ = [
 # A gap longer than this is a pause on the device (a restart, a stalled loop), not a cadence.
 # Replaying twenty minutes of silence in real time is never what the person at the keyboard meant.
 MAX_DELTA_S = 60.0
+
+# The corpus format is contract (docs/CONTROL_API.md section 11), so its version moves with the
+# document and never silently: an older manifest is refused by name.
+CORPUS_VERSION = 1
+
+# Every key a case may assert. A key outside this set is a typo, not a comment, and `load_corpus`
+# refuses it rather than letting the case pass with nothing checked.
+EXPECTATION_KEYS = frozenset(
+    {
+        "records",
+        "served",
+        "last_intent",
+        "last_source",
+        "last_veto_reasons",
+        "distance_valid_on_last",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -238,11 +261,142 @@ def summarize(records: list[DecisionRecord]) -> list[str]:
     ]
 
 
+@dataclass(frozen=True)
+class CorpusCase:
+    """One recorded stream and the outcome a client must be able to reproduce."""
+
+    id: str
+    decisions: Path
+    expect: dict[str, object]
+
+
+def load_corpus(directory: Path) -> list[CorpusCase]:
+    """Read `corpus.json` and resolve every case's stream inside `directory`.
+
+    Everything a bad manifest can do is refused by name: a wrong version, an empty case, an unknown
+    expectation key, and a path that leaves the corpus. The last one matters because a manifest is
+    data from a client repository, and data does not get to name `/etc/shadow`.
+    """
+    manifest = directory / "corpus.json"
+    try:
+        text = manifest.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"cannot read {manifest}: {exc}") from None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{manifest}: not JSON ({exc})") from None
+    if not isinstance(data, dict):
+        raise ValueError(f"{manifest}: the manifest must be an object")
+
+    version = data.get("version")
+    if version != CORPUS_VERSION:
+        raise ValueError(
+            f"{manifest}: unsupported corpus version {version!r}"
+            f" (this build reads {CORPUS_VERSION})"
+        )
+
+    raw_cases = data.get("cases")
+    if not isinstance(raw_cases, list) or not raw_cases:
+        raise ValueError(f"{manifest}: 'cases' must be a non-empty list")
+
+    root = directory.resolve()
+    cases: list[CorpusCase] = []
+    for index, raw in enumerate(raw_cases):
+        if not isinstance(raw, dict):
+            raise ValueError(f"{manifest}: cases[{index}] must be an object")
+        case_id = raw.get("id")
+        relative = raw.get("decisions")
+        expect = raw.get("expect")
+        if not isinstance(case_id, str) or not case_id:
+            raise ValueError(f"{manifest}: cases[{index}] needs a non-empty 'id'")
+        if not isinstance(relative, str) or not relative:
+            raise ValueError(f"{manifest}: {case_id} needs a 'decisions' path")
+        if not isinstance(expect, dict) or not expect:
+            raise ValueError(f"{manifest}: {case_id} needs a non-empty 'expect' object")
+
+        unknown = sorted(set(expect) - EXPECTATION_KEYS)
+        if unknown:
+            raise ValueError(
+                f"{manifest}: {case_id} expects unknown key(s) {', '.join(unknown)}"
+                f" (known: {', '.join(sorted(EXPECTATION_KEYS))})"
+            )
+
+        candidate = (directory / relative).resolve()
+        if not candidate.is_relative_to(root):
+            raise ValueError(
+                f"{manifest}: {case_id} points outside the corpus ({relative})"
+            )
+        cases.append(CorpusCase(case_id, candidate, dict(expect)))
+    return cases
+
+
+def check_case(case: CorpusCase) -> list[str]:
+    """Run one case through the session the control plane serves from; `[]` means it passed."""
+    records, _skipped = load_records(case.decisions)
+    session = ReplaySession()
+    for record in records:
+        session.step(record)
+
+    latest = records[-1] if records else None
+    reading = session.context.get("sensor_reading")
+    actual: dict[str, object] = {
+        "records": len(records),
+        "served": len(session.ring),
+        "last_intent": latest.intent if latest else None,
+        "last_source": latest.source if latest else None,
+        "last_veto_reasons": [refusal.reason for refusal in latest.vetoes] if latest else [],
+        "distance_valid_on_last": bool(getattr(reading, "distance_valid", False)),
+    }
+
+    problems: list[str] = []
+    for key, expected in case.expect.items():
+        if actual.get(key) != expected:
+            problems.append(f"{key}: expected {expected!r}, replay produced {actual.get(key)!r}")
+    return problems
+
+
+def run_corpus(directory: Path) -> int:
+    """Run every case in a corpus directory. 0 all passed, 1 a case failed, 2 a bad manifest."""
+    try:
+        cases = load_corpus(directory)
+    except ValueError as exc:
+        print(f"[corpus] {exc}")
+        return 2
+
+    failed = 0
+    for case in cases:
+        try:
+            problems = check_case(case)
+        except (OSError, ValueError) as exc:
+            problems = [str(exc)]
+        if problems:
+            failed += 1
+            print(f"[corpus] {case.id} FAIL")
+            for problem in problems:
+                print(f"[corpus]   {problem}")
+        else:
+            print(f"[corpus] {case.id} PASS")
+    print(f"[corpus] {len(cases) - failed}/{len(cases)} passed")
+    return 0 if failed == 0 else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Replay a recorded decision log through the control plane (no dog, no motion)"
     )
-    parser.add_argument("path", type=Path, help="path to houndmind_decisions.jsonl")
+    parser.add_argument(
+        "path",
+        type=Path,
+        nargs="?",
+        help="path to houndmind_decisions.jsonl (omit with --corpus)",
+    )
+    parser.add_argument(
+        "--corpus",
+        type=Path,
+        default=None,
+        help="run a corpus directory (corpus.json + recorded streams) instead of one log",
+    )
     parser.add_argument("--speed", type=float, default=1.0, help="playback speed; 0 = no waiting")
     parser.add_argument("--limit", type=int, default=0, help="replay only the last N records")
     parser.add_argument("--check", action="store_true", help="validate and summarise, serve nothing")
@@ -253,6 +407,15 @@ def main(argv: list[str] | None = None) -> int:
         "--linger", type=float, default=0.0, help="keep serving N seconds after the last record"
     )
     args = parser.parse_args(argv)
+
+    if args.corpus is not None:
+        if args.path is not None:
+            print("[corpus] give either a decision log or --corpus, not both")
+            return 2
+        return run_corpus(args.corpus)
+    if args.path is None:
+        print("[replay] give a decision log, or --corpus DIR", file=sys.stderr)
+        return 2
 
     try:
         records, skipped = load_records(args.path)

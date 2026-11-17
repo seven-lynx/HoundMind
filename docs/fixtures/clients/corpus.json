@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "obstacle-veto",
+      "decisions": "decisions/obstacle-veto.jsonl",
+      "expect": {
+        "records": 3,
+        "served": 3,
+        "last_intent": "stand",
+        "last_source": "behavior",
+        "last_veto_reasons": ["obstacle"],
+        "distance_valid_on_last": true
+      }
+    },
+    {
+      "id": "command-accepted",
+      "decisions": "decisions/command-accepted.jsonl",
+      "expect": {
+        "records": 2,
+        "served": 2,
+        "last_intent": "forward",
+        "last_source": "client",
+        "last_veto_reasons": [],
+        "distance_valid_on_last": true
+      }
+    },
+    {
+      "id": "stale-reading",
+      "decisions": "decisions/stale-reading.jsonl",
+      "expect": {
+        "records": 2,
+        "served": 2,
+        "last_intent": "stand",
+        "last_source": "behavior",
+        "last_veto_reasons": [],
+        "distance_valid_on_last": false
+      }
+    }
+  ]
+}

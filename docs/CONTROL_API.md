@@ -31,6 +31,7 @@ file. A route that exists in code and not here — or here and not in code — f
 8. [Places](#8-places)
 9. [People](#9-people)
 10. [Calibration](#10-calibration) — the read-only run route
+11. [Conformance corpus](#11-conformance-corpus) — recorded decisions every client must reproduce
 
 ---
 
@@ -865,5 +866,69 @@ Authorization: Bearer <token>
   joint=deg --apply` on the Pi writes through `DogHAL.apply_offsets`, merging over the loaded values
   and clamping to `SERVO_OFFSET_LIMIT_DEG`. `settings.calibration.auto_apply_servo_offsets` replays
   a saved trim at startup; nothing in the control plane writes one.
+
+## 11. Conformance corpus
+
+Three clients read the same wire contract, and prose is a poor way to disagree with someone's code.
+`docs/fixtures/clients/` holds recorded decisions plus the outcome each one must produce, and
+
+```bash
+python -m tools.replay_decisions --corpus docs/fixtures/clients
+```
+
+runs every case through the same `ReplaySession` the control plane serves from: no dog, no socket,
+no playback timing.
+
+### 11.1 The manifest
+
+`corpus.json` is the index. A case is one recorded stream and what it must produce:
+
+```json
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "obstacle-veto",
+      "decisions": "decisions/obstacle-veto.jsonl",
+      "expect": {
+        "records": 3,
+        "served": 3,
+        "last_intent": "stand",
+        "last_source": "behavior",
+        "last_veto_reasons": ["obstacle"],
+        "distance_valid_on_last": true
+      }
+    }
+  ]
+}
+```
+
+- `decisions` is relative to the corpus directory. An absolute path, or one that escapes the
+  directory, is refused: a manifest is data, and data does not get to name a file outside the corpus.
+- `expect` names only what a replay can actually check. A key outside
+  [§11.2](#112-the-expectation-keys) is refused rather than ignored, so a typo cannot pass as
+  "nothing to assert".
+
+### 11.2 The expectation keys
+
+| Key | Means |
+|---|---|
+| `records` | records `DecisionRecord` accepted from the stream |
+| `served` | records the control plane would serve from its ring after the replay |
+| `last_intent` | the newest record's `intent` (`null` when it decided nothing) |
+| `last_source` | the newest record's `source` |
+| `last_veto_reasons` | the newest record's refusal reasons, in recorded order |
+| `distance_valid_on_last` | whether the replayed sensor reading keeps `distance_valid` for the last record |
+
+The last row matters most. Replay is a *decision* feed, so a fixture that turns an invalid distance
+into a plausible one teaches a client to trust a reading the dog never made
+(`tools/replay_decisions.py:9-20`).
+
+### 11.3 What a corpus run proves
+
+It proves the **contract**: the JSON a client parses, the fields it reads, and the decision semantics
+it renders. It does not prove the dog behaves this way — these streams are recordings, and the
+equivalent run on hardware is `docs/HARDWARE_TEST.md`. Add a case when a client depends on a shape
+that is not covered; never edit an expectation to make a client pass.
 
 

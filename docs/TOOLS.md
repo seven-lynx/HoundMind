@@ -43,6 +43,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Did the speaker actually make a sound? | `audio_check --verify` |
 | Something is broken and I need to file a report | `collect_support_bundle` |
 | Why did the dog do that at 14:03? | `replay_decisions` |
+| Does every client still read the same decisions? | `replay_decisions --corpus` |
 | The semantic labeler has no model | `download_opencv_models` |
 | Is the RTAB-Map adapter wired up? | `validate_rtabmap_adapter` |
 | Which servo joint is leaning, and what trim is saved? | `calibrate_servos` |
@@ -182,17 +183,25 @@ Replays a recorded decision log through a fake control plane — no dog, no moti
 ```bash
 python -m tools.replay_decisions logs/houndmind_decisions.jsonl --check
 python -m tools.replay_decisions logs/houndmind_decisions.jsonl --speed 4
+python -m tools.replay_decisions --corpus docs/fixtures/clients
 ```
 
 | Flag | Meaning |
 |---|---|
-| `path` | the `houndmind_decisions.jsonl` to replay (positional) |
+| `path` | the `houndmind_decisions.jsonl` to replay (positional; omit with `--corpus`) |
+| `--corpus <dir>` | run the conformance corpus in that directory instead of one log |
 | `--speed <x>` | playback speed; `0` means no waiting (default `1.0`) |
 | `--limit <n>` | replay only the last N records (default `0`, all) |
 | `--check` | validate and summarise, serve nothing |
 | `--host`, `--port` | where to serve the fake plane |
 | `--token-path <path>` | token file the client must present |
 | `--linger <seconds>` | keep serving this long after the last record |
+
+`--corpus` is the client contract check, not a debugging aid: `docs/CONTROL_API.md`
+[§11](CONTROL_API.md#11-conformance-corpus) defines the manifest and the six things a case may
+assert, and the exit code is `0` all passed, `1` a case failed, `2` the manifest itself is refused
+(wrong version, unknown expectation key, a path that leaves the corpus).
+
 
 The decision JSONL is **off by default** (`decision_log_file_enabled: false`) — turn it on in
 `config/settings.jsonc` before you need it, not after.
