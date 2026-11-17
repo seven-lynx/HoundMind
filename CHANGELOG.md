@@ -20,6 +20,20 @@ Current Release: v2026.11.16
   limit and a failure budget that disables the module rather than the loop. `docs/SECURITY.md` §8
   records that prompts leave the device when a cloud `base_url` is configured.
 
+### Fixed
+
+- **The IMU handed out raw counts where its contract promised physical units** (#258). `PidogHAL`
+  published `Pidog.accData`/`gyroData` verbatim — 16384 LSB/g and 16.4 LSB/deg/s — while
+  `SensorSnapshot` documents g and deg/s and `FakeDogHAL` posts g and deg/s, so no test could see the
+  difference. The visible symptom was heading: `orientation` integrates `gyro[2]` with
+  `gyro_scale: 1.0`, so a real 90° turn accumulated roughly 1476°. `hal/vendor.py::to_physical` now
+  converts at the boundary, using the sensor's own `acc_scale`/`gyro_scale`/`*_bias` when a
+  calibration is stored and the nominal sensitivities otherwise, and falling back to nominal instead of
+  dividing by zero. `tools.hardware_checkup` gained an `imu_gravity` line: `|acc|` is 1 g at rest, and
+  the checkup warns when it is not — on the bench dog it reads **1.50 g**, meaning the accelerometer
+  offsets were never saved, which biases pitch, roll and the tilt latch. `tests/test_imu_units.py`
+  pins the conversion and a 90°/s rotation reading 90°.
+
 ### Changed
 
 - `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
