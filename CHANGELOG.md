@@ -75,6 +75,16 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **An importable `rtabmap` module is not a SLAM backend until it has an `Rtabmap` class** — the
+  adapter reported `slam_status: ready / rtabmap` whenever the import succeeded, so a partial
+  pybind11 build (upstream `corelib/src/python` ships `PyMatcher`/`PyDetector`/`PyDescriptor` with no
+  `PYBIND11_MODULE`) would have published a pose that never moves and a status a consumer trusts
+  (#265). `_RtabmapAdapter.init()` now returns False and names what is missing; `start()` treats that
+  as "bindings not present", warns, and falls back to the stub, so the status line never claims a
+  backend it cannot run. A frame the adapter cannot process is also warned once instead of being
+  logged at DEBUG where no operator sees it. Three tests inject a fake `rtabmap` module: no class, a
+  class that refuses to construct, and a working one.
+
 - **An IMU calibration could look successful and be pure garbage** (found by running it on the dog).
   Three separate faults, each enough to spoil the result:
   - The vendor's `ActionFlow` plays `waiting`/`feet_left_right` on its own every 2-6 s

@@ -32,12 +32,27 @@ class _RtabmapAdapter:
         except Exception:
             return False
 
-    def init(self, db_path: str) -> None:
+    def init(self, db_path: str) -> bool:
+        """Open the bindings. False means they imported but cannot process a frame.
+
+        A partial pybind11 build imports cleanly and carries helper classes with no `Rtabmap`;
+        reporting that as a backend is how a pose that never moves gets published as `ready`
+        (#265).
+        """
         import rtabmap  # type: ignore
 
-        self._rtab = getattr(rtabmap, "Rtabmap", None)
-        if callable(self._rtab):
-            self._rtab = self._rtab()
+        rtabmap_cls = getattr(rtabmap, "Rtabmap", None)
+        if not callable(rtabmap_cls):
+            logger.warning(
+                "RTAB-Map bindings are incomplete: no Rtabmap class in %s",
+                getattr(rtabmap, "__file__", "rtabmap"),
+            )
+            return False
+        try:
+            self._rtab = rtabmap_cls()
+        except Exception as exc:
+            logger.warning("RTAB-Map Rtabmap() could not start: %s", exc)
+            return False
         # Apply optional parameters from cfg if binding supports it
         params = self._cfg.get("params") if isinstance(self._cfg, dict) else None
         r = self._rtab
@@ -45,8 +60,8 @@ class _RtabmapAdapter:
             try:
                 r.set_parameters(params)
             except Exception:
-                # ignore if API differs
-                pass
+                logger.debug("RTAB-Map refused the configured params", exc_info=True)
+        return True
 
     def process(self, frame: Any, imu: dict | None = None, timestamp: float | None = None) -> None:
         if self._rtab is None:
@@ -119,6 +134,8 @@ class SlamPi4Module(Module):
         self._adapter: _RtabmapAdapter | None = None
         self._rtabmap_cfg: dict = {}
         self._rtabmap_failed = False
+        # One warning per run is enough: a backend that cannot process a frame fails every tick.
+        self._process_warned = False
 
         # Buffers for frame+imu pairing: store tuples (timestamp, frame, imu)
         self._buffer: deque = deque()
@@ -135,24 +152,26 @@ class SlamPi4Module(Module):
 
         if self.backend == "rtabmap":
             adapter = _RtabmapAdapter(self._rtabmap_cfg)
-            if adapter.available():
-                try:
-                    db_path = self._rtabmap_cfg.get("database_path", "rtabmap.db")
-                    adapter.init(db_path)
-                    self._adapter = adapter
-                    self.available = True
-                    context.set("slam_status", {"status": "ready", "backend": "rtabmap"})
-                    return
-                except Exception as exc:
-                    logger.warning("RTAB-Map initialization failed: %s", exc)
-                    self._rtabmap_failed = True
-                    self._adapter = None
-            else:
+            if not adapter.available():
                 logger.warning(
                     "RTAB-Map bindings not present; falling back to the gyro stub, which is dead "
                     "reckoning and not SLAM (#247)"
                 )
                 self._rtabmap_failed = True
+            else:
+                try:
+                    db_path = self._rtabmap_cfg.get("database_path", "rtabmap.db")
+                    if adapter.init(db_path):
+                        self._adapter = adapter
+                        self.available = True
+                        context.set("slam_status", {"status": "ready", "backend": "rtabmap"})
+                        return
+                except Exception as exc:
+                    logger.warning("RTAB-Map initialization failed: %s", exc)
+                # An importable module without a usable Rtabmap is a partial build, not a
+                # backend. The stub is the honest answer, and the status line has to say so.
+                self._rtabmap_failed = True
+                self._adapter = None
 
         # Fallback to stub
         self.available = True
@@ -207,7 +226,14 @@ class SlamPi4Module(Module):
                 try:
                     self._adapter.process(item_frame, imu=item_imu, timestamp=item_ts)
                 except Exception as exc:
-                    logger.debug("RTAB-Map adapter process error: %s", exc)
+                    if not self._process_warned:
+                        logger.warning(
+                            "RTAB-Map adapter cannot process a frame: %s; the pose will not move",
+                            exc,
+                        )
+                        self._process_warned = True
+                    else:
+                        logger.debug("RTAB-Map adapter process error: %s", exc)
                 processed += 1
 
             # Retrieve pose and map data
