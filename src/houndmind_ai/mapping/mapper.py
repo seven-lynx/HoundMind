@@ -5,6 +5,7 @@ import logging
 import math
 import time
 from pathlib import Path
+from typing import Any
 
 from houndmind_ai.core.module import Module
 
@@ -260,3 +261,79 @@ class MappingModule(Module):
                     best_path = {**entry, "score": score}
 
         return openings, safe_paths, best_path
+
+
+# ------------------------------------------------------------------ map geometry
+#
+# The grid is robot-centric: `_ingest_into_grid` writes one hit count per cell, keyed "ix,iy", where
+# `ix` is centimetres to the dog's left and `iy` centimetres forward, both divided by
+# `cell_size_cm`. Every point below is `(forward_cm, left_cm)` - the order the scan conversion
+# already uses - and every function is pure, so a test (or a future consumer) can ask the map a
+# question without standing up a runtime.
+
+Point = tuple[float, float]
+
+
+def cell_centre_cm(ix: int, iy: int, cell_size_cm: float = 10.0) -> Point:
+    """The centre of a grid cell as `(forward_cm, left_cm)`."""
+    return (iy * cell_size_cm, ix * cell_size_cm)
+
+
+def landmark_distance(point_cm: Point, landmark_cm: Point) -> float:
+    """Straight-line distance in centimetres between the dog and one landmark."""
+    return math.hypot(landmark_cm[0] - point_cm[0], landmark_cm[1] - point_cm[1])
+
+
+def wall_distance(point_cm: Point, start_cm: Point, end_cm: Point) -> float:
+    """Distance from a point to a wall segment, clamped to its two ends.
+
+    Anything past an endpoint is measured to that endpoint: a wall is only known between the
+    corners someone surveyed, and extending it to an imaginary infinite line would report a
+    distance to something the dog never saw.
+    """
+    fx = end_cm[0] - start_cm[0]
+    fy = end_cm[1] - start_cm[1]
+    length_sq = fx * fx + fy * fy
+    if length_sq == 0.0:
+        return landmark_distance(point_cm, start_cm)
+    along = ((point_cm[0] - start_cm[0]) * fx + (point_cm[1] - start_cm[1]) * fy) / length_sq
+    along = max(0.0, min(1.0, along))
+    return landmark_distance(point_cm, (start_cm[0] + along * fx, start_cm[1] + along * fy))
+
+
+def nearest_wall(
+    grid: dict[str, Any] | None,
+    point_cm: Point,
+    max_cm: float,
+    *,
+    cell_size_cm: float = 10.0,
+) -> float | None:
+    """Distance to the nearest cell the sweep has recorded a hit in, capped at `max_cm`.
+
+    `grid` is `mapping_state["grid"]` exactly as :meth:`MappingModule._ingest_into_grid` writes
+    it. `None` means *no wall this map knows about* inside `max_cm` - an empty or stale grid is
+    "unknown", not "clear", so callers must not read it as an obstacle-free corridor. That
+    distinction is the reason this returns `None` rather than a sentinel distance.
+    """
+    if not isinstance(grid, dict):
+        return None
+    cells = grid.get("cells")
+    if not isinstance(cells, dict) or not cells:
+        return None
+    best: float | None = None
+    for key, hits in cells.items():
+        try:
+            ix_text, iy_text = str(key).split(",", 1)
+            hit_count = int(hits or 0)
+            ix = int(ix_text)
+            iy = int(iy_text)
+        except (TypeError, ValueError):
+            continue
+        if hit_count <= 0:
+            continue
+        distance = landmark_distance(point_cm, cell_centre_cm(ix, iy, cell_size_cm))
+        if distance > max_cm:
+            continue
+        if best is None or distance < best:
+            best = distance
+    return best

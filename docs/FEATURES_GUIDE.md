@@ -232,6 +232,21 @@ honestly offer and names the reason when that is not the best one available. One
 
 **Disable:** `modules.mapping.enabled = false`
 
+### Distance queries
+
+`mapping/mapper.py` exposes three pure helpers over the same robot-centric grid `tick` already
+builds, so a range reading can be turned into a distance without a runtime:
+
+- `nearest_wall(grid, point_cm, max_cm)` - how far the nearest recorded cell is, or `None`;
+- `landmark_distance(point_cm, landmark_cm)` - straight line to one point;
+- `wall_distance(point_cm, start_cm, end_cm)` - to a wall segment, measured to the nearer end when
+  the point is past it.
+
+A point is `(forward_cm, left_cm)`, the order the scan conversion uses. `None` from `nearest_wall`
+means *no wall this map knows about* inside `max_cm` - "not known", never "clear". Nothing in the
+runtime consumes the helpers yet; they exist so a sonar reading can become the absolute fix the
+localization ladder needs before it decays.
+
 ### Places
 
 A **place** is a named pose the dog can be asked to go to — the kitchen, your bed, the door. Places

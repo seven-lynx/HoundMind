@@ -99,8 +99,8 @@ whose feature was removed says so rather than disappearing.
 - [x] Home map snapshot sample cap
 - [x] Home map snapshot age cap
 - [x] Path planning hooks (Pi4) — default A* hook added, mapper calls `path_planning_hook`, tests and docs updated
- - [ ] Add map-based measurement functions (point landmark distance and line/wall distance) for use by localization and range-matching.
- - [ ] Expose API in `mapping/mapper.py` to query nearest wall/landmark for ultrasonic range association.
+ - [x] Add map-based measurement functions (point landmark distance and line/wall distance) for use by localization and range-matching. (`mapping/mapper.py::landmark_distance`, `::wall_distance`)
+ - [x] Expose API in `mapping/mapper.py` to query nearest wall/landmark for ultrasonic range association. (`mapping/mapper.py::nearest_wall`)
 
 ## Behavior
 - [x] Behavior FSM state definitions (`behavior/fsm.py`)
