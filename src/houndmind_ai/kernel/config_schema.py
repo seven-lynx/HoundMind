@@ -668,6 +668,10 @@ _ORIENTATION = Section(
 _ODOMETRY = Section(
     fields={
         "step_cm": FloatSpec(minimum=0.1, maximum=200.0),
+        # `tools.step_calibrate` measures these. An empty `surface` means the assumed `step_cm`
+        # applies, and the published pose says so instead of looking measured.
+        "surface": StrSpec(),
+        "surface_step_cm": MapOf(FloatSpec(minimum=0.1, maximum=200.0)),
         "track_backward": Bool(),
     }
 )

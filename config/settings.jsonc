@@ -753,9 +753,18 @@
     // ODOMETRY (steps -> a relative pose; this dog has no wheel encoders)
     // =====================================================================
     "odometry": {
-      // Centimetres per issued linear command. A calibrated guess, not a measurement: drive a
-      // known distance, count the steps, and put the real number here.
+      // Centimetres per issued linear command. A calibrated guess, not a measurement: run
+      // `python -m tools.step_calibrate --confirm-clearance` and paste what it prints into
+      // `surface_step_cm` below, which overrides this value for the named surface.
       "step_cm": 25.0,
+      // The floor surface the dog is walking on right now, chosen by you (the IMU classifier that
+      // would guess it is conditional on the measured constants differing between surfaces). An
+      // empty string means "no surface chosen", so `step_cm` applies and the pose says `assumed`.
+      "surface": "",
+      // Measured centimetres per gait cycle, per surface, from `tools.step_calibrate`. A surface
+      // listed here wins over `step_cm`; a surface missing here falls back to it and the pose
+      // reports `step_cm_source: "assumed"` rather than pretending to be measured.
+      "surface_step_cm": {},
       // Count `backward` as a signed step too, or ignore it.
       "track_backward": true
     },

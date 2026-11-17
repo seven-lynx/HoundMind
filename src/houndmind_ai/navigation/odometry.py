@@ -29,19 +29,74 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from houndmind_ai.core.module import Module
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["LINEAR_ACTIONS", "DEFAULT_STEP_CM", "OdometryModule"]
+__all__ = [
+    "LINEAR_ACTIONS",
+    "DEFAULT_STEP_CM",
+    "OdometryModule",
+    "StepScale",
+    "resolve_step_cm",
+]
 
 #: The two actions that advance the dog along its own heading.
 LINEAR_ACTIONS = ("forward", "backward")
 
 #: Assumed stride in centimetres. A guess until someone measures it; see the module docstring.
 DEFAULT_STEP_CM = 25.0
+
+
+@dataclass(frozen=True)
+class StepScale:
+    """The centimetres one gait cycle is believed to carry, and where that number came from.
+
+    `source` is `"assumed"` or `"measured:<surface>"`, and it is published rather than kept private:
+    a pose built on a guess and a pose built on a measured constant look identical otherwise, and
+    every place anchor inherits whichever one was in force when it was taught.
+    """
+
+    cm: float
+    source: str
+    surface: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "step_cm": round(self.cm, 3),
+            "step_cm_source": self.source,
+            "surface": self.surface,
+        }
+
+
+def resolve_step_cm(settings: Mapping[str, Any]) -> StepScale:
+    """Pick the stride: a measured per-surface value when one exists, else `step_cm`.
+
+    A surface that has no entry - or one that is zero, negative or junk - falls back to `step_cm`
+    and says `assumed`. Silently treating a missing entry as 0 cm would collapse every distance
+    the map holds, so the fallback is the loud path, not the quiet one.
+    """
+    assumed = _safe_float(settings.get("step_cm"), DEFAULT_STEP_CM)
+    if assumed <= 0 or not math.isfinite(assumed):
+        assumed = DEFAULT_STEP_CM
+
+    raw_surface = settings.get("surface")
+    surface = (
+        raw_surface.strip()
+        if isinstance(raw_surface, str) and raw_surface.strip()
+        else None
+    )
+    table = settings.get("surface_step_cm")
+    if surface is not None and isinstance(table, Mapping):
+        measured = _safe_float(table.get(surface), 0.0)
+        if measured > 0:
+            return StepScale(cm=measured, source=f"measured:{surface}", surface=surface)
+    return StepScale(cm=assumed, source="assumed", surface=surface)
+
 
 
 def _safe_float(val: Any, default: float) -> float:
@@ -92,7 +147,8 @@ class OdometryModule(Module):
 
     def tick(self, context) -> None:
         settings = (context.get("settings") or {}).get("odometry", {}) or {}
-        step_cm = _safe_float(settings.get("step_cm", DEFAULT_STEP_CM), DEFAULT_STEP_CM)
+        scale = resolve_step_cm(settings)
+        step_cm = scale.cm
         track_backward = bool(settings.get("track_backward", True))
 
         if context.get("odometry_reset"):
@@ -102,7 +158,7 @@ class OdometryModule(Module):
         if isinstance(command, dict):
             self._consume(command, context, step_cm, track_backward)
 
-        self._publish(context)
+        self._publish(context, scale)
 
     def _consume(self, command: dict, context, step_cm: float, track_backward: bool) -> None:
         """Count one step per *issued* command.
@@ -139,7 +195,7 @@ class OdometryModule(Module):
         self._x_cm += signed * step_cm * math.cos(yaw)
         self._y_cm += signed * step_cm * math.sin(yaw)
 
-    def _publish(self, context) -> None:
+    def _publish(self, context, scale: StepScale) -> None:
         heading = context.get("current_heading")
         pose_valid = self._reason is None and heading is not None
         context.set(
@@ -154,5 +210,7 @@ class OdometryModule(Module):
                 "yaw_deg": round(_safe_float(heading, 0.0), 3),
                 "pose_valid": pose_valid,
                 "reason": self._reason,
+                # Which constant built those numbers, and whether anyone measured it (L3.2).
+                **scale.to_dict(),
             },
         )

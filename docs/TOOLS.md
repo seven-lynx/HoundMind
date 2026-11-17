@@ -27,6 +27,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 16. [`schema_export`](#16-schema_export)
 17. [`bench_tick`](#17-bench_tick)
 18. [`map_inspect`](#18-map_inspect)
+19. [`step_calibrate`](#19-step_calibrate)
 
 ---
 
@@ -50,6 +51,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Which servo joint is leaning, and what trim is saved? | `calibrate_servos` |
 | Is the loop spending its tick where I think it is? | `bench_tick` |
 | What is actually inside `data/home_map.json`? | `map_inspect` |
+| How far does one `forward` really carry the dog? | `step_calibrate --confirm-clearance` |
 
 ## 2. Motion risk
 
@@ -58,6 +60,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `installer_verify` | no |
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
+| `step_calibrate` | **yes, unless `--fake`** — it walks toward a wall by design. `--confirm-clearance` is mandatory, `--stop-at` defaults to 45 cm, and every step passes the runtime's interlock |
 | `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `bench_tick`, `map_inspect` | no |
 | `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
@@ -483,6 +486,48 @@ the picture is nose up, the same convention as the web app's map panel.
 the file loads and 1 when it does not — with the reason named, never a bare traceback.
 
 Read-only, no HAL, no runtime: it cannot move the dog, and it runs on any machine.
+
+## 19. `step_calibrate`
+
+Measures how far one `forward` command actually carries the dog, against a wall, and prints a
+`surface_step_cm` block for `config/settings.jsonc`. It exists because `step_cm` shipped as 25 cm for
+a dog about 25 cm long, while the vendor reference lists the real travel of one gait cycle as unknown
+(#285) — and every place anchor and map dot is scaled by that constant.
+
+```bash
+python -m tools.step_calibrate --fake                                  # simulated wall, nothing moves
+python -m tools.step_calibrate --confirm-clearance --surface hardwood
+python -m tools.step_calibrate --confirm-clearance --surface carpet --commands 6
+python -m tools.step_calibrate --confirm-clearance --measure reverse --surface carpet
+python -m tools.step_calibrate --confirm-clearance --measure head-zero
+```
+
+| Flag | Meaning |
+|---|---|
+| `--confirm-clearance` | Mandatory on hardware. Without it (and without `--fake`) the tool prints why and exits `2` |
+| `--measure` | `distance` (forward at a wall), `reverse` (back away from one), `head-zero` (level the head, report the reading) |
+| `--surface` | The floor this run is for. That name is the key in `surface_step_cm` |
+| `--commands` | Gait cycles to issue (default 5). Fewer than 3 is reported as `weak`, not `measured` |
+| `--stop-at` | Stop this many cm from the wall (default 45) |
+| `--speed` | Servo speed; the interlock may lower it, and the lowered value is what runs |
+| `--record-trace` | Write the per-cycle trace (distance, acc, gyro) as JSON — the input L3.4 would need |
+| `--json` | Print the report and snippet as one JSON document instead of the table |
+
+**How it decides.** Each cycle: sample the distance (retrying a missed echo up to three times), ask the
+runtime's own `Interlock` about a `forward` command carrying `steps: 1`, execute the interlock's
+verdict, wait, sample again. `cm/cycle` is the least-squares slope of distance against cycle, so one
+bad echo tilts the line instead of setting the answer, and the residual is printed beside it. A run is
+`measured` only with at least three cycles, no veto and less than 5° of integrating-gyro drift —
+otherwise the verdict says exactly what disqualified it and no value is offered.
+
+**Why it stops instead of retrying.** A veto means the envelope said no: battery under the floor, a
+tilted dog, an obstacle inside 12 cm, or an expired command. Driving on through one would defeat the
+interlock this tool exists to respect, so the run ends and the veto is printed with its detail.
+
+`--fake` runs the identical path against `step_calibrate._WallDogHAL` (a `FakeDogHAL` whose distance
+falls by `--fake-step-cm` per step), which is also how its tests work. Nothing writes
+`config/settings.jsonc`: the config is comment-rich user data, and the tool hands you the block.
+
 
 ## Adding a tool
 

@@ -10,6 +10,23 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **`step_cm` can now be measured instead of assumed** — it shipped as 25 cm per gait cycle for a dog
+  about 25 cm long, and `hal/vendor.py:573` shows one `forward` *is* one cycle, so the constant drives
+  every place anchor and map dot (#285). `tools.step_calibrate` walks the dog toward a wall, samples
+  the ultrasonic each cycle, and fits distance against cycles: `cm/cycle`, the RMS residual, the
+  echoes it dropped and the drift it saw. Every step is evaluated by the runtime's own `Interlock` —
+  battery floor, tilt latch, obstacle rule, speed clamp — and a veto **ends the run and reports the
+  veto** instead of retrying it. `--confirm-clearance` is mandatory, `--stop-at` defaults to 45 cm,
+  the caller-level gate is enforced in `run_calibration` too, and `--fake` runs the whole path against
+  a simulated wall with no hardware. A run needs at least three cycles, no veto and under 5° of
+  gyro-integrated drift to count; it prints a `surface_step_cm` block for `config/settings.jsonc` and
+  never rewrites that comment-rich file itself.
+- **Odometry says which stride it used** — `odometry.surface` names the floor, `odometry.surface_step_cm`
+  holds the measured values per surface, and `resolve_step_cm` prefers the measured entry over the
+  assumed `step_cm`, falling back loudly (`step_cm_source: "assumed"`) for an unlisted, zero or junk
+  entry. The published `odometry` payload now carries `step_cm`, `step_cm_source` and `surface`, so a
+  client can tell a measured constant from a guess.
+
 - **The dog can read back the map it writes** — `save_home_map` persisted a sample log every 30 s and
   nothing ever loaded it, and the file held no map at all: `mapping_state["grid"]` was never written,
   so the occupancy cells and the sweep behind them died with the process (#286). `mapping/home_map.py`

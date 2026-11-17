@@ -211,9 +211,33 @@ honestly offer and names the reason when that is not the best one available. One
   since an absolute fix. An absolute fix resets it. When it reaches `confidence_floor` the pose is
   withdrawn and the dog reports `reactive`.
 
+### Measuring the stride
+
+`step_cm` shipped as 25 cm for a dog about 25 cm long, and the vendor reference itself lists how far
+one gait cycle travels as unknown (#285). One `forward` command is **one gait cycle**
+(`hal/vendor.py:573`), so the constant is centimetres per cycle — measure it, do not guess it:
+
+```bash
+python -m tools.step_calibrate --confirm-clearance --surface hardwood
+```
+
+It walks toward a wall, samples the ultrasonic each cycle, fits distance against cycles and prints a
+`surface_step_cm` block. Every step passes the runtime's own interlock (battery floor, tilt latch,
+obstacle rule, speed clamp); a veto ends the run and is reported rather than retried. It stops at
+`--stop-at` (45 cm by default), and a run whose heading drifted more than 5° is **rejected, not
+averaged in**. Nothing writes `config/settings.jsonc` for you: paste the block it prints.
+
+The result is per surface, because a carpet eats a stride that hardwood does not. `odometry.surface`
+names the floor the dog is on and `odometry.surface_step_cm` holds the measured values; the published
+pose carries `step_cm_source` — `"assumed"` or `"measured:<surface>"` — so a client can tell a
+measured constant from a guess, and a place anchor taught under one is not silently re-scaled by the
+other.
+
 | Key | Default | Meaning |
 |---|---|---|
-| `settings.odometry.step_cm` | `25.0` | Centimetres per issued linear command — a guess until measured |
+| `settings.odometry.step_cm` | `25.0` | Centimetres per issued linear command — the assumed value, used when the surface has no measured entry |
+| `settings.odometry.surface` | `""` | The floor the dog is on (`hardwood`, `carpet`, …). Empty means "no surface chosen" |
+| `settings.odometry.surface_step_cm` | `{}` | Measured cm per cycle, per surface, from `tools.step_calibrate`; wins over `step_cm` |
 | `settings.odometry.track_backward` | `true` | Count `backward` as a signed step |
 | `settings.localization.slam_max_age_s` | `2.0` | A SLAM pose older than this is not believed |
 | `settings.localization.slam_min_confidence` | `0.2` | ...nor one whose own confidence is below this |
