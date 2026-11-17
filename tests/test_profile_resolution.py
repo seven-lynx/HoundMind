@@ -109,9 +109,13 @@ def test_the_shipped_file_asks_the_board() -> None:
     assert _shipped()["profile"] == AUTO_PROFILE
 
 
-def test_the_shipped_profiles_are_the_two_editions() -> None:
-    """Pi 3 was dropped; a `pi3` profile would be a promise the installer no longer keeps."""
-    assert set(_shipped()["profiles"]) == set(PROFILES)
+def test_the_shipped_profiles_are_the_two_editions_plus_the_end_user_set() -> None:
+    """Pi 3 was dropped; a `pi3` profile would be a promise the installer no longer keeps.
+
+    `pet` is not a board edition - it is the end-user set (#272) - so it is the one profile
+    name allowed in addition to the two boards.
+    """
+    assert set(_shipped()["profiles"]) == set(PROFILES) | {"pet"}
 
 
 def test_the_pi5_thermal_warning_sits_above_the_pi5_idle_temperature() -> None:

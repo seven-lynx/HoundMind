@@ -10,6 +10,14 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A `pet` profile for the dog that is left running** — `profiles` gains `pet`: `loop.tick_hz: 10`
+  and the read-only `health` sampler on, everything else inherited. It is a name the guides can
+  point at instead of "edit the shipped file and hope", and it deliberately leaves `safety`,
+  `sensor_health` and `balance` off — those stay off until the 30-minute soak (#26) is recorded,
+  because a profile must never flip a safety module on its own. Three tests load the shipped file
+  through `HOUNDMIND_PROFILE=pet` and hold that line, and the shipped-profile test now names `pet`
+  as the one profile that is not a board edition.
+
 - **The map answers distance questions** — `mapping/mapper.py` gains `nearest_wall`,
   `landmark_distance` and `wall_distance` over the robot-centric grid it already builds, so a
   sonar reading can be compared with a stored wall instead of only with the current sweep. Points
