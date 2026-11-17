@@ -36,7 +36,22 @@ ROBOT_HAT_PROBE = "from robot_hat import Robot, Pin, Ultrasonic, utils, Music, I
 # the installer installs, and a missing `lgpio` or `pygame` made the probe above fail with an
 # ImportError naming `robot_hat` rather than the real culprit - with the probe failing, `pidog` was
 # never installed at all (#180). `pyaudio` arrives from `requirements.txt` on the full preset.
-ROBOT_HAT_DEPS = ("smbus2", "lgpio", "pyaudio", "pygame")
+# `serial` gates nothing at import time, but `robot_hat doctor` lists it in its own `PYTHON_MODULES`
+# (`robot_hat/doctor.py`, 2.5.x), so a stock install reported the vendor library as broken for a
+# dependency nothing installed - and that is the first command the vendor docs send you to (#255).
+ROBOT_HAT_DEPS = ("smbus2", "lgpio", "pyaudio", "pygame", "serial")
+
+# The names above are *import* names, and one of them is not what pip installs. `serial` is the
+# import name of PyPI's `pyserial`; the project called `serial` is an unrelated stub, so handing the
+# probe result straight to `pip install` would satisfy the probe with the wrong package (#255).
+VENDOR_PIP_NAMES = {"serial": "pyserial"}
+
+# `Pidog.speak()` resolves `~/pidog/sounds/<name>.mp3` and falls back to `.wav` (`pidog/pidog.py`,
+# `SOUND_DIR`). The pack sits at the *repository root* of the vendor clone, and pidog's own
+# `MANIFEST.in` does not list it, so `pip install <clone>` drops it: on a dog the directory did not
+# exist and `speak('single_bark_1')` returned False with no sound (#256). The clone is already here
+# at install time, so this is a copy and never a runtime download.
+VENDOR_SOUNDS_DIR = "sounds"
 
 # `robot_hat/tts.py`, `robot_hat/llm.py` and `robot_hat/stt.py` are one-line re-exports of
 # `sunfounder_voice_assistant`, a SunFounder git package that is not on PyPI - the vendor's own
@@ -209,6 +224,102 @@ def missing_modules(python: Path, names: tuple[str, ...]) -> list[str]:
         return list(names)
     lines = out.decode("utf-8", "replace").strip().splitlines()
     return [item for item in (lines[-1].split(",") if lines else []) if item]
+
+
+def vendor_pip_names(modules: list[str]) -> list[str]:
+    """The pip names for a list of import names, so a probe result can be installed.
+
+    Only the names that differ are in `VENDOR_PIP_NAMES`; everything else is its own pip name.
+    """
+    return [VENDOR_PIP_NAMES.get(name, name) for name in modules]
+
+
+def vendor_sounds_path(home: Path | None = None) -> Path:
+    """Where the vendor's `Pidog` looks for its sound files (`SOUND_DIR`).
+
+    The vendor resolves the home directory through `SUDO_USER` when it runs as root
+    (`pidog/pidog.py`), so a copy made under `sudo` belongs in that user's home rather than in
+    `/root`, which no dog process ever reads. An explicit `home` skips the guesswork.
+    """
+    if home is not None:
+        return home / "pidog" / VENDOR_SOUNDS_DIR
+    geteuid = getattr(os, "geteuid", None)
+    sudo_user = os.environ.get("SUDO_USER", "") if geteuid and geteuid() == 0 else ""
+    if sudo_user and (Path("/home") / sudo_user).is_dir():
+        return Path("/home") / sudo_user / "pidog" / VENDOR_SOUNDS_DIR
+    return Path.home() / "pidog" / VENDOR_SOUNDS_DIR
+
+
+def vendor_sounds_present(home: Path | None = None) -> bool:
+    """Whether that directory holds at least one file, i.e. whether `speak()` can find anything."""
+    try:
+        return any(item.is_file() for item in vendor_sounds_path(home).iterdir())
+    except OSError:  # a directory that does not exist is the same answer as an empty one
+        return False
+
+
+def install_vendor_sounds(source: Path, home: Path | None = None) -> int:
+    """Copy the vendor sound pack to where `Pidog.speak()` reads it; return the files copied.
+
+    Idempotent on purpose: the target is on the dog's filesystem and may already hold the pack (or
+    sounds somebody added), so an existing file is left alone and nothing is ever overwritten. A
+    missing source is reported and is not an install failure - audio is cosmetic, and the rest of
+    the install still works without it.
+    """
+    target = vendor_sounds_path(home)
+    if not source.is_dir():
+        print(
+            f"Sound pack not found at {source}; `speak()` will stay silent until a `sounds/` "
+            f"directory is copied to {target} (#256)."
+        )
+        return 0
+    copied = 0
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        for item in sorted(source.iterdir()):
+            if not item.is_file():
+                continue
+            destination = target / item.name
+            if destination.exists():
+                continue
+            shutil.copy2(item, destination)
+            copied += 1
+    except OSError as exc:  # noqa: BLE001 - one unwritable file must not fail the install
+        print(f"Could not copy the whole sound pack to {target}: {exc}")
+        return copied
+    print(f"Sound pack: {copied} file(s) in {target}")
+    return copied
+
+
+def report_pidog_data_gaps(
+    home: Path | None = None, repo_root: Path | None = None
+) -> None:
+    """Name the vendor data directories `pidog` does not ship, and what replaces each.
+
+    The installed package carries Python modules only: no `sounds/`, so `speak()` has no file to
+    play (#256), and no `examples/`, so the `imu_calibration.py` the docs used to send people to
+    does not exist on the device (#259). Sounds are restored by :func:`install_vendor_sounds`. The
+    calibration line names `python -m tools.imu_calibrate` only when that tool is in this checkout,
+    because an installer run from an older tree would otherwise hand out a command that is not
+    there - pointing at the documentation is the honest answer in that case.
+    """
+    if not vendor_sounds_present(home):
+        print(
+            "PiDog sound pack missing: `speak()` will stay silent. Copy the vendor `sounds/` "
+            f"directory into {vendor_sounds_path(home)} (#256)."
+        )
+    tool = repo_root / "src" / "tools" / "imu_calibrate.py" if repo_root else None
+    if tool is not None and tool.is_file():
+        print(
+            "IMU calibration: the vendor's `examples/imu_calibration.py` is not installed with the "
+            "package; run `python -m tools.imu_calibrate --apply` on the dog instead (#259)."
+        )
+    else:
+        print(
+            "IMU calibration: the vendor's `examples/imu_calibration.py` is not installed with the "
+            "package; `docs/pidog/PIDOG-SENSORS.md` section 4.5 lists the setters that replace it "
+            "(#259)."
+        )
 
 
 def python_version_tuple(python: Path) -> tuple[int, int] | None:
@@ -591,6 +702,19 @@ def clone_or_update(repo_url: str, dest: Path, branch: str | None = None) -> int
     return run(cmd)
 
 
+def rtabmap_bindings_source(root: Path) -> Path | None:
+    """The directory `pip install` can turn into the `rtabmap` module, or None.
+
+    Upstream used to keep a ctypes package in `python/`, with a `setup.py` pip could install. That
+    tree is gone, and `-DWITH_PYTHON=ON` builds the internal `PyMatcher` / `PyDetector` /
+    `PyDescriptor` interface under `corelib/src/python` instead - not the `rtabmap` module this
+    project imports (#181). A `python/` directory without a `setup.py` is not an installable
+    package either, so the `setup.py` is what decides.
+    """
+    candidate = root / "python"
+    return candidate if (candidate / "setup.py").is_file() else None
+
+
 def build_rtabmap(cache_root: Path, pip: Path, python: Path) -> int:
     """Clone, build, and install RTAB-Map and its Python bindings into the active env.
 
@@ -600,6 +724,19 @@ def build_rtabmap(cache_root: Path, pip: Path, python: Path) -> int:
     code = clone_or_update("https://github.com/introlab/rtabmap.git", rtabmap_path)
     if code != 0:
         return code
+
+    # Check for the bindings *before* the build, not after it: an explicit `--build-rtabmap` used to
+    # spend the better part of an hour compiling C++ and only then report that the source it needed
+    # was never in the tree (#181). The same verdict is available in a minute.
+    rtabmap_python = rtabmap_bindings_source(rtabmap_path)
+    if rtabmap_python is None:
+        print(
+            "RTAB-Map: this tree ships no installable `python/` bindings source (upstream removed "
+            "it, and `-DWITH_PYTHON=ON` builds `PyMatcher`/`PyDetector`/`PyDescriptor`, not the "
+            "`rtabmap` module): not building. `rtabmap-py` cannot be installed and `slam_pi4` "
+            "stays unavailable. See scripts/install_rtabmap_pi4.md (#181)."
+        )
+        return 1
 
     build_dir = rtabmap_path / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -650,18 +787,8 @@ def build_rtabmap(cache_root: Path, pip: Path, python: Path) -> int:
         except Exception:
             pass
 
-    # Install the Python bindings. Upstream `introlab/rtabmap` no longer ships the `python/` source
-    # directory this used to `pip install` from, and the old fallback re-checked that same path, so
-    # the build returned 0 having installed nothing and `installer_verify` was the first place an
-    # operator learned `rtabmap-py` was missing (#181). Say it here, and fail.
-    rtabmap_python = rtabmap_path / "python"
-    if not rtabmap_python.exists():
-        print(
-            "RTAB-Map built, but this tree ships no `python/` bindings source (upstream removed "
-            "it): `rtabmap-py` cannot be installed, so `slam_pi4` stays unavailable. See "
-            "scripts/install_rtabmap_pi4.md."
-        )
-        return 1
+    # The bindings source was checked before the build (see above), so this is the same directory:
+    # either it was installable and the C++ it wraps is now installed, or this function returned 1.
     return run([str(pip), "install", str(rtabmap_python)])
 
 
@@ -980,12 +1107,13 @@ def main() -> int:
                 # preset (#180).
                 absent = missing_modules(python, ROBOT_HAT_DEPS)
                 if absent:
-                    print(f"Installing the modules `robot_hat` needs to import: {', '.join(absent)}")
-                    code = run([str(pip), "install", *absent])
+                    install = vendor_pip_names(absent)
+                    print(f"Installing the modules `robot_hat` needs to import: {', '.join(install)}")
+                    code = run([str(pip), "install", *install])
                     if code != 0:
                         print(
                             "Could not install "
-                            + ", ".join(absent)
+                            + ", ".join(install)
                             + ". On Bookworm `pyaudio` needs `portaudio19-dev`; install the system "
                             "dependencies (`--auto-system-deps`) and re-run."
                         )
@@ -1027,6 +1155,12 @@ def main() -> int:
                 if code != 0:
                     return code
 
+                # The wheel carries Python modules only: the sound pack sits at the clone's root and
+                # `Pidog.SOUND_DIR` points into the home directory, so a fresh install left
+                # `speak()` with no file to play (#256). The clone is right here, so copy it.
+                install_vendor_sounds(pidog_path / VENDOR_SOUNDS_DIR)
+                report_pidog_data_gaps(repo_root=repo_root)
+
                 i2samp = pidog_path / "i2samp.sh"
                 if args.run_i2samp and i2samp.exists():
                     code = run(["sudo", "bash", str(i2samp)])
@@ -1034,6 +1168,9 @@ def main() -> int:
                         return code
             else:
                 print("PiDog library detected; skipping PiDog install.")
+                # An install made before this copy step existed (or by hand) is exactly the state
+                # #256 was reported in, so check the two data directories either way.
+                report_pidog_data_gaps(repo_root=repo_root)
 
     # The vendor voice stack. Outside the pidog branch on purpose: a dog that already has `pidog`
     # skips that whole block above, and it still needs this - `robot_hat.tts`, `llm` and `stt` are

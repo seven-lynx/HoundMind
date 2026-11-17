@@ -141,9 +141,13 @@ The installer script will:
    stack need.
 4. Create the venv with **`--system-site-packages`**, so Debian-provided bindings (`picamera2`) are
    importable at all.
-5. Install SunFounder dependencies (`robot-hat`, `vilib`, `pidog`) **into the same environment**.
-6. Install HoundMind, then install and **enable** `houndmind.service` (`--no-service` skips it).
-7. Verify the imports, and the camera binding on a Pi, ending at `Installer check: OK`.
+5. Install SunFounder dependencies (`robot-hat`, `vilib`, `pidog`) **into the same environment**,
+   along with the modules `robot_hat doctor` checks for - `pyserial` included, whose import name is
+   `serial` and which nothing used to install (#255).
+6. Copy the vendor `sounds/` directory to `~/pidog/sounds`, where `Pidog.speak()` looks for it: the
+   wheel carries code only, so barks and growls were silent on a fresh install (#256).
+7. Install HoundMind, then install and **enable** `houndmind.service` (`--no-service` skips it).
+8. Verify the imports, and the camera binding on a Pi, ending at `Installer check: OK`.
 
 ### Board detection
 - **Pi 4 and Pi 5**: both honour `--preset`. With `--preset auto` (the default) a Pi 4 installs
@@ -172,7 +176,7 @@ Optional flags:
 - `--allow-unsupported-os` (continue on a release other than Bookworm; not supported, for maintainers)
 
 Additional installer flags (new):
-- `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make`, needs system build deps and `sudo`, and takes the better part of an hour on a Pi 4). It is the **only** way that build happens: `--preset full` no longer implies it, because the Python bindings can no longer be installed (#181), so the build produced nothing but time spent. Leave it off unless you are deliberately experimenting with the C++ library.
+- `--build-rtabmap`: clone, build and install RTAB‑Map and its Python bindings into the environment (runs `cmake`/`make`, needs system build deps and `sudo`, and takes the better part of an hour on a Pi 4). It is the **only** way that build happens: `--preset full` no longer implies it, because the Python bindings can no longer be installed (#181), so the build produced nothing but time spent. The installer checks for an installable bindings source straight after the clone and refuses before the build, so a tree without one costs a minute rather than an hour. Leave it off unless you are deliberately experimenting with the C++ library.
 - `--no-rtabmap`: explicitly skip any RTAB‑Map build/install during this run (useful when you want the full preset but will install RTAB‑Map later by hand).
 - `--auto-system-deps`: automatically install system packages via `apt` (needed before building heavy native dependencies).
 
@@ -244,6 +248,18 @@ python -m pip install ./pidog
 
 Note: `pidog` is **not** published on PyPI. Do not add it to your `requirements.txt`; install from the repo as shown above or use the guided installer.
 
+Two things that install does not give you, both of which the guided installer handles:
+
+- `robot_hat doctor` checks `pyserial` (import name `serial`); without it the vendor's own health
+  check reports its library section as broken. `python -m pip install pyserial` fixes that (#255).
+- `Pidog.speak()` reads `~/pidog/sounds/`, and the pack lives in the clone's root `sounds/`
+  directory rather than inside the installed package, so every bark and growl is silent with only a
+  missing-sound warning in the log. Copy it once (#256):
+
+```bash
+mkdir -p ~/pidog && cp -r ./pidog/sounds ~/pidog/sounds
+```
+
 Optional audio setup:
 
 ```bash
@@ -276,6 +292,12 @@ it comes from the `python3-picamera2` Debian package, and the venv has to be cre
 `--system-site-packages` to see it (the installer does that). If the import fails, leave
 `modules.vision_pi4.enabled` at `false` — enabling it only buys a `Picamera2 unavailable` line on
 every start (#215).
+
+An IMU that was never calibrated biases every angle derived from it: `|acc|` should read 1.00 g at
+rest, and `python -m tools.hardware_checkup --skip-motion` warns when it does not. The vendor's
+`examples/imu_calibration.py`, the only path this page used to point at, is not part of the
+installed package; `docs/pidog/PIDOG-SENSORS.md` section 4.5 lists the setters that write the same
+values, and #259 tracks what replaces the example on the device.
 
 ## What ships enabled
 
@@ -316,6 +338,9 @@ Two rules that hold whatever that document says:
   off *is* a motion run, and the smoke test disables `scanning` as well as the motors because it
   drives the head itself (#184).
 - `--include-motion` only with clearance around the dog and a hand on the power.
+- `sudo .venv/bin/robot_hat doctor` is the vendor's own health check, and its `Library` section
+  should be all ticks now that `pyserial` is installed (#255). If that section is green and the
+  speaker is still silent, the finding is #254 - a hardware question, not a code one.
 
 What still has to be judged by a human, because no command here asserts it: obstacle avoidance
 selecting sensible turns, stuck recovery completing, the watchdog holding motion on stale sensors

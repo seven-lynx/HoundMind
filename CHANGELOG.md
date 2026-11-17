@@ -77,6 +77,30 @@ Current Release: v2026.11.16
   and `config/settings.jsonc` said it switched itself off. Both now describe the fallback, and the
   fallback is logged at WARNING.
 
+- **`robot_hat doctor` reported the library as broken on a clean install** (#255). The vendor's own
+  health check lists `serial` in its `PYTHON_MODULES`; that is the import name of `pyserial`, a
+  package nothing installed, so the first command the vendor docs send you to exited non-zero for a
+  missing dependency rather than a fault. The installer now installs it and translates import names
+  to pip names (`serial` -> `pyserial`) instead of handing the probe result straight to pip: the
+  PyPI project called `serial` is an unrelated stub, so the old shortcut would have satisfied the
+  probe with the wrong package.
+- **Barking was silent because the sound pack was never installed** (#256). `Pidog.speak(name)`
+  resolves `~/pidog/sounds/<name>.mp3` (`.wav` as the fallback), while the files live at the root
+  of the vendor clone and its `MANIFEST.in` does not list them - so `pip install <clone>` dropped
+  them and the directory did not exist on the dog at all. The installer now copies the pack to
+  where the vendor looks (idempotent, an existing file is never overwritten) and reports a dog that
+  already has `pidog` but no pack.
+- **An explicit `--build-rtabmap` compiled for an hour on a tree with no bindings** (#181). The
+  check that upstream ships no installable `python/` bindings source ran *after* the C++ build; it
+  now runs straight after the clone, so the same verdict arrives in about a minute. The bindings
+  themselves are still not installable, and `slam_pi4` stays unavailable.
+- **The IMU calibration path the docs pointed at is not in the installed package** (#259). The
+  vendor's `examples/imu_calibration.py` is not part of the wheel, and nothing said so: the docs sent
+  people to a file that is not on the device. The installer now reports the two vendor data
+  directories that go missing (the sound pack and the examples) and names what replaces each, and
+  `docs/pidog/PIDOG-SENSORS.md` section 4.5 states that its setters are the calibration path on a
+  device.
+
 ## [v2026.11.16] - 2026-11-16
 
 ### Notes
