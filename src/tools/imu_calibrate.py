@@ -56,14 +56,27 @@ def _safe_float(val: Any, default: float) -> float:
         return default
 
 
-def to_raw(acc_g: Sequence[float], scale: Sequence[float]) -> list[float]:
-    """g back to the counts the calibration is expressed in.
+def to_raw(
+    acc_g: Sequence[float],
+    scale: Sequence[float],
+    bias: Sequence[float] | None = None,
+    offset: Sequence[float] | None = None,
+) -> list[float]:
+    """g back to the counts a calibration is expressed in: the full inverse of the read path.
 
-    `hal.read()` publishes g (#258), and the vendor's calibration keys are in LSB per g, so the
-    round trip needs the scale the sensor is currently using - the stored one, or the nominal.
+    The read path is ``acc_g = (raw + offset - bias) / scale``, so the way back multiplies by the
+    scale, adds the stored bias and takes the vendor's startup offset out again. Anything less is an
+    incomplete inverse: leave the bias out and a run against an existing calibration measures a bias
+    that compounds with the old one, which is why this used to clear the stored calibration first - and
+    why an interrupted run used to leave the dog with no calibration at all.
     """
+    zero = (0.0, 0.0, 0.0)
+    stored_bias = bias if bias is not None else zero
+    startup_offset = offset if offset is not None else zero
     return [
         _safe_float(acc_g[index], 0.0) * _safe_float(scale[index], NOMINAL_ACC_LSB_PER_G)
+        + _safe_float(stored_bias[index], 0.0)
+        - _safe_float(startup_offset[index], 0.0)
         for index in range(3)
     ]
 
@@ -180,18 +193,12 @@ def _run(hal: Any, args: argparse.Namespace, prompt: Callable[[str], str]) -> in
         print(
             "[imu] note: the vendor's own startup offset is in force "
             f"({', '.join(f'{value:+.0f}' for value in startup_offset)} LSB). It is computed once at "
-            "boot assuming the dog is level with X down, so it is usually wrong; --apply clears it "
-            "before measuring."
+            "boot assuming the dog is level with X down, so it is usually wrong; it is subtracted "
+            "from every sample here, and cleared when a calibration is saved."
         )
-
-    if args.apply:
-        # Measure the sensor, not the vendor's boot-time guess: `Pidog` shifts every sample by an
-        # offset derived from a level-dog assumption (`pidog.py:474-479`), and a PiDog boots lying
-        # down. Clearing it here is what makes the six faces mean something.
-        if hal.reset_imu_calibration():
-            print("[imu] cleared the stored calibration and the startup offset before measuring")
-        else:
-            print("[imu] could not clear the stored calibration; the numbers may carry an offset")
+    # Nothing is written until the run finishes: the measurement is taken through the stored
+    # calibration and the startup offset and both are undone in `to_raw`, so an interrupted run
+    # leaves the dog exactly as it was.
 
     poses: list[list[float]] = []
     gyros: list[list[float]] = []
@@ -211,7 +218,7 @@ def _run(hal: Any, args: argparse.Namespace, prompt: Callable[[str], str]) -> in
         acc_rows = [item[0] for item in samples]
         gyro_rows = [item[1] for item in samples]
         acc_mean = [_mean(acc_rows, axis) for axis in range(3)]
-        poses.append(to_raw(acc_mean, scale))
+        poses.append(to_raw(acc_mean, scale, current_bias, startup_offset))
         gyros.append([_mean(gyro_rows, axis) for axis in range(3)])
         print(f"[imu]   {POSE_ORDER[index]}: |acc| {magnitude_g(acc_mean):.2f} g")
 

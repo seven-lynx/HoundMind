@@ -1040,4 +1040,18 @@ class PidogHAL:
                 self._dog.close()
             except Exception:  # noqa: BLE001
                 logger.warning("Failed to close Pidog", exc_info=True)
+            finally:
+                # The vendor's close() hijacks SIGINT with a handler that only prints "Please wait"
+                # and arms a five second SIGALRM it never cancels (pidog.py:277-286, with the cancel
+                # commented out at :326). Left alone, Ctrl-C stops working in a process that looks
+                # hung - the natural reaction is to start it again - and the alarm fires later,
+                # inside whatever runs next, including our own exit.
+                try:
+                    import signal
+
+                    # `signal.alarm` is POSIX-only, so the stubs mypy resolves here lack it.
+                    signal.alarm(0)  # type: ignore[attr-defined]
+                    signal.signal(signal.SIGINT, signal.SIG_DFL)
+                except (ImportError, AttributeError, ValueError, OSError):
+                    logger.debug("Could not restore the signal state after close", exc_info=True)
         self._dog = None

@@ -157,24 +157,34 @@ def test_no_imu_reading_stops_the_run(capsys) -> None:
     assert hal.imu_calibrations_saved == []
 
 
-def test_apply_clears_the_old_calibration_before_measuring(capsys) -> None:
-    """Measure the sensor, not what was already subtracted from it."""
+def test_to_raw_undoes_the_full_read_path() -> None:
+    """`acc_g = (raw + offset - bias) / scale`, so the inverse has to carry both terms back."""
+    scale = (16384.0, 16384.0, 16384.0)
+    bias = (500.0, -300.0, 200.0)
+    offset = (-20448.0, 16183.0, -605.0)
+    raw = (10000.0, -2000.0, 300.0)
+
+    as_g = [(raw[i] + offset[i] - bias[i]) / scale[i] for i in range(3)]
+
+    assert to_raw(as_g, scale, bias, offset) == pytest.approx(list(raw))
+
+
+def test_apply_does_not_wipe_the_stored_calibration_before_measuring(capsys) -> None:
+    """An interrupted run must leave the dog exactly as it was.
+
+    The measurement undoes the stored calibration in software instead, which is what makes that
+    possible - the earlier version cleared it first and an interrupted run left nothing behind.
+    """
     hal = FakeDogHAL()
-    hal.set_imu_calibration_store({"acc_bias": [-20448.0, 16183.0, -605.0]})
+    hal.set_imu_calibration_store(
+        {"acc_bias": [0.0, 0.0, 0.0], "acc_scale": [16384.0, 16384.0, 16384.0]}
+    )
 
     assert _dry(hal, FACES, "--apply") == 0
 
-    assert hal.imu_calibration_resets == 1
-    assert "cleared the stored calibration" in capsys.readouterr().out
-
-
-def test_a_dry_run_leaves_the_stored_calibration_alone() -> None:
-    hal = FakeDogHAL()
-    hal.set_imu_calibration_store({"acc_bias": [-20448.0, 16183.0, -605.0]})
-
-    assert _dry(hal, FACES) == 0
-
     assert hal.imu_calibration_resets == 0
+    assert "cleared" not in capsys.readouterr().out
+    assert len(hal.imu_calibrations_saved) == 1
 
 
 def test_a_dry_run_says_when_the_vendor_startup_offset_is_in_force(capsys) -> None:
