@@ -276,7 +276,9 @@ def main(
 
         vendor_hal = PidogHAL(settings={})
         try:
-            vendor_hal.start()
+            # `animate=False`: a probe measures a 2 degree tip, and the vendor's action flow would be
+            # moving the head and legs underneath it.
+            vendor_hal.start(animate=False)
         except Exception as exc:  # noqa: BLE001 - a missing vendor package is the report
             print(f"[level] pidog unavailable: {exc}", file=sys.stderr)
             return 2

@@ -85,15 +85,24 @@ def solve(poses: Sequence[Sequence[float]]) -> dict[str, list[float]]:
 
 
 def coverage(poses: Sequence[Sequence[float]]) -> tuple[bool, list[str]]:
-    """True when every axis saw at least ``COVERAGE_MIN_G`` of gravity across the poses."""
+    """True when every axis saw gravity on **both** sides of zero.
+
+    A span is not enough, and the dog proved it: two poses resting on the same face give a wide span
+    *and* a bias of nearly a whole g, and the first saved run went through with X never pointing up
+    and Y never pointing down. Each axis has to see both signs or the bias and scale it produces are
+    the offset of whatever the dog was doing, not a measurement of the sensor.
+    """
     if not poses:
         return False, ["no samples"]
     problems: list[str] = []
     for axis, name in enumerate("XYZ"):
         values = [_safe_float(pose[axis], 0.0) for pose in poses]
-        span_g = (max(values) - min(values)) / 2.0 / NOMINAL_ACC_LSB_PER_G
-        if span_g < COVERAGE_MIN_G:
-            problems.append(f"{name} saw {span_g:.2f} g (needs {COVERAGE_MIN_G:.2f})")
+        high = max(values) / NOMINAL_ACC_LSB_PER_G
+        low = min(values) / NOMINAL_ACC_LSB_PER_G
+        if high < COVERAGE_MIN_G:
+            problems.append(f"{name} never pointed up (highest {high:+.2f} g)")
+        if low > -COVERAGE_MIN_G:
+            problems.append(f"{name} never pointed down (lowest {low:+.2f} g)")
     return (not problems), problems
 
 
@@ -166,6 +175,23 @@ def _run(hal: Any, args: argparse.Namespace, prompt: Callable[[str], str]) -> in
         f"scale {', '.join(f'{value:.0f}' for value in scale)} LSB/g"
         + ("" if current else " (no calibration saved)")
     )
+    startup_offset = current.get("acc_offset") or [0.0, 0.0, 0.0]
+    if any(abs(value) > 1.0 for value in startup_offset):
+        print(
+            "[imu] note: the vendor's own startup offset is in force "
+            f"({', '.join(f'{value:+.0f}' for value in startup_offset)} LSB). It is computed once at "
+            "boot assuming the dog is level with X down, so it is usually wrong; --apply clears it "
+            "before measuring."
+        )
+
+    if args.apply:
+        # Measure the sensor, not the vendor's boot-time guess: `Pidog` shifts every sample by an
+        # offset derived from a level-dog assumption (`pidog.py:474-479`), and a PiDog boots lying
+        # down. Clearing it here is what makes the six faces mean something.
+        if hal.reset_imu_calibration():
+            print("[imu] cleared the stored calibration and the startup offset before measuring")
+        else:
+            print("[imu] could not clear the stored calibration; the numbers may carry an offset")
 
     poses: list[list[float]] = []
     gyros: list[list[float]] = []
@@ -254,7 +280,9 @@ def main(
 
         vendor_hal = PidogHAL(settings={})
         try:
-            vendor_hal.start()
+            # `animate=False`: the vendor's action flow plays `waiting`/`feet_left_right` on its own,
+            # and this tool measures the dog standing still.
+            vendor_hal.start(animate=False)
         except Exception as exc:  # noqa: BLE001 - a missing vendor package is the report
             print(f"[imu] pidog unavailable: {exc}", file=sys.stderr)
             return 2

@@ -371,7 +371,9 @@ def main(
 
         vendor_hal = PidogHAL()
         try:
-            vendor_hal.start()
+            # `animate=False`: the vendor's action flow plays `waiting`/`feet_left_right` on its
+            # own every few seconds, which would move the joints this pass is trimming.
+            vendor_hal.start(animate=False)
         except Exception as exc:  # noqa: BLE001 - a missing vendor package is the report
             print(f"[tune] pidog unavailable: {exc}", file=sys.stderr)
             return 2

@@ -253,7 +253,9 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
 
         vendor_hal = PidogHAL(_load_settings(args.config))
         try:
-            vendor_hal.start()
+            # `animate=False`: with `--skip-motion` this must not move the dog, and the vendor's
+            # action flow animates it on its own (`waiting`, `feet_left_right`) regardless.
+            vendor_hal.start(animate=False)
         except Exception as exc:  # noqa: BLE001 - a missing vendor package is the report
             print(f"[checkup] pidog unavailable: {exc}", file=sys.stderr)
             return 2

@@ -59,6 +59,27 @@ def test_coverage_of_nothing_is_not_coverage() -> None:
     assert problems == ["no samples"]
 
 
+def test_an_axis_that_never_points_the_other_way_is_refused() -> None:
+    """The dog's first saved run: X never up, Y never down - and the old span check passed it.
+
+    A run like that produces bias values equal to whatever constant was shifting the data, not the
+    sensor's bias, so it has to be refused before anything is written.
+    """
+    shift = (500.0, 16183.0, 0.0)
+    poses = []
+    for axis, sign in ((0, -1.0), (0, -1.0), (1, 1.0), (1, 1.0), (2, 1.0), (2, -1.0)):
+        acc = [0.0, 0.0, 0.0]
+        acc[axis] = sign
+        poses.append([acc[i] * NOMINAL_ACC_LSB_PER_G + shift[i] for i in range(3)])
+
+    covered, problems = coverage(poses)
+
+    assert covered is False
+    assert any("X never pointed up" in problem for problem in problems)
+    assert any("Y never pointed down" in problem for problem in problems)
+    assert not any(problem.startswith("Z") for problem in problems)
+
+
 def test_to_raw_undoes_the_hal_conversion() -> None:
     raw = to_raw((1.0, -1.0, 0.5), (16384.0, 16000.0, 8192.0))
     assert raw == pytest.approx([16384.0, -16000.0, 4096.0])
@@ -134,6 +155,36 @@ def test_no_imu_reading_stops_the_run(capsys) -> None:
 
     assert "no IMU reading" in capsys.readouterr().out
     assert hal.imu_calibrations_saved == []
+
+
+def test_apply_clears_the_old_calibration_before_measuring(capsys) -> None:
+    """Measure the sensor, not what was already subtracted from it."""
+    hal = FakeDogHAL()
+    hal.set_imu_calibration_store({"acc_bias": [-20448.0, 16183.0, -605.0]})
+
+    assert _dry(hal, FACES, "--apply") == 0
+
+    assert hal.imu_calibration_resets == 1
+    assert "cleared the stored calibration" in capsys.readouterr().out
+
+
+def test_a_dry_run_leaves_the_stored_calibration_alone() -> None:
+    hal = FakeDogHAL()
+    hal.set_imu_calibration_store({"acc_bias": [-20448.0, 16183.0, -605.0]})
+
+    assert _dry(hal, FACES) == 0
+
+    assert hal.imu_calibration_resets == 0
+
+
+def test_a_dry_run_says_when_the_vendor_startup_offset_is_in_force(capsys) -> None:
+    """`Pidog` shifts every sample by an offset it derives at boot assuming a level dog."""
+    hal = FakeDogHAL()
+    hal.set_imu_calibration_store({"acc_offset": [-20448.0, 16183.0, -605.0]})
+
+    _dry(hal, FACES)
+
+    assert "startup offset is in force" in capsys.readouterr().out
 
 
 def test_reset_asks_the_hal_to_clear_the_calibration(capsys) -> None:

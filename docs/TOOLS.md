@@ -315,6 +315,24 @@ exists (#259).
 **The gyro gets a bias only.** A rate scale needs a known angular rate, which hand rotation cannot
 supply; writing one anyway would be an unmeasured value of exactly the kind #258 was about.
 
+**Both sides or nothing.** Every axis has to see gravity pointing up *and* down — not merely "a wide
+span". Two poses resting on the same face give a wide span and a bias of nearly a whole g, which is
+what the first saved run on the bench dog produced (X never pointed up, Y never down, and the saved
+bias matched the constant that was shifting the data). The tool refuses instead, naming the axis and
+the direction it never saw.
+
+**It clears the vendor's own offset before sampling.** `Pidog` computes an offset once at boot by
+assuming the dog is level with its X axis pointing down (`pidog.py:474-479`) and then adds it to every
+sample (`:490-495`). A PiDog boots **lying down**, so that offset is usually wrong, and measuring
+through it yields a "bias" that is really that offset. `--apply` clears both the stored calibration and
+the startup offset first, so what gets measured is the sensor. A dry run says when the offset is in
+force, because its numbers then mean nothing.
+
+**Nothing animates while it samples.** The vendor's `ActionFlow` plays `waiting` and
+`feet_left_right` on its own every few seconds (`action_flow.py:230-243`), moving the head and legs.
+Tools open the HAL with `start(animate=False)`, which is also what makes `hardware_checkup
+--skip-motion` honest.
+
 Exit codes: `0` measured or reset, `1` the six poses did not cover all three axes, the IMU did not
 answer, or the HAL refused the write, `2` a usage error.
 

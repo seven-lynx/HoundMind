@@ -39,6 +39,19 @@ Current Release: v2026.11.16
   degrees and speed 30.
 ### Fixed
 
+- **An IMU calibration could look successful and be pure garbage** (found by running it on the dog).
+  Three separate faults, each enough to spoil the result:
+  - The vendor's `ActionFlow` plays `waiting`/`feet_left_right` on its own every 2-6 s
+    (`action_flow.py:230-243`), so the head jittered through the six sampling windows. Tools now open
+    the HAL with `start(animate=False)`; that also makes `hardware_checkup --skip-motion` true, which
+    it was not while the flow animated the dog.
+  - `Pidog` computes `imu_acc_offset` at boot by assuming the dog is level with X pointing down
+    (`pidog.py:474-479`) and adds it to every sample. A PiDog boots lying down, so the measurement was
+    taken through a constant lie: the saved "bias" was that offset, to the count
+    (`-20448, 16183, -605` LSB). `set_imu_calibration`/`reset_imu_calibration` now zero and persist it,
+    `read_imu_calibration` reports it, and `--apply` clears it before sampling.
+  - The coverage check tested span only, so a run with X never up and Y never down passed it. It now
+    requires every axis to see gravity on both sides, and names the axis and the missing direction.
 - **The IMU handed out raw counts where its contract promised physical units** (#258). `PidogHAL`
   published `Pidog.accData`/`gyroData` verbatim — 16384 LSB/g and 16.4 LSB/deg/s — while
   `SensorSnapshot` documents g and deg/s and `FakeDogHAL` posts g and deg/s, so no test could see the

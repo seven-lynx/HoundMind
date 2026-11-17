@@ -227,10 +227,18 @@ class PidogHAL:
             self._action_flow = flow
         return self._action_flow
 
-    def start(self) -> None:
-        """Open the dog and start its action queue. Raises if the vendor package is absent."""
+    def start(self, *, animate: bool = True) -> None:
+        """Open the dog and, unless `animate` is false, start its action queue.
+
+        `ActionFlow` is **not passive**: its standby loop plays `waiting` and `feet_left_right` every
+        2-6 seconds on its own (`action_flow.py:230-243`), which moves the head and legs with nothing
+        asking it to. That is fine for the runtime and wrong for anything that needs the dog still -
+        on the dog, the head jittered through a six-face IMU run and spoiled it, so a calibration
+        tool passes `animate=False`.
+        """
         self._probe_sound(self._ensure_dog())
-        self._ensure_action_flow()
+        if animate:
+            self._ensure_action_flow()
 
     # ----------------------------------------------------------------- sensors
 
@@ -869,9 +877,17 @@ class PidogHAL:
                 dog.tail_move([angles], immediately=True, speed=_NUDGE_SPEED)
 
     def read_imu_calibration(self) -> dict[str, list[float]] | None:
-        """What the vendor loaded for the IMU, or None when it cannot say (#259)."""
+        """What the vendor loaded for the IMU, or None when it cannot say (#259).
+
+        Includes `acc_offset`/`gyro_offset`, which are **not** part of the stored calibration: they
+        are the shift `Pidog` computes once at startup under the assumption that the dog is level with
+        its X axis pointing down (`pidog.py:474-479`), and adds to every sample (`:490-495`). A PiDog
+        boots lying down, so that assumption is usually false and the shift is a constant lie in the
+        data - a caller that measures the sensor has to know whether it is in force.
+        """
         with self._bus:
-            imu = getattr(self._ensure_dog(), "imu", None)
+            dog = self._ensure_dog()
+            imu = getattr(dog, "imu", None)
             if imu is None:
                 return None
             found: dict[str, list[float]] = {}
@@ -884,6 +900,17 @@ class PidogHAL:
                     found[key] = [float(value) for value in values]
                 except (TypeError, ValueError):
                     logger.debug("Unreadable IMU %s: %r", key, values)
+            for key, attribute in (
+                ("acc_offset", "imu_acc_offset"),
+                ("gyro_offset", "imu_gyro_offset"),
+            ):
+                values = getattr(dog, attribute, None)
+                if not isinstance(values, (list, tuple)) or len(values) != 3:
+                    continue
+                try:
+                    found[key] = [float(value) for value in values]
+                except (TypeError, ValueError):
+                    continue
             return found or None
 
     def set_imu_calibration(
@@ -901,7 +928,8 @@ class PidogHAL:
         if all(value is None for value in (acc_bias, acc_scale, gyro_bias, gyro_scale)):
             return False
         with self._bus:
-            imu = getattr(self._ensure_dog(), "imu", None)
+            dog = self._ensure_dog()
+            imu = getattr(dog, "imu", None)
             if imu is None:
                 logger.warning("No vendor IMU object; the calibration was not saved")
                 return False
@@ -914,7 +942,25 @@ class PidogHAL:
                 saved = self._call_calibration_setter(
                     imu, "set_gyro_calibration", gyro_bias, gyro_scale
                 ) and saved
+            # The vendor's startup offset double-counts against `calibrate_*` and was computed from a
+            # false assumption, so saving a calibration clears it - persisted, so the next boot does
+            # not re-invent one from whatever pose the dog happened to be in.
+            saved = self._clear_runtime_offsets(dog) and saved
             return saved
+
+    @staticmethod
+    def _clear_runtime_offsets(dog: Any) -> bool:
+        """Zero `imu_acc_offset`/`imu_gyro_offset` and persist it, so the sensor speaks for itself."""
+        setter = getattr(dog, "set_imu_offsets", None)
+        if not callable(setter):
+            logger.warning("Vendor exposes no set_imu_offsets(); the startup offset stays in force")
+            return False
+        try:
+            setter(acc_offset=[0, 0, 0], gyro_offset=[0, 0, 0])
+        except Exception:  # noqa: BLE001 - a vendor write failure is reported, not fatal
+            logger.warning("Vendor rejected zeroed IMU runtime offsets", exc_info=True)
+            return False
+        return True
 
     @staticmethod
     def _call_calibration_setter(
@@ -935,9 +981,10 @@ class PidogHAL:
         return True
 
     def reset_imu_calibration(self) -> bool:
-        """Clear the stored calibration; the vendor falls back to the datasheet nominal."""
+        """Clear the stored calibration and the vendor's startup offset; back to the datasheet."""
         with self._bus:
-            imu = getattr(self._ensure_dog(), "imu", None)
+            dog = self._ensure_dog()
+            imu = getattr(dog, "imu", None)
             resetter = getattr(imu, "reset_calibration", None)
             if not callable(resetter):
                 logger.warning("Vendor exposes no reset_calibration(); nothing cleared")
@@ -947,6 +994,9 @@ class PidogHAL:
             except Exception:  # noqa: BLE001 - report, do not crash a calibration run
                 logger.warning("Vendor failed to reset the IMU calibration", exc_info=True)
                 return False
+            # Clearing a calibration has to clear the startup shift too, or the next measurement is
+            # taken through an offset nobody can see.
+            self._clear_runtime_offsets(dog)
             return True
 
     def stop(self) -> None:
