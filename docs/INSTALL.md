@@ -257,7 +257,7 @@ Two things that install does not give you, both of which the guided installer ha
   missing-sound warning in the log. Copy it once (#256):
 
 ```bash
-mkdir -p ~/pidog && cp -r ./pidog/sounds ~/pidog/sounds
+mkdir -p ~/pidog/sounds && cp -n ./pidog/sounds/* ~/pidog/sounds/
 ```
 
 Optional audio setup:
