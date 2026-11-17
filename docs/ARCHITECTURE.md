@@ -93,7 +93,9 @@ src/tools/    calibrate_servos.py  camera_check.py  collect_support_bundle.py
 ```
 
 `board/` answers one question — which Raspberry Pi this is — and holds no policy of its own. There is
-no `android/` project yet, and the only client that ships is the web app inside `services/web/`.
+no `android/` project here: the Android client is **HoundMind Remote**, developed in its own repository
+against `docs/CONTROL_API.md` and the conformance corpus in `docs/fixtures/clients/` (#274). The client
+that ships in this tree is the web app inside `services/web/`.
 `src/tools/` holds device CLIs run as `python -m tools.<name>`; it is not a second implementation of
 anything.
 
