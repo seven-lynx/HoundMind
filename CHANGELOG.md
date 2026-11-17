@@ -20,6 +20,13 @@ Current Release: v2026.11.16
   limit and a failure budget that disables the module rather than the loop. `docs/SECURITY.md` §8
   records that prompts leave the device when a cloud `base_url` is configured.
 
+- **`tools.audio_check` measures whether the speaker made a sound** instead of trusting `aplay`'s exit
+  code, which is 0 for a muted amplifier, a dead speaker coil and a stuck I2S clock alike. It plays a
+  tone, records it with the microphone and reports the level difference between the room and the
+  playback, with `--analyse` naming the loudest frequencies in any recording. The measurement records
+  its own trap: the USB microphone ships at 0 of 16 capture gain, which reads as silence on a speaker
+  that works.
+
 - **`tools.imu_calibrate` measures and saves the IMU calibration** — `DogHAL` gains
   `read_imu_calibration`, `set_imu_calibration` and `reset_imu_calibration`, with the `FakeDogHAL`
   twins in the same change. The bench dog had no calibration at all (`|acc|` read 1.50 g at rest
@@ -37,6 +44,17 @@ Current Release: v2026.11.16
   degrees at a joint is refused as mechanical, and it will not run against an uncalibrated IMU or a
   joint with no baseline. `DogHAL` gains `nudge_joint` for it - one joint, relative, capped at 3
   degrees and speed 30.
+
+### Changed
+
+- `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
+  instead of raising `Model not set` on every utterance, and the model download stays out of a tick
+  nobody asked for (#249).
+- `docs/CONTROL_API.md` and `docs/FEATURES_GUIDE.md` now show the command that reads the web console's
+  token (`grep -m1 . ~/.houndmind/api_token`) and the one that checks its mode, instead of naming the
+  file and stopping there. `docs/INSTALL.md` lists the three voice switches and what the vendor voice
+  stack needs.
+
 ### Fixed
 
 - **An IMU calibration could look successful and be pure garbage** (found by running it on the dog).
