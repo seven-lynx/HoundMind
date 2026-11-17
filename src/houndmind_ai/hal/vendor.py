@@ -85,6 +85,48 @@ def _safe_float(val: Any, default: float) -> float:
         return default
 
 
+#: The SH3001's sensitivity at the ranges `sh3001_init` configures, taken from the vendor's own
+#: `sh3001.py:16-17`. `Pidog.accData`/`gyroData` are raw counts: the driver thread reads
+#: `_sh3001_getimudata()` (`pidog.py:461`), not `get_calibrated_data()`.
+ACC_LSB_PER_G = 16384.0
+GYRO_LSB_PER_DPS = 16.4
+
+
+def _axis_value(scale: Any, index: int, nominal: float) -> float:
+    """One axis of a scalar-or-triple conversion factor, or `nominal` when it is unusable."""
+    try:
+        value = float(scale[index] if isinstance(scale, (list, tuple)) else scale)
+    except (TypeError, ValueError, IndexError, KeyError):
+        return nominal
+    return value
+
+
+def to_physical(
+    raw: tuple[float, float, float],
+    scale: Any,
+    nominal: float,
+    bias: Any = None,
+) -> tuple[float, float, float]:
+    """Raw IMU counts to physical units, per axis.
+
+    `scale` is the vendor's LSB-per-unit (`Sh3001.acc_scale`/`gyro_scale`), a scalar or a
+    3-item sequence, and `bias` is its matching offset. This is the same arithmetic the vendor
+    applies in `sh3001.py:686-694`; it exists here because the HAL publishes `Pidog.accData`
+    and receives g and deg/s from every consumer, while `Pidog` hands out counts.
+
+    A missing, zero or unreadable divisor falls back to `nominal`: dividing by zero would put
+    infinities into the heading integrator, which is worse than a nominal-scale reading.
+    """
+    converted: list[float] = []
+    for index in range(3):
+        divisor = _axis_value(scale, index, nominal)
+        if abs(divisor) < 1e-6:
+            divisor = nominal
+        offset = _axis_value(bias, index, 0.0)
+        converted.append((float(raw[index]) - offset) / divisor)
+    return (converted[0], converted[1], converted[2])
+
+
 def _safe_int(val: Any, default: int) -> int:
     try:
         if val is None:
@@ -386,21 +428,26 @@ class PidogHAL:
         try:
             acc_raw = dog.accData
             gyro_raw = dog.gyroData
-            acc = cast(
-                tuple[float, float, float],
+            imu = getattr(dog, "imu", None)
+            acc = to_physical(
                 (
                     _safe_float(acc_raw[0], 0.0),
                     _safe_float(acc_raw[1], 0.0),
                     _safe_float(acc_raw[2], 0.0),
                 ),
+                getattr(imu, "acc_scale", ACC_LSB_PER_G),
+                ACC_LSB_PER_G,
+                getattr(imu, "acc_bias", None),
             )
-            gyro = cast(
-                tuple[float, float, float],
+            gyro = to_physical(
                 (
                     _safe_float(gyro_raw[0], 0.0),
                     _safe_float(gyro_raw[1], 0.0),
                     _safe_float(gyro_raw[2], 0.0),
                 ),
+                getattr(imu, "gyro_scale", GYRO_LSB_PER_DPS),
+                GYRO_LSB_PER_DPS,
+                getattr(imu, "gyro_bias", None),
             )
         except Exception:  # noqa: BLE001
             logger.debug("IMU read failed", exc_info=True)
