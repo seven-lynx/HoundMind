@@ -10,6 +10,17 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The map answers distance questions** — `mapping/mapper.py` gains `nearest_wall`,
+  `landmark_distance` and `wall_distance` over the robot-centric grid it already builds, so a
+  sonar reading can be compared with a stored wall instead of only with the current sweep. Points
+  are `(forward_cm, left_cm)` and every helper is pure, which is what lets a test hand it a grid
+  with no runtime attached. `nearest_wall` returns `None` when the map holds no hit inside the cap:
+  an empty or stale grid is "not known", not "clear", and a caller cannot turn it into a corridor.
+  Six of the thirteen tests are the shapes that would otherwise lie: an empty map, a zero hit, an
+  unreadable key, a wall past the cap, a degenerate segment and a point beyond an endpoint.
+  Nothing consumes them yet; they are the measurement API the localization ladder needs before a
+  range fix can be wired into it.
+
 - **`tools.schema_export` writes the settings schema as JSON Schema** — the config tree was described
   only by the code that rejects it, so an editor could not check `config/settings.jsonc` and a typo
   waited for start-up on the dog. `kernel/config_schema.py` gains `json_schema()`, generated from the
