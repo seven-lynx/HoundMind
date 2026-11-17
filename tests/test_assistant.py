@@ -256,3 +256,17 @@ def test_a_rejected_key_disables_at_once_without_retrying(monkeypatch) -> None:
         assert len(transport.requests) == 1
     finally:
         module.stop(ctx)
+
+
+def test_requests_identify_themselves(monkeypatch) -> None:
+    """Cloudflare-fronted providers reject Python's default agent with 403 and `error code: 1010`."""
+    transport = install(monkeypatch, Transport())
+    ctx = context(monkeypatch)
+    module = AssistantModule("assistant")
+    module.start(ctx)
+    try:
+        module.answer("hello?")
+        assert wait_for_reply(ctx) == REPLY
+        assert transport.requests[0].get_header("User-agent") == "HoundMind/1.0"
+    finally:
+        module.stop(ctx)

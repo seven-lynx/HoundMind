@@ -32,6 +32,10 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A valid API key was rejected by Cloudflare-fronted providers** (#252). `urllib` identifies itself as
+  `Python-urllib/3.x`, which Cloudflare answers with `403` and `error code: 1010` - a bot-signature
+  rule, not an auth failure. The module read that as fatal and disabled itself, blaming the key.
+  Requests now identify themselves honestly as `HoundMind/1.0`.
 - **A rate-limited provider no longer switches the assistant off** (#250). `max_failures` counted every
   failed request, so three 429s from a free tier disabled the feature permanently and reported it as a
   failure. Failures are now classified: 429 and 5xx are retried up to `max_transient_retries` (new key,
