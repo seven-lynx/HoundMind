@@ -732,9 +732,13 @@ all expose it, so the local case is a config change rather than a second impleme
 The key is never in `config/settings.jsonc`: set the environment variable named by `api_key_env`
 (default `LLM_API_KEY`), or write the key into the 0600 file named by `api_key_path`
 (default `~/.houndmind/llm_key`); the environment wins when both exist. Requests run on a worker thread,
-carry `timeout_s`, are spaced by `requests_per_minute`, and the module disables itself after
-`max_failures` consecutive failures - a dead link costs the answer, never the tick. **Prompts leave the
-device** when a cloud `base_url` is configured; see [SECURITY.md](SECURITY.md).
+carry `timeout_s`, and are spaced by `requests_per_minute`. Failures are classified rather than merely
+counted: a provider that is busy (429, or any 5xx) is retried up to `max_transient_retries` times,
+honouring `Retry-After`, and **never counts** toward `max_failures` - a free tier throttles the dog
+rather than breaking it; a rejected key (401/403) disables the module at once, because retrying it only
+burns the allowance; a timeout or a dead link is counted, and `max_failures` consecutive ones disable
+the module instead of the loop. **Prompts leave the device** when a cloud `base_url` is configured; see
+[SECURITY.md](SECURITY.md).
 
 **Enable:**
 - `modules.voice.enabled = true`

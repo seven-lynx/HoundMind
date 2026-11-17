@@ -8,14 +8,31 @@ read from the environment or a file - never from the config this repo publishes.
 
 from __future__ import annotations
 
+import email.message
+import io
 import json
 import time
+import urllib.error
 import urllib.request
 
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.optional.assistant import AssistantModule
 
 REPLY = "Woof. I am fine."
+
+
+def http_error(code: int, retry_after: str | None = None) -> urllib.error.HTTPError:
+    """A provider error shaped like the real one, so the retry policy sees a real status."""
+    headers = email.message.Message()
+    if retry_after is not None:
+        headers["Retry-After"] = retry_after
+    return urllib.error.HTTPError(
+        "https://example.invalid/v1/chat/completions",
+        code,
+        "busy",
+        headers,
+        io.BytesIO(b'{"error": "busy"}'),
+    )
 
 
 class _Response:
@@ -35,15 +52,23 @@ class _Response:
 
 
 class Transport:
-    """A fake `urlopen`: records the requests and returns a canned completion."""
+    """A fake `urlopen`: records the requests, plays back statuses, then returns a completion."""
 
-    def __init__(self, reply: str = REPLY, fail: bool = False) -> None:
+    def __init__(
+        self, reply: str = REPLY, fail: bool = False, statuses: list[int] | None = None
+    ) -> None:
         self.reply = reply
         self.fail = fail
+        self.statuses = list(statuses or [])
         self.requests: list[urllib.request.Request] = []
 
     def __call__(self, request, timeout=None):  # noqa: ANN001 - matches urlopen's shape
         self.requests.append(request)
+        if self.statuses:
+            code = self.statuses.pop(0)
+            if code:
+                # `Retry-After: 0` keeps the tests instant while still exercising the header path.
+                raise http_error(code, "0")
         if self.fail:
             raise OSError("network is down")
         return _Response({"choices": [{"message": {"content": self.reply}}]})
@@ -177,5 +202,57 @@ def test_a_dead_link_disables_the_module_instead_of_the_runtime(monkeypatch) -> 
         assert module.status.enabled is False
         assert "consecutive request failures" in str(module.status.disabled_reason)
         assert ctx.get("assistant_reply") is None
+    finally:
+        module.stop(ctx)
+
+
+def test_a_rate_limit_is_retried_and_never_disables(monkeypatch) -> None:
+    """#250: a busy free tier throttles the dog; it must not switch its voice off."""
+    transport = install(monkeypatch, Transport(statuses=[429, 429]))
+    # `max_failures: 1` makes the test sharp: one *counted* failure would disable the module.
+    ctx = context(monkeypatch, max_failures=1, max_transient_retries=2)
+    module = AssistantModule("assistant")
+    module.start(ctx)
+    try:
+        module.answer("hello?")
+        assert wait_for_reply(ctx, timeout=3.0) == REPLY
+        assert len(transport.requests) == 3  # two throttled, one answered
+        assert module.status.enabled is True
+    finally:
+        module.stop(ctx)
+
+
+def test_a_permanently_busy_provider_drops_the_utterance_but_stays_enabled(monkeypatch) -> None:
+    """The retry budget is finite, and spending it is not the same as being broken."""
+    transport = install(monkeypatch, Transport(statuses=[429, 429, 429, 429]))
+    ctx = context(monkeypatch, max_failures=1, max_transient_retries=2)
+    module = AssistantModule("assistant")
+    module.start(ctx)
+    try:
+        module.answer("hello?")
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline and len(transport.requests) < 3:
+            time.sleep(0.01)
+        assert len(transport.requests) == 3  # first attempt + 2 retries, then it gives up
+        assert module.status.enabled is True
+        assert ctx.get("assistant_reply") is None
+    finally:
+        module.stop(ctx)
+
+
+def test_a_rejected_key_disables_at_once_without_retrying(monkeypatch) -> None:
+    """401 means the key is wrong; retrying it would only burn the day's allowance."""
+    transport = install(monkeypatch, Transport(statuses=[401]))
+    ctx = context(monkeypatch, max_failures=3, max_transient_retries=3)
+    module = AssistantModule("assistant")
+    module.start(ctx)
+    try:
+        module.answer("hello?")
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and module.status.enabled:
+            time.sleep(0.01)
+        assert module.status.enabled is False
+        assert "rejected the key" in str(module.status.disabled_reason)
+        assert len(transport.requests) == 1
     finally:
         module.stop(ctx)

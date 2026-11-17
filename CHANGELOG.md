@@ -32,6 +32,11 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A rate-limited provider no longer switches the assistant off** (#250). `max_failures` counted every
+  failed request, so three 429s from a free tier disabled the feature permanently and reported it as a
+  failure. Failures are now classified: 429 and 5xx are retried up to `max_transient_retries` (new key,
+  honouring `Retry-After`) and never counted toward `max_failures`; 401/403 disable at once, because a
+  rejected key will not fix itself; only timeouts and dead links are counted as before.
 - **The shipped voice could never speak** (#245). `optional/voice.py` held the `pidog` *module* rather
   than a `Pidog()` instance, and `Pidog.speak(name, volume=100)` resolves a preset sound *file* by name
   rather than speaking text, so `tts.backend: "pidog"` had no path to a sentence. TTS now drives the
