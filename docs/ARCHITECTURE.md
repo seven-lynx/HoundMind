@@ -144,6 +144,26 @@ MJPEG viewers (needs frames, so needs the camera). Re-measure before changing th
 a separate process or an opt-in server were all considered and none of them is justified by these
 figures.
 
+### 3.2 Tick budget (measured, #267)
+
+`core/runtime.py:158-190` stamps `module_tick_duration:<name>` and `module_tick_durations` on every
+tick; `python -m tools.bench_tick` drives the same registry `main.build_registry` builds, on a
+`FakeDogHAL`, and reports p50/p95/max per module plus how often each overran `1 / loop.tick_hz`.
+
+These are **module code on a workstation**, fake HAL, control plane off. They rank modules and catch
+a Python-level regression; they are **not** device numbers, because no I2C read, camera frame or
+audio buffer happens here, and the per-module figures sample `time.time()`.
+
+| Board / interpreter | Ticks | tick p50 | tick p95 | Largest module p95 | Command |
+|---|---|---|---|---|---|
+| Workstation, Python 3.14.5, Windows 11 | 300 (+30) @ 10 Hz | 0.17 ms | 0.32 ms | `watchdog` 0.060 ms, `motion_gateway` 0.052 ms, `behavior` 0.032 ms | `python -m tools.bench_tick --ticks 300` |
+| Pi 4B, Bookworm 64-bit, Python 3.11 | — | **not measured** | **not measured** | — | the same command, on the dog |
+
+The budget to compare against is the loop's own: 100 ms per tick at 10 Hz. With every module under
+0.4 ms of code, a device tick that overruns is explained either by the vendor reads this harness does
+not have or by something it does not measure - both are reasons to run it on the Pi and fill the
+second row, not to assume this one.
+
 ---
 
 ## 4. Commands and events
