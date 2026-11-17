@@ -255,7 +255,9 @@ The keys a module may rely on. Anything not here is private and may change.
 | `place_store` | `PlaceStore \| None` — the one store for `settings.places.path`, published by the navigator at start and cleared at stop; the `/places` routes write through it, so a second store would be a second writer (`kernel/place_store.py`) |
 | `identity_roster` | `dict \| None` — `{backend, path, people: [{id, name}]}`, published by `optional/face_recognition.py` at start and after every mutation; what `GET /api/v1/people` serves, and never an embedding |
 | `identity_admin` | `IdentityForgetter \| None` — the module's `forget(id)` and nothing else, published at start and cleared at stop; `DELETE /api/v1/people/{id}` is its only caller, and it runs in an executor because an LBPH retrain reads every image |
-| `mapping_openings`, `mapping_state` | `dict` |
+| `mapping_openings`, `mapping_state` | `dict` — the sweep-derived openings, and the sample history plus the occupancy `grid` |
+| `home_map` | `dict \| None` — the loaded map document (`mapping/home_map.py`), published by `mapping` at start; absent when `mapping.home_map_load_path` is empty |
+| `home_map_status` | `dict` — `{loaded, cells, reason, problems, notes}`, always published, so "no map" is a stated fact rather than a missing key |
 | `behavior_override` | `str \| None` |
 | `behavior_state` | `str` — the FSM's published state (`idle`, `alert`, …), not a command |
 | `runtime_mode` | `idle` \| `patrol` \| `manual` \| `rest` |

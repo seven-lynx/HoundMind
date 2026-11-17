@@ -10,6 +10,21 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The dog can read back the map it writes** — `save_home_map` persisted a sample log every 30 s and
+  nothing ever loaded it, and the file held no map at all: `mapping_state["grid"]` was never written,
+  so the occupancy cells and the sweep behind them died with the process (#286). `mapping/home_map.py`
+  now owns the format in both directions — `build_document` writes `version: 2` with `grid.cells`, the
+  last sweep and the sample window; `load_home_map` validates a file and reports problems by name
+  instead of raising. Writes are atomic (temp file, then `Path.replace`), a pre-v2 file still loads as
+  samples-only with a note, and a file from a newer version is refused rather than guessed at.
+  `mapping.start` publishes `home_map` and `home_map_status` and the first tick seeds
+  `mapping_state["grid"]`, so `nearest_wall` answers from a map recorded in the previous session — a
+  live grid still wins, because merging would double every hit the two share. Two config keys
+  (`home_map_load_path`, empty by default so nothing loads in somebody else's room;
+  `home_map_max_cells`, 20000, keeping the strongest hits) and `tools.map_inspect`, which prints the
+  cells, the nearest wall and a coarse nose-up picture without a runtime. 12 tests in
+  `tests/test_home_map.py` and 4 in `tests/test_map_inspect.py`.
+
 - **A client conformance corpus, and the harness that runs it** — three clients read the same contract
   and nothing tested that they parse the same decisions, so `docs/fixtures/clients/` now holds three
   recorded streams (`obstacle-veto`, `command-accepted`, `stale-reading`) plus the outcome each one

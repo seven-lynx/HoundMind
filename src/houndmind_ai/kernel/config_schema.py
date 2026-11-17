@@ -605,6 +605,11 @@ _MAPPING = Section(
         "home_map_max_age_s": _NON_NEGATIVE,
         "home_map_save_interval_s": _NON_NEGATIVE,
         "home_map_path": StrSpec(),
+        # Read back at start (`mapping/home_map.py`). Empty means "do not load", which is the
+        # shipped default: a map from somebody else's room is worse than no map.
+        "home_map_load_path": StrSpec(),
+        # Upper bound on persisted cells. 0 disables the cap; the writer keeps the strongest hits.
+        "home_map_max_cells": IntSpec(minimum=0),
         "cell_size_cm": _POSITIVE,
         "grid_enabled": Bool(),
         # Indexed as [0] and [1]; a third entry or a scalar is a broken map, not a big one.

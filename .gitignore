@@ -30,6 +30,10 @@ build/
 # Runtime output
 logs/
 *.log
+# The home map the runtime writes (`mapping.home_map_path`, default `data/home_map.json`). It is the
+# dog's memory of one room, not source: machine-local, rewritten every 30 s, and useless to anybody
+# else. Nothing else lives in `data/` today, so the directory goes as a whole.
+data/
 
 # What `scripts/install_houndmind.sh` writes into the checkout
 # `.cache/` holds the SunFounder clones and RTAB-Map build tree; `models/` holds the OpenCV model
