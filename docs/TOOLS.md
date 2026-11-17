@@ -510,6 +510,7 @@ python -m tools.step_calibrate --confirm-clearance --measure head-zero
 | `--commands` | Gait cycles to issue (default 5). Fewer than 3 is reported as `weak`, not `measured` |
 | `--stop-at` | Stop this many cm from the wall (default 45) |
 | `--speed` | Servo speed; the interlock may lower it, and the lowered value is what runs |
+| `--min-volts` | Refuse to walk below this pack voltage (default 7.9 V). Above the interlock's 6.4 V veto on purpose: a gait on a pack this sagging reboots the Pi (#292) |
 | `--record-trace` | Write the per-cycle trace (distance, acc, gyro) as JSON — the input L3.4 would need |
 | `--json` | Print the report and snippet as one JSON document instead of the table |
 
@@ -519,6 +520,36 @@ verdict, wait, sample again. `cm/cycle` is the least-squares slope of distance a
 bad echo tilts the line instead of setting the answer, and the residual is printed beside it. A run is
 `measured` only with at least three cycles, no veto and less than 5° of integrating-gyro drift —
 otherwise the verdict says exactly what disqualified it and no value is offered.
+
+**Space it needs.** Three numbers, because they are three different things:
+
+- **Run-up to the wall.** You get `ceil((distance − stop_at) / stride)` cycles, and you do not know the
+  stride yet. With the default `stop_at` of 45 cm: 100 cm of run-up measures any stride up to
+  **27.5 cm per cycle** (three cycles), and completes all five only up to ~11 cm. Below 28 cm of
+  run-up there is no measurement to be had, so 100 cm is the honest minimum and 150 cm is comfortable.
+- **Measure to the sensor face, not the tail.** The ultrasonic sits in the head module, roughly 20 cm
+  ahead of the middle of the body: a dog placed "100 cm from the wall" with a tape behind it read
+  **80.2 cm**, and the same mark taken at the nose read **101.1 cm**. The first row the tool prints is
+  your check — `before_cm` must match the tape, or something is in the beam.
+- **The wall itself.** A flat, perpendicular, uninterrupted surface about **1 m wide** centred on the
+  heading, with nothing nearer inside the beam (skirting, a door frame, a chair leg all read short).
+  The pulse timeout allows ~290 cm, but `hal.sensors.distance_max_cm` clamps readings to **200 cm**,
+  which is what limits `--measure reverse`: walking away grows the distance, so start close enough to
+  stay under the clamp at the end, and keep ~1.5 m of clear floor behind.
+
+The floor ahead only has to survive **one stride more than `stop_at`**: the stop is checked before each
+step, so a run can finish one stride closer than you asked — at 25 cm/cycle from 100 cm it ends 25 cm
+out, and the interlock's 12 cm obstacle veto is the backstop. That is why 45 cm is the default rather
+than something tighter.
+
+**Before you walk it: the pack.** The interlock vetoes at 6.4 V, which protects the servos — it does
+not protect the Pi. On 2026-11-18 two walking attempts on the bench dog at **7.78 V and 7.85 V idle
+both rebooted the Pi mid-gait** (`vcgencmd get_throttled` = `0x50000`, boots 20 s apart), while
+`--measure head-zero` on the same pack completed twice; #292 has the timestamps. So this tool refuses
+to walk below `--min-volts` (7.9 V) and abandons a run whose pack sags under it, because a brownout
+costs the steps, the pose and the trace together. Charge the pack, then run: `--measure head-zero`
+prints the voltage before anything walks.
+
 
 **Why it stops instead of retrying.** A veto means the envelope said no: battery under the floor, a
 tilted dog, an obstacle inside 12 cm, or an expired command. Driving on through one would defeat the

@@ -52,6 +52,12 @@ DEFAULT_COMMANDS = 5
 DEFAULT_SPEED = 150
 #: Let the gait finish and the echo settle before reading again.
 DEFAULT_PAUSE_S = 0.4
+#: Walk floor on the pack, deliberately above the interlock's 6.4 V veto (#292). Two walking attempts
+#: on the bench dog at 7.78-7.85 V idle **rebooted the Pi mid-gait** — under-voltage latched, boots
+#: 20 s apart — while `--measure head-zero` on the same pack was fine both times. The interlock
+#: protects the servos from an abusive pack; this protects the *measurement* from a pack that will not
+#: survive it, because a brownout costs the steps, the pose and the trace at once.
+MIN_RUN_VOLTS = 7.9
 #: A missed echo is normal on carpet (`docs/pidog/PIDOG-SENSORS.md`), so retry before giving up.
 ECHO_ATTEMPTS = 3
 ECHO_PAUSE_S = 0.05
@@ -124,6 +130,7 @@ class RunReport:
     measure: str
     speed: int
     stop_at_cm: float
+    min_volts: float = MIN_RUN_VOLTS
     cycles: list[Cycle] = field(default_factory=list)
     dropped_echoes: int = 0
     stopped: list[str] = field(default_factory=list)
@@ -185,6 +192,7 @@ class RunReport:
             "measure": self.measure,
             "speed": self.speed,
             "stop_at_cm": self.stop_at_cm,
+            "min_volts": self.min_volts,
             "verdict": self.verdict,
             "accepted": self.accepted,
             "cm_per_cycle": None if self.per_cycle_cm is None else round(self.per_cycle_cm, 3),
@@ -257,6 +265,7 @@ def _walk(
     action: str,
     commands: int,
     stop_at_cm: float,
+    min_volts: float,
     speed: int,
     pause_s: float,
     sleep: Any,
@@ -274,6 +283,22 @@ def _walk(
             break
         if report.volts_before is None and snapshot.battery_valid:
             report.volts_before = snapshot.battery_v
+
+        # The pack floor (#292). Before the first step it refuses the run outright; mid-walk it ends
+        # the run, because the remaining cycles would measure a gait the pack can no longer carry.
+        volts = snapshot.battery_v if snapshot.battery_valid else None
+        if volts is not None and volts < min_volts:
+            if index == 1:
+                report.refused = (
+                    f"pack {volts:.2f} V is below the {min_volts:.2f} V walk floor; charge it - "
+                    "a gait on this pack rebooted the Pi mid-run (#292)"
+                )
+            else:
+                report.veto = "pack_sag"
+                report.veto_detail = (
+                    f"{volts:.2f} V fell below {min_volts:.2f} V after {index - 1} cycle(s)"
+                )
+            break
 
         # Gyro Z integrated between snapshots: coarse, because the snapshots are seconds apart, but
         # enough to reject a run that veered instead of a stride that was measured.
@@ -356,6 +381,7 @@ def run_calibration(
     stop_at_cm: float = DEFAULT_STOP_AT_CM,
     speed: int = DEFAULT_SPEED,
     pause_s: float = DEFAULT_PAUSE_S,
+    min_volts: float = MIN_RUN_VOLTS,
     settings: dict[str, Any] | None = None,
     confirmed: bool = False,
     sleep: Any = time.sleep,
@@ -365,7 +391,13 @@ def run_calibration(
     The gate is not only in `main`: a caller that drives the dog has to say out loud that the floor
     is clear, and a library that would move a robot because a flag defaulted to True is a bug.
     """
-    report = RunReport(surface=surface, measure=measure, speed=speed, stop_at_cm=stop_at_cm)
+    report = RunReport(
+        surface=surface,
+        measure=measure,
+        speed=speed,
+        stop_at_cm=stop_at_cm,
+        min_volts=min_volts,
+    )
     if measure not in (*LINEAR_ACTIONS, "head-zero"):
         report.refused = f"unknown measure {measure!r}"
         return report
@@ -386,6 +418,7 @@ def run_calibration(
         action=LINEAR_ACTIONS[measure],
         commands=max(0, int(commands)),
         stop_at_cm=stop_at_cm,
+        min_volts=min_volts,
         speed=speed,
         pause_s=pause_s,
         sleep=sleep,
@@ -397,7 +430,8 @@ def format_report(report: RunReport) -> list[str]:
     """The lines `main` prints, without the prefix, so a test can assert on meaning, not layout."""
     lines = [
         f"surface {report.surface or '(none)'}, measure {report.measure}, "
-        f"speed {report.speed}, stop_at {report.stop_at_cm:g} cm"
+        f"speed {report.speed}, stop_at {report.stop_at_cm:g} cm, "
+        f"walk floor {report.min_volts:g} V"
     ]
     for cycle in report.cycles:
         lines.append(
@@ -535,6 +569,15 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
         "--pause", type=float, default=DEFAULT_PAUSE_S, help="Settle time after each step (s)"
     )
     parser.add_argument(
+        "--min-volts",
+        type=float,
+        default=MIN_RUN_VOLTS,
+        help=(
+            f"Refuse to walk below this pack voltage (default {MIN_RUN_VOLTS:g} V). Kept above the "
+            "interlock's 6.4 V veto because a gait on a sagging pack reboots the Pi (#292)"
+        ),
+    )
+    parser.add_argument(
         "--record-trace", default=None, help="Write the per-cycle trace as JSON (for L3.4)"
     )
     parser.add_argument(
@@ -590,6 +633,7 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
             stop_at_cm=args.stop_at,
             speed=args.speed,
             pause_s=args.pause,
+            min_volts=args.min_volts,
             settings=settings,
             confirmed=confirmed,
         )

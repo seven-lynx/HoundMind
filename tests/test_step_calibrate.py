@@ -88,11 +88,16 @@ def test_main_refuses_without_the_flag(capsys) -> None:
     assert "--confirm-clearance" in captured.err
 
 
-def test_a_low_battery_ends_the_run_and_reports_the_veto() -> None:
+def test_the_interlock_still_vetoes_below_its_own_floor() -> None:
+    """Two floors, on purpose: the tool's walk floor fires first, the interlock's veto still holds.
+
+    This lowers `min_volts` out of the way so the 6.4 V compiled floor is the one that answers -
+    which is what a caller would get if they used `--min-volts` to override the tool's gate.
+    """
     hal = _WallDogHAL()
     hal.set_battery(6.0)  # below the compiled 6.4 V floor
 
-    report = _run(hal)
+    report = _run(hal, min_volts=6.0)
 
     assert report.veto == "low_voltage"
     assert report.cycles == []
@@ -168,6 +173,55 @@ def test_an_unknown_measure_is_refused() -> None:
 
     assert report.refused is not None
     assert hal.calls == []
+
+
+class _SaggingPack(_WallDogHAL):
+    """A pack that reads fine standing still and collapses once eight servos ask for current."""
+
+    def __init__(self, sag_v: float = 7.2, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._sag_v = sag_v
+
+    def action(self, name: str, params: dict[str, Any]) -> None:
+        super().action(name, params)
+        if name in ("forward", "backward"):
+            self.set_battery(self._sag_v)
+
+
+def test_a_pack_below_the_walk_floor_is_refused_before_it_moves() -> None:
+    # The bench dog read 7.78-7.85 V idle and rebooted the Pi mid-gait twice (#292).
+    hal = _WallDogHAL()
+    hal.set_battery(7.85)
+
+    report = _run(hal)
+
+    assert report.refused is not None and "walk floor" in report.refused
+    assert "#292" in report.refused
+    assert hal.calls == []
+    assert report.cycles == []
+
+
+def test_the_walk_floor_can_be_lowered_on_purpose() -> None:
+    hal = _WallDogHAL()
+    hal.set_battery(7.85)
+
+    report = _run(hal, min_volts=7.0)
+
+    assert report.refused is None
+    assert len(report.cycles) == 5
+
+
+def test_a_pack_that_sags_mid_walk_ends_the_run() -> None:
+    hal = _SaggingPack(distance_cm=150.0, step_cm=8.0)
+
+    report = _run(hal, commands=5)
+
+    assert report.veto == "pack_sag"
+    assert "below" in (report.veto_detail or "")
+    # One cycle completed; the second read the sagging pack and stopped before another step.
+    assert len(report.cycles) == 1
+    assert len(hal.calls) == 1
+    assert not report.accepted
 
 
 def test_the_snippet_is_a_config_block_and_a_rejected_run_has_none() -> None:

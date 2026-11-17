@@ -227,6 +227,13 @@ obstacle rule, speed clamp); a veto ends the run and is reported rather than ret
 `--stop-at` (45 cm by default), and a run whose heading drifted more than 5° is **rejected, not
 averaged in**. Nothing writes `config/settings.jsonc` for you: paste the block it prints.
 
+Two things the first device attempts taught (2026-11-18, #292): **measure the run-up to the sensor
+face, not the tail** — the ultrasonic sits ~20 cm forward of the body, so a dog marked "100 cm" from
+behind read 80.2 cm — and **charge the pack first**. The interlock's 6.4 V veto protects the servos,
+not the Pi: two walks on a 7.78-7.85 V pack rebooted the board mid-gait. The tool therefore refuses to
+walk below `--min-volts` (7.9 V) and abandons a run whose pack sags under it. `--measure head-zero`
+prints the pack voltage and the distance before anything walks.
+
 The result is per surface, because a carpet eats a stride that hardwood does not. `odometry.surface`
 names the floor the dog is on and `odometry.surface_step_cm` holds the measured values; the published
 pose carries `step_cm_source` — `"assumed"` or `"measured:<surface>"` — so a client can tell a
