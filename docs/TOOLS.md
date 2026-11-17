@@ -26,6 +26,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 15. [`audio_check`](#15-audio_check)
 16. [`schema_export`](#16-schema_export)
 17. [`bench_tick`](#17-bench_tick)
+18. [`map_inspect`](#18-map_inspect)
 
 ---
 
@@ -48,6 +49,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Is the RTAB-Map adapter wired up? | `validate_rtabmap_adapter` |
 | Which servo joint is leaning, and what trim is saved? | `calibrate_servos` |
 | Is the loop spending its tick where I think it is? | `bench_tick` |
+| What is actually inside `data/home_map.json`? | `map_inspect` |
 
 ## 2. Motion risk
 
@@ -56,7 +58,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `installer_verify` | no |
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
-| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `bench_tick` | no |
+| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `bench_tick`, `map_inspect` | no |
 | `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
 
@@ -459,6 +461,28 @@ precise number.
 There is no `--hal` flag and no motion option: nothing this tool starts can move the dog. The
 workstation figures and the empty Pi row live in `docs/ARCHITECTURE.md` section 3.2 - fill the Pi row
 from a run on the dog rather than assuming a workstation number carries over.
+
+## 18. `map_inspect`
+
+Prints what a home map file contains, read with the same validator the runtime uses
+(`mapping/home_map.py`). It exists because the file used to be written and never read, so its contents
+were an assumption — it held no grid at all (#286).
+
+```bash
+python -m tools.map_inspect                        # data/home_map.json, if it is there
+python -m tools.map_inspect data/home_map.json --json
+python -m tools.map_inspect path/to/map.json --width 100 --wall-cm 500
+```
+
+It reports the version, when it was saved, the cell size and grid size, how many cells and samples it
+holds, the nearest wall the map knows about from the origin, and a coarse picture: `#` for a strong
+cell, `+` for a weak one, `@` for the dog. `ix` is centimetres to the dog's left and `iy` forward, so
+the picture is nose up, the same convention as the web app's map panel.
+
+`--json` prints the document instead, which is what another tool or a diff wants. Exit code is 0 when
+the file loads and 1 when it does not — with the reason named, never a bare traceback.
+
+Read-only, no HAL, no runtime: it cannot move the dog, and it runs on any machine.
 
 ## Adding a tool
 

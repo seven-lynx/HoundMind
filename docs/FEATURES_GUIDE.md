@@ -228,9 +228,33 @@ honestly offer and names the reason when that is not the best one available. One
 ---
 
 ## 6) Mapping
-**What it does:** Analyzes scan openings and saves lightweight home-map snapshots.
+**What it does:** Analyzes scan openings, keeps a hit-histogram occupancy grid, and saves a home map
+that the next start loads back.
 
 **Disable:** `modules.mapping.enabled = false`
+
+### What is saved, and what is read back
+
+The map is a versioned JSON document (`mapping/home_map.py`). Since v2 it carries the **grid**, the
+last sweep and a window of samples — the grid is the map, the samples are the log around it.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.mapping.home_map_enabled` | `false` | Write a snapshot every `home_map_save_interval_s`, and once at stop. |
+| `settings.mapping.home_map_path` | `data/home_map.json` | Where it is written, relative to the repo root. |
+| `settings.mapping.home_map_load_path` | `""` | What is loaded at start. Empty means load nothing: a map recorded in somebody else's room is worse than no map. |
+| `settings.mapping.home_map_max_cells` | `20000` | Cap on cells written and read. `0` disables it; the strongest hits are kept and `meta.cells_truncated` says so. |
+| `settings.mapping.home_map_max_samples` | `500` | How many per-tick samples ride along. `0` means no cap. |
+
+A file written before v2 has no grid and still loads — samples only, with a note saying so. A file
+from a **newer** version is refused by name rather than guessed at, and a corrupt one becomes "no map,
+here is why", never an empty room. Writes are atomic (temp file, then replace), so a brownout costs
+the last snapshot rather than the whole map.
+
+When a map loads, `MappingModule.start` publishes `home_map` (the document) and `home_map_status`
+(`{loaded, cells, reason, problems, notes}`). The first tick seeds `mapping_state["grid"]` from it; a
+grid this process is already building wins, because merging would double every hit the two share.
+`python -m tools.map_inspect <file>` prints what a file contains, without a runtime.
 
 ### Distance queries
 

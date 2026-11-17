@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import math
 import time
@@ -8,25 +7,111 @@ from pathlib import Path
 from typing import Any
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.mapping.home_map import (
+    HomeMap,
+    build_document,
+    load_home_map,
+    write_document,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _map_path(text: Any, default: str) -> Path:
+    """Resolve a configured map path against the repository root, not the working directory.
+
+    A relative path is the shipped default (`data/home_map.json`) and the service does not run from
+    the repo root, so resolving against the cwd would put the map where nobody looks for it.
+    """
+    raw = text if isinstance(text, str) and text.strip() else default
+    path = Path(raw)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[3] / path
+    return path
 
 
 class MappingModule(Module):
     """Lightweight mapping module with optional home map persistence.
 
-    This does not implement full SLAM. It stores sensor snapshots and can save
-    a "Home Map" file for later analysis or future navigation upgrades.
+    This is not full SLAM. It stores sensor snapshots, keeps a hit-histogram grid, and saves a home
+    map - grid included - that the next start loads back (`mapping/home_map.py`).
     """
 
     def __init__(self, name: str, enabled: bool = True, required: bool = False) -> None:
         super().__init__(name, enabled=enabled, required=required)
         self.last_save_ts = 0.0
+        # A loaded map waits here until the first tick can seed `mapping_state` with it.
+        self._loaded: HomeMap | None = None
+
+    def start(self, context) -> None:
+        """Load the configured home map and publish what happened either way (L1.3)."""
+        settings = (context.get("settings") or {}).get("mapping", {})
+        settings = settings if isinstance(settings, dict) else {}
+        configured = settings.get("home_map_load_path", "")
+        if not (isinstance(configured, str) and configured.strip()):
+            context.set(
+                "home_map_status",
+                {"loaded": False, "reason": "mapping.home_map_load_path is empty"},
+            )
+            return
+
+        path = _map_path(configured, "data/home_map.json")
+        result = load_home_map(path)
+        if result.map is None:
+            detail = "; ".join(result.problems) or result.reason or "unknown"
+            logger.warning("Home map not loaded from %s: %s", path, detail)
+            context.set(
+                "home_map_status",
+                {
+                    "loaded": False,
+                    "path": str(path),
+                    "reason": result.reason,
+                    "problems": list(result.problems),
+                },
+            )
+            return
+
+        self._loaded = result.map
+        context.set("home_map", result.map.to_document())
+        context.set(
+            "home_map_status",
+            {
+                "loaded": True,
+                "path": str(path),
+                "version": result.map.version,
+                "cells": result.map.cell_count,
+                "notes": list(result.notes),
+            },
+        )
+        logger.info("Loaded home map from %s (%d cells)", path, result.map.cell_count)
+
+    def _seed_loaded_map(self, context) -> None:
+        """Put the persisted cells into `mapping_state` once, before this tick adds to them.
+
+        A live grid wins. The sweep counts hits per cell, so merging a loaded grid into a grid this
+        process is already building would double every count it had seen twice.
+        """
+        loaded = self._loaded
+        if loaded is None:
+            return
+        self._loaded = None
+        mapping_state = context.get("mapping_state")
+        if not isinstance(mapping_state, dict):
+            mapping_state = {"samples": []}
+        grid = mapping_state.get("grid")
+        if isinstance(grid, dict) and grid.get("cells"):
+            logger.debug("A live grid already exists; the loaded map stays read-only")
+            return
+        mapping_state["grid"] = loaded.as_grid()
+        context.set("mapping_state", mapping_state)
 
     def tick(self, context) -> None:
         settings = (context.get("settings") or {}).get("mapping", {})
         if not settings.get("enabled", True):
             return
+
+        # A map loaded at start seeds the grid before this tick measures into it (L1.3).
+        self._seed_loaded_map(context)
 
         # Read sensor data and store a basic history for later mapping work.
         sensors = context.get("sensors") or {}
@@ -39,6 +124,14 @@ class MappingModule(Module):
         openings, safe_paths, best_path = self._analyze_scan_openings(
             scan_angles, settings
         )
+
+        if isinstance(scan_angles, dict) and scan_angles:
+            # The grid is derived, so the sweep it came from is kept: `home_map.build_document`
+            # persists it, and a saved map with no angles could never be re-measured.
+            mapping_state["last_sweep"] = {
+                "timestamp": time.time(),
+                "angles": dict(scan_angles),
+            }
 
         sample = {
             "timestamp": time.time(),
@@ -95,43 +188,24 @@ class MappingModule(Module):
             self.last_save_ts = now
 
     def save_home_map(self, mapping_state: dict, settings: dict) -> None:
-        """Persist mapping samples to a JSON file for later analysis."""
-        output_path = Path(settings.get("home_map_path", "data/home_map.json"))
-        if not output_path.is_absolute():
-            output_path = Path(__file__).resolve().parents[3] / output_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        """Write the map so the next start can read it back (L1.1).
 
-        samples = list(mapping_state.get("samples", []))
-        max_samples = int(settings.get("home_map_max_samples", 0))
-        max_age_s = float(settings.get("home_map_max_age_s", 0))
-        if max_age_s > 0:
-            cutoff = time.time() - max_age_s
-            samples = [
-                entry for entry in samples if entry.get("timestamp", 0) >= cutoff
-            ]
-        if max_samples > 0 and len(samples) > max_samples:
-            samples = samples[-max_samples:]
-
-        payload = {
-            "meta": {
-                "saved_at": time.time(),
-                "cell_size_cm": settings.get("cell_size_cm", 10),
-                "grid_size": settings.get("grid_size", [100, 100]),
-                "opening_min_width_cm": settings.get("opening_min_width_cm", 60),
-                "safe_path_min_width_cm": settings.get("safe_path_min_width_cm", 40),
-                "safe_path_score_weight_width": settings.get(
-                    "safe_path_score_weight_width", 0.6
-                ),
-                "safe_path_score_weight_distance": settings.get(
-                    "safe_path_score_weight_distance", 0.4
-                ),
-                "home_map_max_samples": max_samples,
-                "home_map_max_age_s": max_age_s,
-            },
-            "samples": samples,
-        }
-        output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        logger.info("Saved home map to %s", output_path)
+        The document is built by `mapping/home_map.py`, which also loads it: one description of the
+        format, so the writer cannot drift from the reader.
+        """
+        output_path = _map_path(
+            settings.get("home_map_path", "data/home_map.json"), "data/home_map.json"
+        )
+        document = build_document(mapping_state, settings)
+        try:
+            write_document(output_path, document)
+        except OSError as exc:
+            # A read-only card or a full disk costs the map, not the walk.
+            logger.warning("Home map not written to %s: %s", output_path, exc)
+            return
+        logger.info(
+            "Saved home map to %s (%d cells)", output_path, len(document["grid"]["cells"])
+        )
 
     def stop(self, context) -> None:
         settings = (context.get("settings") or {}).get("mapping", {})

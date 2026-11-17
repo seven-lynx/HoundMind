@@ -794,8 +794,14 @@
       "home_map_max_age_s": 0,
       // Save interval in seconds for the home map.
       "home_map_save_interval_s": 30,
-      // Output path for the home map file (relative to repo root).
+      // Output path for the home map file (relative to repo root). The file now carries the
+      // occupancy grid, the last sweep and a sample window, so a restart can read it back.
       "home_map_path": "data/home_map.json",
+      // Load a home map at start. Empty = load nothing, which is the default: a map recorded in
+      // somebody else's room is worse than no map at all.
+      "home_map_load_path": "",
+      // Cap on cells written to (and read from) a map file. 0 = no cap; the strongest hits are kept.
+      "home_map_max_cells": 20000,
       // Metadata for future grid-based mapping.
       "cell_size_cm": 10,
       // Enable the lightweight occupancy-grid ingestion from scan samples.

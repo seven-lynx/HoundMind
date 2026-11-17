@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "meta": {
+    "saved_at": 1763500000.0,
+    "cell_size_cm": 10,
+    "grid_size": [100, 100],
+    "home_map_max_cells": 20000,
+    "cells_truncated": false,
+    "opening_min_width_cm": 60,
+    "safe_path_min_width_cm": 40
+  },
+  "grid": {
+    "cells": {
+      "0,5": 6,
+      "1,5": 6,
+      "-1,5": 6,
+      "0,6": 2,
+      "2,0": 1
+    }
+  },
+  "sweep": {
+    "0": 52.0,
+    "-30": 61.0,
+    "30": 58.0
+  },
+  "samples": [
+    {
+      "timestamp": 1763499990.0,
+      "distance_cm": 52,
+      "touch": false,
+      "sound": false,
+      "openings": [],
+      "safe_paths": [],
+      "best_path": null
+    }
+  ]
+}
