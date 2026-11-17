@@ -450,6 +450,11 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
   },
   "safety": { "active": false, "emergency_stop": false },
   "nav": { "decision": "forward", "confidence": 0.82, "heading_calibrated": true },
+  "localization": {
+    "tier": "dead_reckoning", "frame": "odometry",
+    "pose": { "x": 118.4, "y": -32.0, "yaw_deg": 92.5 },
+    "confidence": 0.94, "age_s": 6.2, "reason": "no SLAM backend (stub)"
+  },
   "decision": {
     "schema_version": 1, "ts": 4212.3, "trace_id": "trace123",
     "mode": "patrol", "state": "alert", "intent": "forward", "source": "navigation",

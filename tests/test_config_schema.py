@@ -266,6 +266,8 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("face_recognition", "backend", "magic"),
     ("semantic_labeler", "input_width", 0),
     ("slam_pi4", "rtabmap", "on"),
+    ("odometry", "step_cm", 0.0),
+    ("localization", "confidence_floor", 1.5),
 ]
 
 
