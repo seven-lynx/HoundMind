@@ -107,6 +107,12 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- **The Android client is named, and it has a home that is not this repository** — `CONTROL_API.md`
+  said the "Android app" codes against the file while `ARCHITECTURE.md` said no Android project existed,
+  so a reader could not tell whether the app was missing, external or planned (#274). The ruling is
+  recorded: the client is **HoundMind Remote**, developed in its own repository against this file and
+  the conformance corpus from #282. `CONTROL_API.md` §11 now says both clients read the corpus, and
+  `docs/ARCHITECTURE.md` says which client ships in this tree.
 - `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
   instead of raising `Model not set` on every utterance, and the model download stays out of a tick
   nobody asked for (#249).
@@ -117,6 +123,11 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **`CONTROL_API.md` claimed the dog does not advertise itself** — it has published one mDNS record
+  (`houndmind._houndmind._tcp.local`, `api.discovery_enabled`, on by default) since #38, so the contract
+  told every client author to hardcode an IP that changes with the DHCP lease. The base-URL paragraph
+  now names `http://houndmind.local:8420` and keeps `hostname -I` as the fallback for a network where
+  mDNS is blocked.
 - **An importable `rtabmap` module is not a SLAM backend until it has an `Rtabmap` class** — the
   adapter reported `slam_status: ready / rtabmap` whenever the import succeeded, so a partial
   pybind11 build (upstream `corelib/src/python` ships `PyMatcher`/`PyDetector`/`PyDescriptor` with no

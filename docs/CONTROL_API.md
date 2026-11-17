@@ -1,11 +1,15 @@
 # HoundMind Control API v1
 
-Status: **contract** — the web app and the Android app code against this file. Additive changes
-only within `v1`; anything that removes or renames a field requires `v2` and a deprecation window.
+Status: **contract** — the web app in `services/web/` and the Android app, **HoundMind Remote**, code
+against this file. HoundMind Remote lives in its own repository (#274): this tree publishes the contract
+and the fixtures, not the app. Additive changes only within `v1`; anything that removes or renames a
+field requires `v2` and a deprecation window.
 Pairs with: `src/houndmind_ai/services/api.py` (the route table), `docs/FEATURES_GUIDE.md` [§25](FEATURES_GUIDE.md#25-wifi-localization--removed)
 
-Base URL: `http://<pi-ip>:8420`. There is **no mDNS** — the dog does not advertise itself, so the
-address is whatever `hostname -I` reports on the device. Everything under `/api/v1` is JSON;
+Base URL: `http://<pi-ip>:8420`, or `http://houndmind.local:8420`. The device advertises **one** mDNS
+record — `houndmind._houndmind._tcp.local`, gated by `api.discovery_enabled` (on by default) — carrying
+its host and port, so a client can find it by name. When discovery is off or blocked, the address is
+whatever `hostname -I` reports on the device. Everything under `/api/v1` is JSON;
 `GET /` serves the web app that ships inside the package.
 
 **The web app's assets are versioned at serve time.** `GET /` rewrites each `/static/...` URL to carry
@@ -104,7 +108,7 @@ pasteable line. Do not paste the output into an issue, a chat window or a screen
 that string is the whole security boundary.
 
 
-**Pairing** — for the Android app and for a second browser:
+**Pairing** — for HoundMind Remote and for a second browser:
 
 ```
 POST /api/v1/pair
@@ -930,5 +934,8 @@ It proves the **contract**: the JSON a client parses, the fields it reads, and t
 it renders. It does not prove the dog behaves this way — these streams are recordings, and the
 equivalent run on hardware is `docs/HARDWARE_TEST.md`. Add a case when a client depends on a shape
 that is not covered; never edit an expectation to make a client pass.
+
+Both clients read this corpus: the web app in `services/web/`, and **HoundMind Remote**, which lives in
+its own repository and is written against this file and these fixtures (#274).
 
 
