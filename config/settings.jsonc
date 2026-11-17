@@ -65,6 +65,20 @@
           "health_gpu_temp_warn_c": 80.0
         }
       }
+    },
+    // The end-user set. `auto` picks a board; this one picks a dog that is left running: the
+    // 10 Hz loop the board profiles use, and the read-only health sampler on so the console can
+    // show CPU and temperature. Everything else is inherited on purpose - `safety`,
+    // `sensor_health` and `balance` stay off until the 30-minute soak (#26) is recorded, and a
+    // profile must never flip a safety module on its own.
+    "pet": {
+      "loop": {
+        "tick_hz": 10,
+        "max_cycles": null
+      },
+      "modules": {
+        "health": {"enabled": true}
+      }
     }
   },
   "loop": {

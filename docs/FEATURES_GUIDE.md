@@ -1243,6 +1243,7 @@ this is; `HOUNDMIND_PROFILE` overrides it at launch.
 | `auto` | Default. Use the detected board's profile: `pi4` or `pi5`. On a host with no device tree (CI, a workstation, a container) it uses `pi4` and logs a warning. |
 | `pi4` | `loop.tick_hz: 10`, faster scan cadence, and Pi4/5-only modules **permitted** — still individually `enabled: false`. |
 | `pi5` | Same cadence and enablement as `pi4`, plus thermal warning thresholds that suit a board which idles near 65 °C and throttles at 80 °C. |
+| `pet` | The end-user set for a dog that is left running: `loop.tick_hz: 10` and the read-only `health` sampler on, so the console shows CPU and temperature. Everything else is inherited — `safety`, `sensor_health` and `balance` stay off until the 30-minute soak in #26 is recorded, because a profile must never flip a safety module on its own. Select it with `"profile": "pet"` or `HOUNDMIND_PROFILE=pet`. |
 
 An unsupported board (Pi 3 and older) is a load-time error, not a silent fallback: the message names
 the model and the last release that supported it. `v2026.01.18` is that release.
