@@ -12,12 +12,17 @@ from tools.hardware_checkup import MOTION_STEPS, main
 
 
 def _make_healthy(hal: FakeDogHAL) -> FakeDogHAL:
-    """One wired-up dog, whether the HAL is the plain fake or a subclass of it."""
+    """One wired-up dog, whether the HAL is the plain fake or a subclass of it.
+
+    The IMU fixture is in **physical units** (g and deg/s), which is what `SensorSnapshot`
+    documents and what `PidogHAL` now publishes after converting the vendor's raw counts (#258).
+    A level dog at rest measures ~1 g of gravity, so this also keeps the gravity check quiet.
+    """
     hal.set_distance(41.7)
     hal.set_touch("N")
     hal.set_sound(None, valid=True)
-    hal.set_acc((412.0, -180.0, 16310.0))
-    hal.set_gyro((18.0, -7.0, 11.0))
+    hal.set_acc((0.025, -0.011, 0.996))
+    hal.set_gyro((1.1, -0.43, 0.67))
     hal.set_battery(7.42)
     return hal
 
@@ -45,8 +50,8 @@ def test_skip_motion_reads_the_snapshot_and_commands_nothing(capsys):
     assert "[checkup] distance_cm: 41.7" in out
     assert "[checkup] touch: N" in out
     assert "[checkup] sound: detected=False dir=None" in out
-    assert "[checkup] acc: (412.0, -180.0, 16310.0)" in out
-    assert "[checkup] gyro: (18.0, -7.0, 11.0)" in out
+    assert "[checkup] acc: (0.025, -0.011, 0.996) g" in out
+    assert "[checkup] gyro: (1.10, -0.43, 0.67) deg/s" in out
     assert "[checkup] battery: 7.42 V" in out
     assert "[checkup] valid: distance=True touch=True sound=True imu=True" in out
     assert "[checkup] sensors: all answered" in out
@@ -54,6 +59,23 @@ def test_skip_motion_reads_the_snapshot_and_commands_nothing(capsys):
     # The whole point of the flag: no action, and no close of a HAL this tool did not open.
     assert hal.calls == []
     assert hal.closed is False
+
+
+def test_an_uncalibrated_imu_is_reported_without_failing_the_run(capsys):
+    """`|acc|` is 1 g at rest; 1.5 g means the accelerometer offsets were never saved (#258).
+
+    A biased IMU is a warning, not a dead sensor: the exit code stays 0 so the checkup keeps its
+    one meaning ("every sensor answered"), and the extra line names the consequence and the issue.
+    """
+    hal = _make_healthy(FakeDogHAL())
+    hal.set_acc((-1.489, -0.143, 0.087))
+
+    assert main(["--skip-motion", "--pause", "0"], hal=hal) == 0
+
+    out = capsys.readouterr().out
+    assert "[checkup] imu_gravity: 1.50 g at rest" in out
+    assert "uncalibrated" in out
+    assert "#258" in out
 
 
 def test_a_failed_reading_prints_none_and_says_so(capsys):

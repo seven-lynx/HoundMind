@@ -37,25 +37,20 @@ Current Release: v2026.11.16
   degrees at a joint is refused as mechanical, and it will not run against an uncalibrated IMU or a
   joint with no baseline. `DogHAL` gains `nudge_joint` for it - one joint, relative, capped at 3
   degrees and speed 30.
-
-### Changed
-
-- **`calibrate_servos --interactive`** replaces the vendor's curses script for the by-eye pass (#142).
-  It walks the twelve joints one at a time at 0.44 degrees a press, with left/right arrows (or `+`/`-`)
-  to step, Enter to accept, `s` to skip and `q` to quit and undo, and `--only`/`--step` to narrow it.
-  Each keypress is written through `apply_offsets`, so the pose you see is the trim you are saving -
-  which is why this is the one mode that moves the dog, and why it refuses to start while the control
-  plane answers on 127.0.0.1:8420. The pass is a reimplementation against `DogHAL`, not a copy: the
-  vendor example is GPL-2.0-only and this tree is GPL-3.0 (#259).
-- `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
-  instead of raising `Model not set` on every utterance, and the model download stays out of a tick
-  nobody asked for (#249).
-- `docs/CONTROL_API.md` and `docs/FEATURES_GUIDE.md` now show the command that reads the web console's
-  token (`grep -m1 . ~/.houndmind/api_token`) and the one that checks its mode, instead of naming the
-  file and stopping there. `docs/INSTALL.md` lists the three voice switches and what the vendor voice
-  stack needs.
-
 ### Fixed
+
+- **The IMU handed out raw counts where its contract promised physical units** (#258). `PidogHAL`
+  published `Pidog.accData`/`gyroData` verbatim — 16384 LSB/g and 16.4 LSB/deg/s — while
+  `SensorSnapshot` documents g and deg/s and `FakeDogHAL` posts g and deg/s, so no test could see the
+  difference. The visible symptom was heading: `orientation` integrates `gyro[2]` with
+  `gyro_scale: 1.0`, so a real 90° turn accumulated roughly 1476°. `hal/vendor.py::to_physical` now
+  converts at the boundary, using the sensor's own `acc_scale`/`gyro_scale`/`*_bias` when a
+  calibration is stored and the nominal sensitivities otherwise, and falling back to nominal instead of
+  dividing by zero. `tools.hardware_checkup` gained an `imu_gravity` line: `|acc|` is 1 g at rest, and
+  the checkup warns when it is not — on the bench dog it reads **1.50 g**, meaning the accelerometer
+  offsets were never saved, which biases pitch, roll and the tilt latch. `tests/test_imu_units.py`
+  pins the conversion and a 90°/s rotation reading 90°.
+
 
 - **Applying a stored servo trim drove all twelve servos to 0 degrees** (#263). `apply_offsets` is
   documented as a save, but the vendor has no silent-save path: `set_leg_offsets` with no `reset_list`
@@ -97,6 +92,23 @@ Current Release: v2026.11.16
   fallback is logged at WARNING.
 
 ## [v2026.11.16] - 2026-11-16
+
+### Changed
+
+- **`calibrate_servos --interactive`** replaces the vendor's curses script for the by-eye pass (#142).
+  It walks the twelve joints one at a time at 0.44 degrees a press, with left/right arrows (or `+`/`-`)
+  to step, Enter to accept, `s` to skip and `q` to quit and undo, and `--only`/`--step` to narrow it.
+  Each keypress is written through `apply_offsets`, so the pose you see is the trim you are saving -
+  which is why this is the one mode that moves the dog, and why it refuses to start while the control
+  plane answers on 127.0.0.1:8420. The pass is a reimplementation against `DogHAL`, not a copy: the
+  vendor example is GPL-2.0-only and this tree is GPL-3.0 (#259).
+- `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
+  instead of raising `Model not set` on every utterance, and the model download stays out of a tick
+  nobody asked for (#249).
+- `docs/CONTROL_API.md` and `docs/FEATURES_GUIDE.md` now show the command that reads the web console's
+  token (`grep -m1 . ~/.houndmind/api_token`) and the one that checks its mode, instead of naming the
+  file and stopping there. `docs/INSTALL.md` lists the three voice switches and what the vendor voice
+  stack needs.
 
 ### Notes
 
