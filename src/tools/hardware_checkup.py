@@ -9,6 +9,7 @@ when one did not, 2 when no dog could be opened at all, 3 when another process o
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 import time
 from pathlib import Path
@@ -60,10 +61,18 @@ def describe(snapshot: SensorSnapshot) -> list[str]:
         if snapshot.sound_valid
         else "detected=None dir=None"
     )
-    acc = str(snapshot.acc) if snapshot.imu_valid and snapshot.acc is not None else "None"
-    gyro = (
-        str(snapshot.gyro) if snapshot.imu_valid and snapshot.gyro is not None else "None"
-    )
+    if snapshot.imu_valid and snapshot.acc is not None:
+        acc = (
+            f"({snapshot.acc[0]:.3f}, {snapshot.acc[1]:.3f}, {snapshot.acc[2]:.3f}) g"
+        )
+    else:
+        acc = "None"
+    if snapshot.imu_valid and snapshot.gyro is not None:
+        gyro = (
+            f"({snapshot.gyro[0]:.2f}, {snapshot.gyro[1]:.2f}, {snapshot.gyro[2]:.2f}) deg/s"
+        )
+    else:
+        gyro = "None"
     battery = (
         f"{snapshot.battery_v:.2f} V"
         if snapshot.battery_valid and snapshot.battery_v is not None
@@ -82,6 +91,32 @@ def describe(snapshot: SensorSnapshot) -> list[str]:
         f"[checkup] battery: {battery}",
         f"[checkup] valid: {valid}",
         *_sound_hint(snapshot),
+        *_gravity_hint(snapshot),
+    ]
+
+
+#: How far `|acc|` may sit from 1 g before the reading is called uncalibrated.
+GRAVITY_TOLERANCE_G = 0.25
+
+
+def _gravity_hint(snapshot: SensorSnapshot) -> list[str]:
+    """One line when the accelerometer does not measure gravity (#258).
+
+    At rest `|acc|` is 1 g. An uncalibrated sensor reads something else, and every angle derived
+    from it - pitch, roll, and the tilt latch in `safety` - carries the same offset. This is the
+    detector only: the vendor's `examples/imu_calibration.py` writes the `calibrate_*` values that
+    fix it, and the warning names the command rather than changing calibration behind the user's
+    back.
+    """
+    if not snapshot.imu_valid or snapshot.acc is None:
+        return []
+    magnitude = math.sqrt(sum(float(axis) ** 2 for axis in snapshot.acc))
+    if abs(magnitude - 1.0) <= GRAVITY_TOLERANCE_G:
+        return []
+    return [
+        f"[checkup] imu_gravity: {magnitude:.2f} g at rest, expected 1.00 g "
+        f"(+-{GRAVITY_TOLERANCE_G:.2f}) - the accelerometer is uncalibrated, so pitch/roll and "
+        "the tilt latch are biased; see the IMU calibration example in docs/pidog (#258)"
     ]
 
 
@@ -218,7 +253,9 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
 
         vendor_hal = PidogHAL(_load_settings(args.config))
         try:
-            vendor_hal.start()
+            # `animate=False`: with `--skip-motion` this must not move the dog, and the vendor's
+            # action flow animates it on its own (`waiting`, `feet_left_right`) regardless.
+            vendor_hal.start(animate=False)
         except Exception as exc:  # noqa: BLE001 - a missing vendor package is the report
             print(f"[checkup] pidog unavailable: {exc}", file=sys.stderr)
             return 2

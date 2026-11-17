@@ -25,13 +25,15 @@ import queue
 import threading
 import time
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as dist_version
 from typing import Any, cast
 
 from houndmind_ai.hal.iface import (
     DOG_ACTIONS,
+    NUDGE_LIMIT_DEG,
+    SERVO_ANGLE_LIMIT_DEG,
     SERVO_GROUP_OF,
     SERVO_GROUPS,
     SERVO_OFFSET_LIMIT_DEG,
@@ -75,6 +77,17 @@ _GROUP_SETTERS = {
     "tail": "set_tail_offset",
 }
 
+# Where each group's last commanded angles live on the vendor object. `Pidog` keeps them itself and
+# updates them on every move (`pidog.py:387`), which is what makes a nudge relative to "now" possible.
+_ANGLE_ATTRS = {
+    "legs": "leg_current_angles",
+    "head": "head_current_angles",
+    "tail": "tail_current_angles",
+}
+
+# A calibration probe moves slowly: one joint, dog standing still, nothing to gain from gait speed.
+_NUDGE_SPEED = 30
+
 
 def _safe_float(val: Any, default: float) -> float:
     try:
@@ -83,6 +96,48 @@ def _safe_float(val: Any, default: float) -> float:
         return float(val)
     except (TypeError, ValueError):
         return default
+
+
+#: The SH3001's sensitivity at the ranges `sh3001_init` configures, taken from the vendor's own
+#: `sh3001.py:16-17`. `Pidog.accData`/`gyroData` are raw counts: the driver thread reads
+#: `_sh3001_getimudata()` (`pidog.py:461`), not `get_calibrated_data()`.
+ACC_LSB_PER_G = 16384.0
+GYRO_LSB_PER_DPS = 16.4
+
+
+def _axis_value(scale: Any, index: int, nominal: float) -> float:
+    """One axis of a scalar-or-triple conversion factor, or `nominal` when it is unusable."""
+    try:
+        value = float(scale[index] if isinstance(scale, (list, tuple)) else scale)
+    except (TypeError, ValueError, IndexError, KeyError):
+        return nominal
+    return value
+
+
+def to_physical(
+    raw: tuple[float, float, float],
+    scale: Any,
+    nominal: float,
+    bias: Any = None,
+) -> tuple[float, float, float]:
+    """Raw IMU counts to physical units, per axis.
+
+    `scale` is the vendor's LSB-per-unit (`Sh3001.acc_scale`/`gyro_scale`), a scalar or a
+    3-item sequence, and `bias` is its matching offset. This is the same arithmetic the vendor
+    applies in `sh3001.py:686-694`; it exists here because the HAL publishes `Pidog.accData`
+    and receives g and deg/s from every consumer, while `Pidog` hands out counts.
+
+    A missing, zero or unreadable divisor falls back to `nominal`: dividing by zero would put
+    infinities into the heading integrator, which is worse than a nominal-scale reading.
+    """
+    converted: list[float] = []
+    for index in range(3):
+        divisor = _axis_value(scale, index, nominal)
+        if abs(divisor) < 1e-6:
+            divisor = nominal
+        offset = _axis_value(bias, index, 0.0)
+        converted.append((float(raw[index]) - offset) / divisor)
+    return (converted[0], converted[1], converted[2])
 
 
 def _safe_int(val: Any, default: int) -> int:
@@ -172,10 +227,18 @@ class PidogHAL:
             self._action_flow = flow
         return self._action_flow
 
-    def start(self) -> None:
-        """Open the dog and start its action queue. Raises if the vendor package is absent."""
+    def start(self, *, animate: bool = True) -> None:
+        """Open the dog and, unless `animate` is false, start its action queue.
+
+        `ActionFlow` is **not passive**: its standby loop plays `waiting` and `feet_left_right` every
+        2-6 seconds on its own (`action_flow.py:230-243`), which moves the head and legs with nothing
+        asking it to. That is fine for the runtime and wrong for anything that needs the dog still -
+        on the dog, the head jittered through a six-face IMU run and spoiled it, so a calibration
+        tool passes `animate=False`.
+        """
         self._probe_sound(self._ensure_dog())
-        self._ensure_action_flow()
+        if animate:
+            self._ensure_action_flow()
 
     # ----------------------------------------------------------------- sensors
 
@@ -386,21 +449,26 @@ class PidogHAL:
         try:
             acc_raw = dog.accData
             gyro_raw = dog.gyroData
-            acc = cast(
-                tuple[float, float, float],
+            imu = getattr(dog, "imu", None)
+            acc = to_physical(
                 (
                     _safe_float(acc_raw[0], 0.0),
                     _safe_float(acc_raw[1], 0.0),
                     _safe_float(acc_raw[2], 0.0),
                 ),
+                getattr(imu, "acc_scale", ACC_LSB_PER_G),
+                ACC_LSB_PER_G,
+                getattr(imu, "acc_bias", None),
             )
-            gyro = cast(
-                tuple[float, float, float],
+            gyro = to_physical(
                 (
                     _safe_float(gyro_raw[0], 0.0),
                     _safe_float(gyro_raw[1], 0.0),
                     _safe_float(gyro_raw[2], 0.0),
                 ),
+                getattr(imu, "gyro_scale", GYRO_LSB_PER_DPS),
+                GYRO_LSB_PER_DPS,
+                getattr(imu, "gyro_bias", None),
             )
         except Exception:  # noqa: BLE001
             logger.debug("IMU read failed", exc_info=True)
@@ -664,13 +732,19 @@ class PidogHAL:
                     logger.debug("Unreadable %s offset %r", name, value)
         return offsets
 
-    def apply_offsets(self, offsets: Mapping[str, float]) -> None:
+    def apply_offsets(
+        self,
+        offsets: Mapping[str, float],
+        pose: Mapping[str, float] | None = None,
+    ) -> None:
         """Save the trim group by group, merged over what the hardware already has.
 
         The vendor's setters replace a whole list, so an offset for one joint must never zero the
-        other seven: the current values are read first, the requested ones merged in, and the
-        full list written. `reset_list` is deliberately not passed — it re-poses the dog, and
-        replaying stored offsets at startup must not move anything.
+        other seven: the current values are read first, the requested ones merged in, and the full
+        list written. Each setter also *re-poses* — `reset_list=None` is the vendor's "drive the legs
+        to zero" branch (`pidog.py:686-692`) — so a legs write lands on the angles the dog already
+        holds (#263), and `pose` lets a calibration tool choose them instead. Nothing in the runtime
+        passes `pose`.
         """
         with self._bus:
             dog = self._ensure_dog()
@@ -696,19 +770,234 @@ class PidogHAL:
                 if any(name not in current for name in names):
                     logger.warning("Incomplete %s offsets; not writing that group", group)
                     continue
-                self._write_group(dog, group, [values.get(name, current[name]) for name in names])
+                self._write_group(
+                    dog,
+                    group,
+                    [values.get(name, current[name]) for name in names],
+                    pose,
+                )
 
-    def _write_group(self, dog: Any, group: str, values: list[float]) -> None:
-        """Save one group through its own vendor entry point; no re-pose, no invented values."""
+    def _write_group(
+        self,
+        dog: Any,
+        group: str,
+        values: list[float],
+        pose: Mapping[str, float] | None = None,
+    ) -> None:
+        """Save one group through its own vendor entry point; no invented values, no reset pose."""
         setter_name = _GROUP_SETTERS[group]
         setter = getattr(dog, setter_name, None)
         if not callable(setter):
             logger.warning("Vendor exposes no %s(); %s offsets not saved", setter_name, group)
             return
         try:
-            setter(values)
+            if group == "legs":
+                angles = self._pose_values(dog, group, pose)
+                if angles is None:
+                    # `reset_list=None` would drive all eight leg servos to zero: skip this save.
+                    logger.warning("No readable %s angles; not saving that group", group)
+                    return
+                setter(values, reset_list=angles)
+            else:
+                # The vendor's head and tail setters re-pose unconditionally and upstream has no
+                # stored-pose path, which is why the contract no longer promises otherwise (#263).
+                setter(values)
         except Exception:  # noqa: BLE001 - a vendor save failure is logged, not fatal
             logger.warning("Failed to save %s offsets", group, exc_info=True)
+
+    def _pose_values(
+        self,
+        dog: Any,
+        group: str,
+        pose: Mapping[str, float] | None,
+    ) -> list[float] | None:
+        """The angles a legs write leaves the dog in: the caller's, else where it already is."""
+        names = SERVO_GROUPS[group]
+        if pose is not None:
+            requested: list[float] = []
+            for name in names:
+                raw = pose.get(name)
+                if raw is None:
+                    logger.warning("Pose is missing %r; not saving %s offsets", name, group)
+                    return None
+                try:
+                    requested.append(float(raw))
+                except (TypeError, ValueError):
+                    logger.warning("Unreadable pose for %r; not saving %s offsets", name, group)
+                    return None
+            return requested
+        return self._current_angles_locked(dog, group)
+
+    def _current_angles_locked(self, dog: Any, group: str) -> list[float] | None:
+        """The angles the vendor last commanded for the group, or None when it cannot say."""
+        names = SERVO_GROUPS[group]
+        attribute = _ANGLE_ATTRS[group]
+        group_object = getattr(dog, group, None)
+        for owner in (dog, group_object):
+            values = getattr(owner, attribute, None)
+            if not isinstance(values, (list, tuple)) or len(values) != len(names):
+                continue
+            try:
+                return [float(value) for value in values]
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def nudge_joint(self, name: str, degrees: float) -> None:
+        """Move one joint by `degrees` from where it is now, slowly, capped at the nudge limit.
+
+        A calibration probe: the trim tools step one joint and watch the IMU. No offset is written
+        here, so nudging back restores the pose exactly.
+        """
+        group = SERVO_GROUP_OF.get(name)
+        if group is None:
+            raise ValueError(f"unknown joint {name!r}")
+        index = SERVO_GROUPS[group].index(name)
+        delta = as_float(degrees, 0.0)
+        delta = max(-NUDGE_LIMIT_DEG, min(NUDGE_LIMIT_DEG, delta))
+        if delta == 0.0:
+            return
+        with self._bus:
+            dog = self._ensure_dog()
+            angles = self._current_angles_locked(dog, group)
+            if angles is None:
+                raise RuntimeError(f"current {group} angles are unreadable; refusing to guess")
+            commanded = angles[index] + delta
+            angles[index] = max(
+                -SERVO_ANGLE_LIMIT_DEG, min(SERVO_ANGLE_LIMIT_DEG, commanded)
+            )
+            if angles[index] != commanded:
+                logger.warning("Nudge of %s clamped to %.1f deg", name, angles[index])
+            if group == "legs":
+                dog.legs_move([angles], immediately=True, speed=_NUDGE_SPEED)
+            elif group == "head":
+                # `head_move_raw` takes servo angles; `head_move` would read them as yaw/roll.
+                dog.head_move_raw([angles], immediately=True, speed=_NUDGE_SPEED)
+            else:
+                dog.tail_move([angles], immediately=True, speed=_NUDGE_SPEED)
+
+    def read_imu_calibration(self) -> dict[str, list[float]] | None:
+        """What the vendor loaded for the IMU, or None when it cannot say (#259).
+
+        Includes `acc_offset`/`gyro_offset`, which are **not** part of the stored calibration: they
+        are the shift `Pidog` computes once at startup under the assumption that the dog is level with
+        its X axis pointing down (`pidog.py:474-479`), and adds to every sample (`:490-495`). A PiDog
+        boots lying down, so that assumption is usually false and the shift is a constant lie in the
+        data - a caller that measures the sensor has to know whether it is in force.
+        """
+        with self._bus:
+            dog = self._ensure_dog()
+            imu = getattr(dog, "imu", None)
+            if imu is None:
+                return None
+            found: dict[str, list[float]] = {}
+            for key in ("acc_bias", "acc_scale", "gyro_bias", "gyro_scale"):
+                values = getattr(imu, key, None)
+                if not isinstance(values, (list, tuple)) or len(values) != 3:
+                    logger.debug("No readable IMU %s on the vendor object", key)
+                    continue
+                try:
+                    found[key] = [float(value) for value in values]
+                except (TypeError, ValueError):
+                    logger.debug("Unreadable IMU %s: %r", key, values)
+            for key, attribute in (
+                ("acc_offset", "imu_acc_offset"),
+                ("gyro_offset", "imu_gyro_offset"),
+            ):
+                values = getattr(dog, attribute, None)
+                if not isinstance(values, (list, tuple)) or len(values) != 3:
+                    continue
+                try:
+                    found[key] = [float(value) for value in values]
+                except (TypeError, ValueError):
+                    continue
+            return found or None
+
+    def set_imu_calibration(
+        self,
+        acc_bias: Sequence[float] | None = None,
+        acc_scale: Sequence[float] | None = None,
+        gyro_bias: Sequence[float] | None = None,
+        gyro_scale: Sequence[float] | None = None,
+    ) -> bool:
+        """Persist through the vendor's own setters, which write `pidog.conf` themselves.
+
+        An omitted argument is passed as None, and the vendor's setters ignore None, so a caller
+        that measured only the accelerometer cannot silently zero the gyroscope's calibration.
+        """
+        if all(value is None for value in (acc_bias, acc_scale, gyro_bias, gyro_scale)):
+            return False
+        with self._bus:
+            dog = self._ensure_dog()
+            imu = getattr(dog, "imu", None)
+            if imu is None:
+                logger.warning("No vendor IMU object; the calibration was not saved")
+                return False
+            saved = True
+            if acc_bias is not None or acc_scale is not None:
+                saved = self._call_calibration_setter(
+                    imu, "set_acc_calibration", acc_bias, acc_scale
+                ) and saved
+            if gyro_bias is not None or gyro_scale is not None:
+                saved = self._call_calibration_setter(
+                    imu, "set_gyro_calibration", gyro_bias, gyro_scale
+                ) and saved
+            # The vendor's startup offset double-counts against `calibrate_*` and was computed from a
+            # false assumption, so saving a calibration clears it - persisted, so the next boot does
+            # not re-invent one from whatever pose the dog happened to be in.
+            saved = self._clear_runtime_offsets(dog) and saved
+            return saved
+
+    @staticmethod
+    def _clear_runtime_offsets(dog: Any) -> bool:
+        """Zero `imu_acc_offset`/`imu_gyro_offset` and persist it, so the sensor speaks for itself."""
+        setter = getattr(dog, "set_imu_offsets", None)
+        if not callable(setter):
+            logger.warning("Vendor exposes no set_imu_offsets(); the startup offset stays in force")
+            return False
+        try:
+            setter(acc_offset=[0, 0, 0], gyro_offset=[0, 0, 0])
+        except Exception:  # noqa: BLE001 - a vendor write failure is reported, not fatal
+            logger.warning("Vendor rejected zeroed IMU runtime offsets", exc_info=True)
+            return False
+        return True
+
+    @staticmethod
+    def _call_calibration_setter(
+        imu: Any,
+        name: str,
+        bias: Sequence[float] | None,
+        scale: Sequence[float] | None,
+    ) -> bool:
+        setter = getattr(imu, name, None)
+        if not callable(setter):
+            logger.warning("Vendor exposes no %s(); the calibration was not saved", name)
+            return False
+        try:
+            setter(bias=bias, scale=scale)
+        except Exception:  # noqa: BLE001 - a vendor save failure is reported, not fatal
+            logger.warning("Vendor rejected %s", name, exc_info=True)
+            return False
+        return True
+
+    def reset_imu_calibration(self) -> bool:
+        """Clear the stored calibration and the vendor's startup offset; back to the datasheet."""
+        with self._bus:
+            dog = self._ensure_dog()
+            imu = getattr(dog, "imu", None)
+            resetter = getattr(imu, "reset_calibration", None)
+            if not callable(resetter):
+                logger.warning("Vendor exposes no reset_calibration(); nothing cleared")
+                return False
+            try:
+                resetter()
+            except Exception:  # noqa: BLE001 - report, do not crash a calibration run
+                logger.warning("Vendor failed to reset the IMU calibration", exc_info=True)
+                return False
+            # Clearing a calibration has to clear the startup shift too, or the next measurement is
+            # taken through an offset nobody can see.
+            self._clear_runtime_offsets(dog)
+            return True
 
     def stop(self) -> None:
         """Stop motion now: clear the queued actions, then ask the vendor to halt."""
@@ -751,4 +1040,18 @@ class PidogHAL:
                 self._dog.close()
             except Exception:  # noqa: BLE001
                 logger.warning("Failed to close Pidog", exc_info=True)
+            finally:
+                # The vendor's close() hijacks SIGINT with a handler that only prints "Please wait"
+                # and arms a five second SIGALRM it never cancels (pidog.py:277-286, with the cancel
+                # commented out at :326). Left alone, Ctrl-C stops working in a process that looks
+                # hung - the natural reaction is to start it again - and the alarm fires later,
+                # inside whatever runs next, including our own exit.
+                try:
+                    import signal
+
+                    # `signal.alarm` is POSIX-only, so the stubs mypy resolves here lack it.
+                    signal.alarm(0)  # type: ignore[attr-defined]
+                    signal.signal(signal.SIGINT, signal.SIG_DFL)
+                except (ImportError, AttributeError, ValueError, OSError):
+                    logger.debug("Could not restore the signal state after close", exc_info=True)
         self._dog = None

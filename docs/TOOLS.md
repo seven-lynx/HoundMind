@@ -21,7 +21,9 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 10. [`download_opencv_models`](#10-download_opencv_models)
 11. [`validate_rtabmap_adapter`](#11-validate_rtabmap_adapter)
 12. [`calibrate_servos`](#12-calibrate_servos)
-13. [`audio_check`](#13-audio_check)
+13. [`imu_calibrate`](#13-imu_calibrate)
+14. [`servo_level`](#14-servo_level)
+15. [`audio_check`](#15-audio_check)
 
 ---
 
@@ -34,6 +36,8 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Does the loop start and produce a scan and a map? | `smoke_test` |
 | Is there a camera, and can it capture? | `camera_check` |
 | Is there a microphone / speaker? | `list_audio_devices` |
+| Does the dog know which way is down? | `imu_calibrate` |
+| The dog sits crooked | `servo_level` |
 | Did the speaker actually make a sound? | `audio_check --verify` |
 | Something is broken and I need to file a report | `collect_support_bundle` |
 | Why did the dog do that at 14:03? | `replay_decisions` |
@@ -48,10 +52,11 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `installer_verify` | no |
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
-| `camera_check`, `list_audio_devices`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
-| `calibrate_servos` | no — it reads and saves the trim; a saved offset does not pose the dog (`hal/iface.py::DogHAL.apply_offsets`) |
+| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
+| `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
+| `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
 
-Neither motion-capable tool moves the dog unless asked, but read the second row twice:
+No motion-capable tool moves the dog unless asked, but read the second row twice:
 **leaving `--skip-motion` off `hardware_checkup` is a motion run.**
 
 ## 3. `installer_verify`
@@ -240,6 +245,9 @@ python -m tools.calibrate_servos --set lf_shoulder=6 --apply       # writes thro
 |---|---|
 | `--set JOINT=DEG` | offset for one joint, repeatable; clamped to ±20 |
 | `--apply` | save the result; **without it nothing is written** |
+| `--interactive` | trim by eye, one joint at a time; **this moves the dog** |
+| `--only JOINT` | restrict `--interactive` to one joint, repeatable |
+| `--step DEG` | keypress step in `--interactive` (default `0.44`) |
 
 Output is one line per joint in the vendor's group order (`legs`, `head`, `tail`), with the current
 value and the proposed one; a joint the HAL could not read prints `unread` rather than `0.0`, and is
@@ -247,12 +255,127 @@ never written, because saving its group would invent the other values in that li
 is clamped and the clamp is what gets saved. Exit codes: `0` saved or nothing to save, `1` a written
 value did not read back (check the vendor log), `2` a usage error, no readable trim, or no dog.
 
-There is no interactive preview on purpose: nudging a servo live needs a raw per-group angle write,
-and that primitive belongs to `act/interlock.py` alone. Trim with `--set`, look at the numbers, then
-`--apply`. The vendor's own script (`examples/0_calibration.py`) still exists and is documented in
-`docs/pidog/HARDWARE.md` [§6](pidog/HARDWARE.md#6-what-lives-on-disk) for anyone who prefers it.
+### `--interactive`: trimming a joint by eye
 
-## 13. `audio_check`
+```bash
+python -m tools.calibrate_servos --interactive                       # all twelve joints
+python -m tools.calibrate_servos --interactive --only lf_shoulder     # one joint
+python -m tools.calibrate_servos --interactive --step 0.25            # finer than 0.44
+```
+
+Walks the joints one at a time: each line shows the joint and its current offset, and you step it until
+the leg (or head, or tail) looks straight.
+
+| Key | Effect |
+|---|---|
+| right arrow, `+`, `d` | raise the offset by one step (0.44° by default) |
+| left arrow, `-`, `a` | lower it |
+| Enter or space | accept this joint and move on |
+| `s` | skip it, undoing any step already taken |
+| `q` | quit and restore every joint this pass changed |
+
+**This is the one mode that moves the dog.** Each keypress is written through
+`DogHAL.apply_offsets` and re-poses as it saves — that write *is* the preview, which is the whole point
+of the pass. Keep clear of the dog, and put it somewhere it can be looked at from the side.
+
+Two guards, both before anything moves: the pass refuses to start while the control plane answers on
+`127.0.0.1:8420` (stop the `houndmind` service first, because two writers on twelve servos is not a
+calibration), and it needs a real terminal — press keys on the dog, not through a pipe.
+
+The earlier version of this section said there was no preview on purpose, because nudging a servo
+needed a raw per-group angle write that belongs to `act/interlock.py`. That reasoning held for the
+*runtime*: the primitive this uses instead, `DogHAL.nudge_joint`, is capped at 3° per call, moves one
+joint at calibration speed, writes no trim of its own, and is called by nothing that ticks.
+
+For a measurement rather than an eye, `servo_level` [§14](#14-servo_level) is the better tool: it
+probes each joint and solves for the trim that squares the body up against the IMU.
+
+## 13. `imu_calibrate`
+
+Measures the IMU's bias and scale by resting the dog on its six faces, then saves them through the
+vendor's own setters. **It does not move the dog** — you rotate it, the tool samples.
+
+```bash
+python -m tools.imu_calibrate            # measure and print, save nothing
+python -m tools.imu_calibrate --apply    # measure and save
+python -m tools.imu_calibrate --reset    # drop the stored calibration
+```
+
+| Flag | Meaning |
+|---|---|
+| `--apply` | write what was measured; without it nothing is saved |
+| `--reset` | clear the stored calibration back to the datasheet nominal |
+| `--seconds`, `--samples` | sampling window per pose (default `2.0` s, `20` samples) |
+
+**Why it matters.** An uncalibrated accelerometer reads `|acc| = 1.50 g` at rest where gravity is
+1.00 g, and every angle derived from it — pitch, roll, the 45° tilt latch — carries the same offset.
+The tool prints `|acc|` per pose and again after saving, and
+`python -m tools.hardware_checkup --skip-motion` reports the same number as `imu_gravity` (#258).
+On the bench dog `~/.config/pidog/pidog.conf` held **no** calibration at all, which is why this
+exists (#259).
+
+**The gyro gets a bias only.** A rate scale needs a known angular rate, which hand rotation cannot
+supply; writing one anyway would be an unmeasured value of exactly the kind #258 was about.
+
+**Both sides or nothing.** Every axis has to see gravity pointing up *and* down — not merely "a wide
+span". Two poses resting on the same face give a wide span and a bias of nearly a whole g, which is
+what the first saved run on the bench dog produced (X never pointed up, Y never down, and the saved
+bias matched the constant that was shifting the data). The tool refuses instead, naming the axis and
+the direction it never saw.
+
+**It clears the vendor's own offset before sampling.** `Pidog` computes an offset once at boot by
+assuming the dog is level with its X axis pointing down (`pidog.py:474-479`) and then adds it to every
+sample (`:490-495`). A PiDog boots **lying down**, so that offset is usually wrong, and measuring
+through it yields a "bias" that is really that offset. `--apply` clears both the stored calibration and
+the startup offset first, so what gets measured is the sensor. A dry run says when the offset is in
+force, because its numbers then mean nothing.
+
+**Nothing animates while it samples.** The vendor's `ActionFlow` plays `waiting` and
+`feet_left_right` on its own every few seconds (`action_flow.py:230-243`), moving the head and legs.
+Tools open the HAL with `start(animate=False)`, which is also what makes `hardware_checkup
+--skip-motion` honest.
+
+Exit codes: `0` measured or reset, `1` the six poses did not cover all three axes, the IMU did not
+answer, or the HAL refused the write, `2` a usage error.
+
+## 14. `servo_level`
+
+Finds the leg trim that makes the dog sit level, by measuring what each joint actually does to the
+body. For every leg joint it nudges the joint by 2°, reads how far the body tipped on the IMU, nudges
+it back, and solves the resulting 2×8 system for the trim that shoulders the tilt.
+
+```bash
+python -m tools.servo_level            # check the prerequisites, print the plan, move nothing
+python -m tools.servo_level --apply    # probe the joints and save the trim
+```
+
+| Flag | Meaning |
+|---|---|
+| `--apply` | probe and save; **this is what makes it move** |
+| `--iterations` | measure-and-trim passes (default `3`), stops early once level |
+| `--probe-deg` | probe step per joint (default `2.0`) |
+| `--target` | level enough, in degrees (default `1.0`) |
+| `--max-trim` | refuse a solve bigger than this per joint (default `20.0` = the vendor limit) |
+
+**Put the dog on a flat hard surface first**, in its resting pose, and keep clear of it: `--apply`
+is a motion run of up to 48 nudges at speed 30.
+
+Two prerequisites, both refused with a message rather than a guess:
+
+- **A calibrated IMU** (`python -m tools.imu_calibrate --apply`). The tool trims servos to cancel a
+  *body* tilt; against an uncalibrated accelerometer it would cancel the sensor's own offset and call
+  it level. `|acc|` must read within 0.15 g of 1.00.
+- **An existing trim** (`python -m tools.calibrate_servos`). A joint with no baseline cannot be merged
+  into, and inventing the other seven would be user data nobody measured.
+
+The solve is the minimum-norm solution, so a tilt is spread across the four shoulders and the four
+knees instead of being dumped on one servo. A solve that wants more than 20° at any joint is refused:
+that is a bent bracket or a stripped horn, not a calibration.
+
+Exit codes: `0` done or dry, `1` a prerequisite failed, the IMU stopped answering, or the solve was
+refused, `2` a usage error.
+
+## 15. `audio_check`
 
 Answers the question `aplay` cannot: **did sound actually leave the speaker?** `aplay` exits 0
 whenever ALSA accepts the samples, so a muted amplifier, a dead speaker coil and a stuck I2S clock all

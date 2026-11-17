@@ -360,6 +360,15 @@ one metre" — it is "no measurement", and downstream logic must branch on the f
 `SensorReading.from_snapshot()` adapts the HAL's `SensorSnapshot` to this shape, so a module never
 touches the vendor object.
 
+**IMU units.** `acc` is in **g** and `gyro` in **deg/s**. `PidogHAL` converts the vendor's raw counts
+at the boundary (`hal/vendor.py::to_physical`: 16384 LSB/g and 16.4 LSB/deg/s, or the sensor's own
+`acc_scale`/`gyro_scale` when a calibration is stored). Until #258 it published the counts themselves,
+so `orientation.gyro_scale: 1.0` integrated a heading roughly 16x too fast.
+
+`|acc|` is 1 g when the dog is at rest. `python -m tools.hardware_checkup --skip-motion` prints an
+`imu_gravity` line and warns when it is not 1.00 g ± 0.25: that means the accelerometer offsets were
+never saved, and pitch, roll and the tilt latch are all biased by the same amount.
+
 ### `ScanReading` — `navigation/scanning.py:34`
 
 ```python

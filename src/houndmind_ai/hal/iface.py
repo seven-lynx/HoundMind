@@ -10,7 +10,7 @@ no dog attached.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -22,6 +22,8 @@ __all__ = [
     "SERVO_GROUP_OF",
     "SERVO_NAMES",
     "SERVO_OFFSET_LIMIT_DEG",
+    "NUDGE_LIMIT_DEG",
+    "SERVO_ANGLE_LIMIT_DEG",
     "TAIL_SERVO_NAMES",
     "DogHAL",
     "SensorSnapshot",
@@ -83,6 +85,11 @@ SERVO_GROUP_OF: Mapping[str, str] = {
 # `robot_hat.Robot.set_offset` clamps a saved trim to ±20°, so the HAL clamps first and never
 # leaves the vendor to reject a value the workflow computed (`docs/pidog/HARDWARE.md:227`).
 SERVO_OFFSET_LIMIT_DEG: float = 20.0
+
+# One nudge of a single joint is a calibration probe, not a gait: the step is capped here so a tool
+# cannot ask the HAL for a move nobody reviewed, and the command angle is capped like a servo.
+NUDGE_LIMIT_DEG: float = 3.0
+SERVO_ANGLE_LIMIT_DEG: float = 90.0
 
 
 def as_float(value: Any, default: float) -> float:
@@ -237,14 +244,61 @@ class DogHAL(Protocol):
         """
         ...
 
-    def apply_offsets(self, offsets: Mapping[str, float]) -> None:
+    def apply_offsets(
+        self,
+        offsets: Mapping[str, float],
+        pose: Mapping[str, float] | None = None,
+    ) -> None:
         """Save servo zero offsets, clamped to :data:`SERVO_OFFSET_LIMIT_DEG`.
 
-        The calibration workflow and `hal/motors.py` supply these; nothing invents them. Saving a
-        trim is not a move: a HAL must not pose the dog here. A name this HAL does not know is
-        ignored, and a group whose current values cannot be read is not written at all —
-        replacing a whole vendor list with zeros would be user data nobody measured.
+        The calibration workflow and `hal/motors.py` supply these; nothing invents them. A name this
+        HAL does not know is ignored, and a group whose current values cannot be read is not written
+        at all — replacing a whole vendor list with zeros would be user data nobody measured.
+
+        The vendor has no silent-save path: every setter re-poses as it saves (#263). So a legs write
+        lands on the pose the dog is **already in**, which is the only way "save this trim" does not
+        also mean "drive eight servos to zero". `pose` overrides that with angles the caller chose,
+        and passing it is a motion request: only the interactive trim tools do.
         """
+        ...
+
+    def nudge_joint(self, name: str, degrees: float) -> None:
+        """Move one joint by `degrees` relative to where it is now. **This moves the dog.**
+
+        Calibration only, and never on a tick: the trim tools use it to see the effect of a change
+        one joint at a time. The step is capped at :data:`NUDGE_LIMIT_DEG` and the result at
+        :data:`SERVO_ANGLE_LIMIT_DEG`. It writes no offset — the trim is saved separately — so a
+        probe can always be undone by nudging back.
+        """
+        ...
+
+    def read_imu_calibration(self) -> dict[str, list[float]] | None:
+        """The IMU calibration the hardware loaded, or ``None`` when it cannot report one.
+
+        Keys are the vendor's own — ``acc_bias``, ``acc_scale``, ``gyro_bias``, ``gyro_scale`` —
+        each a 3-item list in the sensor's units (LSB, LSB per g, LSB, LSB per deg/s). ``None``
+        means "this HAL cannot say", never zeros: an absent calibration is a measurement, and a
+        fabricated one would hide an uncalibrated sensor behind a plausible-looking list (#258).
+        """
+        ...
+
+    def set_imu_calibration(
+        self,
+        acc_bias: Sequence[float] | None = None,
+        acc_scale: Sequence[float] | None = None,
+        gyro_bias: Sequence[float] | None = None,
+        gyro_scale: Sequence[float] | None = None,
+    ) -> bool:
+        """Persist a measured IMU calibration; ``True`` when the hardware accepted it.
+
+        This is user data written into the vendor's own config file, so the caller passes numbers
+        it actually measured and leaves the rest ``None`` — an omitted argument must leave that key
+        untouched rather than reset it. Nothing in the runtime calls this on its own.
+        """
+        ...
+
+    def reset_imu_calibration(self) -> bool:
+        """Drop the stored IMU calibration, back to the datasheet nominal values."""
         ...
 
     def stop(self) -> None:
