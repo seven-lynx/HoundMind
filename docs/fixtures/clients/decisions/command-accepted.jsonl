@@ -1,0 +1,2 @@
+{"schema_version": 1, "ts": 2000.0, "trace_id": "corpus-command-accepted", "mode": "manual", "state": "manual", "intent": "forward", "source": "client", "vetoes": [], "inputs": {"distance_cm": 150.0, "distance_valid": true, "battery_v": 8.1}, "confidence": null}
+{"schema_version": 1, "ts": 2000.2, "trace_id": "corpus-command-accepted", "mode": "manual", "state": "manual", "intent": "forward", "source": "client", "vetoes": [], "inputs": {"distance_cm": 140.0, "distance_valid": true, "battery_v": 8.1}, "confidence": null}

@@ -1,0 +1,2 @@
+{"schema_version": 1, "ts": 3000.0, "trace_id": "corpus-stale-reading", "mode": "idle", "state": "idle", "intent": "stand", "source": "behavior", "vetoes": [], "inputs": {"distance_cm": null, "distance_valid": false}, "confidence": null}
+{"schema_version": 1, "ts": 3000.1, "trace_id": "corpus-stale-reading", "mode": "idle", "state": "idle", "intent": "stand", "source": "behavior", "vetoes": [], "inputs": {"distance_cm": null, "distance_valid": false}, "confidence": null}
