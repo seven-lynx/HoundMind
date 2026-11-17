@@ -24,6 +24,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 13. [`imu_calibrate`](#13-imu_calibrate)
 14. [`servo_level`](#14-servo_level)
 15. [`audio_check`](#15-audio_check)
+16. [`schema_export`](#16-schema_export)
 
 ---
 
@@ -409,6 +410,22 @@ as silence on a speaker that works, which is the opposite of a useful answer.
 A `SILENT` verdict from a validated microphone means the ALSA chain is not the fault: see
 `docs/TROUBLESHOOTING.md` [§6](TROUBLESHOOTING.md#6-camera-audio-vision) for the order to check the
 amplifier and the speaker in.
+
+## 16. `schema_export`
+
+Writes the settings schema as a JSON Schema draft 2020-12 document, generated from the same `Spec`
+tree the loader enforces (`kernel/config_schema.py::json_schema`). An editor uses it to complete and
+check `config/settings.jsonc`; the tool reads no hardware and needs no dog.
+
+```bash
+python -m tools.schema_export --out settings.schema.json
+python -m tools.schema_export                  # print it instead
+```
+
+An unknown key, a wrong type and an out-of-range number are the three things the loader refuses at
+start, and the document declares exactly those: `additionalProperties: false` where the section is
+strict, the `minimum`/`maximum` of every numeric key, and `null` in the type wherever a key allows
+it. `--indent 0` emits one line for a diff.
 
 ## Adding a tool
 
