@@ -7,6 +7,8 @@ could reach the step every install needs before the dog stands straight. Every c
 
 from __future__ import annotations
 
+import pytest
+
 from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.hal.iface import SERVO_NAMES, SERVO_OFFSET_LIMIT_DEG
 from tools.calibrate_servos import main
@@ -108,3 +110,118 @@ def test_a_joint_with_no_baseline_is_not_written(capsys) -> None:
     assert "tail: the dog reported no current value" in captured.err
     assert "[tune] nothing to save" in captured.out
     assert hal.offsets_applied == []
+
+
+# ---- --interactive: the guided pass --------------------------------------------------------------
+
+
+def _keys(*sequence: str):
+    """A `read_key` handing back the script, then Enter forever."""
+    pending = list(sequence)
+
+    def read_key() -> str:
+        return pending.pop(0) if pending else "\r"
+
+    return read_key
+
+
+def _interactive(hal: FakeDogHAL, *keys: str, only: str = "lf_shoulder", runtime: bool = False) -> int:
+    return main(
+        ["--interactive", "--only", only],
+        hal=hal,
+        read_key=_keys(*keys),
+        runtime_up=lambda: runtime,
+    )
+
+
+def test_interactive_steps_a_joint_and_keeps_it(capsys) -> None:
+    hal = _measured()
+
+    assert _interactive(hal, "+", "+", "\r") == 0
+
+    assert hal.read_offsets()["lf_shoulder"] == pytest.approx(0.88)
+    assert "trimmed 1 joint" in capsys.readouterr().out
+
+
+def test_interactive_takes_the_arrow_keys(capsys) -> None:
+    hal = _measured()
+
+    assert _interactive(hal, "\x1b[C", "\x1b[C", "\r") == 0
+
+    assert hal.read_offsets()["lf_shoulder"] == pytest.approx(0.88)
+
+
+def test_interactive_steps_down_too(capsys) -> None:
+    hal = _measured(lf_shoulder=1.0)
+
+    assert _interactive(hal, "-", "-", "\r") == 0
+
+    assert hal.read_offsets()["lf_shoulder"] == pytest.approx(0.12)
+
+
+def test_interactive_never_passes_the_offset_limit() -> None:
+    hal = _measured()
+
+    assert _interactive(hal, *(["+"] * 100), "\r", only="tail") == 0
+
+    assert hal.read_offsets()["tail"] == SERVO_OFFSET_LIMIT_DEG
+
+
+def test_a_skip_walks_back_a_step_already_taken(capsys) -> None:
+    hal = _measured()
+
+    assert _interactive(hal, "+", "s", only="lf_leg") == 0
+
+    assert hal.read_offsets()["lf_leg"] == 0.0
+    assert "nothing changed" in capsys.readouterr().out
+
+
+def test_quit_restores_what_the_pass_changed(capsys) -> None:
+    hal = _measured(lf_shoulder=2.0)
+
+    assert _interactive(hal, "+", "+", "q") == 2
+
+    assert hal.read_offsets()["lf_shoulder"] == pytest.approx(2.0)
+    assert "restoring" in capsys.readouterr().out
+
+
+def test_interactive_refuses_while_the_runtime_is_up(capsys) -> None:
+    hal = _measured()
+
+    assert _interactive(hal, "\r", runtime=True) == 2
+
+    assert hal.offsets_applied == []
+    assert "stop the houndmind service" in capsys.readouterr().err
+
+
+def test_interactive_and_set_are_not_mixable(capsys) -> None:
+    assert main(["--interactive", "--set", "tail=1"], hal=_measured(),
+                read_key=_keys("\r"), runtime_up=lambda: False) == 2
+
+    assert "choose one" in capsys.readouterr().err
+
+
+def test_an_unknown_only_joint_is_refused(capsys) -> None:
+    assert _interactive(_measured(), "\r", only="nose") == 2
+
+    assert "unknown joint" in capsys.readouterr().err
+
+
+def test_a_key_it_does_not_know_is_ignored() -> None:
+    hal = _measured()
+
+    assert _interactive(hal, "x", "?", "\r") == 0
+
+    assert hal.offsets_applied == []
+    assert hal.read_offsets()["lf_shoulder"] == 0.0
+
+
+def test_interactive_walks_every_joint_by_default(capsys) -> None:
+    hal = _measured()
+
+    assert main(["--interactive"], hal=hal, read_key=_keys(), runtime_up=lambda: False) == 0
+
+    out = capsys.readouterr().out
+    assert f"interactive trim, {len(SERVO_NAMES)} joint(s)" in out
+    assert "nothing changed" in out
+

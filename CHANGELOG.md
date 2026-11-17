@@ -20,8 +20,38 @@ Current Release: v2026.11.16
   limit and a failure budget that disables the module rather than the loop. `docs/SECURITY.md` §8
   records that prompts leave the device when a cloud `base_url` is configured.
 
+- **`tools.imu_calibrate` measures and saves the IMU calibration** — `DogHAL` gains
+  `read_imu_calibration`, `set_imu_calibration` and `reset_imu_calibration`, with the `FakeDogHAL`
+  twins in the same change. The bench dog had no calibration at all (`|acc|` read 1.50 g at rest
+  where gravity is 1.00 g) and the vendor's own calibration example is not installed (#259). Six
+  orientations by hand, `bias = (max+min)/2` and `scale = (max-min)/2` per axis, refused unless every
+  axis saw 0.8 g of gravity, and saved through the vendor's setters so `pidog.conf` is written by the
+  library that reads it. The gyro gets a **bias only**: a rate scale needs a known rotation, and
+  inventing one would repeat exactly the mistake #258 fixed.
+
+- **`tools.servo_level` finds the leg trim that makes the dog sit level** — for each of the eight leg
+  joints it nudges 2 degrees, reads how far the body tipped on the IMU, nudges back, and solves the
+  resulting 2x8 system by minimum norm, so the correction is spread across the four shoulders and four
+  knees instead of dumped on one servo. `--apply` gates every move, and there is deliberately no
+  measure-only mode: the measurement *is* a small sequence of moves. A solve that wants more than 20
+  degrees at a joint is refused as mechanical, and it will not run against an uncalibrated IMU or a
+  joint with no baseline. `DogHAL` gains `nudge_joint` for it - one joint, relative, capped at 3
+  degrees and speed 30.
 ### Fixed
 
+- **An IMU calibration could look successful and be pure garbage** (found by running it on the dog).
+  Three separate faults, each enough to spoil the result:
+  - The vendor's `ActionFlow` plays `waiting`/`feet_left_right` on its own every 2-6 s
+    (`action_flow.py:230-243`), so the head jittered through the six sampling windows. Tools now open
+    the HAL with `start(animate=False)`; that also makes `hardware_checkup --skip-motion` true, which
+    it was not while the flow animated the dog.
+  - `Pidog` computes `imu_acc_offset` at boot by assuming the dog is level with X pointing down
+    (`pidog.py:474-479`) and adds it to every sample. A PiDog boots lying down, so the measurement was
+    taken through a constant lie: the saved "bias" was that offset, to the count
+    (`-20448, 16183, -605` LSB). `set_imu_calibration`/`reset_imu_calibration` now zero and persist it,
+    `read_imu_calibration` reports it, and `--apply` clears it before sampling.
+  - The coverage check tested span only, so a run with X never up and Y never down passed it. It now
+    requires every axis to see gravity on both sides, and names the axis and the missing direction.
 - **The IMU handed out raw counts where its contract promised physical units** (#258). `PidogHAL`
   published `Pidog.accData`/`gyroData` verbatim — 16384 LSB/g and 16.4 LSB/deg/s — while
   `SensorSnapshot` documents g and deg/s and `FakeDogHAL` posts g and deg/s, so no test could see the
@@ -34,18 +64,15 @@ Current Release: v2026.11.16
   offsets were never saved, which biases pitch, roll and the tilt latch. `tests/test_imu_units.py`
   pins the conversion and a 90°/s rotation reading 90°.
 
-### Changed
 
-- `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
-  instead of raising `Model not set` on every utterance, and the model download stays out of a tick
-  nobody asked for (#249).
-- `docs/CONTROL_API.md` and `docs/FEATURES_GUIDE.md` now show the command that reads the web console's
-  token (`grep -m1 . ~/.houndmind/api_token`) and the one that checks its mode, instead of naming the
-  file and stopping there. `docs/INSTALL.md` lists the three voice switches and what the vendor voice
-  stack needs.
-
-### Fixed
-
+- **Applying a stored servo trim drove all twelve servos to 0 degrees** (#263). `apply_offsets` is
+  documented as a save, but the vendor has no silent-save path: `set_leg_offsets` with no `reset_list`
+  calls `legs.reset()`, which writes `new_list(0)` to all eight leg servos, and the head and tail
+  setters re-pose unconditionally. Since `motors.start()` applies a stored trim, a correctly trimmed
+  dog would snap to zero on the next boot. A legs write now lands on the angles the dog already holds,
+  an unreadable pose skips the write instead of resetting the legs, and `hal/iface.py` says what the
+  vendor actually does. `apply_offsets(offsets, pose=...)` lets a calibration tool choose the pose
+  instead, which is what the leveling tool needs.
 - **A valid API key was rejected by Cloudflare-fronted providers** (#252). `urllib` identifies itself as
   `Python-urllib/3.x`, which Cloudflare answers with `403` and `error code: 1010` - a bot-signature
   rule, not an auth failure. The module read that as fatal and disabled itself, blaming the key.
@@ -102,6 +129,23 @@ Current Release: v2026.11.16
   device.
 
 ## [v2026.11.16] - 2026-11-16
+
+### Changed
+
+- **`calibrate_servos --interactive`** replaces the vendor's curses script for the by-eye pass (#142).
+  It walks the twelve joints one at a time at 0.44 degrees a press, with left/right arrows (or `+`/`-`)
+  to step, Enter to accept, `s` to skip and `q` to quit and undo, and `--only`/`--step` to narrow it.
+  Each keypress is written through `apply_offsets`, so the pose you see is the trim you are saving -
+  which is why this is the one mode that moves the dog, and why it refuses to start while the control
+  plane answers on 127.0.0.1:8420. The pass is a reimplementation against `DogHAL`, not a copy: the
+  vendor example is GPL-2.0-only and this tree is GPL-3.0 (#259).
+- `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
+  instead of raising `Model not set` on every utterance, and the model download stays out of a tick
+  nobody asked for (#249).
+- `docs/CONTROL_API.md` and `docs/FEATURES_GUIDE.md` now show the command that reads the web console's
+  token (`grep -m1 . ~/.houndmind/api_token`) and the one that checks its mode, instead of naming the
+  file and stopping there. `docs/INSTALL.md` lists the three voice switches and what the vendor voice
+  stack needs.
 
 ### Notes
 
