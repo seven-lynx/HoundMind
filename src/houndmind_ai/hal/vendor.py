@@ -32,6 +32,8 @@ from typing import Any, cast
 
 from houndmind_ai.hal.iface import (
     DOG_ACTIONS,
+    NUDGE_LIMIT_DEG,
+    SERVO_ANGLE_LIMIT_DEG,
     SERVO_GROUP_OF,
     SERVO_GROUPS,
     SERVO_OFFSET_LIMIT_DEG,
@@ -74,6 +76,17 @@ _GROUP_SETTERS = {
     "head": "set_head_offsets",
     "tail": "set_tail_offset",
 }
+
+# Where each group's last commanded angles live on the vendor object. `Pidog` keeps them itself and
+# updates them on every move (`pidog.py:387`), which is what makes a nudge relative to "now" possible.
+_ANGLE_ATTRS = {
+    "legs": "leg_current_angles",
+    "head": "head_current_angles",
+    "tail": "tail_current_angles",
+}
+
+# A calibration probe moves slowly: one joint, dog standing still, nothing to gain from gait speed.
+_NUDGE_SPEED = 30
 
 
 def _safe_float(val: Any, default: float) -> float:
@@ -664,13 +677,19 @@ class PidogHAL:
                     logger.debug("Unreadable %s offset %r", name, value)
         return offsets
 
-    def apply_offsets(self, offsets: Mapping[str, float]) -> None:
+    def apply_offsets(
+        self,
+        offsets: Mapping[str, float],
+        pose: Mapping[str, float] | None = None,
+    ) -> None:
         """Save the trim group by group, merged over what the hardware already has.
 
         The vendor's setters replace a whole list, so an offset for one joint must never zero the
-        other seven: the current values are read first, the requested ones merged in, and the
-        full list written. `reset_list` is deliberately not passed — it re-poses the dog, and
-        replaying stored offsets at startup must not move anything.
+        other seven: the current values are read first, the requested ones merged in, and the full
+        list written. Each setter also *re-poses* — `reset_list=None` is the vendor's "drive the legs
+        to zero" branch (`pidog.py:686-692`) — so a legs write lands on the angles the dog already
+        holds (#263), and `pose` lets a calibration tool choose them instead. Nothing in the runtime
+        passes `pose`.
         """
         with self._bus:
             dog = self._ensure_dog()
@@ -696,19 +715,111 @@ class PidogHAL:
                 if any(name not in current for name in names):
                     logger.warning("Incomplete %s offsets; not writing that group", group)
                     continue
-                self._write_group(dog, group, [values.get(name, current[name]) for name in names])
+                self._write_group(
+                    dog,
+                    group,
+                    [values.get(name, current[name]) for name in names],
+                    pose,
+                )
 
-    def _write_group(self, dog: Any, group: str, values: list[float]) -> None:
-        """Save one group through its own vendor entry point; no re-pose, no invented values."""
+    def _write_group(
+        self,
+        dog: Any,
+        group: str,
+        values: list[float],
+        pose: Mapping[str, float] | None = None,
+    ) -> None:
+        """Save one group through its own vendor entry point; no invented values, no reset pose."""
         setter_name = _GROUP_SETTERS[group]
         setter = getattr(dog, setter_name, None)
         if not callable(setter):
             logger.warning("Vendor exposes no %s(); %s offsets not saved", setter_name, group)
             return
         try:
-            setter(values)
+            if group == "legs":
+                angles = self._pose_values(dog, group, pose)
+                if angles is None:
+                    # `reset_list=None` would drive all eight leg servos to zero: skip this save.
+                    logger.warning("No readable %s angles; not saving that group", group)
+                    return
+                setter(values, reset_list=angles)
+            else:
+                # The vendor's head and tail setters re-pose unconditionally and upstream has no
+                # stored-pose path, which is why the contract no longer promises otherwise (#263).
+                setter(values)
         except Exception:  # noqa: BLE001 - a vendor save failure is logged, not fatal
             logger.warning("Failed to save %s offsets", group, exc_info=True)
+
+    def _pose_values(
+        self,
+        dog: Any,
+        group: str,
+        pose: Mapping[str, float] | None,
+    ) -> list[float] | None:
+        """The angles a legs write leaves the dog in: the caller's, else where it already is."""
+        names = SERVO_GROUPS[group]
+        if pose is not None:
+            requested: list[float] = []
+            for name in names:
+                raw = pose.get(name)
+                if raw is None:
+                    logger.warning("Pose is missing %r; not saving %s offsets", name, group)
+                    return None
+                try:
+                    requested.append(float(raw))
+                except (TypeError, ValueError):
+                    logger.warning("Unreadable pose for %r; not saving %s offsets", name, group)
+                    return None
+            return requested
+        return self._current_angles_locked(dog, group)
+
+    def _current_angles_locked(self, dog: Any, group: str) -> list[float] | None:
+        """The angles the vendor last commanded for the group, or None when it cannot say."""
+        names = SERVO_GROUPS[group]
+        attribute = _ANGLE_ATTRS[group]
+        group_object = getattr(dog, group, None)
+        for owner in (dog, group_object):
+            values = getattr(owner, attribute, None)
+            if not isinstance(values, (list, tuple)) or len(values) != len(names):
+                continue
+            try:
+                return [float(value) for value in values]
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def nudge_joint(self, name: str, degrees: float) -> None:
+        """Move one joint by `degrees` from where it is now, slowly, capped at the nudge limit.
+
+        A calibration probe: the trim tools step one joint and watch the IMU. No offset is written
+        here, so nudging back restores the pose exactly.
+        """
+        group = SERVO_GROUP_OF.get(name)
+        if group is None:
+            raise ValueError(f"unknown joint {name!r}")
+        index = SERVO_GROUPS[group].index(name)
+        delta = as_float(degrees, 0.0)
+        delta = max(-NUDGE_LIMIT_DEG, min(NUDGE_LIMIT_DEG, delta))
+        if delta == 0.0:
+            return
+        with self._bus:
+            dog = self._ensure_dog()
+            angles = self._current_angles_locked(dog, group)
+            if angles is None:
+                raise RuntimeError(f"current {group} angles are unreadable; refusing to guess")
+            commanded = angles[index] + delta
+            angles[index] = max(
+                -SERVO_ANGLE_LIMIT_DEG, min(SERVO_ANGLE_LIMIT_DEG, commanded)
+            )
+            if angles[index] != commanded:
+                logger.warning("Nudge of %s clamped to %.1f deg", name, angles[index])
+            if group == "legs":
+                dog.legs_move([angles], immediately=True, speed=_NUDGE_SPEED)
+            elif group == "head":
+                # `head_move_raw` takes servo angles; `head_move` would read them as yaw/roll.
+                dog.head_move_raw([angles], immediately=True, speed=_NUDGE_SPEED)
+            else:
+                dog.tail_move([angles], immediately=True, speed=_NUDGE_SPEED)
 
     def read_imu_calibration(self) -> dict[str, list[float]] | None:
         """What the vendor loaded for the IMU, or None when it cannot say (#259)."""

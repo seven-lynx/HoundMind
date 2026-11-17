@@ -77,6 +77,11 @@ class FakeDogHAL:
         self.imu_calibrations_saved: list[dict[str, Sequence[float] | None]] = []
         self.imu_calibration_resets = 0
 
+        # Trim writes carry the pose they landed on, so a test can see that a save is not a reset.
+        self.poses_applied: list[dict[str, float] | None] = []
+        self.nudges: list[tuple[str, float]] = []
+        self._angles: dict[str, float] = {}
+
     # ---- scripting helpers -------------------------------------------------
 
     def set_distance(self, cm: float | None) -> None:
@@ -212,10 +217,15 @@ class FakeDogHAL:
         with self._bus:
             return dict(self._offsets)
 
-    def apply_offsets(self, offsets: Mapping[str, float]) -> None:
+    def apply_offsets(
+        self,
+        offsets: Mapping[str, float],
+        pose: Mapping[str, float] | None = None,
+    ) -> None:
         """Mirror the contract: unknown names ignored, clamped, and no baseline means no write."""
         with self._bus:
             self.offsets_applied.append(dict(offsets))
+            self.poses_applied.append(dict(pose) if pose is not None else None)
             for name, value in (offsets or {}).items():
                 if name not in SERVO_GROUP_OF:
                     continue
@@ -225,6 +235,14 @@ class FakeDogHAL:
                 self._offsets[name] = max(
                     -SERVO_OFFSET_LIMIT_DEG, min(SERVO_OFFSET_LIMIT_DEG, number)
                 )
+
+    def nudge_joint(self, name: str, degrees: float) -> None:
+        """Record the probe and move the fake's own angles, so a tool can be driven headless."""
+        if name not in SERVO_GROUP_OF:
+            raise ValueError(f"unknown joint {name!r}")
+        with self._bus:
+            self.nudges.append((name, float(degrees)))
+            self._angles[name] = self._angles.get(name, 0.0) + float(degrees)
 
     def stop(self) -> None:
         self.stop_count += 1

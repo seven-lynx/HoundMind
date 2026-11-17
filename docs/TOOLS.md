@@ -22,6 +22,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 11. [`validate_rtabmap_adapter`](#11-validate_rtabmap_adapter)
 12. [`calibrate_servos`](#12-calibrate_servos)
 13. [`imu_calibrate`](#13-imu_calibrate)
+14. [`servo_level`](#14-servo_level)
 
 ---
 
@@ -35,6 +36,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Is there a camera, and can it capture? | `camera_check` |
 | Is there a microphone / speaker? | `list_audio_devices` |
 | Does the dog know which way is down? | `imu_calibrate` |
+| The dog sits crooked | `servo_level` |
 | Something is broken and I need to file a report | `collect_support_bundle` |
 | Why did the dog do that at 14:03? | `replay_decisions` |
 | The semantic labeler has no model | `download_opencv_models` |
@@ -49,9 +51,10 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
 | `camera_check`, `list_audio_devices`, `imu_calibrate`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
-| `calibrate_servos` | no — it reads and saves the trim; a saved offset does not pose the dog (`hal/iface.py::DogHAL.apply_offsets`) |
+| `calibrate_servos` | no — it reads and saves the trim. A legs write lands on the pose the dog already holds; the vendor's head and tail setters do re-pose as they save (#263) |
+| `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
 
-Neither motion-capable tool moves the dog unless asked, but read the second row twice:
+No motion-capable tool moves the dog unless asked, but read the second row twice:
 **leaving `--skip-motion` off `hardware_checkup` is a motion run.**
 
 ## 3. `installer_verify`
@@ -281,6 +284,43 @@ supply; writing one anyway would be an unmeasured value of exactly the kind #258
 
 Exit codes: `0` measured or reset, `1` the six poses did not cover all three axes, the IMU did not
 answer, or the HAL refused the write, `2` a usage error.
+
+## 14. `servo_level`
+
+Finds the leg trim that makes the dog sit level, by measuring what each joint actually does to the
+body. For every leg joint it nudges the joint by 2°, reads how far the body tipped on the IMU, nudges
+it back, and solves the resulting 2×8 system for the trim that shoulders the tilt.
+
+```bash
+python -m tools.servo_level            # check the prerequisites, print the plan, move nothing
+python -m tools.servo_level --apply    # probe the joints and save the trim
+```
+
+| Flag | Meaning |
+|---|---|
+| `--apply` | probe and save; **this is what makes it move** |
+| `--iterations` | measure-and-trim passes (default `3`), stops early once level |
+| `--probe-deg` | probe step per joint (default `2.0`) |
+| `--target` | level enough, in degrees (default `1.0`) |
+| `--max-trim` | refuse a solve bigger than this per joint (default `20.0` = the vendor limit) |
+
+**Put the dog on a flat hard surface first**, in its resting pose, and keep clear of it: `--apply`
+is a motion run of up to 48 nudges at speed 30.
+
+Two prerequisites, both refused with a message rather than a guess:
+
+- **A calibrated IMU** (`python -m tools.imu_calibrate --apply`). The tool trims servos to cancel a
+  *body* tilt; against an uncalibrated accelerometer it would cancel the sensor's own offset and call
+  it level. `|acc|` must read within 0.15 g of 1.00.
+- **An existing trim** (`python -m tools.calibrate_servos`). A joint with no baseline cannot be merged
+  into, and inventing the other seven would be user data nobody measured.
+
+The solve is the minimum-norm solution, so a tilt is spread across the four shoulders and the four
+knees instead of being dumped on one servo. A solve that wants more than 20° at any joint is refused:
+that is a bent bracket or a stripped horn, not a calibration.
+
+Exit codes: `0` done or dry, `1` a prerequisite failed, the IMU stopped answering, or the solve was
+refused, `2` a usage error.
 
 ## Adding a tool
 

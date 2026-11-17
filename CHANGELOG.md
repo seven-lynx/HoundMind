@@ -29,6 +29,15 @@ Current Release: v2026.11.16
   library that reads it. The gyro gets a **bias only**: a rate scale needs a known rotation, and
   inventing one would repeat exactly the mistake #258 fixed.
 
+- **`tools.servo_level` finds the leg trim that makes the dog sit level** — for each of the eight leg
+  joints it nudges 2 degrees, reads how far the body tipped on the IMU, nudges back, and solves the
+  resulting 2x8 system by minimum norm, so the correction is spread across the four shoulders and four
+  knees instead of dumped on one servo. `--apply` gates every move, and there is deliberately no
+  measure-only mode: the measurement *is* a small sequence of moves. A solve that wants more than 20
+  degrees at a joint is refused as mechanical, and it will not run against an uncalibrated IMU or a
+  joint with no baseline. `DogHAL` gains `nudge_joint` for it - one joint, relative, capped at 3
+  degrees and speed 30.
+
 ### Changed
 
 - `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
@@ -41,6 +50,14 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **Applying a stored servo trim drove all twelve servos to 0 degrees** (#263). `apply_offsets` is
+  documented as a save, but the vendor has no silent-save path: `set_leg_offsets` with no `reset_list`
+  calls `legs.reset()`, which writes `new_list(0)` to all eight leg servos, and the head and tail
+  setters re-pose unconditionally. Since `motors.start()` applies a stored trim, a correctly trimmed
+  dog would snap to zero on the next boot. A legs write now lands on the angles the dog already holds,
+  an unreadable pose skips the write instead of resetting the legs, and `hal/iface.py` says what the
+  vendor actually does. `apply_offsets(offsets, pose=...)` lets a calibration tool choose the pose
+  instead, which is what the leveling tool needs.
 - **A valid API key was rejected by Cloudflare-fronted providers** (#252). `urllib` identifies itself as
   `Python-urllib/3.x`, which Cloudflare answers with `403` and `error code: 1010` - a bot-signature
   rule, not an auth failure. The module read that as fatal and disabled itself, blaming the key.
