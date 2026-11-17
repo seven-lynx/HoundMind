@@ -26,6 +26,11 @@ DEFAULT_SYSTEM_PROMPT = (
 _TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
 _AUTH_STATUS = frozenset({401, 403})
 
+# Providers behind Cloudflare reject `Python-urllib/3.x` with 403 and the body `error code: 1010` - a
+# bot-signature rule, not an auth failure - so the same key that works from curl fails from the module
+# (#252). Identifying the client honestly is the fix; a browser string would be a lie.
+_USER_AGENT = "HoundMind/1.0"
+
 
 class AssistantRequestError(RuntimeError):
     """A failed call, carrying enough to decide whether it is worth retrying."""
@@ -280,6 +285,7 @@ class AssistantModule(Module):
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._api_key}",
+                "User-Agent": _USER_AGENT,
             },
             method="POST",
         )
