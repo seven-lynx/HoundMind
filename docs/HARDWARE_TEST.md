@@ -136,7 +136,7 @@ source .venv/bin/activate
 | 2 | Sensors | `python -m tools.hardware_checkup --skip-motion` | no | ~5 s | five readings, no `None`, `valid:` all `True`, exit 0 |
 | 3 | Loop | `python -m tools.smoke_test` | no | ~5 s | `[smoke] PASS` |
 | 4 | Control plane | `python -m houndmind_ai`, then `GET /state` | no | ~2 min | `*_valid: true` |
-| 5 | Peripherals | `tools.camera_check`, `tools.list_audio_devices` | no | ~1 min | index found, frame saved |
+| 5 | Peripherals | `tools.camera_check`, `tools.list_audio_devices`, `tools.audio_check --verify` | no | ~1 min | index found, frame saved, `verdict: EMITTED` |
 | 6 | Motion | [§9](#9-step-6--motion-and-only-motion) — **only with clearance and a yes** | **yes** | ~1 min | a gait you watched |
 
 ## 4. Step 1 — Install sanity

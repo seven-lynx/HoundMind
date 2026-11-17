@@ -90,6 +90,7 @@ does not answer it, the last column names the document that will.
 | `vision_inference_status: unconfigured` | the scheduler is on with no model | pass an `inference_fn`, or turn `inference_scheduler_enabled` off (`docs/FEATURES_GUIDE.md` [§21](FEATURES_GUIDE.md#21-pi4-vision-feed-pi4)a) |
 | the semantic labeler reports no labels | model files are missing | `python -m tools.download_opencv_models` |
 | `tools.list_audio_devices` is empty | the I2S overlay is not installed | `sudo bash i2samp.sh` from the `pidog` directory, or re-run the installer with `--run-i2samp` |
+| the speaker plays nothing, yet `aplay` and `speaker-test` report no error | ALSA accepted the samples, so the fault is past the mixer: the amplifier, the speaker, or the microphone used to measure it | open the mic gain (`amixer -c 3 sset 'Mic' 16`), then `python -m tools.audio_check --verify`, then `--device plughw:4,0`. `SILENT` on both means the software chain is not the cause: test the speaker on another source before suspecting the HAT |
 | face recognition disables itself at start | `dlib`/`face_recognition` is not importable | optional install; the module degrades to `disabled` with that reason |
 
 ## 7. When you need help

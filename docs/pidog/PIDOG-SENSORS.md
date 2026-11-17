@@ -226,6 +226,10 @@ are not 3 long or that exceed 65536 in magnitude.
 The last row moves nothing but asks you to wave the dog around. Treat it as a device task with
 clearance, and treat every row as a write to user data.
 
+The vendor's `examples/imu_calibration.py` - the way this page used to send you to calibrate - is not
+part of the installed package (#259), so on a device the setters in the table above are the
+calibration path.
+
 ---
 
 ## 5. What a read costs
