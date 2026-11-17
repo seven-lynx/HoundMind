@@ -10,6 +10,15 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **`step_calibrate` refuses to walk a dying pack** — the interlock's 6.4 V veto protects the servos,
+  not the board: two walking attempts on the bench dog at 7.78 V and 7.85 V idle **rebooted the Pi
+  mid-gait** (`vcgencmd get_throttled` = `0x50000`, boots 20 s apart), while a head-only run on the
+  same pack completed twice (#292). The tool now takes a `--min-volts` walk floor (default 7.9 V),
+  refuses before the first step when the pack is under it, and ends a run whose pack sags below it
+  mid-walk (`veto: "pack_sag"`) instead of finishing a measurement the pack cannot carry. The report
+  header prints the floor it used, so the refusal is never a mystery. Three tests, including the
+  on-purpose override and a sagging pack.
+
 - **`step_cm` can now be measured instead of assumed** — it shipped as 25 cm per gait cycle for a dog
   about 25 cm long, and `hal/vendor.py:573` shows one `forward` *is* one cycle, so the constant drives
   every place anchor and map dot (#285). `tools.step_calibrate` walks the dog toward a wall, samples
