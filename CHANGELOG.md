@@ -20,6 +20,15 @@ Current Release: v2026.11.16
   limit and a failure budget that disables the module rather than the loop. `docs/SECURITY.md` §8
   records that prompts leave the device when a cloud `base_url` is configured.
 
+- **`tools.imu_calibrate` measures and saves the IMU calibration** — `DogHAL` gains
+  `read_imu_calibration`, `set_imu_calibration` and `reset_imu_calibration`, with the `FakeDogHAL`
+  twins in the same change. The bench dog had no calibration at all (`|acc|` read 1.50 g at rest
+  where gravity is 1.00 g) and the vendor's own calibration example is not installed (#259). Six
+  orientations by hand, `bias = (max+min)/2` and `scale = (max-min)/2` per axis, refused unless every
+  axis saw 0.8 g of gravity, and saved through the vendor's setters so `pidog.conf` is written by the
+  library that reads it. The gyro gets a **bias only**: a rate scale needs a known rotation, and
+  inventing one would repeat exactly the mistake #258 fixed.
+
 ### Changed
 
 - `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped

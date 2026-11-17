@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from houndmind_ai.hal.iface import (
@@ -70,6 +70,12 @@ class FakeDogHAL:
         self._imu_valid = False
         self._battery_v: float | None = None
         self._battery_valid = False
+
+        # IMU calibration: None means "this fake cannot say", which is what a real dog reports
+        # before anything has been saved (#258, #259).
+        self._imu_calibration: dict[str, list[float]] | None = None
+        self.imu_calibrations_saved: list[dict[str, Sequence[float] | None]] = []
+        self.imu_calibration_resets = 0
 
     # ---- scripting helpers -------------------------------------------------
 
@@ -160,6 +166,47 @@ class FakeDogHAL:
         with self._bus:
             self.distance_samples.append((samples, between_reads_s))
             return self._distance_cm
+
+    def set_imu_calibration_store(self, values: dict[str, list[float]] | None) -> None:
+        """Seed what ``read_imu_calibration`` reports: a saved calibration, or None for none."""
+        self._imu_calibration = values
+
+    def read_imu_calibration(self) -> dict[str, list[float]] | None:
+        with self._bus:
+            if self._imu_calibration is None:
+                return None
+            return {key: list(value) for key, value in self._imu_calibration.items()}
+
+    def set_imu_calibration(
+        self,
+        acc_bias: Sequence[float] | None = None,
+        acc_scale: Sequence[float] | None = None,
+        gyro_bias: Sequence[float] | None = None,
+        gyro_scale: Sequence[float] | None = None,
+    ) -> bool:
+        """Mirror the contract: an omitted argument leaves that key alone, not zeroed."""
+        supplied: dict[str, Sequence[float] | None] = {
+            "acc_bias": acc_bias,
+            "acc_scale": acc_scale,
+            "gyro_bias": gyro_bias,
+            "gyro_scale": gyro_scale,
+        }
+        with self._bus:
+            self.imu_calibrations_saved.append(dict(supplied))
+            if all(value is None for value in supplied.values()):
+                return False
+            store = dict(self._imu_calibration or {})
+            for key, value in supplied.items():
+                if value is not None:
+                    store[key] = [float(item) for item in value]
+            self._imu_calibration = store
+            return True
+
+    def reset_imu_calibration(self) -> bool:
+        with self._bus:
+            self.imu_calibration_resets += 1
+            self._imu_calibration = None
+            return True
 
     def read_offsets(self) -> dict[str, float]:
         with self._bus:

@@ -21,6 +21,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 10. [`download_opencv_models`](#10-download_opencv_models)
 11. [`validate_rtabmap_adapter`](#11-validate_rtabmap_adapter)
 12. [`calibrate_servos`](#12-calibrate_servos)
+13. [`imu_calibrate`](#13-imu_calibrate)
 
 ---
 
@@ -33,6 +34,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Does the loop start and produce a scan and a map? | `smoke_test` |
 | Is there a camera, and can it capture? | `camera_check` |
 | Is there a microphone / speaker? | `list_audio_devices` |
+| Does the dog know which way is down? | `imu_calibrate` |
 | Something is broken and I need to file a report | `collect_support_bundle` |
 | Why did the dog do that at 14:03? | `replay_decisions` |
 | The semantic labeler has no model | `download_opencv_models` |
@@ -46,7 +48,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `installer_verify` | no |
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
-| `camera_check`, `list_audio_devices`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
+| `camera_check`, `list_audio_devices`, `imu_calibrate`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
 | `calibrate_servos` | no — it reads and saves the trim; a saved offset does not pose the dog (`hal/iface.py::DogHAL.apply_offsets`) |
 
 Neither motion-capable tool moves the dog unless asked, but read the second row twice:
@@ -249,6 +251,36 @@ There is no interactive preview on purpose: nudging a servo live needs a raw per
 and that primitive belongs to `act/interlock.py` alone. Trim with `--set`, look at the numbers, then
 `--apply`. The vendor's own script (`examples/0_calibration.py`) still exists and is documented in
 `docs/pidog/HARDWARE.md` [§6](pidog/HARDWARE.md#6-what-lives-on-disk) for anyone who prefers it.
+
+## 13. `imu_calibrate`
+
+Measures the IMU's bias and scale by resting the dog on its six faces, then saves them through the
+vendor's own setters. **It does not move the dog** — you rotate it, the tool samples.
+
+```bash
+python -m tools.imu_calibrate            # measure and print, save nothing
+python -m tools.imu_calibrate --apply    # measure and save
+python -m tools.imu_calibrate --reset    # drop the stored calibration
+```
+
+| Flag | Meaning |
+|---|---|
+| `--apply` | write what was measured; without it nothing is saved |
+| `--reset` | clear the stored calibration back to the datasheet nominal |
+| `--seconds`, `--samples` | sampling window per pose (default `2.0` s, `20` samples) |
+
+**Why it matters.** An uncalibrated accelerometer reads `|acc| = 1.50 g` at rest where gravity is
+1.00 g, and every angle derived from it — pitch, roll, the 45° tilt latch — carries the same offset.
+The tool prints `|acc|` per pose and again after saving, and
+`python -m tools.hardware_checkup --skip-motion` reports the same number as `imu_gravity` (#258).
+On the bench dog `~/.config/pidog/pidog.conf` held **no** calibration at all, which is why this
+exists (#259).
+
+**The gyro gets a bias only.** A rate scale needs a known angular rate, which hand rotation cannot
+supply; writing one anyway would be an unmeasured value of exactly the kind #258 was about.
+
+Exit codes: `0` measured or reset, `1` the six poses did not cover all three axes, the IMU did not
+answer, or the HAL refused the write, `2` a usage error.
 
 ## Adding a tool
 

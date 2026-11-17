@@ -10,7 +10,7 @@ no dog attached.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -245,6 +245,35 @@ class DogHAL(Protocol):
         ignored, and a group whose current values cannot be read is not written at all —
         replacing a whole vendor list with zeros would be user data nobody measured.
         """
+        ...
+
+    def read_imu_calibration(self) -> dict[str, list[float]] | None:
+        """The IMU calibration the hardware loaded, or ``None`` when it cannot report one.
+
+        Keys are the vendor's own — ``acc_bias``, ``acc_scale``, ``gyro_bias``, ``gyro_scale`` —
+        each a 3-item list in the sensor's units (LSB, LSB per g, LSB, LSB per deg/s). ``None``
+        means "this HAL cannot say", never zeros: an absent calibration is a measurement, and a
+        fabricated one would hide an uncalibrated sensor behind a plausible-looking list (#258).
+        """
+        ...
+
+    def set_imu_calibration(
+        self,
+        acc_bias: Sequence[float] | None = None,
+        acc_scale: Sequence[float] | None = None,
+        gyro_bias: Sequence[float] | None = None,
+        gyro_scale: Sequence[float] | None = None,
+    ) -> bool:
+        """Persist a measured IMU calibration; ``True`` when the hardware accepted it.
+
+        This is user data written into the vendor's own config file, so the caller passes numbers
+        it actually measured and leaves the rest ``None`` — an omitted argument must leave that key
+        untouched rather than reset it. Nothing in the runtime calls this on its own.
+        """
+        ...
+
+    def reset_imu_calibration(self) -> bool:
+        """Drop the stored IMU calibration, back to the datasheet nominal values."""
         ...
 
     def stop(self) -> None:

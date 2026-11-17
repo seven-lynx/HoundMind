@@ -25,7 +25,7 @@ import queue
 import threading
 import time
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as dist_version
 from typing import Any, cast
@@ -709,6 +709,87 @@ class PidogHAL:
             setter(values)
         except Exception:  # noqa: BLE001 - a vendor save failure is logged, not fatal
             logger.warning("Failed to save %s offsets", group, exc_info=True)
+
+    def read_imu_calibration(self) -> dict[str, list[float]] | None:
+        """What the vendor loaded for the IMU, or None when it cannot say (#259)."""
+        with self._bus:
+            imu = getattr(self._ensure_dog(), "imu", None)
+            if imu is None:
+                return None
+            found: dict[str, list[float]] = {}
+            for key in ("acc_bias", "acc_scale", "gyro_bias", "gyro_scale"):
+                values = getattr(imu, key, None)
+                if not isinstance(values, (list, tuple)) or len(values) != 3:
+                    logger.debug("No readable IMU %s on the vendor object", key)
+                    continue
+                try:
+                    found[key] = [float(value) for value in values]
+                except (TypeError, ValueError):
+                    logger.debug("Unreadable IMU %s: %r", key, values)
+            return found or None
+
+    def set_imu_calibration(
+        self,
+        acc_bias: Sequence[float] | None = None,
+        acc_scale: Sequence[float] | None = None,
+        gyro_bias: Sequence[float] | None = None,
+        gyro_scale: Sequence[float] | None = None,
+    ) -> bool:
+        """Persist through the vendor's own setters, which write `pidog.conf` themselves.
+
+        An omitted argument is passed as None, and the vendor's setters ignore None, so a caller
+        that measured only the accelerometer cannot silently zero the gyroscope's calibration.
+        """
+        if all(value is None for value in (acc_bias, acc_scale, gyro_bias, gyro_scale)):
+            return False
+        with self._bus:
+            imu = getattr(self._ensure_dog(), "imu", None)
+            if imu is None:
+                logger.warning("No vendor IMU object; the calibration was not saved")
+                return False
+            saved = True
+            if acc_bias is not None or acc_scale is not None:
+                saved = self._call_calibration_setter(
+                    imu, "set_acc_calibration", acc_bias, acc_scale
+                ) and saved
+            if gyro_bias is not None or gyro_scale is not None:
+                saved = self._call_calibration_setter(
+                    imu, "set_gyro_calibration", gyro_bias, gyro_scale
+                ) and saved
+            return saved
+
+    @staticmethod
+    def _call_calibration_setter(
+        imu: Any,
+        name: str,
+        bias: Sequence[float] | None,
+        scale: Sequence[float] | None,
+    ) -> bool:
+        setter = getattr(imu, name, None)
+        if not callable(setter):
+            logger.warning("Vendor exposes no %s(); the calibration was not saved", name)
+            return False
+        try:
+            setter(bias=bias, scale=scale)
+        except Exception:  # noqa: BLE001 - a vendor save failure is reported, not fatal
+            logger.warning("Vendor rejected %s", name, exc_info=True)
+            return False
+        return True
+
+    def reset_imu_calibration(self) -> bool:
+        """Clear the stored calibration; the vendor falls back to the datasheet nominal."""
+        with self._bus:
+            imu = getattr(self._ensure_dog(), "imu", None)
+            resetter = getattr(imu, "reset_calibration", None)
+            if not callable(resetter):
+                logger.warning("Vendor exposes no reset_calibration(); nothing cleared")
+                return False
+            try:
+                resetter()
+            except Exception:  # noqa: BLE001 - report, do not crash a calibration run
+                logger.warning("Vendor failed to reset the IMU calibration", exc_info=True)
+                return False
+            return True
 
     def stop(self) -> None:
         """Stop motion now: clear the queued actions, then ask the vendor to halt."""
