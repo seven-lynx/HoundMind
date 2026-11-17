@@ -40,6 +40,13 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- **`calibrate_servos --interactive`** replaces the vendor's curses script for the by-eye pass (#142).
+  It walks the twelve joints one at a time at 0.44 degrees a press, with left/right arrows (or `+`/`-`)
+  to step, Enter to accept, `s` to skip and `q` to quit and undo, and `--only`/`--step` to narrow it.
+  Each keypress is written through `apply_offsets`, so the pose you see is the trim you are saving -
+  which is why this is the one mode that moves the dog, and why it refuses to start while the control
+  plane answers on 127.0.0.1:8420. The pass is a reimplementation against `DogHAL`, not a copy: the
+  vendor example is GPL-2.0-only and this tree is GPL-3.0 (#259).
 - `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
   instead of raising `Model not set` on every utterance, and the model download stays out of a tick
   nobody asked for (#249).

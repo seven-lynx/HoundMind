@@ -51,7 +51,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
 | `camera_check`, `list_audio_devices`, `imu_calibrate`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
-| `calibrate_servos` | no — it reads and saves the trim. A legs write lands on the pose the dog already holds; the vendor's head and tail setters do re-pose as they save (#263) |
+| `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
 
 No motion-capable tool moves the dog unless asked, but read the second row twice:
@@ -243,6 +243,9 @@ python -m tools.calibrate_servos --set lf_shoulder=6 --apply       # writes thro
 |---|---|
 | `--set JOINT=DEG` | offset for one joint, repeatable; clamped to ±20 |
 | `--apply` | save the result; **without it nothing is written** |
+| `--interactive` | trim by eye, one joint at a time; **this moves the dog** |
+| `--only JOINT` | restrict `--interactive` to one joint, repeatable |
+| `--step DEG` | keypress step in `--interactive` (default `0.44`) |
 
 Output is one line per joint in the vendor's group order (`legs`, `head`, `tail`), with the current
 value and the proposed one; a joint the HAL could not read prints `unread` rather than `0.0`, and is
@@ -250,10 +253,40 @@ never written, because saving its group would invent the other values in that li
 is clamped and the clamp is what gets saved. Exit codes: `0` saved or nothing to save, `1` a written
 value did not read back (check the vendor log), `2` a usage error, no readable trim, or no dog.
 
-There is no interactive preview on purpose: nudging a servo live needs a raw per-group angle write,
-and that primitive belongs to `act/interlock.py` alone. Trim with `--set`, look at the numbers, then
-`--apply`. The vendor's own script (`examples/0_calibration.py`) still exists and is documented in
-`docs/pidog/HARDWARE.md` [§6](pidog/HARDWARE.md#6-what-lives-on-disk) for anyone who prefers it.
+### `--interactive`: trimming a joint by eye
+
+```bash
+python -m tools.calibrate_servos --interactive                       # all twelve joints
+python -m tools.calibrate_servos --interactive --only lf_shoulder     # one joint
+python -m tools.calibrate_servos --interactive --step 0.25            # finer than 0.44
+```
+
+Walks the joints one at a time: each line shows the joint and its current offset, and you step it until
+the leg (or head, or tail) looks straight.
+
+| Key | Effect |
+|---|---|
+| right arrow, `+`, `d` | raise the offset by one step (0.44° by default) |
+| left arrow, `-`, `a` | lower it |
+| Enter or space | accept this joint and move on |
+| `s` | skip it, undoing any step already taken |
+| `q` | quit and restore every joint this pass changed |
+
+**This is the one mode that moves the dog.** Each keypress is written through
+`DogHAL.apply_offsets` and re-poses as it saves — that write *is* the preview, which is the whole point
+of the pass. Keep clear of the dog, and put it somewhere it can be looked at from the side.
+
+Two guards, both before anything moves: the pass refuses to start while the control plane answers on
+`127.0.0.1:8420` (stop the `houndmind` service first, because two writers on twelve servos is not a
+calibration), and it needs a real terminal — press keys on the dog, not through a pipe.
+
+The earlier version of this section said there was no preview on purpose, because nudging a servo
+needed a raw per-group angle write that belongs to `act/interlock.py`. That reasoning held for the
+*runtime*: the primitive this uses instead, `DogHAL.nudge_joint`, is capped at 3° per call, moves one
+joint at calibration speed, writes no trim of its own, and is called by nothing that ticks.
+
+For a measurement rather than an eye, `servo_level` [§14](#14-servo_level) is the better tool: it
+probes each joint and solves for the trim that squares the body up against the IMU.
 
 ## 13. `imu_calibrate`
 
