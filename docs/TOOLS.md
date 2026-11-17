@@ -21,6 +21,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 10. [`download_opencv_models`](#10-download_opencv_models)
 11. [`validate_rtabmap_adapter`](#11-validate_rtabmap_adapter)
 12. [`calibrate_servos`](#12-calibrate_servos)
+13. [`audio_check`](#13-audio_check)
 
 ---
 
@@ -33,6 +34,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Does the loop start and produce a scan and a map? | `smoke_test` |
 | Is there a camera, and can it capture? | `camera_check` |
 | Is there a microphone / speaker? | `list_audio_devices` |
+| Did the speaker actually make a sound? | `audio_check --verify` |
 | Something is broken and I need to file a report | `collect_support_bundle` |
 | Why did the dog do that at 14:03? | `replay_decisions` |
 | The semantic labeler has no model | `download_opencv_models` |
@@ -46,7 +48,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `installer_verify` | no |
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
-| `camera_check`, `list_audio_devices`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
+| `camera_check`, `list_audio_devices`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter` | no |
 | `calibrate_servos` | no — it reads and saves the trim; a saved offset does not pose the dog (`hal/iface.py::DogHAL.apply_offsets`) |
 
 Neither motion-capable tool moves the dog unless asked, but read the second row twice:
@@ -249,6 +251,41 @@ There is no interactive preview on purpose: nudging a servo live needs a raw per
 and that primitive belongs to `act/interlock.py` alone. Trim with `--set`, look at the numbers, then
 `--apply`. The vendor's own script (`examples/0_calibration.py`) still exists and is documented in
 `docs/pidog/HARDWARE.md` [§6](pidog/HARDWARE.md#6-what-lives-on-disk) for anyone who prefers it.
+
+## 13. `audio_check`
+
+Answers the question `aplay` cannot: **did sound actually leave the speaker?** `aplay` exits 0
+whenever ALSA accepts the samples, so a muted amplifier, a dead speaker coil and a stuck I2S clock all
+look like success. This tool records with the microphone while it plays, and measures the room.
+
+```bash
+python -m tools.audio_check --list
+python -m tools.audio_check --verify                      # closed loop through `default`
+python -m tools.audio_check --verify --device plughw:4,0  # straight to the DAC
+python -m tools.audio_check --say "hello"
+python -m tools.audio_check --analyse recording.wav       # what is in a recording
+```
+
+| Flag | Meaning |
+|---|---|
+| `--verify` | play a tone, record it, compare the room level before and during |
+| `--device NAME` | playback: `default` (through `asound.conf`), `robothat`, `plughw:4,0` |
+| `--mic NAME` | capture device, default `plughw:3,0` |
+| `--tone HZ` | play a tone only |
+| `--amp on\|off` | drive the speaker-enable pin (GPIO20 on V4, GPIO12 on V5) |
+| `--analyse FILE` | the loudest frequencies in a wav, loudest first (needs numpy) |
+
+`--verify` prints the room level, the level during playback, the delta and a verdict: `EMITTED` at
++10 dB or more, `SILENT` at +3 dB or less, `UNCLEAR` between. Exit codes: `0` emitted, `1` silent,
+`2` usage. Nothing here constructs `Pidog`, so the servo bus is never touched.
+
+**Check the microphone gain before believing `SILENT`.** The USB microphone ships with its capture
+control at 0 of 16 (`amixer -c 3 sset 'Mic' 16` to open it, +23.8 dB). A metre at minimum gain reads
+as silence on a speaker that works, which is the opposite of a useful answer.
+
+A `SILENT` verdict from a validated microphone means the ALSA chain is not the fault: see
+`docs/TROUBLESHOOTING.md` [§6](TROUBLESHOOTING.md#6-camera-audio-vision) for the order to check the
+amplifier and the speaker in.
 
 ## Adding a tool
 

@@ -20,6 +20,13 @@ Current Release: v2026.11.16
   limit and a failure budget that disables the module rather than the loop. `docs/SECURITY.md` §8
   records that prompts leave the device when a cloud `base_url` is configured.
 
+- **`tools.audio_check` measures whether the speaker made a sound** instead of trusting `aplay`'s exit
+  code, which is 0 for a muted amplifier, a dead speaker coil and a stuck I2S clock alike. It plays a
+  tone, records it with the microphone and reports the level difference between the room and the
+  playback, with `--analyse` naming the loudest frequencies in any recording. The measurement records
+  its own trap: the USB microphone ships at 0 of 16 capture gain, which reads as silence on a speaker
+  that works.
+
 ### Changed
 
 - `settings.voice_assistant.tts.piper_model` selects Piper's model; while it is empty Piper is skipped
