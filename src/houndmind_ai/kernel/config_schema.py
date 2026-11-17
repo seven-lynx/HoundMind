@@ -30,6 +30,7 @@ __all__ = [
     "ConfigError",
     "FloatSpec",
     "IntSpec",
+    "json_schema",
     "ListOf",
     "MapOf",
     "Problem",
@@ -1176,6 +1177,78 @@ _TOP = Section(
         "settings": _SETTINGS,
     }
 )
+
+
+def _describe(spec: Spec) -> dict[str, Any]:
+    """The JSON Schema fragment for one spec node."""
+    if isinstance(spec, AnyValue):
+        return {}
+    if isinstance(spec, Section):
+        return {
+            "type": "object",
+            "properties": {name: _describe(child) for name, child in spec.fields.items()},
+            # The validator refuses an unknown key unless the section allows extras, and the
+            # document has to say the same thing or an editor would accept what the dog rejects.
+            "additionalProperties": bool(spec.allow_extra),
+        }
+    if isinstance(spec, MapOf):
+        return {"type": "object", "additionalProperties": _describe(spec.value)}
+    if isinstance(spec, ListOf):
+        list_node: dict[str, Any] = {"type": "array", "items": _describe(spec.item)}
+        if spec.length is not None:
+            list_node["minItems"] = spec.length
+            list_node["maxItems"] = spec.length
+        if spec.allow_none:
+            list_node["type"] = ["array", "null"]
+        return list_node
+    if isinstance(spec, Bool):
+        return {"type": "boolean"}
+    if isinstance(spec, IntSpec):
+        int_node: dict[str, Any] = {
+            "type": ["integer", "null"] if spec.allow_none else "integer"
+        }
+        if spec.minimum is not None:
+            int_node["minimum"] = spec.minimum
+        if spec.maximum is not None:
+            int_node["maximum"] = spec.maximum
+        return int_node
+    if isinstance(spec, FloatSpec):
+        float_node: dict[str, Any] = {
+            "type": ["number", "null"] if spec.allow_none else "number"
+        }
+        if spec.minimum is not None:
+            float_node["exclusiveMinimum" if spec.exclusive_minimum else "minimum"] = (
+                spec.minimum
+            )
+        if spec.maximum is not None:
+            float_node["maximum"] = spec.maximum
+        return float_node
+    if isinstance(spec, StrSpec):
+        str_node: dict[str, Any] = {
+            "type": ["string", "null"] if spec.allow_none else "string"
+        }
+        if spec.choices:
+            str_node["enum"] = list(spec.choices)
+        return str_node
+    return {}
+
+
+def json_schema() -> dict[str, Any]:
+    """The settings tree as a JSON Schema draft 2020-12 document.
+
+    Generated from the same specs :func:`validate_config_tree` enforces, so an editor and the
+    loader cannot disagree about a key, its type or its bounds. `python -m tools.schema_export`
+    writes it; nothing here touches the filesystem.
+    """
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "HoundMind settings",
+        "description": (
+            "Runtime configuration for HoundMind, generated from kernel/config_schema.py. "
+            "Unknown keys are refused by the loader, so an editor reports them too."
+        ),
+        **_describe(_TOP),
+    }
 
 
 def validate_config_tree(raw: Any) -> list[Problem]:

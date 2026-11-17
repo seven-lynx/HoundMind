@@ -29,7 +29,8 @@ whose feature was removed says so rather than disappearing.
 - [x] Config loading + validation (`core/config.py`)
 - [x] Module status/health reporting (`core/module.py`)
  - [x] Runtime validation of `config/settings.jsonc` with clear errors (`kernel/config_schema.py`)
-- [ ] Export that schema as a JSON Schema document for editors and tooling
+- [x] Export that schema as a JSON Schema document for editors and tooling
+  (`kernel/config_schema.py::json_schema`, `tools.schema_export`)
 
 ## HAL (Hardware Abstraction Layer)
 - [x] Motor control integration (servo actions, head/tail) (`hal/motors.py`)

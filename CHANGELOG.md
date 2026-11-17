@@ -10,6 +10,13 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **`tools.schema_export` writes the settings schema as JSON Schema** — the config tree was described
+  only by the code that rejects it, so an editor could not check `config/settings.jsonc` and a typo
+  waited for start-up on the dog. `kernel/config_schema.py` gains `json_schema()`, generated from the
+  same `Spec` tree `validate_config_tree` enforces, so an unknown key, a wrong type and an
+  out-of-range number are declared once and reported by both. The tool prints the document or writes
+  it with `--out`, and reads no hardware.
+
 - **A language model behind the voice** (`modules.assistant` + `settings.assistant`, off by default).
   An utterance the phrase map does not own is handed to a model and the reply is spoken by the TTS
   engine; the module writes text only - no `behavior_override`, no `motion_command`, no intent - so a
