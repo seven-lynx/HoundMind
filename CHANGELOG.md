@@ -264,6 +264,15 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **The document's `x/y` and the runtime's `x/y` are different axes, and nothing said so** — a document
+  point is `[x = left, y = forward]` and a runtime point is `(forward_cm, left_cm)`, both correct, both
+  called `x`/`y` (#347). Nothing was wrong while the two never met; the console is about to draw the
+  document *and* the live pose on one canvas, so the swap now exists as
+  `mapping/home_map.py::document_point_to_runtime` (and `runtime_point_to_document`), the only place it
+  is written, and `tests/test_map_frames.py` pins both frames and the composition between them. The
+  runtime frame stays as it is — `mapping/mapper.py::cell_centre_cm` already returned it and only its
+  neighbours' local names (`x_cm`, `y_cm`) disagreed; those now say `forward_cm`/`left_cm`, as does the
+  planner's rule 2. `CONTROL_API.md` states both orders.
 - **A mode change left every autonomy intent standing** — `MODE_ALLOWED_SOURCES` decides whether a
   *new* intent is admitted and says nothing about one already published, so a hand on the wheel could
   leave a behaviour or navigation slot live until it expired: exactly the stale intent a client command

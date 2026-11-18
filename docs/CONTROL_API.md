@@ -241,9 +241,17 @@ carried verbatim either way, which is what reserves `meta.floor` for a multi-flo
 version bump. `document` is `null` when no map was loaded and none was ever saved — a third fact
 beside `map: null`, and a client that cannot tell it from an empty map draws a room nobody has seen.
 
-Every coordinate in `document` is centimetres from the map origin with `x` left-positive and `y`
-forward-positive — the mapper's own axes (`mapping/mapper.py::_ingest_into_grid`) — so a console
-scales the cells and converts nothing.
+Every coordinate in `document` is centimetres from the map origin, `[x = left, y = forward]` — the order
+a person tracing a floor plan reads, and the one the console's canvas draws.
+
+**That is not the runtime's order, and both are called `x` and `y` (#347).** The runtime speaks
+`(forward_cm, left_cm)`: the pose (`navigation/odometry.py`), the planner (`mapping/planner.py`) and
+the grid cells (`mapping/mapper.py::cell_centre_cm`) all use it. Nothing was wrong while the two never
+met, and they meet as soon as a client draws the document and the live pose on one canvas, so the swap
+is written **once**, in `mapping/home_map.py::document_point_to_runtime` (and its inverse
+`runtime_point_to_document`), and `tests/test_map_frames.py` pins both frames and the composition
+between them. A client that plots a pose without it draws a mirrored dog, which looks plausible and is
+wrong.
 
 `surface_step_cm` (M4) is the **measured** step length per named surface, `{"hardwood": 18.4}`, copied
 from `odometry.surface_step_cm` with anything non-positive dropped. It rides beside `document` because

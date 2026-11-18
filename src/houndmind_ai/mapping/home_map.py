@@ -24,7 +24,7 @@ import json
 import logging
 import math
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -37,8 +37,10 @@ __all__ = [
     "HomeMapLoad",
     "USER_SECTIONS",
     "build_document",
+    "document_point_to_runtime",
     "load_home_map",
     "map_path",
+    "runtime_point_to_document",
     "validate_document",
     "write_document",
 ]
@@ -73,6 +75,43 @@ def _safe_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def document_point_to_runtime(point: Any) -> tuple[float, float]:
+    """A document point `[x = left, y = forward]` as the runtime's `(forward_cm, left_cm)`.
+
+    The two frames are both correct and both called `x`/`y`, which is the defect (#347). A **document**
+    point is written for a person reading a plan: `x` runs left and `y` runs forward
+    (`CONTROL_API.md`, the console's canvas). The **runtime** speaks `(forward_cm, left_cm)`: the pose
+    (`navigation/odometry.py`), the planner (`mapping/planner.py::_index_of`) and the grid
+    (`mapping/mapper.py::cell_centre_cm`) all use it.
+
+    Nothing was wrong while the two never met. They meet in the console, which draws the document and
+    will plot the live pose, and this pair of functions is the only place the swap is written — so a
+    reader who gets it wrong gets it wrong once, here, where `tests/test_map_frames.py` can see it.
+    """
+    left, forward = _point2(point)
+    return forward, left
+
+
+def runtime_point_to_document(point: Any) -> tuple[float, float]:
+    """The inverse of `document_point_to_runtime`: `(forward_cm, left_cm)` as `[x = left, y = forward]`."""
+    forward, left = _point2(point)
+    return left, forward
+
+
+def _point2(point: Any) -> tuple[float, float]:
+    """Two finite floats from a `[x, y]` pair, zero-filled rather than raised on.
+
+    A polygon vertex typed by hand can be short, a string or `null`; a map that raised on one would
+    make the whole document unreadable, and a vertex at the origin is a shape someone can see and fix.
+    """
+    if isinstance(point, (str, bytes)) or not isinstance(point, Sequence):
+        return 0.0, 0.0
+    values = list(point)[:2]
+    while len(values) < 2:
+        values.append(0.0)
+    return _safe_float(values[0], 0.0), _safe_float(values[1], 0.0)
 
 
 def map_path(text: Any, default: str = "data/home_map.json") -> Path:
