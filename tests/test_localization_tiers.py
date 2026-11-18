@@ -316,3 +316,66 @@ def test_a_correction_without_a_pose_behind_it_is_not_a_tier() -> None:
     assert localization["tier"] == str(LocalizationTier.REACTIVE)
     assert localization["pose"] is None
 
+
+def test_the_walk_is_recorded_once_the_dog_has_moved() -> None:
+    """M6: a breadcrumb per five centimetres, not per tick - a still dog is not a walk."""
+    module, context, _ = _setup()
+    odometry = _odometry()
+    context.set("odometry", odometry)
+
+    module.tick(context)
+    assert len(context.get("pose_trail")) == 1
+
+    odometry["x_cm"] = 40.0  # thirty centimetres on
+    context.set("odometry", odometry)
+    module.tick(context)
+
+    trail = context.get("pose_trail")
+    assert len(trail) == 2
+    assert trail[-1]["x_cm"] == pytest.approx(40.0)
+
+
+def test_a_pose_that_barely_moved_is_not_a_second_breadcrumb() -> None:
+    module, context, _ = _setup()
+    odometry = _odometry()
+    context.set("odometry", odometry)
+    module.tick(context)
+
+    odometry["x_cm"] = 12.0  # two centimetres
+    context.set("odometry", odometry)
+    module.tick(context)
+
+    assert len(context.get("pose_trail")) == 1
+
+
+def test_slam_points_are_not_mixed_into_the_odometry_trail() -> None:
+    """A trail with two frames on it draws a walk through rooms the dog was never in."""
+    module, context, _ = _setup()
+    context.set("odometry", _odometry())
+    _slam(context)
+
+    module.tick(context)
+
+    assert context.get("pose_trail") is None
+
+
+def test_a_correction_empties_the_trail_it_invalidated() -> None:
+    """Every point before the correction is in the origin that correction just replaced."""
+    module, context, _ = _setup()
+    odometry = _odometry()
+    context.set("odometry", odometry)
+    module.tick(context)
+    odometry["x_cm"] = 40.0
+    context.set("odometry", odometry)
+    module.tick(context)
+    assert len(context.get("pose_trail")) == 2
+
+    corrected = _odometry()
+    corrected["anchor"] = _anchor(stamp=2.0)
+    context.set("odometry", corrected)
+    module.tick(context)
+
+    trail = context.get("pose_trail")
+    assert len(trail) == 1
+    assert trail[0]["tier"] == str(LocalizationTier.USER)
+

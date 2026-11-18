@@ -326,6 +326,9 @@ the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py
 | `odometry` | `dict` — `steps`, `distance_cm`, `travelled_cm`, `x_cm`, `y_cm`, `yaw_deg`, `pose_valid`, `reason`, `step_cm`, `step_cm_source`, `surface`; centimetres along the heading, no encoders, and the source says whether the constant was measured |
 | `localization` | `dict` — the chosen pose and why it is the best available: `tier` (`slam`/`place`/`user`/`dead_reckoning`/`reactive`), `frame`, `pose`, `confidence`, `age_s`, `reason` |
 | `localization_event` | `dict` — one record per change of tier, `{from, to, reason}` |
+| `pose_trail` | `list` — the walk so far, `[{x_cm, y_cm, yaw_deg, tier, ts}, ...]` in the **odometry** frame: one point per 5 cm of movement, capped at `TRAIL_MAX_POINTS`, emptied when a correction re-anchors the origin (M6). A SLAM-framed pose is never appended: a trail with two frames on it is a walk through rooms the dog was never in |
+| `pose_reset` | `dict \| None` — `{x_cm, y_cm, source, frame_ts}` written by `PUT /api/v1/map/pose`; `navigation/odometry.py` consumes it **once** and re-anchors the pose there. A bare `odometry_reset` still means "the origin now" (M5) |
+| `route_request`, `route` | `dict` — the goal a client asked for (`{"goal_cm": {...}}`, written by `POST /api/v1/map/go`) and the plan `navigation/route_follower.py` made of it: waypoints, `index`, `total`, `state`, or the named refusal (M5, M6) |
 | `event_log_report` | `dict` — the event writer's own state (`logging/event_logger.py`) |
 
 **Internal bookkeeping — not a contract**

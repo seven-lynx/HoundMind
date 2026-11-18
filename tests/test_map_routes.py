@@ -494,4 +494,163 @@ def test_position_and_go_both_need_the_move_scope(tmp_path) -> None:
     assert asyncio.run(scenario()) == (403, 403)
 
 
+# ---- M6: preview, trail, health ---------------------------------------------
+
+BAND = [[-50, 80], [50, 80], [50, 120], [-50, 120]]
+
+
+def _keep_out_document(*rooms: dict) -> dict:
+    return wire_document(rooms=list(rooms))
+
+
+def _pose(x: float = 0.0, y: float = 0.0) -> dict:
+    return {"tier": "dead_reckoning", "pose": {"x": x, "y": y, "yaw_deg": 0.0}}
+
+
+def test_preview_refuses_without_a_pose(tmp_path) -> None:
+    """A route in map coordinates means nothing to a dog that cannot place itself on the map."""
+
+    async def scenario() -> tuple[int, dict]:
+        plane, headers, _path = make_plane(tmp_path, document=wire_document())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/preview", headers=headers, json={"x_cm": 10, "y_cm": 20}
+            )
+            return response.status, await response.json()
+
+    status, body = asyncio.run(scenario())
+    assert status == 409 and body["error"] == "no_pose"
+
+
+def test_preview_plans_and_answers_in_the_document_frame(tmp_path) -> None:
+    """`state:read` plans a route it may not walk, and the waypoints come back in the document frame."""
+
+    async def scenario() -> tuple[int, dict]:
+        plane, headers, _path = make_plane(tmp_path, document=wire_document())
+        plane.context.set("localization", _pose())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/preview", headers=headers, json={"x_cm": 30.0, "y_cm": 100.0}
+            )
+            assert response.status == 200
+            return response.status, await response.json()
+
+    _status, body = asyncio.run(scenario())
+    assert body["valid"] is True and body["refusal"] is None
+    assert body["distance_cm"] > 0
+    assert body["waypoints"], "a plan over an empty grid is still a straight line"
+    # The goal echoed back is the document point that was sent, not the runtime swap.
+    assert body["goal_cm"] == {"x_cm": 30.0, "y_cm": 100.0}
+    for waypoint in body["waypoints"]:
+        assert "x_cm" in waypoint and "y_cm" in waypoint
+
+
+def test_preview_refuses_a_goal_inside_a_keep_out_room(tmp_path) -> None:
+    """#353: a keep-out room the user drew now refuses something, and names itself."""
+
+    async def scenario() -> dict:
+        document = _keep_out_document(
+            {"id": "stairs", "name": "stairs", "keep_out": True, "polygon": BAND}
+        )
+        plane, headers, _path = make_plane(tmp_path, document=document)
+        plane.context.set("localization", _pose())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/preview", headers=headers, json={"x_cm": 0.0, "y_cm": 100.0}
+            )
+            assert response.status == 200, "a refusal about a hypothetical is not a bad request"
+            return await response.json()
+
+    body = asyncio.run(scenario())
+    assert body["valid"] is False
+    assert body["refusal"] == "goal_in_keep_out"
+    assert body["keep_out"]["label"] == "stairs"
+    assert body["waypoints"] == []
+
+
+def test_preview_refuses_a_walk_that_crosses_a_keep_out_room(tmp_path) -> None:
+    """Neither end is in the room; the straight run between them is. That is the case to catch."""
+
+    async def scenario() -> dict:
+        document = _keep_out_document(
+            {"id": "stairs", "name": "stairs", "keep_out": True, "polygon": BAND}
+        )
+        plane, headers, _path = make_plane(tmp_path, document=document)
+        plane.context.set("localization", _pose())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/preview", headers=headers, json={"x_cm": 0.0, "y_cm": 200.0}
+            )
+            return await response.json()
+
+    body = asyncio.run(scenario())
+    assert body["valid"] is False and body["refusal"] == "route_in_keep_out"
+    assert body["keep_out"]["label"] == "stairs"
+
+
+def test_preview_does_not_trap_a_dog_already_inside_a_keep_out_room(tmp_path) -> None:
+    """A room is marked to keep the dog out, not to imprison it: the walk back out is allowed."""
+
+    async def scenario() -> dict:
+        document = _keep_out_document(
+            {"id": "stairs", "name": "stairs", "keep_out": True, "polygon": BAND}
+        )
+        plane, headers, _path = make_plane(tmp_path, document=document)
+        plane.context.set("localization", _pose(100.0, 0.0))
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/preview", headers=headers, json={"x_cm": 0.0, "y_cm": 300.0}
+            )
+            return await response.json()
+
+    body = asyncio.run(scenario())
+    assert body["valid"] is True
+    assert "already inside" in (body["note"] or "")
+
+
+def test_preview_needs_two_numbers(tmp_path) -> None:
+    async def scenario() -> int:
+        plane, headers, _path = make_plane(tmp_path)
+        plane.context.set("localization", _pose())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/preview", headers=headers, json={"x_cm": None, "y_cm": 2}
+            )
+            return response.status
+
+    assert asyncio.run(scenario()) == 400
+
+
+def test_get_map_publishes_the_trail_and_the_health(tmp_path) -> None:
+    """Both ride beside the document: what the dog walked, and what the map can say about itself."""
+
+    async def scenario() -> dict:
+        plane, headers, _path = make_plane(
+            tmp_path, document=wire_document(meta={"rev": 3, "updated_at": 500.0})
+        )
+        plane.context.set("mapping_state", {"grid": {"cells": {"1,2": 3}}})
+        plane.context.set("pose_trail", [{"x_cm": 100.0, "y_cm": 30.0, "ts": 1.0}])
+        plane.context.set(
+            "home_map_status",
+            {"loaded": True, "notes": ["kept the strongest cells"], "loaded_at": 400.0},
+        )
+        plane.context.set("odometry", {"step_cm": 18.4, "step_cm_source": "measured:hardwood"})
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/map", headers=headers)
+            return await response.json()
+
+    body = asyncio.run(scenario())
+    assert body["trail"] == [[30.0, 100.0]], "runtime (forward, left) swapped once, on the device"
+    health = body["health"]
+    assert health["loaded"] is True
+    assert health["loaded_at"] == 400.0
+    assert health["updated_at"] == 500.0
+    assert health["rev"] == 3.0
+    assert health["step_cm"] == 18.4
+    assert health["step_cm_source"] == "measured:hardwood"
+    assert health["conflicts"] == [] and health["notes"] == ["kept the strongest cells"]
+    assert health["cells"] == 1
+
+
+
 

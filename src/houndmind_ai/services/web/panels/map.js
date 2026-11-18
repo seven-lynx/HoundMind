@@ -159,6 +159,7 @@ export const map = {
             <span class="chip" id="mp-rev">rev -</span>
             <span class="chip" id="mp-pose-tier">pose: -</span>
             <span class="chip" id="mp-route"></span>
+            <span class="chip" id="mp-health">map: -</span>
           </div>
         </div>
         <div class="row" style="margin:.5rem 0;flex-wrap:wrap">
@@ -183,6 +184,7 @@ export const map = {
           <button id="mp-mode-go" class="tiny">Go</button>
           <button id="mp-pose-confirm" class="tiny" disabled>Confirm position</button>
           <button id="mp-pose-cancel" class="tiny" disabled>Cancel</button>
+          <button id="mp-send" class="tiny" disabled>Send route</button>
           <input id="mp-room-name" class="tiny" placeholder="room name" style="width:7.5rem">
           <select id="mp-surface" class="tiny">
             <option value="hardwood">hardwood</option>
@@ -217,6 +219,8 @@ export const map = {
     const routeChip = root.querySelector("#mp-route");
     const confirmButton = root.querySelector("#mp-pose-confirm");
     const cancelButton = root.querySelector("#mp-pose-cancel");
+    const sendButton = root.querySelector("#mp-send");
+    const healthChip = root.querySelector("#mp-health");
 
     let view = loadView();
     let document_ = null;
@@ -237,6 +241,12 @@ export const map = {
     // measurement, and a drop that was not confirmed must not move the origin the map is built on.
     let livePose = null;
     let ghost = null;
+    // M6: the walk so far and what the map says about itself, both read from `GET /map`, plus the
+    // route the user is looking at before it is sent. `preview` is the whole answer, refusal included:
+    // a preview that is not `valid` is drawn as a reason, never as a route.
+    let trail = [];
+    let health = null;
+    let preview = null;
     const dirty = root.querySelector("#mp-dirty");
     const widthInput = root.querySelector("#mp-opening-width");
 
@@ -284,12 +294,15 @@ export const map = {
       // Leaving Pose drops an unconfirmed ghost: it is a proposal, and a proposal that survived a
       // mode change would be confirmed later by a click the user meant for something else.
       if (next !== "pose") ghost = null;
+      // A preview belongs to `Go` for the same reason: it is a route nobody asked for yet.
+      if (next !== "go") preview = null;
       for (const name of MODES) {
         const button = root.querySelector(`#mp-mode-${name}`);
         if (button) button.classList.toggle("active", name === next);
       }
       canvas.style.cursor = next === "view" ? "grab" : "crosshair";
       refreshPoseButtons();
+      refreshSend();
       render();
     }
 
@@ -314,6 +327,43 @@ export const map = {
       // button would be a second way to do something the mode does not offer.
       confirmButton.disabled = !(mode === "pose" && ghost);
       cancelButton.disabled = !ghost;
+    }
+
+    function refreshSend() {
+      // Send is enabled by a *valid* preview and nothing else: a refused route has no goal to send,
+      // and one that was never previewed is a click the dog was never shown.
+      sendButton.disabled = !(mode === "go" && preview && preview.valid === true);
+    }
+
+    function agoText(seconds) {
+      const value = Number(seconds);
+      if (!Number.isFinite(value) || value < 0) return "-";
+      if (value < 90) return `${Math.round(value)}s`;
+      if (value < 5400) return `${Math.round(value / 60)}m`;
+      return `${Math.round(value / 3600)}h`;
+    }
+
+    function refreshHealth() {
+      // The badge is the map's own account of itself: whether the file was read, how long ago, which
+      // stride the walk is measured in, and anything the loader could not take at face value.
+      if (!health) {
+        healthChip.textContent = "map: -";
+        healthChip.title = "";
+        return;
+      }
+      const loaded = health.loaded ? "loaded" : "not loaded";
+      const when = Number.isFinite(Number(health.loaded_at))
+        ? ` ${agoText(Date.now() / 1000 - Number(health.loaded_at))} ago`
+        : "";
+      const stride = health.step_cm_source || "assumed";
+      const conflicts = (health.conflicts || []).length;
+      healthChip.textContent = `map: ${loaded}${when} · stride ${stride} · ${conflicts} conflict${
+        conflicts === 1 ? "" : "s"
+      }`;
+      const details = []
+        .concat(health.conflicts || [], health.notes || [])
+        .filter(Boolean);
+      healthChip.title = details.length ? details.join("; ") : String(health.reason || "");
     }
 
     function toggleKeepOut() {
@@ -582,6 +632,36 @@ export const map = {
     }
 
 
+    async function previewRoute(point) {
+      error.textContent = "";
+      note.textContent = "";
+      try {
+        const answer = await api("/map/preview", {
+          method: "POST",
+          body: JSON.stringify({ x_cm: point[0], y_cm: point[1] }),
+        });
+        preview = answer && typeof answer === "object" ? answer : null;
+        if (preview && preview.valid === true) {
+          const count = (preview.waypoints || []).length;
+          note.textContent = `${fmt(preview.distance_cm, "cm")} to walk · ${count} waypoint${
+            count === 1 ? "" : "s"
+          } · Send route to start${preview.note ? ` · ${preview.note}` : ""}`;
+        } else if (preview) {
+          // The refusal is the whole answer here, and it is already named: `goal_in_keep_out` is the
+          // room the user drew, not a failure of the click.
+          error.textContent = `${preview.refusal || "refused"}: ${preview.detail || "no route"}`;
+        }
+      } catch (err) {
+        preview = null;
+        const payload = err.payload || {};
+        error.textContent = payload.detail
+          ? `${payload.error || "refused"}: ${payload.detail}`
+          : errorText(err);
+      }
+      refreshSend();
+      render();
+    }
+
     async function goTo(point) {
       error.textContent = "";
       try {
@@ -590,6 +670,11 @@ export const map = {
           body: JSON.stringify({ x_cm: point[0], y_cm: point[1] }),
         });
         note.textContent = "route requested: the dog plans it on the next tick";
+        // The preview has been spent: keeping it would leave a route drawn that the follower has
+        // already planned, and a `Send` that would ask for it twice.
+        preview = null;
+        refreshSend();
+        render();
       } catch (err) {
         const payload = err.payload || {};
         // The 409 bodies carry the reason a client would otherwise have to infer from nothing
@@ -784,6 +869,88 @@ export const map = {
     }
 
 
+    function drawTrail(ctx) {
+      // Behind everything and faint: a breadcrumb is context for where the dog is, not a feature of its
+      // own. Drawn from `GET /map`'s `trail`, which the device already swapped into this frame (#347).
+      if (!trail.length) return;
+      ctx.save();
+      ctx.strokeStyle = "rgba(122, 214, 122, 0.4)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      trail.forEach((point, index) => {
+        const [sx, sy] = screen(Number(point[0]) || 0, Number(point[1]) || 0);
+        if (index === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(122, 214, 122, 0.45)";
+      for (const point of trail.slice(-20)) {
+        const [sx, sy] = screen(Number(point[0]) || 0, Number(point[1]) || 0);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPreview(ctx) {
+      // A refusal is a cross where the walk was asked for, never a route: drawing a line the dog will
+      // not follow is how a client says "yes" to the user and "no" to the dog.
+      if (!preview) return;
+      const goal = preview.goal_cm;
+      const [gx, gy] = goal
+        ? screen(Number(goal.x_cm) || 0, Number(goal.y_cm) || 0)
+        : [0, 0];
+      if (preview.valid !== true) {
+        if (!goal) return;
+        ctx.save();
+        ctx.strokeStyle = "#e46a6a";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(gx - 6, gy - 6);
+        ctx.lineTo(gx + 6, gy + 6);
+        ctx.moveTo(gx + 6, gy - 6);
+        ctx.lineTo(gx - 6, gy + 6);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+      const waypoints = preview.waypoints || [];
+      ctx.save();
+      ctx.strokeStyle = "#8fb8a8";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      [goal, ...waypoints].filter(Boolean).forEach((point, index) => {
+        const [sx, sy] = screen(Number(point.x_cm) || 0, Number(point.y_cm) || 0);
+        if (index === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#8fb8a8";
+      for (const point of waypoints) {
+        const [sx, sy] = screen(Number(point.x_cm) || 0, Number(point.y_cm) || 0);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (goal) {
+        ctx.strokeStyle = "#8fb8a8";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(gx, gy, 6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "#e9eef3";
+        ctx.font = "11px ui-monospace, monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(fmt(preview.distance_cm, "cm"), gx, gy - 11);
+      }
+      ctx.restore();
+    }
+
     function drawDog(ctx) {
       // The live pose first: it is the runtime's answer, already swapped into this frame by
       // `GET /map`. `document.dog` is the fallback and answers a different question - where the dog
@@ -923,6 +1090,8 @@ export const map = {
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!document_ || !view) return;
+      // The walk is context for everything else, so it is drawn first and faintest (M6).
+      drawTrail(ctx);
       // Meaning underneath evidence: a room is context for the cells drawn on top of it.
       if (layers.has("surfaces")) drawSurfaces(ctx);
       if (layers.has("rooms")) drawRooms(ctx);
@@ -934,6 +1103,7 @@ export const map = {
       drawDraft(ctx);
       drawLasso(ctx);
       drawSelection(ctx);
+      drawPreview(ctx);
       drawDog(ctx);
       drawGhost(ctx);
       drawScale(ctx);
@@ -979,12 +1149,20 @@ export const map = {
         // M5: the runtime's pose, swapped into this frame by the route, or null when the dog cannot
         // place itself - in which case the last confirmed `document.dog` is still worth drawing.
         livePose = payload && payload.pose ? payload.pose : null;
+        // M6: the walk and the map's own account of itself. Neither is editable, so the poll may
+        // replace them mid-edit - unlike the document, which it refuses to touch while dirty.
+        trail = payload && Array.isArray(payload.trail) ? payload.trail : [];
+        health =
+          payload && payload.health && typeof payload.health === "object" ? payload.health : null;
+        preview = null;
         history = [];
         draft = null;
         lasso = null;
         selected = null;
         refreshSurface();
         refreshKeepOut();
+        refreshHealth();
+        refreshSend();
         markDirty(false);
         if (!document_) {
           count.textContent = "no document";
@@ -1035,6 +1213,11 @@ export const map = {
       refreshPoseButtons();
       render();
     });
+    sendButton.addEventListener("click", () => {
+      // Only a valid preview has something to send; `refreshSend` is what keeps the button honest.
+      if (!preview || preview.valid !== true || !preview.goal_cm) return;
+      goTo([Number(preview.goal_cm.x_cm) || 0, Number(preview.goal_cm.y_cm) || 0]);
+    });
     surfacePick.addEventListener("change", refreshSurface);
 
     for (const name of LAYERS) {
@@ -1066,7 +1249,8 @@ export const map = {
         return;
       }
       if (mode === "go") {
-        goTo(point);
+        // Preview first, walk second: the user sees the route and its distance before the dog does.
+        previewRoute(point);
         return;
       }
       if (mode === "wall") {

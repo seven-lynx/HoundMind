@@ -18,6 +18,7 @@ import asyncio
 import io
 import json
 import logging
+import math
 import secrets
 import threading
 import time
@@ -55,6 +56,12 @@ from houndmind_ai.mapping.home_map import (
     runtime_point_to_document,
     validate_document,
     write_document,
+)
+from houndmind_ai.mapping.planner import plan_route
+from houndmind_ai.mapping.rooms import (
+    keep_out_room_at,
+    polyline_in_keep_out,
+    room_label,
 )
 from houndmind_ai.services.auth import (
     AuthError,
@@ -619,6 +626,67 @@ def _pose_in_document(context) -> dict[str, Any] | None:
     }
 
 
+def _trail_in_document(context) -> list[list[float]]:
+    """The walk so far, in the document frame, as `[[x, y], ...]` (M6).
+
+    The same rule as the pose: the console draws the document, so the swap happens here once (#347).
+    An entry the producer could not read is dropped rather than plotted at the origin - a breadcrumb is
+    only worth drawing if every vertex on it is a place the dog actually was.
+    """
+    trail = context.get("pose_trail")
+    if not isinstance(trail, list):
+        return []
+    points: list[list[float]] = []
+    for entry in trail:
+        if not isinstance(entry, dict):
+            continue
+        forward_cm = _number(entry.get("x_cm"))
+        left_cm = _number(entry.get("y_cm"))
+        if forward_cm is None or left_cm is None:
+            continue
+        doc_x, doc_y = runtime_point_to_document((forward_cm, left_cm))
+        points.append([round(doc_x, 1), round(doc_y, 1)])
+    return points
+
+
+def _map_health(context) -> dict[str, Any]:
+    """What the map can honestly say about itself (M6).
+
+    `conflicts` is the loader's own list of what it could not take at face value - a room of the wrong
+    type, a version newer than this runtime, a grid longer than the cap - and `notes` is what it
+    accepted while saying something about it. They are kept apart because one means "this is not the
+    map that was written" and the other means "this is, with a caveat".
+
+    `step_cm_source` reads the odometry module first and the document second: the document's copy is
+    only as fresh as the last save, so after a calibration the module knows a measured stride the file
+    does not.
+    """
+    status = context.get("home_map_status")
+    status = status if isinstance(status, dict) else {}
+    odometry = context.get("odometry")
+    odometry = odometry if isinstance(odometry, dict) else {}
+    document = _map_document(context) or {}
+    meta = document.get("meta")
+    meta = meta if isinstance(meta, dict) else {}
+    cells = document.get("cells")
+    step_cm = _number(odometry.get("step_cm"))
+    if step_cm is None:
+        step_cm = _number(meta.get("step_cm"))
+    return {
+        "loaded": bool(status.get("loaded")),
+        "reason": status.get("reason"),
+        "path": status.get("path"),
+        "conflicts": [str(item) for item in status.get("problems") or ()],
+        "notes": [str(item) for item in status.get("notes") or ()],
+        "loaded_at": _number(status.get("loaded_at")),
+        "updated_at": _number(meta.get("updated_at")),
+        "rev": _number(meta.get("rev")),
+        "cells": len(cells) if isinstance(cells, dict) else 0,
+        "step_cm": step_cm,
+        "step_cm_source": str(odometry.get("step_cm_source") or meta.get("step_cm_source") or "assumed"),
+    }
+
+
 def _file_document(plane: ControlPlane, path: Path) -> dict[str, Any] | None:
     """The document a write should extend: the file's, else the published one, in file shape.
 
@@ -635,6 +703,32 @@ def _file_document(plane: ControlPlane, path: Path) -> dict[str, Any] | None:
         return None
     known = validate_document(published)
     return known.map.to_file_document() if known.map is not None else None
+
+
+def _localization_of(context) -> tuple[dict[str, Any], str]:
+    """The `localization` key and its tier, whatever shape the context happens to hold."""
+    raw = context.get("localization")
+    localization = raw if isinstance(raw, dict) else {}
+    return localization, str(localization.get("tier") or "")
+
+
+def _has_pose(localization: dict[str, Any]) -> bool:
+    """A pose a route can start from: a tier that is not the floor, and a point behind it."""
+    tier = str(localization.get("tier") or "")
+    return tier not in ("", "reactive") and isinstance(localization.get("pose"), dict)
+
+
+def _no_pose_response(tier: str) -> web.Response:
+    """The `409` a route that needs a pose answers with: the tier, and what to do about it."""
+    if tier == "reactive":
+        detail = "localization is reactive: there is no pose to plan from"
+    elif not tier:
+        detail = "the dog cannot place itself on the map yet; correct its position first"
+    else:
+        detail = f"the dog reports {tier} but published no pose to plan from"
+    return web.json_response(
+        {"error": "no_pose", "tier": tier or None, "detail": detail}, status=409
+    )
 
 
 async def _map(request: web.Request) -> web.Response:
@@ -679,6 +773,8 @@ async def _map(request: web.Request) -> web.Response:
                 "grid_enabled": grid_enabled,
                 "document": document,
                 "pose": _pose_in_document(plane.context),
+                "trail": _trail_in_document(plane.context),
+                "health": _map_health(plane.context),
                 "surface_step_cm": surface_step_cm,
             },
             headers={"Cache-Control": "no-store"},
@@ -711,6 +807,8 @@ async def _map(request: web.Request) -> web.Response:
             "grid_enabled": grid_enabled,
             "document": document,
             "pose": _pose_in_document(plane.context),
+            "trail": _trail_in_document(plane.context),
+            "health": _map_health(plane.context),
             "surface_step_cm": surface_step_cm,
         },
         headers={"Cache-Control": "no-store"},
@@ -905,22 +1003,9 @@ async def _map_go(request: web.Request) -> web.Response:
             {"error": "bad_request", "detail": "x_cm and y_cm must be numbers"}, status=400
         )
 
-    raw = plane.context.get("localization")
-    localization = raw if isinstance(raw, dict) else {}
-    tier = str(localization.get("tier") or "")
-    if tier in ("", "reactive") or not isinstance(localization.get("pose"), dict):
-        return web.json_response(
-            {
-                "error": "no_pose",
-                "tier": tier or None,
-                "detail": (
-                    "localization is reactive: there is no pose to plan from"
-                    if tier == "reactive"
-                    else "the dog cannot place itself on the map yet; correct its position first"
-                ),
-            },
-            status=409,
-        )
+    localization, tier = _localization_of(plane.context)
+    if not _has_pose(localization):
+        return _no_pose_response(tier)
 
     route = plane.context.get("route")
     if isinstance(route, dict) and route.get("state") in ("publish", "walking"):
@@ -933,6 +1018,157 @@ async def _map_go(request: web.Request) -> web.Response:
     goal = {"x_cm": round(forward_cm, 3), "y_cm": round(left_cm, 3)}
     plane.context.set("route_request", {"goal_cm": goal})
     return web.json_response({"accepted": True, "goal_cm": goal, "tier": tier}, status=202)
+
+
+def _room_ref(room: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A room as a client can name it, without shipping its polygon back."""
+    if room is None:
+        return None
+    return {"id": room.get("id"), "name": room.get("name"), "label": room_label(room)}
+
+
+def _safe_pose(pose: dict[str, Any], key: str) -> float:
+    """One coordinate of a pose, or `0.0` when it is not a number. Callers check `_has_pose` first."""
+    value = _number(pose.get(key))
+    return value if value is not None else 0.0
+
+
+def _mapped_cells(context, document: dict[str, Any]) -> dict[str, Any]:
+    """The cells to plan over: the live grid first, the document's flat copy second.
+
+    The live grid is the mapper's own and newer than any save; the document is what a restart would
+    read. `mapping/planner.py` treats a cell below the hit threshold as unknown ground rather than
+    clear, so an empty grid plans a straight line and says how much room it believed it had through
+    each waypoint's `clearance_cm`.
+    """
+    state = context.get("mapping_state")
+    if isinstance(state, dict):
+        grid = state.get("grid")
+        cells = grid.get("cells") if isinstance(grid, dict) else None
+        if isinstance(cells, dict) and cells:
+            return cells
+    flat = document.get("cells")
+    return flat if isinstance(flat, dict) else {}
+
+
+async def _map_preview(request: web.Request) -> web.Response:
+    """What a walk to that point would look like, or the refusal that stops it (M6).
+
+    A read, not a command: it plans with the same pure `mapping/planner.py::plan_route` that
+    `route_follower` walks, and writes nothing. That is why the scope is `state:read` and not `move` -
+    a client that may not drive is exactly the client that should be able to see the route first.
+
+    Two refusals belong to this route, and they are what a `keep_out` room finally *means* (#353):
+    `goal_in_keep_out` when the clicked point is inside one, `route_in_keep_out` when the walk crosses
+    one. Both name the room. Neither is decided here from scratch - `mapping/rooms.py` owns the geometry
+    and `mapping/planner.py` still owns the route.
+
+    The case that is **not** refused is a dog already standing inside a keep-out room. A room is marked
+    to keep the dog out, not to imprison it: refusing would leave no way to plan the walk back out. The
+    answer says so in `note` rather than allowing it silently.
+    """
+    plane = _plane(request)
+    body = await _json_body(request)
+    doc_x = _number(body.get("x_cm"))
+    doc_y = _number(body.get("y_cm"))
+    if doc_x is None or doc_y is None:
+        return web.json_response(
+            {"error": "bad_request", "detail": "x_cm and y_cm must be numbers"}, status=400
+        )
+
+    localization, tier = _localization_of(plane.context)
+    if not _has_pose(localization):
+        return _no_pose_response(tier)
+    pose = localization.get("pose")
+    pose = pose if isinstance(pose, dict) else {}
+
+    forward_cm, left_cm = document_point_to_runtime((doc_x, doc_y))
+    start = (_safe_pose(pose, "x"), _safe_pose(pose, "y"))
+    document = _map_document(plane.context) or {}
+    goal_document = {"x_cm": round(doc_x, 3), "y_cm": round(doc_y, 3)}
+
+    def refuse(reason: str, detail: str, room: dict[str, Any] | None = None) -> web.Response:
+        # A refusal is a `200`: it is a true answer about a hypothetical. Only a malformed request or a
+        # missing pose is a `4xx`, and both are decided before a route exists.
+        return web.json_response(
+            {
+                "valid": False,
+                "refusal": reason,
+                "detail": detail,
+                "distance_cm": None,
+                "goal_cm": goal_document,
+                "waypoints": [],
+                "keep_out": _room_ref(room),
+                "note": None,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
+    inside = keep_out_room_at((doc_x, doc_y), document)
+    if inside is not None:
+        return refuse(
+            "goal_in_keep_out", f"that point is inside the keep-out room {room_label(inside)}", inside
+        )
+
+    settings = (plane.context.get("settings") or {}).get("mapping", {})
+    settings = settings if isinstance(settings, dict) else {}
+    plan = plan_route(
+        _mapped_cells(plane.context, document), start, (forward_cm, left_cm), settings
+    )
+    if not plan.ok:
+        return refuse(str(plan.refusal or "no_path"), str(plan.detail or "no route was found"))
+
+    route_document = [
+        runtime_point_to_document((waypoint.x_cm, waypoint.y_cm)) for waypoint in plan.waypoints
+    ]
+    waypoints = [
+        {
+            "x_cm": round(point[0], 1),
+            "y_cm": round(point[1], 1),
+            "clearance_cm": waypoint.to_dict()["clearance_cm"],
+        }
+        for point, waypoint in zip(route_document, plan.waypoints, strict=False)
+    ]
+
+    # A room marked keep-out *after* the dog walked in must not become a trap: the walk out crosses it
+    # by definition, so the path is only judged when the dog starts outside one.
+    start_room = keep_out_room_at(runtime_point_to_document(start), document)
+    note: str | None = None
+    if start_room is not None:
+        note = f"the dog is already inside {room_label(start_room)}; the route out is not refused"
+    else:
+        # From the goal back along the route: the first leg runs from the goal to the cell the dog
+        # stands in, so this judges the whole walk and not only the waypoints.
+        crossing = polyline_in_keep_out([(doc_x, doc_y), *route_document], document)
+        if crossing is not None:
+            return refuse(
+                "route_in_keep_out",
+                f"the route crosses the keep-out room {room_label(crossing)}",
+                crossing,
+            )
+
+    distance_cm = 0.0
+    previous = start
+    for waypoint in plan.waypoints:
+        distance_cm += math.hypot(waypoint.x_cm - previous[0], waypoint.y_cm - previous[1])
+        previous = (waypoint.x_cm, waypoint.y_cm)
+    # The planner's last waypoint is the goal's *cell centre*, so a preview that stopped there would
+    # understate every walk by up to half a cell.
+    distance_cm += math.hypot(forward_cm - previous[0], left_cm - previous[1])
+
+    return web.json_response(
+        {
+            "valid": True,
+            "refusal": None,
+            "detail": None,
+            "distance_cm": round(distance_cm, 1),
+            "goal_cm": goal_document,
+            "waypoints": waypoints,
+            "keep_out": None,
+            "note": note,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def _modules(request: web.Request) -> web.Response:
@@ -2218,6 +2454,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("PUT", "/map", "config", _map_save),
     ("PUT", "/map/pose", "move", _map_pose),
     ("POST", "/map/go", "move", _map_go),
+    ("POST", "/map/preview", "state:read", _map_preview),
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/routines", "state:read", _routines_list),

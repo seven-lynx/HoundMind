@@ -27,7 +27,13 @@ from typing import Any
 
 from houndmind_ai.core.module import Module
 from houndmind_ai.kernel.commands import Source
+from houndmind_ai.mapping.home_map import runtime_point_to_document
 from houndmind_ai.mapping.planner import plan_route
+from houndmind_ai.mapping.rooms import (
+    keep_out_room_at,
+    polyline_in_keep_out,
+    room_label,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +157,10 @@ class RouteFollowerModule(Module):
         if not plan.ok:
             self._refuse(context, plan.refusal or "no_path", plan.detail or "no route")
             return
+        keep_out = self._keep_out_refusal(context, start, target, plan)
+        if keep_out is not None:
+            self._refuse(context, keep_out[0], keep_out[1])
+            return
 
         tolerance = max(0.0, _safe_float(self._section(context).get("tolerance_cm"), DEFAULT_TOLERANCE_CM))
         waypoints = [waypoint.to_dict() for waypoint in plan.waypoints]
@@ -181,6 +191,34 @@ class RouteFollowerModule(Module):
             target[1],
         )
 
+
+    def _keep_out_refusal(self, context, start, target, plan) -> tuple[str, str] | None:
+        """The keep-out room this walk would enter, or `None` (#353).
+
+        Checked here **and** in `POST /map/preview`, because a client can send a goal without asking for
+        a preview: a rule that lived only in the preview would be a rule about the console, not about the
+        dog. Both call the same predicate in `mapping/rooms.py`, so they cannot disagree.
+
+        The dog's own position is not judged. A room marked keep-out while the dog is standing in it must
+        not become a trap it cannot plan its way out of.
+        """
+        document = context.get("home_map")
+        document = document if isinstance(document, dict) else {}
+        goal_document = runtime_point_to_document(target)
+        room = keep_out_room_at(goal_document, document)
+        if room is not None:
+            return "goal_in_keep_out", f"the goal is inside the keep-out room {room_label(room)}"
+        if keep_out_room_at(runtime_point_to_document(start), document) is not None:
+            return None
+        path = [goal_document]
+        path.extend(
+            runtime_point_to_document((waypoint.x_cm, waypoint.y_cm))
+            for waypoint in plan.waypoints
+        )
+        room = polyline_in_keep_out(path, document)
+        if room is not None:
+            return "route_in_keep_out", f"the route crosses the keep-out room {room_label(room)}"
+        return None
 
     def _refuse(self, context, reason: str, detail: str) -> None:
         """Record a refused request. The dog does not move, and the reason is readable."""
