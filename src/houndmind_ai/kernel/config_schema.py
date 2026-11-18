@@ -622,6 +622,14 @@ _MAPPING = Section(
         "safe_path_cell_conf_min": _FRACTION,
         "safe_path_score_weight_width": _FRACTION,
         "safe_path_score_weight_distance": _FRACTION,
+        # Routing across the grid (`mapping/planner.py`, #305). The mapper records hits, never free
+        # space, so `occupied_hits` is the threshold that turns a count into an obstacle: one echo is
+        # noise, two in the same cell is a thing. `clearance_cells` is the room a waypoint would like
+        # and `clearance_weight` is what the planner pays for entering a tighter cell - it is a
+        # preference, never a ban, because a doorway is narrow by definition.
+        "occupied_hits": _POSITIVE,
+        "clearance_cells": _NON_NEGATIVE,
+        "clearance_weight": _NON_NEGATIVE,
     }
 )
 

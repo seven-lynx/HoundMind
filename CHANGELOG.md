@@ -10,6 +10,18 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A map can be turned into a route** — the dog could build a grid and, since M1, a client could edit
+  it, and nothing turned that into a walk (#305). `mapping/planner.py::plan_route` is an A* over the
+  free cells with a clearance penalty, returning `{x_cm, y_cm, clearance_cm}` waypoints or a refusal
+  that names itself (`start_unknown`, `goal_blocked`, `no_path`). It is a pure function over
+  `(cells, start, goal, settings)` — no context, no HAL, no mapper — so a synthetic grid is the whole
+  test. Three facts are load-bearing and documented: a cell below `occupied_hits` is *not known to be
+  blocked* rather than clear, because the grid records hits and never free space; the cell keys are
+  `"ix,iy"` with `ix` counting left and `iy` forward, so a transposed read produces a valid-looking
+  route into the wrong room; and the clearance penalty is a preference, never a ban, because a doorway
+  is narrow by definition. Not wired to motion yet: the consumer and hand-off are #306 and the walk on
+  the dog is #304.
+
 - **The stride audits itself, and `--apply` is the clamped way to accept the evidence** — `step_cm`
   is one number behind every place anchor and every map dot, and nothing compared it with what the
   sonar saw (#300). `navigation/odometry.py` now watches each forward step: when the reading is valid
