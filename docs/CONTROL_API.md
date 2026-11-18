@@ -525,8 +525,8 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "started_at": 4212.3
   },
   "scan": { "mode": "sweep", "timestamp": 4211.9, "samples": 9 },
-  "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "temp_c": 61.4, "mem_used_pct": 51.0 } },
-  "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [], "exempt": { "api": "exempt by settings.watchdog.ignore_modules" } },
+  "health": { "status": "ok", "cpu_pct": 31.0, "temp_c": 58.2, "mem_used_pct": 44.0, "reasons": [], "high_water": { "<signal>": 61.4 } },
+  "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [], "exempt": { "<module>": "exempt by settings.watchdog.ignore_modules" } },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 },
   "perf": { "tick_hz_target": 5, "tick_hz_actual": 4.98, "tick_ms": 41.2, "tick_overrun_ms": 0.0, "loop_delay_ms": 200.0 },
   "session": { "started_at": 4212.0, "trace_id": "trace123", "previous_ending": "reboot", "previous_started_at": 4000.1, "previous_pid": 1187, "boot_changed": true, "throttled": "0x50000" }
@@ -535,6 +535,12 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
 
 `ts` is the runtime's **monotonic** clock, not epoch seconds: compare it to other timestamps in the
 same stream, never to wall time. Device identity and version live in `GET /api/v1/meta`, not here.
+
+The block above is machine-readable on purpose. `tests/test_contract_coverage.py` parses it and fails
+when a documented key is missing from `build_state`, when a published key has no contract row, or when
+a panel reads a snapshot field the contract does not name (#314). A `{"<name>": ...}` key marks a map
+whose keys are data rather than schema — `supervisor.exempt` is keyed by module, `health.high_water`
+by signal — so the placeholder is a promise, not a field a client should look for.
 
 `decision` is the tick's decision record (`kernel/decisions.py`) — the same object
 `GET /api/v1/decisions` returns a list of. `intent` and `source` name the intent that won the tick;
