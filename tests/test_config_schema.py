@@ -270,6 +270,7 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("localization", "confidence_floor", 1.5),
     ("localization", "place_max_age_s", -1.0),
     ("place_recognition", "min_score", 1.5),
+    ("route_follower", "heading_tolerance_deg", 200.0),
 ]
 
 

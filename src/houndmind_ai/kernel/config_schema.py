@@ -700,6 +700,18 @@ _LOCALIZATION = Section(
     }
 )
 
+# `navigation/route_follower.py` (#306). A route is planned once from the map and then walked
+# waypoint by waypoint. `tolerance_cm` is the radius that counts as arrival - generous, because a
+# waypoint is a cell centre and the pose is a dead-reckoned estimate; `heading_tolerance_deg` is how
+# far off the bearing the dog may be before it spends a tick turning instead of walking.
+_ROUTE_FOLLOWER = Section(
+    fields={
+        "tolerance_cm": _NON_NEGATIVE,
+        "heading_tolerance_deg": FloatSpec(minimum=0.0, maximum=180.0),
+        "timeout_s": _NON_NEGATIVE,
+    }
+)
+
 # `navigation/place_recognition.py` + `perception/place_views.py` (#296-#301). A view is user data
 # under `~/.houndmind/places/views`, which is why `views_dir` is a path and not a content knob; the
 # rest are bounds on a guess: `min_score` below ~0.4 starts calling two doorways one room, and
@@ -1174,6 +1186,7 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "performance": _PERFORMANCE,
     "personality": _PERSONALITY,
     "place_recognition": _PLACE_RECOGNITION,
+    "route_follower": _ROUTE_FOLLOWER,
     "places": _PLACES,
     "quiet_mode": _QUIET_MODE,
     "routines": _ROUTINES,

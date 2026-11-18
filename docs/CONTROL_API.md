@@ -197,7 +197,7 @@ what stops the guard from looking redundant (`#39`).
 |---|---|---|
 | `idle` | every source | autonomy on: behaviour and the navigator may drive |
 | `patrol` | every source | the navigator roams on its own |
-| `manual` | client, routine, place, watchdog, system | a hand on the wheel: autonomy may not |
+| `manual` | client, route, routine, place, watchdog, system | a hand on the wheel: autonomy may not |
 | `rest` | watchdog and system | parked: only the two sources that exist to end a motion |
 
 `stop` is never gated by a mode, and any valid mode may be set from any other — including `rest` →
@@ -386,10 +386,11 @@ is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus `camera`, `p
 3. **`409` is not retried blindly.** `veto: "obstacle"` means retrying makes it worse; `veto: "tilt"`
    needs a human to right the dog and clear the latch; `veto: "mode"` means the runtime is in `rest`.
 4. **Ordering is by priority, not arrival.** `system` > `watchdog` > `client` > `navigation` >
-   `place` > `routine` > `behaviour` (`kernel/commands.py:37`). A `system` command preempts a `client`
-   one, and the preempted client can see it in `actuators.displaced`. A `place` goal — "go to the
-   kitchen" — sits just under `navigation`, so a hazard always wins the tick and the goal resumes when
-   it clears; a `routine` sits under the goal, and over idle behaviour.
+   `route` > `place` > `routine` > `behaviour` (`kernel/commands.py`). A `system` command preempts a
+   `client` one, and the preempted client can see it in `actuators.displaced`. A `route` — a planned
+   path — and a `place` goal — "go to the kitchen" — sit just under `navigation`, so a hazard always
+   wins the tick and the goal resumes when it clears; a routine sits under both, and over idle
+   behaviour. A route outranks a place because it is the same request with a path attached.
 
 ### Routines
 
@@ -529,7 +530,8 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
   "supervisor": { "holding": false, "reason": null, "restarts": [], "failed": [], "exempt": { "<module>": "exempt by settings.watchdog.ignore_modules" } },
   "modules": { "loaded": 11, "disabled": 3, "failed": 0 },
   "perf": { "tick_hz_target": 5, "tick_hz_actual": 4.98, "tick_ms": 41.2, "tick_overrun_ms": 0.0, "loop_delay_ms": 200.0 },
-  "session": { "started_at": 4212.0, "trace_id": "trace123", "previous_ending": "reboot", "previous_started_at": 4000.1, "previous_pid": 1187, "boot_changed": true, "throttled": "0x50000" }
+  "session": { "started_at": 4212.0, "trace_id": "trace123", "previous_ending": "reboot", "previous_started_at": 4000.1, "previous_pid": 1187, "boot_changed": true, "throttled": "0x50000" },
+  "route": null
 }
 ```
 
@@ -578,11 +580,22 @@ is what makes it an under-voltage fingerprint. The block is `null` when nothing 
 - a tool or a test that built a runtime without `main()`. It reports; it never resumes: motion does
 not survive a restart.
 
+`route` is the route the follower is walking, or `null` when nothing has planned one (#306):
+`{state, index, total, waypoints, goal_cm, refusal, detail, place, ts}`. `state` is `walking`, `done`
+or `refused`, and `index` is the waypoint being walked, so `index`/`total` is the progress a client
+renders. Each waypoint is `{x_cm, y_cm, clearance_cm}`, with `clearance_cm: null` when the map holds
+nothing to measure against. A `refused` route names why in `refusal` — `no_pose` (the dog has no pose
+to place itself on, which is the `reactive` tier), `start_unknown`, `goal_blocked`, `no_path` (the
+planner's own names), `bad_request`, `no_board`, or `timeout` — and carries the sentence a person reads
+in `detail`. `place` is the last place the camera confirmed at an arrival, or `null`: the follower
+never moves the dog on the strength of a view.
+
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
-`navigation`, `routine`, `behaviour`). `actuators.displaced` counts the intents a higher-priority one overrode
-this tick — a client that pressed forward and sees `source: "watchdog"` can tell "someone else is
-driving" from "the dog ignored me". `actuators.veto` carries the reason the last command was refused,
-and `actuators.tilt_latched` reports the latch state the client must surface.
+`navigation`, `route`, `place`, `routine`, `behaviour`). `actuators.displaced` counts the intents a
+higher-priority one overrode this tick — a client that pressed forward and sees `source: "watchdog"`
+can tell "someone else is driving" from "the dog ignored me". `actuators.veto` carries the reason the
+last command was refused, and `actuators.tilt_latched` reports the latch state the client must
+surface.
 
 `safety` answers the narrower question `actuators` cannot: is the safety module overriding right now
 (`active`), and is the emergency stop set (`emergency_stop`). Both are `false` while

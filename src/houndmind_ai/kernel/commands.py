@@ -52,6 +52,12 @@ class Source(IntEnum):
     # renumbering a member, and a place intent is *not* written into the navigation slot: two
     # producers sharing one slot would take turns publishing and the dog would stutter between them.
     PLACE = 17
+    # A planned route is the same kind of request as a place, one step more specific: it says *how*
+    # to get there. 19 keeps it above a place goal (a route is the newer, fuller answer) and below
+    # `NAVIGATION`, because a plan must never outvote an obstacle. It is a separate member rather
+    # than a shared slot for the reason PLACE is: two producers in one slot take turns and the dog
+    # stutters between them.
+    ROUTE = 19
     NAVIGATION = 20
     CLIENT = 30
     WATCHDOG = 40
@@ -114,9 +120,17 @@ MODE_ALLOWED_SOURCES: dict[str, frozenset[Source]] = {
     "idle": frozenset(Source),
     "patrol": frozenset(Source),
     # A place goal is a client's request, scripted or typed: a hand on the wheel may still say
-    # "go to the kitchen", the same way it may run a routine.
+    # "go to the kitchen", the same way it may run a routine. A route is that same request with a
+    # path attached, so it is admitted for the same reason.
     "manual": frozenset(
-        {Source.CLIENT, Source.ROUTINE, Source.PLACE, Source.WATCHDOG, Source.SYSTEM}
+        {
+            Source.CLIENT,
+            Source.ROUTE,
+            Source.ROUTINE,
+            Source.PLACE,
+            Source.WATCHDOG,
+            Source.SYSTEM,
+        }
     ),
     "rest": frozenset({Source.WATCHDOG, Source.SYSTEM}),
 }

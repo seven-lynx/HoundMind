@@ -10,6 +10,20 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A planned route can be walked, and it is a producer like any other** — the planner answered "which
+  way" and nothing consumed it (#306). `navigation/route_follower.py` (ships **off**) takes one
+  `route_request` (`{goal_cm: {x_cm, y_cm}}`), plans it with `plan_route`, publishes `route` — waypoints,
+  `index`, `total`, `state` — and walks it a waypoint at a time by publishing ordinary intents at the
+  new `Source.ROUTE` (19: above a place goal, below the navigator, because a plan must never outvote
+  an obstacle). The gateway, the interlock and the live sonar judge every step as they judge a hand.
+  Three rules are load-bearing: planning from the `reactive` tier is refused as `no_pose`, because a
+  route is drawn in map coordinates; arrival is the *pose* inside `tolerance_cm`, not a step count,
+  and the waypoint the dog already stands on is dropped so `index` means "the next thing to walk to";
+  and each arrival takes exactly one look at `place_match`, recording the place id without ever
+  re-planning or moving on the strength of a view. `/state` gains `route`, `CONTROL_API.md` §3 and §4
+  follow, and `tests/test_contract_coverage.py` holds them together. Nothing in the API writes
+  `route_request` yet: the route that makes a map point a goal is #310.
+
 - **A map can be turned into a route** — the dog could build a grid and, since M1, a client could edit
   it, and nothing turned that into a walk (#305). `mapping/planner.py::plan_route` is an A* over the
   free cells with a clearance penalty, returning `{x_cm, y_cm, clearance_cm}` waypoints or a refusal
