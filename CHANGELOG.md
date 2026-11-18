@@ -10,6 +10,17 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The map panel draws the home map, not just cells** — it drew the occupancy grid nose-up with the
+  dog pinned at the canvas centre, a body-frame view rather than a home map, and it fetched the
+  `document` M1 published and threw it away (#307). It now renders rooms as labelled polygons,
+  surfaces as hatched fills with a legend, walls as lines, openings as breaks in them, and the cells as
+  a toggleable evidence layer in which solid is floor and an outline is a cell seen once — a maybe, not
+  a floor. Nose up in the document's own frame, a metre scale bar, zoom and drag-to-pan with the view
+  remembered in `localStorage` under `houndmind.map.view`, and the dog as a heading triangle from
+  `document.dog`. It deliberately does **not** plot the live `localization.pose`: the runtime's pose is
+  `(forward, left)` while the document's is `(left, forward)`, so that would be a mirrored dog — the
+  convention clash is filed as #347 and the panel says where its dog comes from.
+
 - **A planned route can be walked, and it is a producer like any other** — the planner answered "which
   way" and nothing consumed it (#306). `navigation/route_follower.py` (ships **off**) takes one
   `route_request` (`{goal_cm: {x_cm, y_cm}}`), plans it with `plan_route`, publishes `route` — waypoints,
