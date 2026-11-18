@@ -61,6 +61,27 @@ def test_enabling_it_with_no_model_says_so() -> None:
         module.stop(ctx)
 
 
+def test_a_missing_numpy_disables_the_module_instead_of_raising(monkeypatch) -> None:
+    """#290: `lite` carries no numpy, so the wheel must cost the camera, not the runtime.
+
+    `VisionPreprocessor.__init__` imports numpy, and `start()` constructed it unguarded: an install
+    with `.[lite,dev]` and no numpy raised `ModuleNotFoundError` out of `start()` and took the whole
+    runtime with it. `None` in `sys.modules` is how an unimportable package looks to `import`.
+    """
+
+    monkeypatch.setitem(sys.modules, "numpy", None)
+    ctx = context(inference_scheduler_enabled=True)
+    module = VisionPi4Module("vision_pi4", inference_fn=lambda frame: "ok")
+    module.start(ctx)
+    try:
+        assert module.status.enabled is False
+        assert "numpy" in (module.status.disabled_reason or "")
+        assert module.status.started is False
+        assert module._preprocessor is None
+    finally:
+        module.stop(ctx)
+
+
 def test_a_wired_model_still_uses_the_scheduler(monkeypatch) -> None:
     """The scheduler and preprocessor are kept: they are what a real model will plug into.
 
