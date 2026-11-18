@@ -363,18 +363,31 @@ over in person, and do not put it in a chat. A paired client cannot do this: ope
 
 ### Map
 
-**Shows** — the occupancy cells the mapper has filled, drawn with the nose up and the dog's left on
-the screen's left. One square is `cell_size_cm`. The chip counts the cells and says `(truncated)`
-when the wire carried only the most-hit ones.
+**Shows** — the home map from the `document` on `GET /map`: rooms as labelled polygons, surfaces as
+hatched fills, walls as lines, openings as breaks in them, and the cells the sonar filled as an
+evidence layer. The map is drawn **nose up in the document's own frame** — `x` is the map's left
+axis and `y` its forward axis, so nothing is transposed here — with the dog as a triangle at
+`document.dog`. One square is `cell_size_cm`, and the note says whether the stride behind every
+distance is `assumed` or `measured`.
 
-**You can** refresh; it also polls every four seconds while visible. There is nothing to edit here —
-the picture is what the device recorded.
+Solid squares are floor (two or more hits in a cell); outlines are ground seen **once**, which is a
+maybe rather than a floor, and the two are drawn differently on purpose. A truncated map says
+`(truncated)`: an empty corner is "not sent", not "not mapped".
+
+**You can** toggle the four layers (`cells`, `rooms`, `walls`, `surfaces`), `Fit` the map to the
+canvas, zoom with `+`/`-` or the wheel, and **drag to pan**. The view — scale and centre — is kept in
+`localStorage` under `houndmind.map.view`, so a reload comes back where you left it; `Fit` throws it
+away. It polls every four seconds while visible.
 
 **Needs** — `state:read`.
 
-**If it looks wrong** — the note distinguishes the two empty cases: `mapping.grid_enabled` is off, so
-nothing is being recorded, versus "no sweep has filled a cell yet". An empty corner in a truncated
-map means "not sent", not "not mapped", and only one of those is safe to walk into.
+**If it looks wrong** — "no map" with *no sweep has filled a cell yet* means the mapper has recorded
+nothing; a device whose `mapping.grid_enabled` is off or whose map file is empty reads the same way,
+and `python -m tools.map_inspect data/home_map.json` prints what the file actually holds. The dog
+triangle comes from the document, **not** from the live `localization.pose`: the runtime's pose is
+`(forward, left)` while the document's is `(left, forward)`, so plotting the live pose on this frame
+would mirror it (#347). There is nothing to edit here yet — drawing walls, naming rooms and correcting
+the pose are M3-M5.
 
 ### Modules
 
