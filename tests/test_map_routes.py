@@ -38,10 +38,14 @@ class DummyContext:
         self.data[key] = value
 
 
-def make_plane(tmp_path, document: dict | None = None) -> tuple[ControlPlane, dict[str, str], Path]:
+def make_plane(
+    tmp_path, document: dict | None = None, odometry: dict | None = None
+) -> tuple[ControlPlane, dict[str, str], Path]:
     """A plane whose map file is under `tmp_path`, and the device token's headers."""
     map_file = tmp_path / "home_map.json"
     settings = {"mapping": {"home_map_path": str(map_file), "cell_size_cm": 10.0}}
+    if odometry:
+        settings["odometry"] = odometry
     plane = ControlPlane(
         DummyContext(settings),
         ApiSettings(host="127.0.0.1", port=0, token_path=str(tmp_path / "api_token")),
@@ -270,3 +274,72 @@ def test_writing_the_map_needs_the_config_scope(tmp_path) -> None:
 def test_cors_advertises_the_put_method_the_route_needs() -> None:
     """`PUT /map` is the table's first `PUT`, and a preflight that omits it refuses the save."""
     assert "PUT" in api_module._CORS_ALLOW_METHODS
+
+
+def test_put_map_keeps_a_room_and_the_surface_painted_over_it(tmp_path) -> None:
+    """The console's own sections survive a save verbatim: a room that loses `keep_out` is a floor the dog walks on."""
+    rooms = [
+        {
+            "id": "room_1",
+            "name": "kitchen",
+            "colour": "rgba(120, 170, 220, 0.30)",
+            "keep_out": True,
+            "polygon": [[0, 0], [200, 0], [200, 150], [0, 150]],
+        }
+    ]
+    surfaces = [
+        {
+            "id": "surf_1",
+            "name": "hardwood",
+            "step_scale": "hardwood",
+            "polygon": [[0, 0], [200, 0], [200, 150], [0, 150]],
+        }
+    ]
+    document = wire_document(meta={"rev": 0, "cell_size_cm": 10.0}, rooms=rooms, surfaces=surfaces)
+
+    async def scenario() -> tuple[int, dict, dict]:
+        plane, headers, path = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.put(
+                f"{API_PREFIX}/map", headers=headers, json={"document": document}
+            )
+            body = await response.json()
+        return response.status, body, json.loads(path.read_text(encoding="utf-8"))
+
+    status, body, written = asyncio.run(scenario())
+    assert status == 200
+    assert written["rooms"] == rooms
+    assert written["surfaces"] == surfaces
+    assert body["document"]["rooms"] == rooms
+
+
+def test_get_map_publishes_the_measured_step_per_surface(tmp_path) -> None:
+    """A vocabulary without values is a menu that lies: the panel cannot read the config, so it rides here."""
+    odometry = {"surface_step_cm": {"hardwood": 18.4, "carpet": 0, "tile": "nonsense", "rug": -3}}
+
+    async def scenario() -> dict:
+        plane, headers, _path = make_plane(tmp_path, odometry=odometry)
+        plane.context.set("mapping_state", {"grid": {"cells": {"1,2": 3}}})
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/map", headers=headers)
+            return await response.json()
+
+    body = asyncio.run(scenario())
+    # A zero, a negative and a string are all "not measured", never a number a panel would draw.
+    assert body["surface_step_cm"] == {"hardwood": 18.4}
+
+
+def test_get_map_publishes_an_empty_measurement_before_calibration(tmp_path) -> None:
+    """`{}` and not a default: an assumed step drawn as measured is a false observation."""
+
+    async def scenario() -> dict:
+        plane, headers, _path = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/map", headers=headers)
+            return await response.json()
+
+    body = asyncio.run(scenario())
+    # The empty-grid return carries the key too: a client must not have to guess which branch it got.
+    assert body["map"] is None
+    assert body["surface_step_cm"] == {}
+

@@ -126,8 +126,9 @@ class HomeMap:
     cells: Mapping[str, int]
     sweep: Mapping[str, float]
     samples: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
-    # The user's own sections (walls, rooms, ...), carried verbatim. None of them has a writer until
-    # M3-M5, but a document that drops what it just read is not one a human can edit.
+    # The user's own sections (walls, rooms, ...), carried verbatim: walls and openings gained their
+    # writer in M3 and rooms and surfaces in M4, and a document that drops what it just read is not one
+    # a human can edit.
     sections: Mapping[str, Any] = field(default_factory=dict)
 
     @property

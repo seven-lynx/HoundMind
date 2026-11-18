@@ -583,15 +583,32 @@ async def _map(request: web.Request) -> web.Response:
     """
     plane = _plane(request)
     state = plane.context.get("mapping_state")
-    settings = (plane.context.get("settings") or {}).get("mapping", {})
+    all_settings = plane.context.get("settings") or {}
+    settings = all_settings.get("mapping", {}) if isinstance(all_settings, dict) else {}
     settings = settings if isinstance(settings, dict) else {}
+    # The console names a surface; what that surface *measures* was decided by `tools.step_calibrate`
+    # and lives in the config, which the panel cannot read. Publishing the table here is what lets the
+    # map say "hardwood - 18.4 cm measured" instead of offering a vocabulary with no values behind it.
+    odometry = all_settings.get("odometry") if isinstance(all_settings, dict) else None
+    measured_raw = odometry.get("surface_step_cm") if isinstance(odometry, dict) else None
+    surface_step_cm: dict[str, float] = {}
+    if isinstance(measured_raw, dict):
+        for name, value in measured_raw.items():
+            number = _number(value)
+            if number is not None and number > 0:
+                surface_step_cm[str(name)] = number
     document = _map_document(plane.context)
     grid_enabled = bool(settings.get("grid_enabled", True))
     grid = state.get("grid") if isinstance(state, dict) else None
     cells = grid.get("cells") if isinstance(grid, dict) else None
     if not isinstance(cells, dict) or not cells:
         return web.json_response(
-            {"map": None, "grid_enabled": grid_enabled, "document": document},
+            {
+                "map": None,
+                "grid_enabled": grid_enabled,
+                "document": document,
+                "surface_step_cm": surface_step_cm,
+            },
             headers={"Cache-Control": "no-store"},
         )
 
@@ -621,6 +638,7 @@ async def _map(request: web.Request) -> web.Response:
             },
             "grid_enabled": grid_enabled,
             "document": document,
+            "surface_step_cm": surface_step_cm,
         },
         headers={"Cache-Control": "no-store"},
     )

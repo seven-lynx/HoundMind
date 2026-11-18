@@ -852,8 +852,19 @@ def test_the_map_route_reports_nothing_until_a_cell_is_filled(tmp_path) -> None:
             disabled_body = await disabled.json()
 
         assert empty.status == 200
-        assert empty_body == {"map": None, "grid_enabled": True, "document": None}
-        assert disabled_body == {"map": None, "grid_enabled": False, "document": None}
+        assert empty_body == {
+            "map": None,
+            "grid_enabled": True,
+            "document": None,
+            # The measured step table rides beside the document (M4), `{}` until someone calibrates.
+            "surface_step_cm": {},
+        }
+        assert disabled_body == {
+            "map": None,
+            "grid_enabled": False,
+            "document": None,
+            "surface_step_cm": {},
+        }
 
     asyncio.run(scenario())
 
