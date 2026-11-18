@@ -51,8 +51,8 @@ export const routines = {
       <div class="card">
         <h3>Write a routine</h3>
         <p class="hint">Saved as <span class="mono">&lt;id&gt;.json</span> in the directory above, judged
-        by the loader's own validation — a refused save names the step to fix. The runner reads that
-        directory at start, so a new routine is playable after a restart.</p>
+        by the loader's own validation — a refused save names the step to fix. The runner re-reads
+        that directory on its next tick, so a saved routine is playable immediately (#196).</p>
         <form id="rt-form">
           <textarea id="rt-json" rows="12" spellcheck="false"
             style="width:100%;font-family:ui-monospace,monospace;font-size:.8rem"></textarea>

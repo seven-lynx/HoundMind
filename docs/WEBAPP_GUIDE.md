@@ -169,7 +169,7 @@ entry, not a control. It is the second place a refusal appears, after the panel 
 | `Esc` | close the palette |
 | `1` … `9` | jump to that panel, in rail order |
 | `W` `A` `S` `D` or the arrow keys | drive while held — forward, left, back, right |
-| `Space` | stop |
+| `Space` | stop and park (`rest`) |
 
 Three rules make the shortcuts safe rather than clever:
 
@@ -177,10 +177,12 @@ Three rules make the shortcuts safe rather than clever:
   an editable element (`web/app.js:517`), so naming a place "wasd" does not walk the dog.
 - **Drive keys are global.** They work on any panel, not only Drive — the same code path the
   on-screen pad uses, so a key press and a held button cannot drift apart (`web/app.js:506`).
-- **A hidden tab stops the dog.** Switching tabs or minimising the window sends a stop
-  (`web/app.js:564`).
+- **A hidden tab stops the dog.** Switching tabs or minimising the window stops the motion the tab
+  was commanding (`web/app.js:566`), without changing the mode.
 
-The palette lists every panel by name and every command it can run. `1`–`9` map to the first nine
+The palette lists every panel by name and every command it can run — including the three that act on
+the dog rather than the view: `Stop the dog (parks it in rest)`, `Park the dog (mode rest)` and
+`Hand back control - autonomy on (mode idle)`. `1`–`9` map to the first nine
 panels: Overview, Drive, Tricks, Routines, Places, People, Camera, Decisions, History.
 
 ## 5. The panels
@@ -213,24 +215,30 @@ that the console is broken. Cross-check Modules.
 
 ### Drive
 
-**Shows** — a hold-to-walk pad, the runtime mode, and a one-step control.
+**Shows** — a hold-to-walk pad, the mode that decides what may drive, and a one-step control.
 
 **You can**
 
 - **Hold** ▲ / ◀ / ▶ / ▼ to walk, and release to stop. While held the client renews the command every
   150 ms; the server expires any command 300 ms after the last renewal (`web/lib.js:21`). Releasing
-  also sends an explicit stop, so the deadman is the backstop and not the mechanism.
-- **STOP** in the middle, the `Space` key, or hiding the tab — all end motion.
-- **Change the mode**: `idle` (autonomy on: behaviour and the navigator may drive), `manual` (a hand
-  on the wheel: clients may drive, autonomy may not), `patrol` (the navigator roams), `rest` (parked:
-  only stop and the watchdog get through). This posts to `/api/v1/mode` and changes the whole dog.
+  also sends an explicit `stop` command, so the deadman is the backstop and not the mechanism.
+- **STOP** in the middle, or the `Space` key — both **park** the dog. The client calls
+  `POST /api/v1/stop`, which stops the motion in flight *and* sets the mode to `rest`, so it stays
+  parked until a mode change rather than resuming on the next tick (#333).
+- **Hiding the tab** stops the motion the tab was commanding and leaves the mode alone.
+- **Change the mode**, labelled with what it means: `idle - autonomy on` (behaviour and the navigator
+  may drive), `manual - you drive` (clients may, autonomy may not), `patrol - roams` (the navigator
+  roams), `rest - parked` (only stop and the watchdog get through). This posts to `/api/v1/mode` and
+  changes the whole dog.
 - **One step**: speed 60–200 in steps of 10, one to five steps, forward or backward. That path sends
   `wait: true`, so the HAL finishes the step before the answer returns — it is the control to use
   when measuring distance, and there is no queue behind it.
 
-**Handing control back.** `idle` is *also* how you give the dog its autonomy again — it is the same
-list, not a separate control. There is no "resume autonomy" button and no confirmation: one selection
-returns the dog to self-driving. From a shell, with the token read on the device:
+**Handing control back.** The brake and the throttle are the same control: parking is `rest` and
+handing the dog back to autonomy is `idle`. The command palette does both from the keyboard —
+`Park the dog (mode rest)` and `Hand back control - autonomy on (mode idle)` — and the mode list on
+this panel is the same two acts with their neighbours. There is no confirmation on `rest` -> `idle`:
+one selection returns the dog to self-driving. From a shell, with the token read on the device:
 
 ```bash
 TOKEN=$(cat ~/.houndmind/api_token)
@@ -320,10 +328,11 @@ through a blob, so the URL does not land in browser history with a credential in
 
 **Needs** — `state:read`, and a vision module on the device that actually publishes frames.
 
-**If it looks wrong** — "No frames. Enable a vision module on the device, or check the camera index
-in config." Nothing in the panel can fix that, and it is not a token problem: enable `vision_pi4`
-(Pi 4/5, and only once `picamera2` is importable) or `vision`, and read the reason it is off from the
-Modules panel. There is no `camera_index` key to check — see #332.
+**If it looks wrong** — "No frames. No vision module is publishing them - enable one on the device, or
+read the reason it gave up in the Modules panel (vision_pi4 needs picamera2; vision needs Vilib)."
+Nothing in the panel can fix that, and it is not a token problem: enable `vision_pi4` (Pi 4/5, and only
+once `picamera2` is importable) or `vision`, and read the reason it is off from the Modules panel. There
+is no camera-index config key to check (#332).
 
 ### Decisions
 
@@ -449,8 +458,9 @@ console shows that answer and never bypasses it.
 
 **Three stop paths, and the deadman behind all of them**
 
-1. Releasing the pad (or the key) sends an explicit stop.
-2. Hiding the tab sends a stop (`web/app.js:564`).
+1. Releasing the pad (or the key) issues a `stop` **command** (`POST /api/v1/command`): the motion in
+   flight ends and the mode is untouched, which is what makes hold-and-release driving work.
+2. Hiding the tab does the same (`web/app.js:566`).
 3. If neither happens — a laptop lid closes, WiFi dies — the command simply expires: the client renews
    every 150 ms and the server drops a command 300 ms after the last renewal (`web/lib.js:21`). A
    client that stops pinging loses its command after `settings.api.link_loss_s` (6 s).
@@ -458,10 +468,12 @@ console shows that answer and never bypasses it.
 A routine is not an exception: it plays one step per tick through the same gateway, so the interlock,
 the obstacle stop and the mode gate apply to it exactly as they do to a hand on the pad.
 
-**None of those stops a self-driving dog.** With autonomy on — the `idle` mode — the behaviour and the
-navigator publish a fresh intent on the very next tick, so a stop holds for about a tenth of a second
-and the dog walks on. That is #333, and until it is closed the brake is the **mode**: `manual` keeps
-autonomy out and leaves the pad working, `rest` leaves only stop and the watchdog.
+**STOP is the fourth path, and the only one that parks.** The STOP button, `Space` and the palette's
+`Stop the dog` call `POST /api/v1/stop`, which stops the command *and* sets `rest` (#333). With
+autonomy on — the `idle` mode — the behaviour and the navigator publish a fresh intent on the very
+next tick, so a path that only cleared the motion in flight held for about a tenth of a second and the
+dog walked on. `rest` is the mode the gateway refuses to drive in, so the press sticks until a mode
+change; `manual` is the other way to keep autonomy out while leaving the pad working.
 
 **A restart is not a resume — and not a park either.** After `systemctl restart houndmind` or a reboot,
 a gait in flight is gone and a routine that was mid-run is lost rather than replayed. But the runtime

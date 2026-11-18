@@ -876,8 +876,19 @@ async def _stop(request: web.Request) -> web.Response:
     # otherwise the flag would outlive the stop and kill the next run instead.
     if plane.context.get("routine_report") is not None:
         plane.context.set("routine_stop", True)
+    # And the stop has to *park*, not just clear the motion in flight (#333). In `idle` the
+    # behaviour and the navigator publish a fresh intent about 100 ms later, so the operator's
+    # panic press was a stop autonomy overwrote on the next tick. `rest` is the mode the gateway
+    # refuses to drive in, and any client may set another mode, so the brake and the throttle stay
+    # one control. A pad release does not come through here: it issues a `stop` command
+    # (`panels/drive.js::stopMotion`), which is a motion stop with no mode change.
+    if plane.mode() != "rest":
+        plane.set_mode("rest")
+        plane.hub.publish_event("mode_changed", {"mode": "rest"})
     plane.hub.publish_event("command_accepted", {"action": "stop"})
-    return web.json_response({"accepted": True, "action": "stop"}, status=202)
+    return web.json_response(
+        {"accepted": True, "action": "stop", "mode": plane.mode()}, status=202
+    )
 
 
 async def _mode_get(request: web.Request) -> web.Response:

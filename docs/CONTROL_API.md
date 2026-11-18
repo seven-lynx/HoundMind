@@ -170,7 +170,7 @@ what stops the guard from looking redundant (`#39`).
 | `POST` | `/api/v1/pair` | none | exchange a pairing code for a client token |
 | `POST` | `/api/v1/pair/open` | `admin` | open a pairing window; returns the 6-digit code |
 | `POST` | `/api/v1/command` | `move` | issue a command ([§3](#3-commands)) |
-| `POST` | `/api/v1/stop` | `move` | unconditional stop; never vetoed, never queued, and it ends a running routine |
+| `POST` | `/api/v1/stop` | `move` | unconditional stop; never vetoed, never queued; sets the mode to `rest` and ends a running routine |
 | `POST` | `/api/v1/routines/{id}/run` | `move` | start one routine; optional `{"dry_run": true}` ([§3](#3-commands)) |
 | `POST` | `/api/v1/places` | `config` | create one place; a refused body is `400` with `problems[]` ([§8](#8-places)) |
 | `DELETE` | `/api/v1/places/{id}` | `config` | forget one place by id or name; a second call is `404` ([§8](#8-places)) |
@@ -200,6 +200,13 @@ what stops the guard from looking redundant (`#39`).
 `idle`, which hands the dog back to autonomy with no confirmation step and no intermediate state. An
 unknown name is a `400` listing the four accepted values, and each change is published as a
 `mode_changed` event on `/api/v1/events`.
+
+**`POST /stop` is a mode change as well as a stop.** It sets `rest`, because a stop that only cleared
+the motion in flight was overwritten on the next tick: under `idle` the behaviour and the navigator
+publish a fresh intent about 100 ms later (#333). The answer carries `{"accepted": true, "action":
+"stop", "mode": "rest"}`, and leaving `rest` is the operator's next act. A client that wants to stop
+motion *without* parking issues a `stop` command through `/command`, which every mode admits
+(`act/gateway.py::_vet`) — that is what the console's pad release does.
 
 `PATCH /config` writes only `behavior.action_cooldown_s`, `led.brightness`,
 `motors.min_action_interval_s` and `navigation.safe_distance_cm` (`services/api.py:81`), each re-read
@@ -368,8 +375,10 @@ is a list of *surfaces* (`command`, `events`, `mode`, `state`, plus `camera`, `p
 1. **Motion is a deadman, not a toggle.** A client wanting continuous forward must re-issue at least
    every `ttl_ms`. If the app dies, the dog stops — and the deadman starts when the device received
    the command, so a command that sat in a tunnel does not run when it finally arrives.
-2. **`POST /stop` is never refused** and bypasses the queue. The UI must always have it reachable, and
-   must call it on `onPause`/`onStop`. It ends a running routine too, so a stop is a stop.
+2. **`POST /stop` is never refused**, bypasses the queue, and **parks** the runtime in `rest`. The UI
+   must always have it reachable, and must call it on `onPause`/`onStop`. It ends a running routine too,
+   so a stop is a stop — and it clears the mode that would let autonomy re-issue the motion on the next
+   tick. A motion stop that must leave the mode alone is a `stop` command through `/command`.
 3. **`409` is not retried blindly.** `veto: "obstacle"` means retrying makes it worse; `veto: "tilt"`
    needs a human to right the dog and clear the latch; `veto: "mode"` means the runtime is in `rest`.
 4. **Ordering is by priority, not arrival.** `system` > `watchdog` > `client` > `navigation` >

@@ -178,6 +178,71 @@ def test_rest_mode_vetoes_client_motion_but_not_system_stop(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_stop_parks_the_dog_so_autonomy_cannot_resume(tmp_path) -> None:
+    """#333: a stop that cleared only the motion in flight was undone on the next tick.
+
+    Under the shipped `idle` mode the behaviour and the navigator publish a fresh intent about
+    100 ms later, so the operator's panic press has to change the state that *permits* motion.
+    `rest` is that state, and a client motion command is refused with `veto: "mode"` while it
+    holds - which is what makes STOP a brake rather than a pause.
+    """
+
+    async def scenario() -> None:
+        world = World(tmp_path)
+        assert world.plane.mode() == "idle", "the shipped default is the case #333 reported"
+        async with TestClient(TestServer(create_app(world.plane))) as client:
+            stopped = await client.post(f"{API_PREFIX}/stop", headers=world.auth())
+            body = await stopped.json()
+
+            request = asyncio.create_task(
+                client.post(
+                    f"{API_PREFIX}/command",
+                    headers=world.auth(),
+                    json={"id": "c-park", "action": "forward"},
+                )
+            )
+            await world.tick_until(request.done)
+            response = await request
+            refused = await response.json()
+
+        assert stopped.status == 202, body
+        assert body["mode"] == "rest"
+        assert world.plane.mode() == "rest"
+        assert response.status == 409, refused
+        assert refused["veto"] == "mode"
+        assert ("forward", {}) not in world.hal.calls
+
+    asyncio.run(scenario())
+
+
+def test_a_pad_release_stop_does_not_park_the_dog(tmp_path) -> None:
+    """The other half of #333: `stop` as a *command* is a motion stop, not a park.
+
+    Releasing a held key or a pad button issues this, and it has to leave the mode alone - the
+    gateway admits `stop` in every mode (act/gateway.py::_vet), so a parked dog can still be
+    stopped, and a driving dog is not parked by letting go of the key.
+    """
+
+    async def scenario() -> None:
+        world = World(tmp_path)
+        async with TestClient(TestServer(create_app(world.plane))) as client:
+            request = asyncio.create_task(
+                client.post(
+                    f"{API_PREFIX}/command",
+                    headers=world.auth(),
+                    json={"id": "c-release", "action": "stop"},
+                )
+            )
+            await world.tick_until(request.done)
+            response = await request
+            body = await response.json()
+
+        assert response.status == 202, body
+        assert world.plane.mode() == "idle", "a release must not change the mode"
+
+    asyncio.run(scenario())
+
+
 def test_two_identical_actions_from_two_ids_are_two_commands(tmp_path) -> None:
     """H-10: the old gateway deduplicated on the action string and dropped the second."""
     world = World(tmp_path)

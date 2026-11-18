@@ -17,6 +17,16 @@ const MODES = {
   rest: "parked: only stop and the watchdog get through",
 };
 
+// The select shows the intent, not the vocabulary (#334). "idle" is a word an operator has to
+// learn; "autonomy on" is the decision they are making - and `rest` -> `idle` is a single change
+// that hands a parked dog back to self-driving, so it has to read as one.
+const MODE_LABELS = {
+  idle: "idle - autonomy on",
+  manual: "manual - you drive",
+  patrol: "patrol - roams",
+  rest: "rest - parked",
+};
+
 let renewTimer = null;
 let held = null;
 
@@ -32,13 +42,33 @@ async function issue(action, params = {}) {
   });
 }
 
-/** Stop from anywhere - the palette, a hidden tab, the keyboard. Never fails loudly. */
+/** Stop from anywhere - the palette, the keyboard, a hidden tab. Parks the dog, and never fails
+ *  loudly: `POST /stop` sets the runtime to `rest`, which is the only mode autonomy cannot drive
+ *  in, so a panic press is not overwritten on the next tick (#333). */
 export async function stopAllMotion() {
   try {
     await api("/stop", { method: "POST", body: JSON.stringify({}) });
   } catch (err) {
     /* a stop that cannot reach the device is the connection badge's job to report */
   }
+}
+
+/** Stop the motion in flight without parking: a pad release, not a panic press.
+ *
+ * A `stop` command is the escape hatch the gateway accepts in any mode (act/gateway.py::_vet), so
+ * this is the same deadman stop the pad's own buttons get - and it leaves the mode alone, which is
+ * what makes hold-and-release driving possible while `POST /stop` means parked. */
+export async function stopMotion() {
+  try {
+    await issue("stop");
+  } catch (err) {
+    /* the deadman expires the last command if even this never arrives */
+  }
+}
+
+/** Hand the runtime a mode. Labels are intent, the mode name is the wire value (#334). */
+export async function setMode(mode) {
+  return api("/mode", { method: "POST", body: JSON.stringify({ mode }) });
 }
 
 function stopHold() {
@@ -70,11 +100,13 @@ export const drive = {
 
         <div class="card">
           <h3>Mode</h3>
-          <label for="drive-mode">Runtime mode</label>
+          <label for="drive-mode">What may drive</label>
           <select id="drive-mode">
-            ${Object.keys(MODES).map((mode) => `<option value="${mode}">${mode}</option>`).join("")}
+            ${Object.keys(MODES).map((mode) => `<option value="${mode}">${esc(MODE_LABELS[mode] || mode)}</option>`).join("")}
           </select>
           <p class="hint" id="drive-mode-hint">${esc(MODES.idle)}</p>
+          <p class="hint">STOP parks the dog: it sets <span class="mono">rest</span>, the one mode
+          autonomy cannot drive in. Pick a mode here to let it drive again.</p>
 
           <h3 style="margin-top:1.1rem">One step</h3>
           <div class="row grow">
@@ -105,7 +137,7 @@ export const drive = {
     function startHold(action, button) {
       stopHold();
       if (action === "stop") {
-        stopAllMotion();
+        stopMotion();
         return;
       }
       held = action;
@@ -122,8 +154,10 @@ export const drive = {
     function release() {
       if (!held) return;
       stopHold();
-      // An explicit stop on release, so the deadman is the backstop and not the mechanism.
-      stopAllMotion();
+      // A stop on release, so the deadman is the backstop and not the mechanism. It is a stop
+      // *command*, not `POST /stop`: releasing a key must not park the dog, or driving by hold
+      // would be one press and a mode change to resume.
+      stopMotion();
     }
 
     root.querySelectorAll(".pad").forEach((button) => {
@@ -146,7 +180,7 @@ export const drive = {
     modeSelect.addEventListener("change", async () => {
       modeHint.textContent = MODES[modeSelect.value] || "";
       try {
-        await api("/mode", { method: "POST", body: JSON.stringify({ mode: modeSelect.value }) });
+        await setMode(modeSelect.value);
       } catch (err) {
         error.textContent = errorText(err);
       }

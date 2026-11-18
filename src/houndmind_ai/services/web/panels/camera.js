@@ -35,7 +35,8 @@ export const camera = {
       img.hidden = true;
       note.hidden = false;
       note.textContent =
-        "No frames. Enable a vision module on the device, or check the camera index in config.";
+        "No frames. No vision module is publishing them - enable one on the device, or read the " +
+        "reason it gave up in the Modules panel (vision_pi4 needs picamera2; vision needs Vilib).";
     });
 
     async function ticket() {

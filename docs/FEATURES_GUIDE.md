@@ -1221,7 +1221,8 @@ curl -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
 
 Every motion command is judged by the interlock exactly as an internal producer is. A refusal
 answers `409` with `veto` and `detail`, and the client is expected to display the reason. `rest`
-mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed.
+mode refuses client motion with a reason; `POST /api/v1/stop` is never vetoed, and it parks the
+runtime in `rest` as well as stopping the motion in flight (#333).
 
 **Config** (`settings.api`, and `modules.api` for the on/off switch):
 

@@ -25,7 +25,7 @@ import {
   setToken,
   store,
 } from "./lib.js";
-import { stopAllMotion } from "./panels/drive.js";
+import { setMode, stopAllMotion, stopMotion } from "./panels/drive.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -560,9 +560,11 @@ document.addEventListener("keyup", (event) => {
   }
 });
 
-// A hidden tab must not leave a dog walking on a renewed deadman.
+// A hidden tab must not leave a dog walking on a renewed deadman. This stops what the tab was
+// commanding; it does not park, because parking is an explicit act and a backgrounded tab is not
+// an operator decision.
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stopAllMotion();
+  if (document.hidden) stopMotion();
 });
 
 // ------------------------------------------------------------------ palette
@@ -574,7 +576,12 @@ function paletteEntries(query) {
     kind: "panel",
     run: () => { location.hash = `#${panel.id}`; },
   }));
-  items.push({ label: "Stop the dog", kind: "action", run: () => stopAllMotion() });
+  items.push({ label: "Stop the dog (parks it in rest)", kind: "action", run: () => stopAllMotion() });
+  // The brake and the throttle are the same control (#334): the path that stops the dog from
+  // anywhere has to be able to hand it back, or the only way to start autonomy is a dropdown
+  // whose label does not say autonomy.
+  items.push({ label: "Park the dog (mode rest)", kind: "action", run: () => setMode("rest").catch(() => {}) });
+  items.push({ label: "Hand back control - autonomy on (mode idle)", kind: "action", run: () => setMode("idle").catch(() => {}) });
   items.push({ label: "Camera snapshot", kind: "panel", run: () => { location.hash = "#camera"; } });
   if (!needle) return items;
   return items.filter((item) => item.label.toLowerCase().includes(needle));
