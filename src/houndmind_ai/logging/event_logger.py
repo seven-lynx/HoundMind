@@ -72,6 +72,9 @@ class EventLoggerModule(Module):
             "mapping_openings": context.get("mapping_openings"),
             "mapping_hint": context.get("mapping_hint"),
             "health_degraded": context.get("health_degraded"),
+            # The last ranged comparison of a predicted step (#300). Predicted against actual, with
+            # the surface it was walked on; nothing here is applied to a constant.
+            "odometry_audit": (context.get("odometry") or {}).get("audit"),
             "module_statuses": context.get("module_statuses"),
         }
         if snapshot == self._last_snapshot:
@@ -93,6 +96,7 @@ class EventLoggerModule(Module):
             "scan_result": snapshot["scan_latest"],
             "mapping_hint": snapshot["mapping_hint"],
             "health_degraded": snapshot["health_degraded"],
+            "odometry_audit": snapshot["odometry_audit"],
             "module_status_summary": self._summarize_module_statuses(
                 snapshot["module_statuses"]
             ),

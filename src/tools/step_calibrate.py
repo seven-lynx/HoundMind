@@ -42,6 +42,7 @@ from houndmind_ai.act.interlock import Interlock, interlock_limits_from_settings
 from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.hal.iface import DogHAL, SensorSnapshot
 from houndmind_ai.kernel.commands import Command
+from houndmind_ai.navigation.odometry import resolve_step_cm
 
 __all__ = ["Cycle", "RunReport", "main", "run_calibration"]
 
@@ -536,6 +537,63 @@ def _load_settings(path: str | None) -> dict[str, Any]:
         return {}
 
 
+MAX_APPLY_FRACTION = 0.20
+MIN_APPLY_SAMPLES = 5
+APPLY_CONSISTENCY = 0.10
+
+
+def per_cycle_samples(report: RunReport) -> list[float]:
+    """The distance each accepted cycle covered, for the cycles that actually moved."""
+    return [cycle.delta_cm for cycle in report.cycles if cycle.delta_cm > 0.0]
+
+
+def apply_value(
+    report: RunReport,
+    current_cm: float,
+    *,
+    min_samples: int = MIN_APPLY_SAMPLES,
+    consistency: float = APPLY_CONSISTENCY,
+    max_fraction: float = MAX_APPLY_FRACTION,
+) -> tuple[float | None, str]:
+    """The constant this run supports, clamped, or `None` with the reason it does not.
+
+    Three gates, in the order a person would apply them (#300):
+
+    1. **Enough samples.** One cycle is an echo; `min_samples` is what makes it a measurement.
+    2. **They agree.** The smallest and largest accepted cycles must be within `consistency` of each
+       other, because a run that walked 4 cm once and 12 cm once measured nothing repeatable.
+    3. **Clamped.** The answer never moves the constant by more than `max_fraction` in one apply, so a
+       bad run cannot triple every place anchor in the file at once.
+
+    It returns a value; it does not write one. `config/settings.jsonc` is comment-rich user data and
+    this tool's standing rule is that it never edits it - the clamped number is printed for a human to
+    paste, which is also the only way a comment survives.
+    """
+    samples = sorted(per_cycle_samples(report))
+    if not report.accepted:
+        return None, f"the run did not produce a value: {report.verdict}"
+    if len(samples) < min_samples:
+        return None, f"{len(samples)} usable cycle(s), {min_samples} needed for --apply"
+    smallest, largest = samples[0], samples[-1]
+    if largest - smallest > consistency * largest:
+        return None, (
+            f"cycles disagree ({smallest:.2f}-{largest:.2f} cm, more than {consistency:.0%} apart)"
+        )
+    median = samples[len(samples) // 2]
+    if median <= 0.0:
+        return None, "the median cycle covered no ground"
+    low = max(0.1, current_cm * (1.0 - max_fraction))
+    high = current_cm * (1.0 + max_fraction)
+    value = round(min(max(median, low), high), 2)
+    clamped = "" if value == round(median, 2) else f" (clamped from {median:.2f})"
+    return value, f"{len(samples)} cycles, median {median:.2f} cm{clamped}"
+
+
+def applied_snippet(surface: str, value: float) -> str:
+    """The one-line block the clamped value belongs in, ready to paste."""
+    return f'"surface_step_cm": {{"{surface}": {value}}}'
+
+
 def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
     """Run one measurement. `hal` is the injection seam: `None` opens the real dog."""
     parser = argparse.ArgumentParser(
@@ -595,6 +653,14 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
         help="The stride the simulated wall answers with",
     )
     parser.add_argument("--config", default=None, help="Path to settings.jsonc")
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help=(
+            "compute the value this run supports: N consistent cycles, clamped to +/-20 percent of "
+            "the constant in force. Prints it; never edits the config"
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Print the report as JSON")
     args = parser.parse_args(argv)
 
@@ -660,6 +726,22 @@ def main(argv: list[str] | None = None, hal: DogHAL | None = None) -> int:
             for line in snippet(report).splitlines():
                 print(f"[step_calibrate]   {line}")
 
+    applied = 0
+    if args.apply:
+        odometry_settings = dict(_load_settings(args.config).get("odometry") or {})
+        odometry_settings["surface"] = report.surface
+        current_cm = resolve_step_cm(odometry_settings).cm
+        value, why = apply_value(report, current_cm)
+        if value is None:
+            print(f"[step_calibrate] --apply refused: {why}", file=sys.stderr)
+            applied = 2
+        else:
+            print(f"[step_calibrate] --apply: {why} -> {value} cm per cycle")
+            print("[step_calibrate] write this under settings.odometry:")
+            print(f"[step_calibrate]   {applied_snippet(report.surface, value)}")
+
+    if applied:
+        return applied
     if report.refused is not None:
         return 2
     if report.veto is not None:

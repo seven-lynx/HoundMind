@@ -304,3 +304,65 @@ def test_the_published_pose_names_the_constant_it_used() -> None:
     assert payload["step_cm_source"] == "measured:hardwood"
     assert payload["surface"] == "hardwood"
 
+
+
+def _report(
+    cycles: list[float], *, surface: str = "hardwood", veto: str | None = None
+):
+    """A run report with one cycle per distance, in the shape `run_calibration` produces."""
+    from tools.step_calibrate import Cycle, RunReport
+
+    report = RunReport(surface=surface, measure="forward", speed=100, stop_at_cm=45.0)
+    for index, covered in enumerate(cycles):
+        before = 150.0 - index * covered
+        report.cycles.append(Cycle(index=index, before_cm=before, after_cm=before - covered))
+    report.veto = veto
+    return report
+
+
+def test_apply_takes_the_median_of_enough_consistent_cycles() -> None:
+    from tools.step_calibrate import apply_value
+
+    value, why = apply_value(_report([8.0, 8.1, 7.9, 8.0, 8.05]), current_cm=8.0)
+
+    assert value == pytest.approx(8.0)
+    assert "5 cycles" in why
+
+
+def test_apply_refuses_fewer_samples_than_it_needs() -> None:
+    """One cycle is an echo; --apply asks for more evidence than `measured` does (#300)."""
+    from tools.step_calibrate import apply_value
+
+    value, why = apply_value(_report([8.0, 8.0, 8.0, 8.0]), current_cm=8.0)
+
+    assert value is None
+    assert "needed for --apply" in why
+
+
+def test_apply_refuses_cycles_that_disagree() -> None:
+    from tools.step_calibrate import apply_value
+
+    value, why = apply_value(_report([4.0, 12.0, 6.0, 9.0, 11.0]), current_cm=8.0)
+
+    assert value is None
+    assert "disagree" in why
+
+
+def test_apply_clamps_a_jump_so_one_run_cannot_rescale_every_anchor() -> None:
+    """25 -> 8 clamps to 20: the constant moves by at most 20 % per apply, by design."""
+    from tools.step_calibrate import apply_value
+
+    value, why = apply_value(_report([8.0, 8.0, 8.0, 8.0, 8.0]), current_cm=25.0)
+
+    assert value == pytest.approx(20.0)
+    assert "clamped from 8.00" in why
+
+
+def test_apply_refuses_a_run_the_interlock_stopped() -> None:
+    from tools.step_calibrate import apply_value
+
+    value, why = apply_value(_report([8.0] * 5, veto="low_voltage"), current_cm=8.0)
+
+    assert value is None
+    assert "low_voltage" in why
+
