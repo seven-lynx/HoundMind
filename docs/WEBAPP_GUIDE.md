@@ -65,9 +65,10 @@ Then find the address to type into the browser:
 hostname -I | awk '{print $1}'                 # e.g. 192.168.1.42
 ```
 
-The plane also advertises itself over mDNS, so `http://houndmind.local:8420/` normally works
-(`settings.api.discovery_name` renames the instance). mDNS loses to networks that block multicast;
-the numeric address always works.
+The plane also advertises itself over mDNS, so `http://<hostname>.local:8420/` normally works — the
+name the plane publishes is `<whatever the Pi is called>.local`, so a stock card answers as
+`raspberrypi.local` (`settings.api.discovery_name` renames the mDNS *instance*, not the host).
+mDNS loses to networks that block multicast; the numeric address always works (#294).
 
 ## 2. First connection
 

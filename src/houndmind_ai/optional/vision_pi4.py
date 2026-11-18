@@ -65,7 +65,16 @@ class VisionPi4Module(Module):
         # the camera (M-03). A scheduler with no model is not a feature, so it is off by default
         # and an install that enables it without supplying `inference_fn` is told so instead of
         # being given a plausible-looking result.
-        self._preprocessor = VisionPreprocessor(settings.get("preprocessing", {}))
+        #
+        # `VisionPreprocessor` imports numpy in its constructor, and numpy is not in `lite`: on an
+        # install without the wheel that raised `ModuleNotFoundError` straight out of `start()`
+        # (#290). The module disables with the reason instead - a missing wheel costs the camera,
+        # not the runtime, which is the rule every optional module follows.
+        try:
+            self._preprocessor = VisionPreprocessor(settings.get("preprocessing", {}))
+        except ImportError as exc:
+            self.disable(f"missing dependency: {exc.name or 'numpy'}")
+            return
         if not settings.get("inference_scheduler_enabled", False):
             context.set("vision_inference_status", {"state": "disabled"})
         elif self._inference_fn is None:

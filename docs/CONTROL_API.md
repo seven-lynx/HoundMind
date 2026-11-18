@@ -6,11 +6,15 @@ and the fixtures, not the app. Additive changes only within `v1`; anything that 
 field requires `v2` and a deprecation window.
 Pairs with: `src/houndmind_ai/services/api.py` (the route table), `docs/FEATURES_GUIDE.md` [§25](FEATURES_GUIDE.md#25-wifi-localization--removed)
 
-Base URL: `http://<pi-ip>:8420`, or `http://houndmind.local:8420`. The device advertises **one** mDNS
-record — `houndmind._houndmind._tcp.local`, gated by `api.discovery_enabled` (on by default) — carrying
-its host and port, so a client can find it by name. When discovery is off or blocked, the address is
-whatever `hostname -I` reports on the device. Everything under `/api/v1` is JSON;
-`GET /` serves the web app that ships inside the package.
+Base URL: `http://<pi-ip>:8420`, or `http://<hostname>.local:8420` — the name discovery actually
+publishes. `services/discovery.py::_default_host` returns `<whatever the Pi is called>.local`, so on a
+stock Bookworm card that is `raspberrypi.local` until the host is renamed; nothing in
+`scripts/install_houndmind.sh`, `scripts/installer_core.py` or this tree's docs changes the hostname,
+and `houndmind.local` resolves only on a device an owner renamed by hand (#294). The device advertises
+**one** mDNS record — `houndmind._houndmind._tcp.local`, gated by `api.discovery_enabled` (on by
+default) — carrying its host and port, so a client can find it by name. When discovery is off or
+blocked, the address is whatever `hostname -I` reports on the device. Everything under `/api/v1` is
+JSON; `GET /` serves the web app that ships inside the package.
 
 **The web app's assets are versioned at serve time.** `GET /` rewrites each `/static/...` URL to carry
 `?v=<package version>`, and `/static/` answers `Cache-Control: no-cache`. A returning browser

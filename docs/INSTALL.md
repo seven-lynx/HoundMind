@@ -318,10 +318,15 @@ Three things worth knowing about that list:
   `balance` are the four that need a soak on a real dog before they are anybody's default, and #26 is
   that soak. `watchdog` is on and holds motion; the *interlock* is always on and is not a module.
 - **The voice stack needs three things beyond the Python install**: the vendor
-  `sunfounder-voice-assistant` package (the installer installs it), the HAT speaker enabled
-  (`setup_robot_hat_audio.sh`, then a reboot) and `espeak-ng` for the local `pyttsx3` fallback. Voice
-  ships off in all three of its switches - `modules.voice.enabled`, `voice_assistant.stt.enabled` and
-  `voice_assistant.tts.enabled` - and `voice_assistant.tts.backend` picks the engine
+  `sunfounder-voice-assistant` package (the installer installs it), the HAT speaker enabled, and
+  `espeak-ng` for the local `pyttsx3` fallback. The speaker is *not* enabled by the installer and
+  there is no `setup_robot_hat_audio.sh` in this repository: the enable step ships with the vendor
+  package (`sunfounder-voice-assistant`, run by the SunFounder install guide), and what governs it is
+  the `dtoverlay=hifiberry-dac` line in `/boot/firmware/config.txt` plus an `/etc/asound.conf` whose
+  `pcm.!default` points at `robothat`. `python -m tools.audio_check --verify` is the local proof that
+  the routing works (#289, #254). Voice ships off in all three of its switches -
+  `modules.voice.enabled`, `voice_assistant.stt.enabled` and `voice_assistant.tts.enabled` - and
+  `voice_assistant.tts.backend` picks the engine
   (`FEATURES_GUIDE.md` [§19](FEATURES_GUIDE.md#19-voice-assistant-pi4), #240, #245, #246).
 - **`slam_pi4` cannot be enabled usefully yet**: the `rtabmap` backend's bindings are not installable
   and the `stub` backend is dead reckoning, not visual SLAM

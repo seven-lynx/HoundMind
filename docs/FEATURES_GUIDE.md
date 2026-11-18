@@ -832,9 +832,11 @@ speaker is a dropped answer rather than an unexpected voice. A config with no `t
 **What the vendor engines need.** `robot_hat.tts`, `llm` and `stt` are thin wrappers over
 `sunfounder-voice-assistant`, the SunFounder git package the installer now installs; `sox` primes the
 amplifier, `espeak`/`espeak-ng` is what the eSpeak engine and `pyttsx3` shell out to, and
-`libsox-fmt-mp3` is what `edge` needs to convert the MP3 it fetches. Without the HAT speaker enabled -
-`setup_robot_hat_audio.sh`, then a reboot - every engine constructs, says nothing, and logs the failure
-once (#246, #249).
+`libsox-fmt-mp3` is what `edge` needs to convert the MP3 it fetches. The HAT speaker enable step is
+**not** in this repository — it ships with `sunfounder-voice-assistant` — and without it (the
+`dtoverlay=hifiberry-dac` line, an `/etc/asound.conf` whose `pcm.!default` is `robothat`, and the
+PulseAudio sink on the HAT) every engine constructs, says nothing, and logs the failure once. Prove
+the routing before blaming the engine: `python -m tools.audio_check --verify` (#246, #249, #254, #289).
 
 **The assistant: a language model, cloud or LAN (off by default).** `modules.assistant` plus
 `settings.assistant` put a model behind the `voice_question_handler` seam that `voice` already

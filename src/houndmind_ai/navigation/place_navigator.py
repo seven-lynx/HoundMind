@@ -15,9 +15,11 @@ Three rules shape it.
    avoidance.
 2. **Arrival is dead reckoning, and it says so.** Nothing in this stack measures how far the dog
    walked, so the only honest distance is the one the gateway accepted: each accepted `forward`
-   counts `settings.places.step_cm`. That is a calibrated guess, not an odometry — PL7 on the
-   device is where `step_cm` gets measured instead of assumed, together with which way a positive
-   yaw actually turns a PiDog.
+   counts `settings.places.step_cm`. That is a calibrated guess, not an odometry — L3.3 of the
+   odometry-calibration plan is where `step_cm` gets measured on the dog rather than assumed
+   (#285), by the wall-referenced walk in `tools/step_calibrate.py`. Which way a positive yaw
+   actually turns a PiDog is the same kind of device question, and the place-navigation device run
+   is what observes it (#273).
 3. **The anchor is a precondition, not a formality.** A stored distance was measured from the pose
    the dog stood at when the place was taught, and nothing at L0 can verify that pose. So the
    request must *say* the dog is at the anchor (`at_anchor: true`) and the place's anchor must be
@@ -104,7 +106,7 @@ def heading_error(target_deg: float, current_deg: float) -> float:
     mapper records a scan yaw with 0 = forward and positive = left (`mapping/mapper.py:175-181`), and
     `obstacle_avoidance._apply_mapping_bias` turns right on a positive yaw for the same reason
     (`navigation/obstacle_avoidance.py:633`). Which way a positive gyro yaw actually turns a PiDog is
-    a device question, and PL7 answers it.
+    a device question, and the place-navigation device run observes it (#273).
     """
     return (target_deg - current_deg + 180.0) % 360.0 - 180.0
 

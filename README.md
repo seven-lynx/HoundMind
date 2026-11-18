@@ -127,8 +127,9 @@ config) and open:
 - `http://<pi-ip>:8420/` — web app: telemetry, camera, hold-to-move d-pad, event feed. The panels,
   the keyboard shortcuts and the troubleshooting table are in
   [docs/WEBAPP_GUIDE.md](docs/WEBAPP_GUIDE.md)
-- `http://houndmind.local:8420/` — the same app by name, because the plane advertises itself over
-  mDNS (#38); `settings.api.discovery_name` changes the instance name
+- `http://<hostname>.local:8420/` — the same app by name, because the plane advertises itself over
+  mDNS (#38); the name is `<whatever the Pi is called>.local` (`raspberrypi.local` on a stock card),
+  and `settings.api.discovery_name` changes the instance name, not the host (#294)
 - `http://<pi-ip>:8420/api/v1/state` — JSON snapshot (token required)
 - `http://<pi-ip>:8420/api/v1/camera/stream` — MJPEG (token required)
 
