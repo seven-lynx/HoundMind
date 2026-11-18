@@ -186,6 +186,7 @@ honestly offer and names the reason when that is not the best one available. One
 |---|---|---|
 | `slam` | `slam_pose` — rtabmap, or a LAN/remote backend | the backend is absent or `stub`, the slam module has no heartbeat, the pose is older than `slam_max_age_s`, or its confidence is below `slam_min_confidence` |
 | `place` | odometry, re-anchored at a place `place_recognition` recognised from the camera | the fix is older than `place_max_age_s`, or there is no odometry pose to place it on |
+| `user` | odometry, re-anchored at the point a human dragged the dog to on the console map (`PUT /map/pose`) | the correction is older than `USER_FIX_MAX_AGE_S` (30 s), the dog has walked far enough from it for the drift confidence to fall past `confidence_floor`, or there is no odometry pose behind it |
 | `dead_reckoning` | `navigation/odometry.py`: heading × counted steps | no heading for the steps taken, or the drift confidence decays past `confidence_floor` |
 | `reactive` | nothing — sonar and head scan only | never; this is the floor |
 

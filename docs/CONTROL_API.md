@@ -158,6 +158,8 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/scan` | `state:read` | the last head sweep verbatim — `mode` plus `forward`/`right`/`left`, or `mode` plus `angles` `{yaw: cm}`; `{"scan": null}` before the first one (#169) |
 | `GET` | `/api/v1/map` | `state:read` | the occupancy grid as `[ix, iy, hits]` cells with `cell_size_cm`, `count` and `truncated`, plus `document`, the versioned home map (see below); `{"map": null}` when no cell has been filled (#175) |
 | `PUT` | `/api/v1/map` | `config` | replace the home-map document: body `{"document": {...}}`, judged by the same validator that loads the file; `meta.rev` must match or the answer is `409` with the current one (M1) |
+| `PUT` | `/api/v1/map/pose` | `move` | the dog's position on the map as a human just corrected it: body `{"x_cm", "y_cm", "heading_deg"?}` in the **document** frame; re-anchors odometry and writes `dog` into the file, bumping `meta.rev` (M5) |
+| `POST` | `/api/v1/map/go` | `move` | send the dog to a point: body `{"x_cm", "y_cm"}` in the document frame, handed to `route_follower` as `route_request`; `409 no_pose` with no pose to plan from, `409 conflict` while a route walks (M5) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
@@ -267,6 +269,27 @@ refused document is a `400` with `problems[]` (the shape `POST /places` already 
 document this route accepts is one the next start can read. Writes are atomic, and a scan snapshot
 every `home_map_save_interval_s` carries the user's sections and the `rev` forward, so the map's own
 log never erases an edit.
+
+`GET /map` also carries `pose` (M5): the live `localization` pose **already converted into the
+document's frame**, with `x_cm`/`y_cm` in the document's axes, `heading_deg`, the `tier` it came from and
+its `confidence`. It is `null` when the dog cannot place itself. The conversion belongs on the device
+because the console draws the document, and a runtime point drawn against it mirrors the dog (#347).
+
+`PUT /map/pose` is how a human moves the dog (M5). The body is a document point — `x_cm` left, `y_cm`
+forward, `heading_deg` optional — and the route does two things together: it sets `pose_reset`, which
+re-anchors `navigation/odometry.py` at that point, and it writes the `dog` section into the file, bumping
+`meta.rev`. A correction therefore survives a restart, and `localization.tier` reads `user` until the
+correction ages out (30 s) or the dog walks far enough from it. It requires `move`, not `config`: the
+token that may re-anchor the pose is the one that may drive. Nothing here moves a servo — a correction
+while walking simply re-anchors mid-walk.
+
+`POST /map/go` is click-to-walk: a document point, swapped once into the runtime frame and handed to
+`navigation/route_follower.py` as `route_request`, which plans the route on its next tick and publishes
+`route` with either waypoints or the refusal that ended it. A dog that cannot place itself on the map is
+refused **here** — `409 no_pose`, naming the tier — rather than accepting a goal that would be silently
+refused in `/state`. A route already in flight is `409 conflict`, because one destination at a time is
+what keeps the brake and the throttle one control.
+
 
 A value the config **file** would have rejected is refused too: the write is checked against the same
 section schema (`kernel/config_schema.py::validate_settings_section`), so a `400` carries

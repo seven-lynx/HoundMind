@@ -124,3 +124,53 @@ def test_odometry_reset_reanchors_the_pose() -> None:
     assert odometry["steps"] == 0
     assert odometry["x_cm"] == pytest.approx(0.0)
     assert odometry["travelled_cm"] == pytest.approx(0.0)
+
+
+def test_a_pose_reset_anchors_the_pose_at_the_point_and_is_applied_once() -> None:
+    """M5: the console says where the dog is - and one drag is not a permanent origin."""
+    context = _context()
+    context.set("current_heading", 0.0)
+    context.set("pose_reset", {"x_cm": 120.0, "y_cm": -40.0, "source": "user", "frame_ts": 7.0})
+    module = OdometryModule("odometry")
+
+    module.tick(context)
+    anchored = context.get("odometry")
+    assert anchored["x_cm"] == pytest.approx(120.0)
+    assert anchored["y_cm"] == pytest.approx(-40.0)
+    assert anchored["anchor"]["source"] == "user"
+    assert context.get("pose_reset") is None, "applied once, or every tick would re-anchor"
+
+    # The next step moves away from the anchor rather than snapping back to the origin.
+    odometry = _step(module, context, 1)
+    assert odometry["x_cm"] == pytest.approx(145.0)
+
+
+def test_an_origin_reset_drops_the_anchor_it_supersedes() -> None:
+    """A place fix re-anchors at the origin; the old correction no longer describes where the dog is."""
+    context = _context()
+    context.set("current_heading", 0.0)
+    context.set("pose_reset", {"x_cm": 50.0, "y_cm": 0.0, "source": "user", "frame_ts": 1.0})
+    module = OdometryModule("odometry")
+    module.tick(context)
+
+    context.set("odometry_reset", True)
+    module.tick(context)
+
+    odometry = context.get("odometry")
+    assert odometry["x_cm"] == pytest.approx(0.0)
+    assert odometry["anchor"] is None
+
+
+def test_a_pose_reset_without_a_usable_point_is_refused() -> None:
+    """A NaN would poison every later step, and `0, 0` looks like a position someone measured."""
+    context = _context()
+    context.set("pose_reset", {"x_cm": "left", "y_cm": None})
+    module = OdometryModule("odometry")
+
+    module.tick(context)
+
+    odometry = context.get("odometry")
+    assert odometry["anchor"] is None
+    assert odometry["x_cm"] == pytest.approx(0.0)
+    assert "pose_reset" in (odometry["reason"] or "")
+

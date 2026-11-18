@@ -255,3 +255,64 @@ def test_slam_still_wins_over_a_place_match() -> None:
 
     assert context.get("localization")["tier"] == str(LocalizationTier.SLAM)
 
+
+def _anchor(stamp: object = 1.0, x_cm: float = 10.0, y_cm: float = -5.0) -> dict:
+    return {"source": "user", "x_cm": x_cm, "y_cm": y_cm, "frame_ts": stamp}
+
+
+def test_a_position_the_user_confirmed_is_the_top_tier() -> None:
+    """M5: the console's correction has to reach the ladder, or the drag changed nothing."""
+    module, context, _ = _setup()
+    odometry = _odometry()
+    odometry["anchor"] = _anchor()
+    context.set("odometry", odometry)
+
+    module.tick(context)
+
+    localization = context.get("localization")
+    assert localization["tier"] == str(LocalizationTier.USER)
+    assert localization["pose"]["x"] == pytest.approx(10.0)
+    assert localization["frame"] == "odometry"
+    assert "confirmed" in (localization["reason"] or "")
+
+
+def test_a_fresh_correction_outranks_a_live_slam_pose() -> None:
+    """The correction is the one claim that says the map's frame is wrong - that is why M5 exists."""
+    module, context, _ = _setup()
+    odometry = _odometry()
+    odometry["anchor"] = _anchor()
+    context.set("odometry", odometry)
+    _slam(context)
+
+    module.tick(context)
+
+    assert context.get("localization")["tier"] == str(LocalizationTier.USER)
+
+
+def test_a_user_position_expires_like_any_other_anchor() -> None:
+    """Bounded in age, or a correction made once becomes a claim the dog never gives up."""
+    module, context, clock = _setup()
+    odometry = _odometry()
+    odometry["anchor"] = _anchor()
+    context.set("odometry", odometry)
+    module.tick(context)
+
+    clock.advance(31.0)
+    module.tick(context)
+
+    assert context.get("localization")["tier"] == str(LocalizationTier.DEAD_RECKONING)
+
+
+def test_a_correction_without_a_pose_behind_it_is_not_a_tier() -> None:
+    """A position with no heading is a point on a canvas, not a pose the dog can plan from."""
+    module, context, _ = _setup()
+    odometry = _odometry(valid=False, reason="no heading for this step")
+    odometry["anchor"] = _anchor()
+    context.set("odometry", odometry)
+
+    module.tick(context)
+
+    localization = context.get("localization")
+    assert localization["tier"] == str(LocalizationTier.REACTIVE)
+    assert localization["pose"] is None
+

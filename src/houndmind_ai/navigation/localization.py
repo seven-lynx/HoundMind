@@ -11,6 +11,11 @@ better. The ladder, best first:
   It outranks dead reckoning because a confirmed view match is an absolute fix: the dog knows which
   room it is in, and the odometry origin has just been moved to that place. It drops out when the fix
   goes stale, and it is never reported from one frame alone - `place_recognition` requires two.
+- ``user`` - odometry re-anchored at a point a human dragged the dog to on the console map (M5). It
+  sits above every measurement because it is the one source that can say *the map's frame is wrong*:
+  someone looking at the dog and the plan is disputing the sources above, and honouring that is the
+  whole point of the correction. It decays like any anchor - bounded in age, restarted by the next
+  absolute fix, and never reported without a pose behind it.
 - ``dead_reckoning`` - the pose from `odometry` (heading x counted steps). Drops out when there is
   no heading, no step it can place, or when its drift confidence decays past the floor.
 - ``reactive`` - no pose at all, sonar and head scan only. The floor; it cannot drop further.
@@ -26,7 +31,7 @@ all rather than promoted.
 
 Publishes `localization`::
 
-    {"ts": float, "tier": "slam" | "dead_reckoning" | "reactive",
+    {"ts": float, "tier": "slam" | "place" | "user" | "dead_reckoning" | "reactive",
      "frame": "slam" | "odometry" | None,
      "pose": {"x": float, "y": float, "yaw_deg": float} | None,
      "confidence": float, "age_s": float, "reason": str | None}
@@ -53,6 +58,11 @@ __all__ = ["LocalizationModule", "LocalizationTier"]
 #: treating it as the top tier would tell every consumer it is localized when it is not.
 NON_SLAM_BACKENDS = ("", "stub")
 
+#: How long a position a human confirmed keeps the top tier. Not a config key: it bounds a claim
+#: rather than tuning a feature, and an age nobody can lengthen is what stops a stale declaration
+#: from outliving the moment it was true. Thirty seconds is a slow walk across a room.
+USER_FIX_MAX_AGE_S = 30.0
+
 
 def _safe_float(val: Any, default: float) -> float:
     try:
@@ -66,6 +76,7 @@ def _safe_float(val: Any, default: float) -> float:
 class LocalizationTier(StrEnum):
     SLAM = "slam"
     PLACE = "place"
+    USER = "user"
     DEAD_RECKONING = "dead_reckoning"
     REACTIVE = "reactive"
 
@@ -82,6 +93,8 @@ class LocalizationModule(Module):
         self._slam_seen_at: float | None = None
         self._place_stamp: object | None = None
         self._place_seen_at: float | None = None
+        self._user_stamp: object | None = None
+        self._user_seen_at: float | None = None
         self._corrected_at = time.monotonic()
         self._corrected_travelled_cm = 0.0
         self._clock = time.monotonic
@@ -103,10 +116,28 @@ class LocalizationModule(Module):
         place_id, place_confidence, place_reason = self._read_place(
             context, now, place_max_age_s, odometry
         )
-        if slam_pose is not None:
-            tier = LocalizationTier.SLAM
-            frame: str | None = "slam"
+        user_anchor = self._read_user(odometry, now)
+        if (
+            user_anchor is not None
+            and self._drift_confidence(now, odometry, scale_m, horizon_s) < floor
+        ):
+            # The correction expired by the same measure that expires dead reckoning: it stops being
+            # a tier rather than becoming a stale claim stated with confidence.
+            user_anchor = None
+        if user_anchor is not None:
+            tier = LocalizationTier.USER
+            frame: str | None = "odometry"
             pose: dict | None = {
+                "x": _safe_float(odometry.get("x_cm"), 0.0),
+                "y": _safe_float(odometry.get("y_cm"), 0.0),
+                "yaw_deg": _safe_float(odometry.get("yaw_deg"), 0.0),
+            }
+            confidence = self._drift_confidence(now, odometry, scale_m, horizon_s)
+            reason = f"position confirmed on the map ({user_anchor.get('source') or 'user'})"
+        elif slam_pose is not None:
+            tier = LocalizationTier.SLAM
+            frame = "slam"
+            pose = {
                 "x": _safe_float(slam_pose.get("x"), 0.0),
                 "y": _safe_float(slam_pose.get("y"), 0.0),
                 "yaw_deg": _safe_float(slam_pose.get("yaw"), 0.0),
@@ -202,6 +233,35 @@ class LocalizationModule(Module):
             None,
         )
 
+
+    def _read_user(self, odometry: dict, now: float) -> dict | None:
+        """The point a human confirmed on the map, while it is fresh and has a pose behind it (M5).
+
+        Freshness is an identity comparison on `frame_ts`, the rule `_read_place` already uses and for
+        the same reason: the anchor carries a wall-clock stamp while this loop runs on a monotonic
+        one, so subtracting the two would make a fresh correction read as ancient.
+
+        A new correction restarts the drift clock here, once. Restarting it on every tick that reads
+        the anchor would hold the confidence at 1.0 forever, which is how a correction turns into a
+        claim the dog never has to give up.
+        """
+        anchor = odometry.get("anchor")
+        if not isinstance(anchor, dict):
+            return None
+        if not bool(odometry.get("pose_valid")):
+            # A correction with no heading behind it is a position without a pose, and this module
+            # does not report one - the same refusal a place fix with no odometry behind it gets.
+            return None
+        stamp = anchor.get("frame_ts")
+        if stamp != self._user_stamp:
+            self._user_stamp = stamp
+            self._user_seen_at = now
+            self._corrected_at = now
+            self._corrected_travelled_cm = _safe_float(odometry.get("travelled_cm"), 0.0)
+        seen_at = self._user_seen_at if self._user_seen_at is not None else now
+        if max(0.0, now - seen_at) > USER_FIX_MAX_AGE_S:
+            return None
+        return anchor
 
     def _read_slam(
         self, context, now: float, max_age_s: float, min_confidence: float

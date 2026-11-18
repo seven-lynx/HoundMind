@@ -856,6 +856,8 @@ def test_the_map_route_reports_nothing_until_a_cell_is_filled(tmp_path) -> None:
             "map": None,
             "grid_enabled": True,
             "document": None,
+            # The live pose beside the document is `None` here too (M5): no pose is an answer.
+            "pose": None,
             # The measured step table rides beside the document (M4), `{}` until someone calibrates.
             "surface_step_cm": {},
         }
@@ -863,6 +865,7 @@ def test_the_map_route_reports_nothing_until_a_cell_is_filled(tmp_path) -> None:
             "map": None,
             "grid_enabled": False,
             "document": None,
+            "pose": None,
             "surface_step_cm": {},
         }
 

@@ -49,8 +49,10 @@ from houndmind_ai.kernel.place import slug
 from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.kernel.routine_store import RoutineConflict, RoutineStore, StoreReport
 from houndmind_ai.mapping.home_map import (
+    document_point_to_runtime,
     load_home_map,
     map_path,
+    runtime_point_to_document,
     validate_document,
     write_document,
 )
@@ -587,6 +589,54 @@ def _map_document(context) -> dict[str, Any] | None:
     return document if isinstance(document, dict) else None
 
 
+def _pose_in_document(context) -> dict[str, Any] | None:
+    """The live pose, in the document's frame, swapped once here (M5).
+
+    The console draws the document, so handing it a runtime point would mirror the dog - the defect
+    `home_map.document_point_to_runtime` exists to prevent (#347). The swap belongs on this side
+    because the panel keeps no second copy of it. `heading_deg` passes through unchanged: the
+    runtime's yaw is already "0 is forward, positive is left", and the canvas maps forward to up and
+    left to left, which is the same rotation.
+    """
+    localization = context.get("localization")
+    if not isinstance(localization, dict):
+        return None
+    pose = localization.get("pose")
+    if not isinstance(pose, dict):
+        return None
+    forward_cm = _number(pose.get("x"))
+    left_cm = _number(pose.get("y"))
+    if forward_cm is None or left_cm is None:
+        return None
+    doc_x, doc_y = runtime_point_to_document((forward_cm, left_cm))
+    yaw = _number(pose.get("yaw_deg"))
+    return {
+        "x_cm": round(doc_x, 3),
+        "y_cm": round(doc_y, 3),
+        "heading_deg": round(yaw if yaw is not None else 0.0, 3),
+        "tier": str(localization.get("tier") or ""),
+        "confidence": _number(localization.get("confidence")),
+    }
+
+
+def _file_document(plane: ControlPlane, path: Path) -> dict[str, Any] | None:
+    """The document a write should extend: the file's, else the published one, in file shape.
+
+    The file wins because it is what a restart reads - `home_map_load_path` ships empty, so a
+    context-only copy is only whatever this process has seen. `None` means there is no map at all,
+    and a correction with nowhere to live must not invent an empty document behind the mapper's
+    back: the next scan save would then be writing over a map the user never made.
+    """
+    stored = load_home_map(path).map
+    if stored is not None:
+        return stored.to_file_document()
+    published = _map_document(plane.context)
+    if published is None:
+        return None
+    known = validate_document(published)
+    return known.map.to_file_document() if known.map is not None else None
+
+
 async def _map(request: web.Request) -> web.Response:
     """The occupancy grid the mapper built, bounded (#175), and the home-map document (M1).
 
@@ -628,6 +678,7 @@ async def _map(request: web.Request) -> web.Response:
                 "map": None,
                 "grid_enabled": grid_enabled,
                 "document": document,
+                "pose": _pose_in_document(plane.context),
                 "surface_step_cm": surface_step_cm,
             },
             headers={"Cache-Control": "no-store"},
@@ -659,6 +710,7 @@ async def _map(request: web.Request) -> web.Response:
             },
             "grid_enabled": grid_enabled,
             "document": document,
+            "pose": _pose_in_document(plane.context),
             "surface_step_cm": surface_step_cm,
         },
         headers={"Cache-Control": "no-store"},
@@ -761,6 +813,126 @@ async def _map_save(request: web.Request) -> web.Response:
         {"rev": wire["meta"].get("rev"), "document": wire},
         headers={"Cache-Control": "no-store"},
     )
+
+
+async def _map_pose(request: web.Request) -> web.Response:
+    """Move the dog on the map, and make the move stick (M5).
+
+    Two writes with different lifetimes, made together so they cannot disagree. The **pose** is
+    immediate: `pose_reset` re-anchors `navigation/odometry.py` at that point in `odometry`'s own
+    frame, which is what the next plan measures from. The **document** is durable: the `dog` section
+    lands in the file, `rev` moves because the file changed, and a restart still knows where the dog
+    was left.
+
+    The body is in the **document's** frame (`x` left, `y` forward) like every other point the
+    console sends, and is swapped exactly once, here (#347). Nothing here drives the dog: this is
+    about where the runtime believes it is, and a correction while walking simply re-anchors mid-walk.
+    """
+    plane = _plane(request)
+    body = await _json_body(request)
+    doc_x = _number(body.get("x_cm"))
+    doc_y = _number(body.get("y_cm"))
+    if doc_x is None or doc_y is None:
+        return web.json_response(
+            {"error": "bad_request", "detail": "x_cm and y_cm must be numbers"}, status=400
+        )
+    heading = _number(body.get("heading_deg"))
+
+    forward_cm, left_cm = document_point_to_runtime((doc_x, doc_y))
+    frame_ts = plane.now()
+    plane.context.set(
+        "pose_reset",
+        {"x_cm": forward_cm, "y_cm": left_cm, "source": "user", "frame_ts": frame_ts},
+    )
+
+    dog: dict[str, Any] = {
+        "x_cm": round(doc_x, 3),
+        "y_cm": round(doc_y, 3),
+        "source": "user",
+        "ts": time.time(),
+    }
+    if heading is not None:
+        dog["heading_deg"] = round(heading, 3)
+
+    settings = (plane.context.get("settings") or {}).get("mapping", {})
+    settings = settings if isinstance(settings, dict) else {}
+    path = map_path(settings.get("home_map_path", "data/home_map.json"), "data/home_map.json")
+    rev: int | None = None
+    document = _file_document(plane, path)
+    if document is not None:
+        meta = document.get("meta")
+        meta = meta if isinstance(meta, dict) else {}
+        document["meta"] = meta
+        meta["rev"] = int(_number(meta.get("rev")) or 0) + 1
+        meta["updated_at"] = time.time()
+        meta["source"] = "user"
+        document["dog"] = dog
+        try:
+            write_document(path, document)
+        except OSError as exc:
+            logger.warning("Dog position not written to %s: %s", path, exc)
+        else:
+            verified = validate_document(document)
+            wire = verified.map.to_document() if verified.map is not None else None
+            if wire is not None:
+                plane.context.set("home_map", wire)
+                rev = wire["meta"].get("rev")
+
+    return web.json_response(
+        {"accepted": True, "rev": rev, "dog": dog, "frame_ts": frame_ts},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def _map_go(request: web.Request) -> web.Response:
+    """Send the dog to a point on the map: the console's click, handed to `route_follower` (M5).
+
+    One write and no motion. `navigation/route_follower.py::_accept_request` plans the route itself on
+    the next tick and publishes `route` with either waypoints or the refusal that ended it - the
+    existing hand-off, so this adds no second planner and no second clearance rule.
+
+    A goal in map coordinates means nothing to a dog that cannot place itself on the map, so the
+    answer is `409` and *why*: the refusal the follower would publish, said before the client starts
+    watching for a walk that will not happen. A route already in flight is `409` too - one
+    destination at a time is what keeps the brake and the throttle one control.
+    """
+    plane = _plane(request)
+    body = await _json_body(request)
+    doc_x = _number(body.get("x_cm"))
+    doc_y = _number(body.get("y_cm"))
+    if doc_x is None or doc_y is None:
+        return web.json_response(
+            {"error": "bad_request", "detail": "x_cm and y_cm must be numbers"}, status=400
+        )
+
+    raw = plane.context.get("localization")
+    localization = raw if isinstance(raw, dict) else {}
+    tier = str(localization.get("tier") or "")
+    if tier in ("", "reactive") or not isinstance(localization.get("pose"), dict):
+        return web.json_response(
+            {
+                "error": "no_pose",
+                "tier": tier or None,
+                "detail": (
+                    "localization is reactive: there is no pose to plan from"
+                    if tier == "reactive"
+                    else "the dog cannot place itself on the map yet; correct its position first"
+                ),
+            },
+            status=409,
+        )
+
+    route = plane.context.get("route")
+    if isinstance(route, dict) and route.get("state") in ("publish", "walking"):
+        return web.json_response(
+            {"error": "conflict", "detail": "a route is already being walked", "current": route},
+            status=409,
+        )
+
+    forward_cm, left_cm = document_point_to_runtime((doc_x, doc_y))
+    goal = {"x_cm": round(forward_cm, 3), "y_cm": round(left_cm, 3)}
+    plane.context.set("route_request", {"goal_cm": goal})
+    return web.json_response({"accepted": True, "goal_cm": goal, "tier": tier}, status=202)
 
 
 async def _modules(request: web.Request) -> web.Response:
@@ -2044,6 +2216,8 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/scan", "state:read", _scan),
     ("GET", "/map", "state:read", _map),
     ("PUT", "/map", "config", _map_save),
+    ("PUT", "/map/pose", "move", _map_pose),
+    ("POST", "/map/go", "move", _map_go),
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/routines", "state:read", _routines_list),

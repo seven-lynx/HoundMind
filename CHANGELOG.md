@@ -10,6 +10,16 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The dog can be put where it is, and sent where you clicked — position and go (M5)** — the console
+  could edit the house and could not say where the dog was in it. `Pose` drags the dog to its real place
+  and **Confirm position** sends it with `PUT /map/pose`: odometry re-anchors at that point, the
+  position is written into the map file so a restart still knows it, and `localization` reports a new
+  `user` tier with a `reason` while the correction is fresh. `Go` clicks a point and hands it to
+  `route_follower` as a route request; a dog that cannot place itself on the map is refused with
+  `no_pose` **and the reason**, instead of accepting a goal that would be silently refused later.
+  `GET /map` now publishes the live pose already converted into the document's frame, which is the one
+  place the frame swap lives (#347) — the panel still draws nose-up and cannot mirror the dog. Both
+  routes need `move`, not `config`: the token that may re-anchor the pose is the token that may drive.
 - **The home map is editable: walls and doorways, drawn in the console** — `PUT /map` shipped in M1
   with no editor, and the panel could only look (#309). The Map panel now has four modes: `View` pans,
   `Wall` drags a wall between two points, `Doorway` cuts an opening through a wall you click, and

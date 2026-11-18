@@ -5,9 +5,10 @@
 // reading a plan expects, so this panel draws nose-up with no conversion: screen x = centre - x * scale
 // (left is left), screen y = centre - y * scale (forward is up). The runtime speaks
 // `(forward_cm, left_cm)` — the pose, the planner and the grid cells all do — so when this panel plots
-// `localization.pose` it swaps once, through `document_point_to_runtime` on the server side (#347).
-// Until M5 does that, the dog here comes from `document.dog` alone: drawing a runtime pose against this
-// frame without the swap mirrors the dog, which is exactly the bug the swap exists to prevent.
+// `localization.pose` it swaps once, through `runtime_point_to_document` on the server side (#347).
+// That swap is why the dog here comes from `GET /map`'s `pose` (M5), not from `/state`: the panel
+// keeps no second copy of the frame rule, and `document.dog` is only the fallback - the position last
+// confirmed, not a pose.
 //
 // Four layers, each toggleable, because they answer different questions: cells are *evidence* (what
 // the sonar hit), walls and openings are *claims* (drawn by a person or lifted from the scan), rooms
@@ -41,7 +42,7 @@ const ROOM_COLOURS = [
   "rgba(210, 150, 200, 0.30)",
   "rgba(180, 180, 230, 0.30)",
 ];
-const MODES = ["view", "wall", "opening", "delete", "room", "surface"];
+const MODES = ["view", "wall", "opening", "delete", "room", "surface", "pose", "go"];
 
 function pointInPolygon(point, polygon) {
   // Ray casting: a click inside a lasso selects that room, and a boundary hit counts as inside.
@@ -156,6 +157,8 @@ export const map = {
           <div class="row">
             <span class="chip" id="mp-count">no map</span>
             <span class="chip" id="mp-rev">rev -</span>
+            <span class="chip" id="mp-pose-tier">pose: -</span>
+            <span class="chip" id="mp-route"></span>
           </div>
         </div>
         <div class="row" style="margin:.5rem 0;flex-wrap:wrap">
@@ -176,6 +179,10 @@ export const map = {
           <button id="mp-mode-delete" class="tiny">Delete</button>
           <button id="mp-mode-room" class="tiny">Room</button>
           <button id="mp-mode-surface" class="tiny">Surface</button>
+          <button id="mp-mode-pose" class="tiny">Pose</button>
+          <button id="mp-mode-go" class="tiny">Go</button>
+          <button id="mp-pose-confirm" class="tiny" disabled>Confirm position</button>
+          <button id="mp-pose-cancel" class="tiny" disabled>Cancel</button>
           <input id="mp-room-name" class="tiny" placeholder="room name" style="width:7.5rem">
           <select id="mp-surface" class="tiny">
             <option value="hardwood">hardwood</option>
@@ -206,6 +213,10 @@ export const map = {
     const note = root.querySelector("#mp-note");
     const legend = root.querySelector("#mp-legend");
     const error = root.querySelector("#mp-error");
+    const poseChip = root.querySelector("#mp-pose-tier");
+    const routeChip = root.querySelector("#mp-route");
+    const confirmButton = root.querySelector("#mp-pose-confirm");
+    const cancelButton = root.querySelector("#mp-pose-cancel");
 
     let view = loadView();
     let document_ = null;
@@ -221,6 +232,11 @@ export const map = {
     let cursorPoint = null;
     let selected = null;
     let measured = {};
+    // M5: the live pose exactly as `GET /map` publishes it - already in the document's frame - and the
+    // ghost the user dragged. The ghost is separate on purpose: a finger on a canvas is not a
+    // measurement, and a drop that was not confirmed must not move the origin the map is built on.
+    let livePose = null;
+    let ghost = null;
     const dirty = root.querySelector("#mp-dirty");
     const widthInput = root.querySelector("#mp-opening-width");
 
@@ -265,11 +281,15 @@ export const map = {
       draft = null;
       lasso = null;
       cursorPoint = null;
+      // Leaving Pose drops an unconfirmed ghost: it is a proposal, and a proposal that survived a
+      // mode change would be confirmed later by a click the user meant for something else.
+      if (next !== "pose") ghost = null;
       for (const name of MODES) {
         const button = root.querySelector(`#mp-mode-${name}`);
         if (button) button.classList.toggle("active", name === next);
       }
       canvas.style.cursor = next === "view" ? "grab" : "crosshair";
+      refreshPoseButtons();
       render();
     }
 
@@ -287,6 +307,13 @@ export const map = {
       const room = selected && selected.kind === "room" ? selected.item : null;
       keepOutButton.disabled = !room;
       keepOutButton.textContent = `keep-out: ${room ? (room.keep_out ? "on" : "off") : "-"}`;
+    }
+
+    function refreshPoseButtons() {
+      // Confirm only means something with a ghost on the map, and only in Pose: anywhere else the
+      // button would be a second way to do something the mode does not offer.
+      confirmButton.disabled = !(mode === "pose" && ghost);
+      cancelButton.disabled = !ghost;
     }
 
     function toggleKeepOut() {
@@ -555,6 +582,56 @@ export const map = {
     }
 
 
+    async function goTo(point) {
+      error.textContent = "";
+      try {
+        await api("/map/go", {
+          method: "POST",
+          body: JSON.stringify({ x_cm: point[0], y_cm: point[1] }),
+        });
+        note.textContent = "route requested: the dog plans it on the next tick";
+      } catch (err) {
+        const payload = err.payload || {};
+        // The 409 bodies carry the reason a client would otherwise have to infer from nothing
+        // happening: `no_pose` means "correct the position first", not "try again".
+        error.textContent = payload.detail
+          ? `${payload.error || "refused"}: ${payload.detail}`
+          : errorText(err);
+      }
+    }
+
+    async function confirmPose() {
+      if (!ghost || !document_) return;
+      error.textContent = "";
+      // Only a heading the dog actually reported is sent. With no pose there is no compass reading,
+      // and writing 0 would claim the dog faces forward on the strength of a drag.
+      const heading = livePose === null ? null : Number(livePose.heading_deg);
+      const body = { x_cm: ghost.x, y_cm: ghost.y };
+      if (heading !== null && Number.isFinite(heading)) body.heading_deg = heading;
+      try {
+        const answer = await api("/map/pose", { method: "PUT", body: JSON.stringify(body) });
+        // Adopt `dog` and `rev` only. The rest of this tree may hold unsaved edits, and replacing it
+        // with the server's copy is exactly the edit-losing refresh `load()` refuses to be.
+        if (answer && answer.dog) {
+          document_.dog = answer.dog;
+          const stored = Number(answer.dog.heading_deg);
+          livePose = {
+            x_cm: answer.dog.x_cm,
+            y_cm: answer.dog.y_cm,
+            // Local marker only: the next `GET /map` replaces this with the device's own pose.
+            heading_deg: Number.isFinite(stored) ? stored : 0,
+            tier: "user",
+          };
+        }
+        if (answer && answer.rev != null && document_.meta) document_.meta.rev = answer.rev;
+        ghost = null;
+        modeTo("view");
+      } catch (err) {
+        error.textContent = errorText(err);
+      }
+    }
+
+
     const toScreen = (x, y) => [canvas.width / 2 - x * view.scale, canvas.height / 2 - y * view.scale];
 
     function fit(document) {
@@ -708,7 +785,10 @@ export const map = {
 
 
     function drawDog(ctx) {
-      const dog = document_.dog;
+      // The live pose first: it is the runtime's answer, already swapped into this frame by
+      // `GET /map`. `document.dog` is the fallback and answers a different question - where the dog
+      // was last *confirmed* - so it is drawn only when there is no pose to draw.
+      const dog = livePose || document_.dog;
       if (!dog) return;
       const [sx, sy] = screen(Number(dog.x_cm) || 0, Number(dog.y_cm) || 0);
       // Screen y is up-negative, so a forward heading of 0 points up rather than down.
@@ -724,6 +804,26 @@ export const map = {
       ctx.lineTo(-6, 7);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
+    }
+
+    function drawGhost(ctx) {
+      // What the user is about to claim, drawn as a claim: an open ring, not a dog. Confirm turns it
+      // into the dog; nothing else does.
+      if (!ghost) return;
+      const [sx, sy] = screen(ghost.x, ghost.y);
+      ctx.save();
+      ctx.strokeStyle = "#f0c060";
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = "10px ui-monospace, monospace";
+      ctx.fillStyle = "#f0c060";
+      ctx.textAlign = "center";
+      ctx.fillText("confirm?", sx, sy - 13);
       ctx.restore();
     }
 
@@ -835,6 +935,7 @@ export const map = {
       drawLasso(ctx);
       drawSelection(ctx);
       drawDog(ctx);
+      drawGhost(ctx);
       drawScale(ctx);
     }
 
@@ -875,6 +976,9 @@ export const map = {
           payload && payload.surface_step_cm && typeof payload.surface_step_cm === "object"
             ? payload.surface_step_cm
             : {};
+        // M5: the runtime's pose, swapped into this frame by the route, or null when the dog cannot
+        // place itself - in which case the last confirmed `document.dog` is still worth drawing.
+        livePose = payload && payload.pose ? payload.pose : null;
         history = [];
         draft = null;
         lasso = null;
@@ -925,6 +1029,12 @@ export const map = {
     root.querySelector("#mp-save").addEventListener("click", save);
     root.querySelector("#mp-reload").addEventListener("click", () => load());
     root.querySelector("#mp-keepout").addEventListener("click", toggleKeepOut);
+    confirmButton.addEventListener("click", confirmPose);
+    cancelButton.addEventListener("click", () => {
+      ghost = null;
+      refreshPoseButtons();
+      render();
+    });
     surfacePick.addEventListener("change", refreshSurface);
 
     for (const name of LAYERS) {
@@ -941,9 +1051,24 @@ export const map = {
     // because a canvas that switches behaviour by mode is easier to trust than three overlapping
     // listeners that all have to guess which one the user meant.
     let dragging = null;
+    let dogDragging = false;
     canvas.addEventListener("pointerdown", (event) => {
       if (!document_) return;
       const point = docPoint(event);
+      if (mode === "pose") {
+        // Dragging *proposes* a position. Confirm is a separate act (`confirmPose`), because a finger
+        // on a canvas is not a measurement and a mis-drop must not move the map's origin.
+        ghost = { x: point[0], y: point[1] };
+        dogDragging = true;
+        canvas.setPointerCapture(event.pointerId);
+        refreshPoseButtons();
+        render();
+        return;
+      }
+      if (mode === "go") {
+        goTo(point);
+        return;
+      }
       if (mode === "wall") {
         const start = snapped(point, null, false);
         draft = { a: start, b: start };
@@ -969,6 +1094,12 @@ export const map = {
 
     canvas.addEventListener("pointermove", (event) => {
       if (!document_) return;
+      if (mode === "pose" && dogDragging && ghost) {
+        const point = docPoint(event);
+        ghost = { x: point[0], y: point[1] };
+        render();
+        return;
+      }
       if (mode === "wall" && draft) {
         draft = { a: draft.a, b: snapped(docPoint(event), draft.a, event.shiftKey) };
         render();
@@ -992,6 +1123,7 @@ export const map = {
     });
 
     const endDrag = (event) => {
+      dogDragging = false;
       if (mode === "wall" && draft) {
         const start = draft.a;
         const end = draft.b || start;
@@ -1034,8 +1166,23 @@ export const map = {
     }, 4000);
 
     return {
-      update() {
-        /* the map changes at scan rate; the timer is enough */
+      update(store) {
+        // Text only. The dog marker needs a pose in *this* frame, and the swap is the server's job
+        // (#347), so the geometry arrives on the 4 s `GET /map` and not on every state frame - the
+        // alternative was a second copy of the frame rule living in JavaScript.
+        const tier = store && store.localization ? String(store.localization.tier || "") : "";
+        poseChip.textContent = `pose: ${tier || "-"}`;
+        const route = store && store.route;
+        if (route && route.state === "refused") {
+          routeChip.textContent = `route refused: ${route.refusal || "no_path"}`;
+          routeChip.title = String(route.detail || "");
+        } else if (route && route.state === "walking") {
+          routeChip.textContent = `walking ${route.index}/${route.total}`;
+          routeChip.title = "";
+        } else if (routeChip.textContent) {
+          routeChip.textContent = "";
+          routeChip.title = "";
+        }
       },
       destroy() {
         clearInterval(timer);
