@@ -838,7 +838,16 @@
       "safe_path_cell_conf_min": 0.5,
       // Safe path scoring weights.
       "safe_path_score_weight_width": 0.6,
-      "safe_path_score_weight_distance": 0.4
+      "safe_path_score_weight_distance": 0.4,
+      // Routing across the grid (mapping/planner.py, #305). The grid holds *hits*, never free space,
+      // so a cell becomes an obstacle at this count: one echo is noise, two in the same cell is a
+      // thing. Below it the cell is "not known to be blocked", which is not the same as clear.
+      "occupied_hits": 2,
+      // How many cells of room a waypoint would like, and what the planner pays for entering a
+      // tighter one. This is a preference, never a ban: a doorway is narrow by definition, and a
+      // planner that refuses narrow cells cannot leave a room.
+      "clearance_cells": 2,
+      "clearance_weight": 2.0
     },
     // =====================================================================
     // BEHAVIOR

@@ -316,6 +316,35 @@ When a map loads, `MappingModule.start` publishes `home_map` (the document) and 
 grid this process is already building wins, because merging would double every hit the two share.
 `python -m tools.map_inspect <file>` prints what a file contains, without a runtime.
 
+### Routing across the map
+
+`mapping/planner.py::plan_route(cells, start_cm, goal_cm, settings)` turns the grid into a route: a
+list of `{x_cm, y_cm, clearance_cm}` waypoints, or a refusal that names itself — `start_unknown`
+(the pose is off the map or inside an obstacle), `goal_blocked` (the goal is), `no_path` (a free
+route does not exist). It is a pure function: no context, no HAL, no mapper instance, so a synthetic
+grid is the whole test.
+
+Two things about it are worth knowing before trusting a route:
+
+- **A cell below `occupied_hits` is "not known to be blocked", not "clear".** The grid counts hits
+  and never records free space, so a route over unscanned ground is a hypothesis the reactive
+  navigator still has to survive. That is why every waypoint carries `clearance_cm` — the distance to
+  the nearest occupied cell, less half a cell, or `null` when the map holds nothing to measure
+  against.
+- **Cell keys are `"ix,iy"` with `ix` counting left and `iy` forward**, so `x_cm = iy * cell` and
+  `y_cm = ix * cell` (`mapping/mapper.py::cell_centre_cm`). The transpose is inverted in exactly one
+  place in the planner and pinned by a test, because a swapped route is a valid-looking walk into the
+  wrong room.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.mapping.occupied_hits` | `2` | Hits that make a cell an obstacle. One echo is noise. |
+| `settings.mapping.clearance_cells` | `2` | The room a waypoint would like, in cells. |
+| `settings.mapping.clearance_weight` | `2.0` | What A* pays for entering a tighter cell. A preference, never a ban: a doorway is narrow by definition. |
+
+Routing is not wired to motion yet: the route consumer and its hand-off are #306, and the walk on the
+dog is #304.
+
 ### Distance queries
 
 `mapping/mapper.py` exposes three pure helpers over the same robot-centric grid `tick` already
