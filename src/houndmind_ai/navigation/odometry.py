@@ -39,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "LINEAR_ACTIONS",
+    "AUDIT_MAX_CM",
+    "AUDIT_MIN_CHANGE_CM",
+    "AUDIT_TIMEOUT_S",
     "DEFAULT_STEP_CM",
     "OdometryModule",
     "StepScale",
@@ -99,6 +102,17 @@ def resolve_step_cm(settings: Mapping[str, Any]) -> StepScale:
 
 
 
+#: The audit only believes a reading this close: beyond it the sonar's own error is larger than a
+#: gait cycle, so a "measurement" would be noise with a decimal point (#300).
+AUDIT_MAX_CM = 250.0
+#: A step is audited against the next reading that differs by at least this much; anything smaller is
+#: the same echo, and the reading has not caught up with the step yet.
+AUDIT_MIN_CHANGE_CM = 0.5
+#: How long a pending step waits for that reading before it is dropped. Three seconds covers a gait
+#: cycle plus a sensor tick; past that the distance is no longer evidence about *this* step.
+AUDIT_TIMEOUT_S = 3.0
+
+
 def _safe_float(val: Any, default: float) -> float:
     try:
         if val is None:
@@ -106,6 +120,22 @@ def _safe_float(val: Any, default: float) -> float:
         return float(val)
     except (TypeError, ValueError):
         return default
+
+
+def _distance(context) -> tuple[float | None, bool]:
+    """The sonar reading and its validity flag, from the `SensorReading` the sensor module sets.
+
+    Validity is checked before the value, always: a failed read that happens to remember the last
+    number is not evidence, and the audit exists to compare a predicted step with a real one.
+    """
+    reading = context.get("sensor_reading")
+    if reading is None:
+        return None, False
+    distance = getattr(reading, "distance_cm", None)
+    valid = bool(getattr(reading, "distance_valid", False))
+    if distance is None:
+        return None, False
+    return _safe_float(distance, -1.0), valid
 
 
 def _safe_int(val: Any, default: int) -> int:
@@ -135,6 +165,10 @@ class OdometryModule(Module):
         self._x_cm = 0.0
         self._y_cm = 0.0
         self._reason: str | None = None
+        # The range-aided audit (#300): the step being watched, and the last record it produced.
+        self._audit_pending: dict[str, Any] | None = None
+        self._audit: dict[str, Any] | None = None
+        self._clock = time.time
 
     def reset(self) -> None:
         """Re-anchor the pose at the origin, keeping the counters' meaning for the next window."""
@@ -148,25 +182,31 @@ class OdometryModule(Module):
     def tick(self, context) -> None:
         settings = (context.get("settings") or {}).get("odometry", {}) or {}
         scale = resolve_step_cm(settings)
-        step_cm = scale.cm
         track_backward = bool(settings.get("track_backward", True))
 
         if context.get("odometry_reset"):
             self.reset()
 
+        # Close the previous step's audit before consuming this one, so a reading that arrived
+        # between ticks is credited to the step it belongs to.
+        self._close_audit(context)
+
         command = context.get("motion_command")
         if isinstance(command, dict):
-            self._consume(command, context, step_cm, track_backward)
+            self._consume(command, context, scale, track_backward)
 
         self._publish(context, scale)
 
-    def _consume(self, command: dict, context, step_cm: float, track_backward: bool) -> None:
+    def _consume(
+        self, command: dict, context, scale: StepScale, track_backward: bool
+    ) -> None:
         """Count one step per *issued* command.
 
         `act/gateway.py` re-keeps a repeated intent without republishing it, so the published
         `motion_command` only changes when the gateway really issued something. `seq` makes that
         explicit: a command without one cannot be counted without guessing, so it is not.
         """
+        step_cm = scale.cm
         seq = _safe_int(command.get("seq"), -1)
         if seq < 0:
             self._reason = "motion_command carries no seq"
@@ -185,6 +225,10 @@ class OdometryModule(Module):
         self._steps += 1
         self._distance_cm += signed * step_cm
         self._travelled_cm += abs(step_cm)
+        # Only a forward step closes on a wall, and only that gives the sonar a distance to compare
+        # against. The audit is opened before the heading check: the step happened either way.
+        if signed > 0:
+            self._open_audit(context, scale, step_cm)
 
         heading = context.get("current_heading")
         if heading is None:
@@ -212,5 +256,53 @@ class OdometryModule(Module):
                 "reason": self._reason,
                 # Which constant built those numbers, and whether anyone measured it (L3.2).
                 **scale.to_dict(),
+                # The last ranged comparison, or None until a step closed on a wall (#300). It is
+                # logged, never applied: the constant changes only through `step_calibrate --apply`.
+                "audit": self._audit,
             },
         )
+
+    def _open_audit(self, context, scale: StepScale, predicted_cm: float) -> None:
+        """Watch this step against the next distance reading, if one can testify to it."""
+        distance, valid = _distance(context)
+        if not valid or distance is None or not 0.0 < distance <= AUDIT_MAX_CM:
+            self._audit_pending = None
+            return
+        self._audit_pending = {
+            "predicted_cm": abs(predicted_cm),
+            "before_cm": float(distance),
+            "surface": scale.surface,
+            "step_cm_source": scale.source,
+            "deadline": self._clock() + AUDIT_TIMEOUT_S,
+        }
+
+    def _close_audit(self, context) -> None:
+        """Turn a pending step into a record once a new reading exists, or drop it with a reason.
+
+        Nothing here changes a constant. The record is evidence a human (or `--apply`) reads, and a
+        step whose reading never moved is dropped rather than recorded as zero travel: a blocked
+        gait and a missed echo are not measurements of a stride.
+        """
+        pending = self._audit_pending
+        if pending is None:
+            return
+        distance, valid = _distance(context)
+        if self._clock() > pending["deadline"]:
+            self._audit_pending = None
+            return
+        if not valid or distance is None or not 0.0 < distance <= AUDIT_MAX_CM:
+            self._audit_pending = None
+            return
+        travelled = pending["before_cm"] - float(distance)
+        if travelled < AUDIT_MIN_CHANGE_CM:
+            return  # the reading has not caught up (or the step was refused); keep waiting
+        self._audit_pending = None
+        predicted = pending["predicted_cm"]
+        self._audit = {
+            "ts": time.time(),
+            "surface": pending["surface"],
+            "step_cm_source": pending["step_cm_source"],
+            "predicted_cm": round(predicted, 2),
+            "actual_cm": round(travelled, 2),
+            "ratio": round(travelled / predicted, 3) if predicted > 0 else None,
+        }

@@ -249,6 +249,21 @@ pose carries `step_cm_source` — `"assumed"` or `"measured:<surface>"` — so a
 measured constant from a guess, and a place anchor taught under one is not silently re-scaled by the
 other.
 
+`--apply` is the clamped second step (#300). It takes the run's cycles, refuses fewer than five, refuses
+cycles more than 10 % apart, and then never moves the constant by more than **20 %** in one go — so a
+single bad run cannot rescale every place anchor in the file at once. It prints the value and the exact
+`surface_step_cm` line; it still does not edit your config, because the config is comment-rich user
+data and a tool that rewrites it takes the comments with it.
+
+**The dog audits its own stride while it walks.** `navigation/odometry.py` compares every forward step
+with the sonar when the reading is valid and within 250 cm: the distance the wall loses is the distance
+the dog gained. The comparison is published as `odometry.audit` (`predicted_cm`, `actual_cm`, `ratio`,
+`surface`) and lands in the event log as `odometry_audit`, so a walk in the front room produces evidence
+about the constant without a calibration run. **Nothing is applied automatically** — the audit is a
+record, and `--apply` is the only path from evidence to a constant. A step whose reading never moved,
+never arrived, or arrived past 3 s is dropped rather than recorded as zero travel: a blocked gait is not
+a measurement of a stride.
+
 | Key | Default | Meaning |
 |---|---|---|
 | `settings.odometry.step_cm` | `25.0` | Centimetres per issued linear command — the assumed value, used when the surface has no measured entry |

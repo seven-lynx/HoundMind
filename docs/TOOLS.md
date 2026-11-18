@@ -533,6 +533,7 @@ python -m tools.step_calibrate --confirm-clearance --measure head-zero
 | `--speed` | Servo speed; the interlock may lower it, and the lowered value is what runs |
 | `--min-volts` | Refuse to walk below this pack voltage (default 7.9 V). Above the interlock's 6.4 V veto on purpose: a gait on a pack this sagging reboots the Pi (#292) |
 | `--record-trace` | Write the per-cycle trace (distance, acc, gyro) as JSON — the input L3.4 would need |
+| `--apply` | Compute the value the run supports: at least five cycles, no two more than 10 % apart, clamped to ±20 % of the constant in force. Prints the `surface_step_cm` line; never edits the config (#300) |
 | `--json` | Print the report and snippet as one JSON document instead of the table |
 
 **How it decides.** Each cycle: sample the distance (retrying a missed echo up to three times), ask the

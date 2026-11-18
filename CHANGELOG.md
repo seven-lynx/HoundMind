@@ -10,6 +10,18 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The stride audits itself, and `--apply` is the clamped way to accept the evidence** — `step_cm`
+  is one number behind every place anchor and every map dot, and nothing compared it with what the
+  sonar saw (#300). `navigation/odometry.py` now watches each forward step: when the reading is valid
+  and within 250 cm, the distance the wall loses is the distance the dog gained, and the comparison is
+  published as `odometry.audit` (`predicted_cm`, `actual_cm`, `ratio`, `surface`) and logged as
+  `odometry_audit` in the event log. A step whose reading never moved, never arrived, or arrived more
+  than 3 s later is dropped rather than recorded as zero travel. **Nothing is applied automatically.**
+  `tools.step_calibrate --apply` is the separate step: it needs at least five cycles, refuses cycles
+  more than 10 % apart, and never moves the constant by more than 20 % in one go, so one bad run
+  cannot rescale every anchor in the file. It prints the `surface_step_cm` line instead of editing the
+  commented config, which stays the tool's standing rule.
+
 - **A place can be recognised from the camera, and that is now a localization tier** — the dog knew
   where it had been told to go and had no way to notice it had arrived (#296-#301). A *view* is a
   32x24 thumbnail plus ORB keypoints and descriptors (`perception/place_views.py`), stored one
