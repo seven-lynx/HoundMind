@@ -339,6 +339,30 @@ Three things worth knowing about that list:
   and the `stub` backend is dead reckoning, not visual SLAM
   (`FEATURES_GUIDE.md` [§23](FEATURES_GUIDE.md#23-slam-pi4), #181).
 
+## Upgrading an install
+
+Re-running the installer is the repair advice for a broken install, so it is additive by design
+(#317), and it says so on the way out: a green run prints a `Re-run safety:` block listing what it
+found under your home directory. What it never touches:
+
+| Path | What lives there |
+|---|---|
+| `config/settings.jsonc` | your configuration, including keys this version does not know |
+| `~/.houndmind/routines/` | saved routines, one JSON file each |
+| `~/.houndmind/places.json` | taught places |
+| `~/.houndmind/face/` | the face roster: embeddings, the LBPH model and its label map |
+| `~/.houndmind/session.json`, `run.lock`, `api_token` | the runtime's own state and credentials |
+
+The update is `git pull` in the checkout plus a fresh run of `scripts/install_houndmind.sh`: it
+re-installs the packages and rewrites the unit. A key a new version adds arrives in
+`config/settings.jsonc` when you merge it yourself — this repository never edits that file on your
+behalf. A key this build does not know is a **load error that names the key**
+(`kernel/config_schema.py`), never a silent ignore and never a deletion, so a config left over from a
+newer version fails loudly instead of quietly losing a setting.
+
+The one write the installer makes in a home directory is the vendor sound pack (`~/pidog/sounds`),
+and it copies only files that are not already there, so a sound you replaced stays replaced.
+
 ## Bench checklist (before calling a build done)
 
 Nothing on this list can be ticked from a workstation. [`docs/HARDWARE_TEST.md`](HARDWARE_TEST.md)
