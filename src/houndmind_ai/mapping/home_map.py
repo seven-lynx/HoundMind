@@ -35,8 +35,11 @@ __all__ = [
     "DEFAULT_MAX_CELLS",
     "HomeMap",
     "HomeMapLoad",
+    "USER_SECTIONS",
     "build_document",
     "load_home_map",
+    "map_path",
+    "validate_document",
     "write_document",
 ]
 
@@ -45,6 +48,10 @@ logger = logging.getLogger(__name__)
 CURRENT_VERSION = 2
 DEFAULT_CELL_SIZE_CM = 10.0
 DEFAULT_MAX_CELLS = 20000
+
+# The sections a human owns. The scan writes the cells, the sweep and the samples; these arrive from
+# an editor and outlive every save, so a 30 s snapshot never erases a wall someone drew (M1).
+USER_SECTIONS: tuple[str, ...] = ("walls", "openings", "rooms", "surfaces", "places", "dog")
 
 
 def _safe_float(value: Any, default: float) -> float:
@@ -66,6 +73,21 @@ def _safe_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def map_path(text: Any, default: str = "data/home_map.json") -> Path:
+    """Resolve a configured map path against the repository root, not the working directory.
+
+    A relative path is the shipped default (`data/home_map.json`) and the service does not run from
+    the repo root, so resolving against the cwd would put the map where nobody looks for it. The
+    rule lives here, beside the format, because the mapper, the loader and the control plane all
+    have to agree on which file they mean.
+    """
+    raw = text if isinstance(text, str) and text.strip() else default
+    path = Path(raw)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[3] / path
+    return path
 
 
 def _bounded_cells(cells: Mapping[str, Any], max_cells: int) -> tuple[dict[str, int], bool]:
@@ -104,10 +126,18 @@ class HomeMap:
     cells: Mapping[str, int]
     sweep: Mapping[str, float]
     samples: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
+    # The user's own sections (walls, rooms, ...), carried verbatim. None of them has a writer until
+    # M3-M5, but a document that drops what it just read is not one a human can edit.
+    sections: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def cell_count(self) -> int:
         return len(self.cells)
+
+    @property
+    def rev(self) -> int:
+        """The edit generation a `PUT /map` has to match. A scan save never bumps it."""
+        return _safe_int(self.meta.get("rev"), 0)
 
     @property
     def cell_size_cm(self) -> float:
@@ -126,14 +156,42 @@ class HomeMap:
         return {"cells": dict(self.cells)}
 
     def to_document(self) -> dict[str, Any]:
-        """The shape a client receives: JSON-ready, with the sweep angle count rather than the sweep."""
-        return {
+        """The **client** shape: `cells` flat, the sample window as a count (M1).
+
+        This is what `GET /map` publishes and what a `PUT /map` body carries back. The file nests
+        the cells under `grid` and keeps the sample log; a client never receives that log, so it
+        cannot send it either - which is why the two shapes are methods here rather than one dict.
+        """
+        document: dict[str, Any] = {
             "version": self.version,
             "meta": dict(self.meta),
             "cells": dict(self.cells),
             "sweep": dict(self.sweep),
             "samples": len(self.samples),
         }
+        for name in USER_SECTIONS:
+            if name in self.sections:
+                document[name] = self.sections[name]
+        return document
+
+    def to_file_document(self) -> dict[str, Any]:
+        """The **file** shape `write_document` writes: `grid.cells` nested, the sample log intact.
+
+        The differences from `to_document()` are where the cells live and whether `samples` is the
+        list or its count. Both spellings live in this class on purpose: a save that wrote the
+        client shape would produce a file the next start reads as an empty map.
+        """
+        document: dict[str, Any] = {
+            "version": self.version,
+            "meta": dict(self.meta),
+            "grid": {"cells": dict(self.cells)},
+            "sweep": dict(self.sweep),
+            "samples": [dict(entry) for entry in self.samples],
+        }
+        for name in USER_SECTIONS:
+            if name in self.sections:
+                document[name] = self.sections[name]
+        return document
 
 
 @dataclass(frozen=True)
@@ -170,11 +228,17 @@ def build_document(
     settings: Mapping[str, Any],
     *,
     now: float | None = None,
+    previous: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The document to write: the grid, the last sweep, and a window of samples (L1.1).
 
     Pure apart from the clock, because building this inside the write is how the reader and the
     writer acquire two different ideas of what a map file is.
+
+    `previous` is the document this runtime already knows. A scan save takes the edit generation
+    (`meta.rev`) and the user's own sections from it, so a snapshot every 30 s never erases a wall
+    a human drew and never invalidates a client's in-flight edit (M1). The scan owns the cells; the
+    user owns everything else.
     """
     stamp = time.time() if now is None else float(now)
     cell_size_cm = _safe_float(settings.get("cell_size_cm"), DEFAULT_CELL_SIZE_CM)
@@ -203,10 +267,17 @@ def build_document(
                 if distance > 0:
                     sweep[str(key)] = distance
 
-    return {
+    previous_meta_raw = previous.get("meta") if isinstance(previous, Mapping) else None
+    previous_meta = previous_meta_raw if isinstance(previous_meta_raw, Mapping) else {}
+
+    document: dict[str, Any] = {
         "version": CURRENT_VERSION,
         "meta": {
+            "rev": _safe_int(previous_meta.get("rev"), 0),
+            "created_at": _safe_float(previous_meta.get("created_at"), stamp),
             "saved_at": stamp,
+            "updated_at": stamp,
+            "source": "scan",
             "cell_size_cm": cell_size_cm,
             "grid_size": [_safe_int(grid_size[0], 100), _safe_int(grid_size[1], 100)],
             "home_map_max_cells": max_cells,
@@ -218,6 +289,10 @@ def build_document(
         "sweep": sweep,
         "samples": _windowed_samples(mapping_state.get("samples"), settings, stamp),
     }
+    for name in USER_SECTIONS:
+        if isinstance(previous, Mapping) and name in previous:
+            document[name] = previous[name]
+    return document
 
 
 def write_document(path: Path, document: Mapping[str, Any]) -> Path:
@@ -238,7 +313,8 @@ def load_home_map(path: Path) -> HomeMapLoad:
     """Read a map file, reporting problems by name instead of raising (L1.2).
 
     Every failure path returns a `HomeMapLoad`: a corrupt file degrades to "no map, here is why".
-    It never takes the runtime down and is never mistaken for an empty room.
+    It never takes the runtime down and is never mistaken for an empty room. The judgement itself
+    is `validate_document`, so a `PUT /map` body and a file are held to the same rules.
     """
     target = Path(path)
     try:
@@ -252,7 +328,22 @@ def load_home_map(path: Path) -> HomeMapLoad:
         raw = json.loads(text)
     except ValueError as exc:
         return HomeMapLoad(None, problems=(f"not JSON: {exc}",), reason="not JSON")
-    if not isinstance(raw, dict):
+
+    return validate_document(raw)
+
+
+def validate_document(raw: Any) -> HomeMapLoad:
+    """Judge one parsed document: the single validator, for a file and for a request body (M1).
+
+    `cells` is read from `grid.cells` (the file shape) or from `cells` (the client shape that
+    `GET /map` publishes and a `PUT /map` body carries) — the same map under two spellings, and
+    accepting both is what keeps a round-trip from arriving with no cells.
+
+    The user's sections are checked for shape only: a section of the wrong type is a problem, not a
+    note, because silently dropping a room a human drew is exactly the failure the validity rules
+    exist to prevent. Each segment that writes one (M3-M5) tightens its entries here.
+    """
+    if not isinstance(raw, Mapping):
         return HomeMapLoad(None, problems=("the file is not a JSON object",), reason="wrong shape")
 
     notes: list[str] = []
@@ -276,7 +367,7 @@ def load_home_map(path: Path) -> HomeMapLoad:
             notes.append("meta is not an object; defaults used")
 
     grid_raw = raw.get("grid")
-    cells_raw = grid_raw.get("cells") if isinstance(grid_raw, Mapping) else None
+    cells_raw = grid_raw.get("cells") if isinstance(grid_raw, Mapping) else raw.get("cells")
     if isinstance(cells_raw, Mapping):
         cells, truncated = _bounded_cells(
             cells_raw, _safe_int(meta.get("home_map_max_cells"), DEFAULT_MAX_CELLS)
@@ -307,7 +398,33 @@ def load_home_map(path: Path) -> HomeMapLoad:
         if samples_raw is not None:
             notes.append("samples is not a list; ignored")
 
+    sections: dict[str, Any] = {}
+    problems: list[str] = []
+    for name in USER_SECTIONS:
+        if name not in raw:
+            continue
+        value = raw[name]
+        if name == "dog":
+            if isinstance(value, Mapping):
+                sections[name] = dict(value)
+            else:
+                problems.append(f"{name} must be an object, not {type(value).__name__}")
+            continue
+        if isinstance(value, list) and all(isinstance(entry, Mapping) for entry in value):
+            sections[name] = [dict(entry) for entry in value]
+        else:
+            problems.append(f"{name} must be a list of objects")
+    if problems:
+        return HomeMapLoad(None, problems=tuple(problems), reason="wrong section")
+
     return HomeMapLoad(
-        HomeMap(version=version, meta=meta, cells=cells, sweep=sweep, samples=samples),
+        HomeMap(
+            version=version,
+            meta=meta,
+            cells=cells,
+            sweep=sweep,
+            samples=samples,
+            sections=sections,
+        ),
         notes=tuple(notes),
     )

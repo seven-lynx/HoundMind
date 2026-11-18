@@ -10,6 +10,18 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The map can be read off the wire and written back** — `GET /map` served a picture a console
+  could not correct: the versioned document existed on disk (`mapping/home_map.py`) and reached no
+  client, and nothing could save one (M1). `GET /map` now carries `document` beside the capped
+  `cells` list it always served, and `PUT /map` (`config`) replaces it under `meta.rev` — a stale
+  generation is a `409` carrying the current one, a refused body a `400` with `problems[]`, and the
+  write is atomic. One validator, `validate_document`, judges a file and a body, and it reads both
+  spellings of the grid (`cells` flat on the wire, `grid.cells` in the file) — a save that wrote the
+  wire shape would otherwise load back as an empty map. The user's sections (`walls`, `openings`,
+  `rooms`, `surfaces`, `places`, `dog`) and the sample log survive a scan snapshot, so a map that
+  saves itself every 30 s never erases an edit or invalidates the `rev` behind it. `PUT` also joined
+  the CORS allow-list, which listed every method the route table used except this one.
+
 - **`step_calibrate` refuses to walk a dying pack** — the interlock's 6.4 V veto protects the servos,
   not the board: two walking attempts on the bench dog at 7.78 V and 7.85 V idle **rebooted the Pi
   mid-gait** (`vcgencmd get_throttled` = `0x50000`, boots 20 s apart), while a head-only run on the

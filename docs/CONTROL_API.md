@@ -152,7 +152,8 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/whoami` | any valid token | the caller's `device` name, `scopes` and `kind` — the same shape as the `welcome` frame, so a client can say what its token cannot do before a request fails (#168) |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
 | `GET` | `/api/v1/scan` | `state:read` | the last head sweep verbatim — `mode` plus `forward`/`right`/`left`, or `mode` plus `angles` `{yaw: cm}`; `{"scan": null}` before the first one (#169) |
-| `GET` | `/api/v1/map` | `state:read` | the occupancy grid as `[ix, iy, hits]` cells with `cell_size_cm`, `count` and `truncated`; `{"map": null}` when no cell has been filled (#175) |
+| `GET` | `/api/v1/map` | `state:read` | the occupancy grid as `[ix, iy, hits]` cells with `cell_size_cm`, `count` and `truncated`, plus `document`, the versioned home map (see below); `{"map": null}` when no cell has been filled (#175) |
+| `PUT` | `/api/v1/map` | `config` | replace the home-map document: body `{"document": {...}}`, judged by the same validator that loads the file; `meta.rev` must match or the answer is `409` with the current one (M1) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
@@ -204,6 +205,27 @@ forward, exactly what `mapping/mapper.py::_ingest_into_grid` writes — so a cli
 capped at 4000 cells and keeps the ones with the most hits; `count` is the uncapped total and
 `truncated: true` means "the rest is on the device, not in this response", because an empty corner of
 a truncated map is not unmapped space.
+
+The same response carries `document` (M1): the versioned home map, in the shape `PUT /map` takes
+back. One document, two spellings, and the contract names both. On the **wire** `cells` is flat and
+`samples` is a count; in the **file** the cells sit under `grid` and `samples` is the log. A client
+never receives that log, so it cannot send one, and `PUT /map` keeps the file's window. `meta` is
+carried verbatim either way, which is what reserves `meta.floor` for a multi-floor map without a
+version bump. `document` is `null` when no map was loaded and none was ever saved — a third fact
+beside `map: null`, and a client that cannot tell it from an empty map draws a room nobody has seen.
+
+Every coordinate in `document` is centimetres from the map origin with `x` left-positive and `y`
+forward-positive — the mapper's own axes (`mapping/mapper.py::_ingest_into_grid`) — so a console
+scales the cells and converts nothing.
+
+`PUT /map` replaces the document under the `config` scope and bumps `meta.rev`. The body is
+`{"document": {...}}` carrying the generation it read; a stale generation is a `409` with the current
+`rev` in the body and nothing is written, so two consoles never overwrite each other silently. A
+refused document is a `400` with `problems[]` (the shape `POST /places` already uses), judged by
+`mapping/home_map.py::validate_document` — the same function that loads the file, which is why a
+document this route accepts is one the next start can read. Writes are atomic, and a scan snapshot
+every `home_map_save_interval_s` carries the user's sections and the `rev` forward, so the map's own
+log never erases an edit.
 
 A value the config **file** would have rejected is refused too: the write is checked against the same
 section schema (`kernel/config_schema.py::validate_settings_section`), so a `400` carries
