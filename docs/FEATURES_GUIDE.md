@@ -1103,6 +1103,10 @@ estimate — not as a module that only ever worked on a developer's laptop.
 
 ## 26) Control Plane — REST, WebSocket, camera, web app
 
+This section is the **reference**: what the surface is, what each route takes, and what the defaults
+are. For the operator walkthrough — connecting, the panels, shortcuts and the troubleshooting table —
+read [`WEBAPP_GUIDE.md`](WEBAPP_GUIDE.md).
+
 **What it does:** Serves the dog to a browser or a phone. One process, one port (8420), one API,
 as specified in `docs/CONTROL_API.md`:
 

@@ -3,7 +3,7 @@
 Status: **index** — the map of `docs/`. If a file is not listed here, it should not exist.
 Pairs with: `README.md` (the front door), `ROADMAP.md` (what is planned)
 
-Eighteen documents plus one reference set, each with one job. Start at the row that matches what you
+Nineteen documents plus one reference set, each with one job. Start at the row that matches what you
 are doing; do not read the whole directory.
 
 ---
@@ -13,6 +13,7 @@ are doing; do not read the whole directory.
 | I want to… | Read | Status |
 |---|---|---|
 | Go from a flashed SD card to a running dog, safely, in ten minutes | [`QUICKSTART.md`](QUICKSTART.md) | guide |
+| Open the browser console, connect to it, and use every panel | [`WEBAPP_GUIDE.md`](WEBAPP_GUIDE.md) | guide |
 | Install HoundMind on a Pi and get it running | [`INSTALL.md`](INSTALL.md) | guide |
 | Install over SSH with no monitor on the dog, and the traps that cost time | [`SSH_INSTALL_AND_BRINGUP.md`](SSH_INSTALL_AND_BRINGUP.md) | guide |
 | Run the full hardware test on a dog, step by step | [`HARDWARE_TEST.md`](HARDWARE_TEST.md) | guide |

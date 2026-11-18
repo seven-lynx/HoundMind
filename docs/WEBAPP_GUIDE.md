@@ -1,0 +1,622 @@
+# HoundMind Kennel Console — user guide
+
+Status: **guide** — open the web app, connect to it, and use each panel. Every fact here is
+checkable against the tree: `src/houndmind_ai/services/web/` is the app, `services/settings.py` holds
+the defaults, and `docs/CONTROL_API.md` is the route contract.
+Pairs with: [`CONTROL_API.md`](CONTROL_API.md) (the wire contract),
+[`INSTALL.md` §*The service: what starts at boot*](INSTALL.md#the-service-what-starts-at-boot),
+[`FEATURES_GUIDE.md` §26](FEATURES_GUIDE.md#26-control-plane--rest-websocket-camera-web-app) (the
+reference entry, including the security posture)
+
+The console is the **Kennel Console**: one page, fourteen panels, served by the runtime itself. It
+is not a second program. `GET /` and `/static/*` come from the `api` module
+(`ControlPlaneModule`, `src/houndmind_ai/services/module.py`) on the same port as the REST and
+WebSocket API — `8420` unless `settings.api.port` says otherwise. Two consequences worth holding on
+to:
+
+- runtime up ⇒ console up, provided `modules.api.enabled` is `true` (it is, in the shipped config);
+- runtime down, or the module disabled itself ⇒ nothing is listening, and no browser can connect.
+
+Nothing in this guide moves the dog by itself. Drive and Tricks send commands, and whether the dog
+acts on one is decided on the device — [§6](#6-what-the-console-cannot-do) is the part to read before
+pressing anything.
+
+## Contents
+
+- [1. Before you open it](#1-before-you-open-it)
+- [2. First connection](#2-first-connection)
+- [3. The shell](#3-the-shell)
+- [4. Keyboard and the palette](#4-keyboard-and-the-palette)
+- [5. The panels](#5-the-panels)
+- [6. What the console cannot do](#6-what-the-console-cannot-do)
+- [7. Install it on a phone](#7-install-it-on-a-phone)
+- [8. Desktop notifications](#8-desktop-notifications)
+- [9. Several dogs](#9-several-dogs)
+- [10. When it will not load](#10-when-it-will-not-load)
+- [11. Security](#11-security)
+- [12. Where the facts live](#12-where-the-facts-live)
+
+## 1. Before you open it
+
+Four things have to be true. The first three are the ones that fail in practice.
+
+| Need | Check it on the device | Comes from |
+|---|---|---|
+| The runtime is running | `systemctl is-active houndmind` → `active` | [`INSTALL.md` §*The service*](INSTALL.md#the-service-what-starts-at-boot) |
+| The control plane is enabled | `modules.api.enabled` is `true` | `config/settings.jsonc:143` |
+| Something is listening | `ss -ltnp \| grep 8420` | `settings.api.host` / `port` |
+| A token exists | `ls -l ~/.houndmind/api_token` | written `0600` on the first start |
+
+```bash
+# on the device
+systemctl is-active houndmind
+ss -ltnp | grep 8420                          # one LISTEN on 0.0.0.0:8420
+curl -s http://127.0.0.1:8420/api/v1/health   # answers without a token
+curl -s http://127.0.0.1:8420/api/v1/meta     # answers without a token
+```
+
+`/api/v1/health` and `/api/v1/meta` are the only routes that answer without a token; everything
+else needs it. If the first command says `inactive`, nothing below in this guide applies until the
+service is started — [§10](#10-when-it-will-not-load).
+
+Then find the address to type into the browser:
+
+```bash
+hostname -I | awk '{print $1}'                 # e.g. 192.168.1.42
+```
+
+The plane also advertises itself over mDNS, so `http://houndmind.local:8420/` normally works
+(`settings.api.discovery_name` renames the instance). mDNS loses to networks that block multicast;
+the numeric address always works.
+
+## 2. First connection
+
+Open `http://<pi-address>:8420/`. Until a token is accepted you get the **Connect** card and
+nothing else — it is the only screen reachable without one.
+
+### With the device token
+
+The device token is the operator credential. The runtime generates it on its first start and writes
+it to `~/.houndmind/api_token`, mode `0600`:
+
+```bash
+grep -m1 . ~/.houndmind/api_token           # prints the token; run this on the device
+stat -c '%a %n' ~/.houndmind/api_token      # expect 600 and the path
+```
+
+Paste it into **Device token** and press **Use token**. The console keeps it in the tab's
+`sessionStorage` (`houndmind.token`, `web/lib.js:9`): it survives a reload, disappears when the tab
+closes, and is never written to `localStorage` or to disk. **Disconnect** clears it.
+
+Do not paste that output into a URL, a chat, an issue or a screenshot.
+
+### With a pairing code
+
+A pairing code is for a phone or a second browser that should not hold the operator credential.
+Open a window from a client that already has `admin` — the **History** panel's *Open a pairing
+window* button, or:
+
+```bash
+curl -H "Authorization: Bearer $(cat ~/.houndmind/api_token)" \
+     -X POST http://127.0.0.1:8420/api/v1/pair/open
+```
+
+The code is six digits, valid **five minutes**, **single use** (`services/auth.py:135`). Enter it in
+**Pairing code**, give the client a name, and press **Pair this browser**.
+
+### What a paired client may do
+
+| Scope | Device token | Paired client | What it unlocks |
+|---|---|---|---|
+| `state:read` | yes | yes | every read: state, scan, map, modules, decisions, history, camera ticket |
+| `move` | yes | yes | `POST /command`, `/stop`, `/mode` — Drive, Tricks, a routine, walking to a place |
+| `config` | yes | yes | `PATCH /config`, place and routine writes, calibration probes |
+| `admin` | yes | **no** | People, Logs, the support bundle, opening a pairing window |
+
+`PAIRING_SCOPES` is exactly the first three (`services/auth.py:44`). A panel that needs a scope the
+token lacks says so: `403` renders as "This token lacks the scope for that" rather than an empty box
+(`web/lib.js:223`).
+
+### HTTPS
+
+With `settings.api.tls_enabled: false` (the default) the console is plain HTTP: the token, every
+command and every camera frame cross the network in the clear. `true` serves HTTPS with a
+self-signed certificate generated on first start, and each client trusts it once —
+[`INSTALL.md` §*TLS*](INSTALL.md#tls-for-the-control-plane-optional). Two browser features need a
+secure context, installing the app to a home
+screen ([§7](#7-install-it-on-a-phone)) and desktop notifications ([§8](#8-desktop-notifications)), and
+both are simply unavailable without one.
+
+## 3. The shell
+
+Once connected, the page is a header, a rail of panels, a stage, and an event ticker.
+
+| Control | What it shows | Notes |
+|---|---|---|
+| Brand chip | `<device_id> · <profile>` | from `/api/v1/meta`; the profile is what the board reported |
+| Device picker | this dog, plus any you added | choosing one navigates the tab — [§9](#9-several-dogs) |
+| Mode badge | `mode idle` / `manual` / `patrol` / `rest` | the runtime's mode, not a local setting |
+| Link badge | `connecting`, `live`, `no frames`, `offline`, `no stream` | hover it: it names the identity you are authenticated as and the scopes |
+| Theme button | `dark` or `light` | dark-first, follows the OS until you choose; remembered in `localStorage` |
+| Notify button | `notify off` / `notify on` / `notify blocked` | hidden entirely without a secure context — [§8](#8-desktop-notifications) |
+| Disconnect | — | forgets the token in this tab and returns to the Connect card |
+
+**The link badge is the one thing to trust over the panels.** A panel always shows its last known
+state; the badge says whether that state is still arriving.
+
+| Badge | Means | What to do |
+|---|---|---|
+| `connecting` | the socket is opening | wait a second |
+| `live` | state frames are arriving | nothing |
+| `no frames` | nothing for over 4 s (`web/app.js:355`) | check WiFi; the panels are frozen, not wrong |
+| `offline` | the socket is closed | the client retries with backoff, up to every 15 s |
+| `no stream` | HTTP answers, the WebSocket does not | a proxy or firewall is breaking the socket — [§10](#10-when-it-will-not-load) |
+
+When the badge is not `live`, a banner says so in a sentence. On `offline` it says every panel shows
+its last known state and nothing you press will reach the dog — that is literal: the REST call would
+fail too.
+
+**The ticker** (bottom) is the last twelve events from the device, newest first. Vetoes —
+`command_vetoed`, `command_expired`, `safety_action` — are tinted, and each event row is a log
+entry, not a control. It is the second place a refusal appears, after the panel that caused it.
+
+## 4. Keyboard and the palette
+
+| Key | Does |
+|---|---|
+| `Ctrl`/`Cmd` + `K` | open the command palette |
+| `?` | open the palette |
+| `Esc` | close the palette |
+| `1` … `9` | jump to that panel, in rail order |
+| `W` `A` `S` `D` or the arrow keys | drive while held — forward, left, back, right |
+| `Space` | stop |
+
+Three rules make the shortcuts safe rather than clever:
+
+- **Typing wins.** A shortcut is ignored while the focus is in an `input`, `textarea`, `select`, or
+  an editable element (`web/app.js:517`), so naming a place "wasd" does not walk the dog.
+- **Drive keys are global.** They work on any panel, not only Drive — the same code path the
+  on-screen pad uses, so a key press and a held button cannot drift apart (`web/app.js:506`).
+- **A hidden tab stops the dog.** Switching tabs or minimising the window sends a stop
+  (`web/app.js:564`).
+
+The palette lists every panel by name and every command it can run. `1`–`9` map to the first nine
+panels: Overview, Drive, Tricks, Routines, Places, People, Camera, Decisions, History.
+
+## 5. The panels
+
+Rail order is the operator's path: see the dog, drive it, then the things that need setting up. The
+first nine are the ones `1`–`9` jump to.
+
+### Overview
+
+**Shows** — the dog in its current posture, four instruments, two sparklines, the sentence behind the
+last decision, and a runtime block.
+
+- The stance is a **reading, not a claim**: `moving`/`sitting`/`lying` only while the winning command
+  is under 2.5 s old; otherwise `rest` reads as resting, `patrol` as patrolling, anything else as
+  `standing by`. A posture the runtime has no word for stays "standing by" rather than a guess
+  (`web/panels/overview.js:29`).
+- Instruments honour validity: a sensor that did not answer draws a dash. Sonar warns at ≤30 cm and
+  is critical at ≤12; battery at ≤7.0 V and ≤6.6 V; temperature at ≥65 °C and ≥78 °C; the loop gauge
+  tints on tick overrun. Below them: a 12-second sonar trace and the tick cost.
+- The **why** line is one of four sentences: the veto ("refused — the dog did not do it, see
+  Decisions"), `intent (confidence%) from source`, `holding <action>`, or "nothing has asked the dog
+  to move yet".
+- The facts block carries mode, touch, sound (heard, and from where), pitch/roll, whether the heading
+  is gyro-corrected, safety on/off, e-stop set/clear, and whether the supervisor is holding motion.
+
+**Needs** — `state:read`.
+
+**If it looks wrong** — dashes everywhere under a `live` badge mean the sensor modules are off, not
+that the console is broken. Cross-check Modules.
+
+### Drive
+
+**Shows** — a hold-to-walk pad, the runtime mode, and a one-step control.
+
+**You can**
+
+- **Hold** ▲ / ◀ / ▶ / ▼ to walk, and release to stop. While held the client renews the command every
+  150 ms; the server expires any command 300 ms after the last renewal (`web/lib.js:21`). Releasing
+  also sends an explicit stop, so the deadman is the backstop and not the mechanism.
+- **STOP** in the middle, the `Space` key, or hiding the tab — all end motion.
+- **Change the mode**: `idle` (autonomy on: behaviour and the navigator may drive), `manual` (a hand
+  on the wheel: clients may drive, autonomy may not), `patrol` (the navigator roams), `rest` (parked:
+  only stop and the watchdog get through). This posts to `/api/v1/mode` and changes the whole dog.
+- **One step**: speed 60–200 in steps of 10, one to five steps, forward or backward. That path sends
+  `wait: true`, so the HAL finishes the step before the answer returns — it is the control to use
+  when measuring distance, and there is no queue behind it.
+
+**Handing control back.** `idle` is *also* how you give the dog its autonomy again — it is the same
+list, not a separate control. There is no "resume autonomy" button and no confirmation: one selection
+returns the dog to self-driving. From a shell, with the token read on the device:
+
+```bash
+TOKEN=$(cat ~/.houndmind/api_token)
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"mode":"idle"}' http://127.0.0.1:8420/api/v1/mode      # {"mode": "idle"}
+```
+
+`GET /api/v1/mode` reads it back (`state:read`), and every change is published as `mode_changed`, so it
+appears in the ticker. `rest` and `idle` are one selection apart in both directions — the route table
+and what each mode admits are in [`CONTROL_API.md` §2](CONTROL_API.md#2-endpoints).
+
+**Needs** — `move`.
+
+**If it looks wrong** — an inline sentence, never silence: *Tilt latched: put the dog upright, then
+clear it from the device*, or *Refused: `<veto>`* with the reason the interlock gave. A refusal is
+the device working.
+
+### Tricks
+
+**Shows** — every action the repertoire reports (`GET /api/v1/repertoire`), grouped by the class the
+**server** assigns from `config/actions.jsonc` — locomotion, posture, expression, non_motion.
+
+**You can** run any action. Locomotion sits behind an **arm locomotion** switch, because that class
+changes where the dog is and a stray click in a list of forty buttons is exactly how that happens.
+Posture and expression run unarmed. Posing classes send `wait: true` so a second click cannot stack
+behind a slow stand-up. Hovering a button shows its parameters.
+
+**Needs** — `move`.
+
+**If it looks wrong** — an empty list says why: no action is classified and the HAL reports none.
+That is a config question, not a console one.
+
+### Routines
+
+**Shows** — the routines the runner actually loaded (not the files on disk), each with a step count,
+plus a **refused files** table naming the file and the loader's own message.
+
+**You can**
+
+- **Run** a routine, or **Dry run** it. A dry run publishes nothing — it walks the step list one step
+  a tick and reports what it *would* do (`behavior/routine_runner.py:257`). Nothing moves.
+- **Stop the run**, which posts `/api/v1/stop` like every other stop.
+- **Write a routine** in the JSON box. Save is judged by the loader's own validator, so a refused
+  save names the step to fix. A saved routine is playable on the runner's next tick — `POST
+  /routines` sets `routine_reload` (`services/api.py:1049`), so no restart is needed.
+- Watch the **in progress** table: routine, state, step index, action, detail or veto, and whether it
+  is a dry run.
+
+**Needs** — `config` to write, `move` to run. With `modules.routine_runner.enabled: false` the routes
+answer `503` and `/meta` stops advertising routines.
+
+### Places
+
+**Shows** — the taught catalogue: name, heading, distance, anchor, confidence; and any walk in
+flight.
+
+**You can** teach a place (name, heading in degrees, distance in cm, optional anchor and confidence),
+**Go** to one, **Rename** it, or **Forget** it. *Go* sends `at_anchor` as a real boolean from the
+checkbox: a walk across the room is refused unless you assert the dog is standing at the anchor,
+because nothing on the device can verify that pose. A refused body lists every problem, not one.
+
+**Needs** — `config` to teach or forget, `move` to go.
+
+**If it looks wrong** — "nothing in flight" is the normal state, not an error. A `503` means
+`place_navigator` is off; those routes then refuse rather than inventing a second writer.
+
+### People
+
+**Shows** — who the dog has been taught, and whether the identity module is running (with its
+backend) or off (with the reason). "Identity off" and "nobody enrolled" are different sentences on
+purpose.
+
+**You can** enrol a name — one face in frame; the request is accepted (`202`) and the roster reports
+the outcome — and **Forget** someone.
+
+**Needs** — `admin`, **and** the identity module enabled. A paired phone gets a `403` here, and the
+panel says which scope it lacks.
+
+### Camera
+
+**Shows** — the MJPEG stream, and a still on demand.
+
+The panel never puts the device token in a URL. It asks for a short-lived **ticket**
+(`POST /api/v1/camera/ticket`: one use, 60 s, `state:read` on a single frame) and puts that in the
+query string, because an `<img>` cannot send an `Authorization` header. **Save still** downloads
+through a blob, so the URL does not land in browser history with a credential in it.
+
+**Needs** — `state:read`, and a vision module on the device that actually publishes frames.
+
+**If it looks wrong** — "No frames. Enable a vision module on the device, or check the camera index
+in config." Nothing in the panel can fix that, and it is not a token problem: enable `vision_pi4`
+(Pi 4/5, and only once `picamera2` is importable) or `vision`, and read the reason it is off from the
+Modules panel. There is no `camera_index` key to check — see #332.
+
+### Decisions
+
+**Shows** — one record per tick, newest first: timestamp, the intent that won, who asked (`source`),
+its confidence, and what refused it.
+
+This is the panel that answers "why did it do that" without opening a log file. It polls every three
+seconds while it is on screen, and the limit box takes 1–200 records.
+
+**Needs** — `state:read`, and `modules.decision_log` running.
+
+**If it looks wrong** — `503` here is a specific fact: "the decision feed is not running; enable
+modules.decision_log" (`services/api.py:1590`). That is a different sentence from "no decisions
+recorded yet", and the panel keeps them apart on purpose.
+
+### History
+
+**Shows** — the command audit (time, action, source, client, verdict) and the clients currently
+attached (name, scopes, how long they have been quiet, last command).
+
+**You can** — refresh on demand, raise the limit to 200, and, with `admin`, **Open a pairing window**
+for a phone or a second browser. The code is six digits, valid five minutes, single use — hand it
+over in person, and do not put it in a chat. A paired client cannot do this: opening a window needs
+`admin`.
+
+**Needs** — `state:read`; the pairing button needs `admin`.
+
+### Map
+
+**Shows** — the occupancy cells the mapper has filled, drawn with the nose up and the dog's left on
+the screen's left. One square is `cell_size_cm`. The chip counts the cells and says `(truncated)`
+when the wire carried only the most-hit ones.
+
+**You can** refresh; it also polls every four seconds while visible. There is nothing to edit here —
+the picture is what the device recorded.
+
+**Needs** — `state:read`.
+
+**If it looks wrong** — the note distinguishes the two empty cases: `mapping.grid_enabled` is off, so
+nothing is being recorded, versus "no sweep has filled a cell yet". An empty corner in a truncated
+map means "not sent", not "not mapped", and only one of those is safe to walk into.
+
+### Modules
+
+**Shows** — every component, its state, its per-tick cost in `tick_ms`, and the reason it is not
+running. The chip above the table counts loaded / disabled / failed.
+
+**You can** refresh; it polls every four seconds while visible.
+
+**Needs** — `state:read`.
+
+**Reading it** — `disabled` is normal and expected: vision ships off, and a module with a missing
+wheel or no camera disables itself with a reason. `failed` is a bug. The two are drawn in different
+colours so the one that matters is not invisible. Rising `tick_ms` values are a performance question,
+not a hardware fault — `docs/TROUBLESHOOTING.md` has the loop-overrun path.
+
+### Config
+
+**Shows** — the live keys the server says can be changed, and the whole document with secrets
+redacted.
+
+**You can** edit a live key and press **Apply changes**.
+
+**Needs** — `config`.
+
+**Three rules the panel itself enforces**
+
+- Only **live** keys are offered. Anything else is read-only here, because the runtime reads it once
+  at start.
+- A redacted leaf (a password, a token path) is never turned into an input: sending `***` back would
+  overwrite a real secret with three stars.
+- The answer carries `persisted: false` and the panel says so: a change made here dies with the
+  process. To keep it, edit `config/settings.jsonc` and restart (`docs/INSTALL.md`).
+
+### Calibration
+
+**Shows** — the stored servo trim (`servo_zero_offsets`) and whether it is applied automatically at
+start.
+
+**You can** run the read-only probes the route advertises. The probe list is not hardcoded in the
+page: it is discovered from the route's own refusal, so the console can never hold a second copy that
+drifts.
+
+**Needs** — `config`.
+
+**Nothing here writes an offset and nothing here moves the dog.** Applying and editing calibration is
+a device procedure (`calibration/` and `src/tools/`); the console only reports.
+
+### Logs
+
+**Shows** — the runtime's own JSON log lines: time, level, logger, message, and the trace id when the
+record has one.
+
+**You can**
+
+- Set the tail (10–500 lines), a level, and a substring to search for. The filter is a **server-side
+  query** over the file, not a filter of what happened to be on screen, so a match older than the
+  tail is still found.
+- Watch it live: with no filter set, new lines arrive over the socket and the chip says `live`. Set a
+  filter and the chip says `filtered`; the two are never mixed.
+- **Download the support bundle** (logs, `config/settings.jsonc` and run metadata, zipped).
+
+**Needs** — `admin`, which a paired client does not have; the panel says so rather than showing an
+empty box.
+
+**Before you share a bundle** — it contains `config/settings.jsonc` **verbatim**, WiFi credentials
+included. Read it first.
+
+## 6. What the console cannot do
+
+The console is a **client**. It renders what the device publishes and submits what you ask; it never
+decides whether the dog moves. Every press becomes a typed intent on the device's intent board, and
+`act/gateway.py` resolves the competing intents in priority order before the interlock answers. The
+console shows that answer and never bypasses it.
+
+| The console cannot | Because |
+|---|---|
+| force an action past a veto | a veto is the interlock saying no; it is displayed, not overridden |
+| clear a latched tilt | that is a physical condition; put the dog upright and clear it on the device |
+| enable a safety module or silence a watchdog | those are config decisions, made in `config/settings.jsonc` |
+| write a servo offset | calibration is a device procedure, not a web form |
+| keep the dog moving when the link drops | see the three stop paths below |
+
+**Three stop paths, and the deadman behind all of them**
+
+1. Releasing the pad (or the key) sends an explicit stop.
+2. Hiding the tab sends a stop (`web/app.js:564`).
+3. If neither happens — a laptop lid closes, WiFi dies — the command simply expires: the client renews
+   every 150 ms and the server drops a command 300 ms after the last renewal (`web/lib.js:21`). A
+   client that stops pinging loses its command after `settings.api.link_loss_s` (6 s).
+
+A routine is not an exception: it plays one step per tick through the same gateway, so the interlock,
+the obstacle stop and the mode gate apply to it exactly as they do to a hand on the pad.
+
+**None of those stops a self-driving dog.** With autonomy on — the `idle` mode — the behaviour and the
+navigator publish a fresh intent on the very next tick, so a stop holds for about a tenth of a second
+and the dog walks on. That is #333, and until it is closed the brake is the **mode**: `manual` keeps
+autonomy out and leaves the pad working, `rest` leaves only stop and the watchdog.
+
+**A restart is not a resume — and not a park either.** After `systemctl restart houndmind` or a reboot,
+a gait in flight is gone and a routine that was mid-run is lost rather than replayed. But the runtime
+comes back in `mode idle`, where behaviour and the navigator may drive, so a dog with
+`modules.behavior` enabled can start moving again on its own. Parking is a mode, not a restart: set
+`rest` (or `manual`) once it is up.
+
+## 7. Install it on a phone
+
+The console is a small web app: it can be added to a home screen and opens without browser chrome.
+That needs a **secure context** — HTTPS with a certificate the phone trusts, or `localhost`. On plain
+HTTP the manifest is ignored and the service worker never registers; the console still works, it
+just cannot be installed (`web/lib.js:80`).
+
+| Platform | Steps |
+|---|---|
+| Android (Chrome) | menu ⋮ → *Install app* (or *Add to Home screen*) |
+| iOS (Safari) | Share → *Add to Home Screen* |
+| Desktop (Chrome/Edge) | the install icon in the address bar |
+
+The installed shell is cached so the icon opens instantly and survives a device restart; **API
+responses are never cached** (`/api/*` is excluded), so nothing it shows is stale data pretending to
+be live. The token still lives in the tab's `sessionStorage`, so expect a fresh launch to ask for it
+again — for a phone, open a pairing window and use the code ([§2](#2-first-connection)) rather than
+pasting the device
+token.
+
+## 8. Desktop notifications
+
+The **notify** button appears only in a secure context, because the browser's `Notification` API
+requires one. Nothing is requested on page load: the permission prompt happens on your click, once,
+and a refusal turns the button into `notify blocked`.
+
+When granted, three events raise a desktop notification — the same three the ticker tints:
+
+| Event | Means |
+|---|---|
+| `command_vetoed` | the interlock refused a command |
+| `command_expired` | a command ran out of TTL before the dog acted |
+| `safety_action` | a safety module acted |
+
+A notification is a **second signal, never the only one**: the ticker records every event whether or
+not the browser allows notifications, and the dog's own stop path is on the device. If notifications
+stop arriving, check the badge first — an `offline` console raises nothing.
+
+## 9. Several dogs
+
+The header picker lists the dog this page was served by, plus any you have added. *add a device…*
+asks for the other console's URL once.
+
+Choosing one **navigates the tab** — it is a full page load at that dog's origin, not a cross-origin
+fetch. That is deliberate: each device serves its own console and bundle, each keeps its own token in
+its own origin's `sessionStorage`, and nothing needs CORS. It also means mixed deployments (one dog
+on HTTPS, one on HTTP) do not break.
+
+The list of URLs lives in `localStorage` (`houndmind.devices`); tokens never do. Switching to a dog
+asks for that dog's token again in the new tab, and *that* is the same per-tab rule as
+[§2](#2-first-connection) rather than
+a new one.
+
+## 10. When it will not load
+
+Find the symptom, take the row. The first two commands answer most of them.
+
+```bash
+# on the device
+systemctl is-active houndmind
+journalctl -u houndmind -n 50
+ss -ltnp | grep 8420
+```
+
+| Symptom | Cause | Do |
+|---|---|---|
+| Browser cannot reach the site | nothing is listening: the runtime is stopped, or `api` disabled itself | the three commands above; the journal carries the module's own reason |
+| Connect card appears again | this tab has no token — a new tab, or **Disconnect** was pressed | paste the token, or pair |
+| "Token rejected - paste the device token again" | wrong token, or it was rotated | re-read `~/.houndmind/api_token` on the device |
+| One panel says the token lacks a scope | a paired client hitting an `admin` route | use the device token for People, Logs and the bundle |
+| "Not running on the device: …" | the module that serves that panel is off | the detail names it: routines → `routine_runner`, decisions → `decision_log`, places → `place_navigator` |
+| Badge says `no stream`, the rest works | the WebSocket is blocked while plain HTTP passes | usually a proxy without `Upgrade` support — connect directly |
+| Badge says `no frames` | WiFi | the panels keep their last values; they are frozen, not wrong |
+| Every instrument is a dash | the sensor modules are off | Modules panel |
+| Camera: "No frames" | no vision module is publishing frames | enable `modules.vision_pi4` (needs `picamera2` importable) or `modules.vision`; Modules carries the reason it is off |
+| Map: "`mapping.grid_enabled` is off" | mapping is off | `config/settings.jsonc` |
+| Nothing at all after a reboot | the unit is installed but not enabled | `sudo systemctl enable --now houndmind` |
+
+Confirm the boot contract. This is the whole difference between "it works today" and "it works after
+the next power cut":
+
+```bash
+systemctl is-enabled houndmind                       # expect: enabled
+systemctl cat houndmind | grep -A2 '\[Install\]'    # expect: WantedBy=multi-user.target
+systemctl show houndmind -p ExecStart               # the runtime command
+```
+
+`is-enabled` is the check that matters; `systemctl show -p WantedBy` prints an **empty** value while
+the unit is disabled, because it reports the links that exist rather than what the file asks for. The
+`[Install]` line is what `enable` creates, and `ExecStart=… -m houndmind_ai.main` is the runtime.
+
+One timing note that reads like a fault and is not: for the first few seconds after a start there is
+no listener on 8420, because `api` is the last module registered. Give it ten seconds before
+believing `ss`.
+
+If the unit is missing entirely,
+[`INSTALL.md` §*The service: what starts at boot*](INSTALL.md#the-service-what-starts-at-boot) has the
+manual install, and `packaging/systemd/houndmind.service` is the template it renders.
+
+**One honest limitation.** The control plane runs *inside* the runtime process. systemd restarts the
+process if it exits (`Restart=on-failure`), and the watchdog restarts other modules — but a plane that
+hangs without the process exiting is not restarted by anything today, and it is exempt from the
+watchdog by config (`settings.watchdog.ignore_modules`). When that happens the console is simply dead
+while `systemctl status` looks healthy, and `sudo systemctl restart houndmind` is the fix. The gap is
+tracked in **#330**; until it is closed, treat "the console stopped answering but the service is
+active" as a restart, not a mystery.
+
+## 11. Security
+
+The console is the only network surface the device has, and on plain HTTP it is a plaintext one. Read
+this before putting the dog on a network you do not control.
+
+| Fact | Consequence |
+|---|---|
+| `tls_enabled: false` by default | the token, every command and every camera frame cross the LAN in the clear |
+| The device token is the whole boundary | whoever holds it is the operator, with `admin` |
+| `/api/v1/health` and `/api/v1/meta` need no token | they expose liveness, version and identity only |
+| `/api/v1/pair` (submitting a code) and `/api/v1/events` (auth in its first frame) are open | a code is single-use and dies in five minutes |
+| Camera URLs carry a one-use ticket, not the token | the token never enters browser history or a proxy log |
+
+Three ways to close the door, cheapest first:
+
+1. **Trust the network.** A LAN nobody else is on. Not a café, not a shared flat, not a hotel.
+2. **Bind to loopback** — `"host": "127.0.0.1"` under `settings.api` — and reach it through an SSH
+   tunnel: `ssh -L 8420:127.0.0.1:8420 pi@<pi-address>`, then open `http://127.0.0.1:8420/`.
+3. **Turn TLS on** — `"tls_enabled": true`, and trust the generated certificate once per client
+   ([`INSTALL.md` §*TLS*](INSTALL.md#tls-for-the-control-plane-optional) documents the browser, phone
+   and `curl` steps).
+
+Never port-forward 8420 to the internet, never paste the token into a URL or a screenshot, and read a
+support bundle before sharing it: it contains `config/settings.jsonc` verbatim, WiFi credentials
+included. `docs/SECURITY.md` covers what the device exposes and how to report a problem.
+
+## 12. Where the facts live
+
+| Question | Read |
+|---|---|
+| What does this route accept and return? | [`CONTROL_API.md`](CONTROL_API.md) — the contract |
+| What does the control plane do, and what are its defaults? | [`FEATURES_GUIDE.md` §26](FEATURES_GUIDE.md#26-control-plane--rest-websocket-camera-web-app) |
+| How do I install it, enable the service, or turn TLS on? | [`INSTALL.md`](INSTALL.md) |
+| Something is broken and I do not know which file owns it | [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) |
+| What do the log fields mean? | [`LOGGING.md`](LOGGING.md) |
+| Every config key, with a comment | `config/settings.jsonc` |
+| Which actions exist and what they cost | [`REPERTOIRE.md`](REPERTOIRE.md) |
+| The routine file format | [`ROUTINES.md`](ROUTINES.md) |
+
+
+
+
+
+

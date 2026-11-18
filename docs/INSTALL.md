@@ -47,9 +47,11 @@ steps, and each one links to the detail further down.
 
 Two things that surprise people, both measured on a bench dog:
 
-- **The service resumes; motion never does.** After a reboot the modules come back and the dog stays
-  still. `motion_command` and the intent board are context-only and every intent expires, so a gait
-  cannot survive a restart and a routine mid-run is lost rather than replayed.
+- **The service resumes; a command in flight does not.** After a reboot the modules come back, and a
+  gait cannot survive it: `motion_command` and the intent board are context-only and every intent
+  expires, so a routine mid-run is lost rather than replayed. **Autonomy does come back** — the runtime
+  starts in `mode idle`, where `behavior` and the navigator may drive, so a dog with those modules
+  enabled can start moving on its own. Park it with `mode rest` if it must stay put.
 - **A second process cannot open the dog.** The runtime holds `~/.houndmind/run.lock`; a tool started
   while it runs exits **3** with `the servo bus is owned by pid N (runtime)` instead of hanging. That
   is the answer to "why did `hardware_checkup` print nothing?", not a dead tool.
@@ -440,13 +442,33 @@ sudo systemctl restart houndmind
 
 The unit is in the tree at `packaging/systemd/houndmind.service`, with three placeholders
 (`@HOUNDMIND_USER@`, `@HOUNDMIND_ROOT@`, `@HOUNDMIND_PYTHON@`) that the installer fills from the
-account and checkout it ran with. Passing `--no-service` skips the step; installing it by hand means
-substituting them yourself.
+account and checkout it ran with. Passing `--no-service` skips the step.
 
-**The service resumes; motion never does.** After a reboot the modules come back and the dog stays
-still: a gait cannot survive a restart, because `motion_command` and the intent board are
-context-only and every intent expires, and a routine that was mid-run is lost rather than replayed.
-The next start says how the previous one ended — `~/.houndmind/session.json`, #214.
+To install it by hand — the case for a device that was set up before the unit existed — render the
+three values from the checkout that is actually there, rather than editing the template:
+
+```bash
+cd ~/HoundMind
+sed -e "s|@HOUNDMIND_USER@|$(whoami)|g" \
+    -e "s|@HOUNDMIND_ROOT@|$(pwd)|g" \
+    -e "s|@HOUNDMIND_PYTHON@|$(pwd)/.venv/bin/python|g" \
+    packaging/systemd/houndmind.service > /tmp/houndmind.service
+sudo install -m 0644 /tmp/houndmind.service /etc/systemd/system/houndmind.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now houndmind
+systemctl is-enabled houndmind      # enabled
+```
+
+The installer itself only runs `enable`, so an install never opens the servo bus on its own. The
+`--now` above is the operator saying "start it too", which is the deliberate extra step. From then on
+`multi-user.target` starts it at every boot.
+
+**The service resumes; a command in flight does not.** A gait cannot survive a restart, because
+`motion_command` and the intent board are context-only and every intent expires, and a routine that was
+mid-run is lost rather than replayed. What does come back is autonomy: the runtime starts in `mode
+idle`, where `behavior` and the navigator may drive, so a dog with those modules enabled can start
+moving on its own after a boot — set `mode rest` if it must stay put. The next start says how the
+previous one ended — `~/.houndmind/session.json`, #214.
 
 A unit that fails three times in a minute stops instead of looping, so a broken `settings.jsonc`
 gives a message rather than a restart storm: `journalctl -u houndmind -n 50`.
