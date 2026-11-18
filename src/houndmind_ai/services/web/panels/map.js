@@ -30,6 +30,43 @@ const SURFACE_HATCH = {
   unknown: ["#8f8f8f", "rgba(143, 143, 143, 0.16)"],
 };
 
+// Editing (#309): a wall is two centimetre points, an opening is a gap in one. Everything a person
+// draws is snapped to 5 cm and magnets to an existing endpoint, because a wall that misses its
+// neighbour by 2 cm is a hole the planner will happily route through.
+const SNAP_CM = 5;
+const MAGNET_CM = 15;
+const MIN_WALL_CM = 20;
+const HIT_PX = 12;
+
+const snap = (value) => Math.round(value / SNAP_CM) * SNAP_CM;
+
+function uid(prefix) {
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${prefix}_${random}`;
+}
+
+function distanceToSegment(point, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return Math.hypot(point[0] - a[0], point[1] - a[1]);
+  let t = ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(point[0] - (a[0] + t * dx), point[1] - (a[1] + t * dy));
+}
+
+function projectOnSegment(point, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return 0;
+  return Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / lengthSquared));
+}
+
+function pointAt(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
 function loadView() {
   try {
     const raw = localStorage.getItem(VIEW_KEY);
@@ -106,6 +143,20 @@ export const map = {
         </div>
         <canvas id="mp-canvas" width="720" height="460"
           style="width:100%;display:block;background:var(--ink-2);border-radius:8px;cursor:grab"></canvas>
+        <div class="row" style="margin:.5rem 0;flex-wrap:wrap">
+          <button id="mp-mode-view" class="tiny">View</button>
+          <button id="mp-mode-wall" class="tiny">Wall</button>
+          <button id="mp-mode-opening" class="tiny">Doorway</button>
+          <button id="mp-mode-delete" class="tiny">Delete</button>
+          <label class="tiny" style="margin:0">doorway width
+            <input id="mp-opening-width" type="number" min="30" max="200" step="5" value="80"
+              style="width:4.5rem;margin-left:.3rem">
+          </label>
+          <button id="mp-undo" class="tiny">Undo</button>
+          <button id="mp-save" class="tiny">Save to device</button>
+          <button id="mp-reload" class="tiny">Reload</button>
+          <span class="chip" id="mp-dirty">saved</span>
+        </div>
         <p class="hint" id="mp-note"></p>
         <p class="hint" id="mp-legend"></p>
         <p class="error" id="mp-error" role="alert"></p>
@@ -121,6 +172,215 @@ export const map = {
     let view = loadView();
     let document_ = null;
     let layers = new Set(LAYERS);
+    // Editing state (#309): `history` holds {walls, openings} snapshots, one per edit, so Undo is a
+    // restore rather than an inverse operation nobody wrote down.
+    let history = [];
+    let mode = "view";
+    let draft = null;
+    let edited = false;
+    const dirty = root.querySelector("#mp-dirty");
+    const widthInput = root.querySelector("#mp-opening-width");
+
+    function markDirty(isDirty) {
+      edited = Boolean(isDirty);
+      dirty.textContent = edited ? "unsaved" : "saved";
+    }
+
+    function pushHistory() {
+      if (!document_) return;
+      history.push(
+        JSON.stringify({ walls: document_.walls || [], openings: document_.openings || [] })
+      );
+      if (history.length > 50) history.shift();
+    }
+
+    function undo() {
+      if (!document_ || !history.length) return;
+      const previous = JSON.parse(history.pop());
+      document_.walls = previous.walls;
+      document_.openings = previous.openings;
+      markDirty(true);
+      render();
+    }
+
+    function modeTo(next) {
+      mode = next;
+      draft = null;
+      for (const name of ["view", "wall", "opening", "delete"]) {
+        const button = root.querySelector(`#mp-mode-${name}`);
+        if (button) button.classList.toggle("active", name === next);
+      }
+      canvas.style.cursor = next === "view" ? "grab" : "crosshair";
+      render();
+    }
+
+    function docPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      const px = ((event.clientX - rect.left) * canvas.width) / Math.max(rect.width, 1);
+      const py = ((event.clientY - rect.top) * canvas.height) / Math.max(rect.height, 1);
+      return [
+        (canvas.width / 2 - px) / view.scale + (view.cx || 0),
+        (canvas.height / 2 - py) / view.scale + (view.cy || 0),
+      ];
+    }
+
+    function magnet(point) {
+      // Endpoint magnetism: a wall that ends 2 cm from its neighbour leaves a gap the planner will
+      // happily walk through, so an existing endpoint within MAGNET_CM wins over the snap grid.
+      let best = null;
+      let bestDistance = MAGNET_CM;
+      for (const wall of (document_ && document_.walls) || []) {
+        for (const end of [wall.a, wall.b]) {
+          if (!Array.isArray(end)) continue;
+          const distance = Math.hypot(point[0] - end[0], point[1] - end[1]);
+          if (distance < bestDistance) {
+            best = [end[0], end[1]];
+            bestDistance = distance;
+          }
+        }
+      }
+      return best;
+    }
+
+    function snapped(point, anchor, shiftKey) {
+      let [x, y] = point;
+      if (shiftKey && anchor) {
+        // Shift constrains to the axis the drag is longer on: walls are usually straight.
+        if (Math.abs(x - anchor[0]) >= Math.abs(y - anchor[1])) y = anchor[1];
+        else x = anchor[0];
+      }
+      const magneted = magnet([x, y]);
+      return magneted || [snap(x), snap(y)];
+    }
+
+    function nearestSegment(point, toleranceCm) {
+      let best = null;
+      let bestDistance = toleranceCm;
+      for (const opening of (document_ && document_.openings) || []) {
+        if (!Array.isArray(opening.a) || !Array.isArray(opening.b)) continue;
+        const distance = distanceToSegment(point, opening.a, opening.b);
+        if (distance < bestDistance) {
+          best = { kind: "opening", item: opening };
+          bestDistance = distance;
+        }
+      }
+      for (const wall of (document_ && document_.walls) || []) {
+        if (!Array.isArray(wall.a) || !Array.isArray(wall.b)) continue;
+        const distance = distanceToSegment(point, wall.a, wall.b);
+        if (distance < bestDistance) {
+          best = { kind: "wall", item: wall };
+          bestDistance = distance;
+        }
+      }
+      return best;
+    }
+
+    function commitWall(a, b) {
+      const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (length < MIN_WALL_CM) {
+        error.textContent = `a wall shorter than ${MIN_WALL_CM} cm is a dot, not a wall`;
+        return;
+      }
+      pushHistory();
+      document_.walls = [
+        ...(document_.walls || []),
+        { id: uid("wall"), a: [a[0], a[1]], b: [b[0], b[1]], source: "user" },
+      ];
+      error.textContent = "";
+      markDirty(true);
+      render();
+    }
+
+    function cutOpening(point) {
+      const width = Math.max(10, Number(widthInput.value) || 80);
+      let target = null;
+      let best = (HIT_PX + 4) / view.scale;
+      for (const wall of (document_ && document_.walls) || []) {
+        if (!Array.isArray(wall.a) || !Array.isArray(wall.b)) continue;
+        const distance = distanceToSegment(point, wall.a, wall.b);
+        if (distance < best) {
+          best = distance;
+          target = wall;
+        }
+      }
+      if (!target) {
+        error.textContent = "click a wall to cut a doorway through it";
+        return;
+      }
+      const length = Math.hypot(target.b[0] - target.a[0], target.b[1] - target.a[1]);
+      if (length < width + 10) {
+        error.textContent = `that wall is ${length.toFixed(0)} cm; a ${width} cm doorway does not fit`;
+        return;
+      }
+      const t = projectOnSegment(point, target.a, target.b);
+      const half = width / 2 / length;
+      // Keep the gap inside its own wall: a doorway that overhangs is a tear, not an opening.
+      const from = Math.max(0, t - half);
+      const to = Math.min(1, t + half);
+      pushHistory();
+      document_.openings = [
+        ...(document_.openings || []),
+        {
+          id: uid("door"),
+          a: pointAt(target.a, target.b, from),
+          b: pointAt(target.a, target.b, to),
+          width_cm: Math.round(width),
+          kind: "door",
+        },
+      ];
+      error.textContent = "";
+      markDirty(true);
+      render();
+    }
+
+    function deleteAt(point) {
+      const hit = nearestSegment(point, (HIT_PX + 4) / view.scale);
+      if (!hit) return;
+      pushHistory();
+      if (hit.kind === "opening") {
+        document_.openings = (document_.openings || []).filter((item) => item !== hit.item);
+      } else {
+        document_.walls = (document_.walls || []).filter((item) => item !== hit.item);
+      }
+      markDirty(true);
+      render();
+    }
+
+    async function save() {
+      if (!document_) return;
+      error.textContent = "";
+      try {
+        const answer = await api("/map", {
+          method: "PUT",
+          body: JSON.stringify({
+            document: {
+              ...document_,
+              walls: document_.walls || [],
+              openings: document_.openings || [],
+            },
+          }),
+        });
+        // Publish what the device wrote: the rev it returns is the one the next save must send.
+        if (answer && answer.document) {
+          document_ = answer.document;
+          describe(document_);
+        }
+        markDirty(false);
+        history = [];
+        render();
+      } catch (err) {
+        const payload = err.payload || {};
+        if (payload.problems && payload.problems.length) {
+          error.textContent = `${err.message}: ${payload.problems.join("; ")}`;
+        } else if (err.status === 409) {
+          error.textContent =
+            "the map changed since this copy was read - press Reload and redo the edit";
+        } else {
+          error.textContent = errorText(err);
+        }
+      }
+    }
+
 
     const toScreen = (x, y) => [canvas.width / 2 - x * view.scale, canvas.height / 2 - y * view.scale];
 
@@ -317,6 +577,21 @@ export const map = {
       ctx.fillText(metres < 1 ? `${metres * 100} cm` : `${metres} m`, 12, y - 8);
     }
 
+    function drawDraft(ctx) {
+      if (!draft || !draft.b) return;
+      const [ax, ay] = screen(draft.a[0], draft.a[1]);
+      const [bx, by] = screen(draft.b[0], draft.b[1]);
+      ctx.save();
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = "#7ad67a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function polygonCentre(polygon) {
       let x = 0;
       let y = 0;
@@ -339,6 +614,7 @@ export const map = {
         drawWalls(ctx);
         drawOpenings(ctx);
       }
+      drawDraft(ctx);
       drawDog(ctx);
       drawScale(ctx);
     }
@@ -370,7 +646,13 @@ export const map = {
       error.textContent = "";
       try {
         const payload = await api("/map");
-        document_ = payload && payload.document ? payload.document : null;
+        const incoming = payload && payload.document ? payload.document : null;
+        // A copy, not the payload: every edit mutates this tree, and a poll must never merge a
+        // half-finished edit into a fresh document.
+        document_ = incoming ? JSON.parse(JSON.stringify(incoming)) : null;
+        history = [];
+        draft = null;
+        markDirty(false);
         if (!document_) {
           count.textContent = "no document";
           note.textContent = "the device answered without a map document";
@@ -407,6 +689,13 @@ export const map = {
     root.querySelector("#mp-in").addEventListener("click", () => zoom(1.3));
     root.querySelector("#mp-out").addEventListener("click", () => zoom(1 / 1.3));
 
+    for (const name of ["view", "wall", "opening", "delete"]) {
+      root.querySelector(`#mp-mode-${name}`).addEventListener("click", () => modeTo(name));
+    }
+    root.querySelector("#mp-undo").addEventListener("click", undo);
+    root.querySelector("#mp-save").addEventListener("click", save);
+    root.querySelector("#mp-reload").addEventListener("click", () => load());
+
     for (const name of LAYERS) {
       const box = root.querySelector(`#mp-layer-${name}`);
       box.checked = layers.has(name);
@@ -417,14 +706,39 @@ export const map = {
       });
     }
 
-    // Drag to pan, wheel to zoom. Both write the view, so a reload comes back where you left it.
+    // Drag to pan in View; drag to draw in Wall; click to cut or delete. One handler, four modes,
+    // because a canvas that switches behaviour by mode is easier to trust than three overlapping
+    // listeners that all have to guess which one the user meant.
     let dragging = null;
     canvas.addEventListener("pointerdown", (event) => {
+      if (!document_) return;
+      const point = docPoint(event);
+      if (mode === "wall") {
+        const start = snapped(point, null, false);
+        draft = { a: start, b: start };
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
+      if (mode === "opening") {
+        cutOpening(point);
+        return;
+      }
+      if (mode === "delete") {
+        deleteAt(point);
+        return;
+      }
       canvas.setPointerCapture(event.pointerId);
       canvas.style.cursor = "grabbing";
       dragging = { x: event.clientX, y: event.clientY, view: { ...(view || {}) } };
     });
+
     canvas.addEventListener("pointermove", (event) => {
+      if (!document_) return;
+      if (mode === "wall" && draft) {
+        draft = { a: draft.a, b: snapped(docPoint(event), draft.a, event.shiftKey) };
+        render();
+        return;
+      }
       if (!dragging || !view) return;
       const dx = event.clientX - dragging.x;
       const dy = event.clientY - dragging.y;
@@ -435,14 +749,22 @@ export const map = {
       };
       render();
     });
-    const stopDrag = () => {
+
+    const endDrag = (event) => {
+      if (mode === "wall" && draft) {
+        const start = draft.a;
+        const end = draft.b || start;
+        draft = null;
+        commitWall(start, end);
+        return;
+      }
       if (!dragging) return;
       dragging = null;
       canvas.style.cursor = "grab";
       if (view) saveView(view);
     };
-    canvas.addEventListener("pointerup", stopDrag);
-    canvas.addEventListener("pointercancel", stopDrag);
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
     canvas.addEventListener(
       "wheel",
       (event) => {
@@ -456,7 +778,9 @@ export const map = {
     // The map moves at scan rate, not at the state rate: one small read every few seconds is the
     // honest cadence, and it is paused while the tab is hidden.
     const timer = setInterval(() => {
-      if (!document.hidden && !root.closest(".panel").hidden) load();
+      // Never while an edit is unsaved: a poll that replaced the working copy would delete the
+      // wall somebody is drawing, which is the one thing an editor must not do.
+      if (!document.hidden && !root.closest(".panel").hidden && !edited) load();
     }, 4000);
 
     return {

@@ -377,7 +377,23 @@ maybe rather than a floor, and the two are drawn differently on purpose. A trunc
 **You can** toggle the four layers (`cells`, `rooms`, `walls`, `surfaces`), `Fit` the map to the
 canvas, zoom with `+`/`-` or the wheel, and **drag to pan**. The view — scale and centre — is kept in
 `localStorage` under `houndmind.map.view`, so a reload comes back where you left it; `Fit` throws it
-away. It polls every four seconds while visible.
+away. It polls every four seconds while visible, and **never while an edit is unsaved**.
+
+**Editing the walls (#309).** Four modes, chosen from the row under the canvas:
+
+| Mode | What a press does |
+|---|---|
+| `View` | pans — the default, and the only mode in which dragging moves the picture |
+| `Wall` | drag from one end to the other; the draw snaps to 5 cm and **magnets to an existing endpoint** within 15 cm, so two walls meant to meet do meet. Hold `Shift` to constrain to the axis the drag is longer on. A wall shorter than 20 cm is refused |
+| `Doorway` | click a wall to cut an opening through it, centred where you clicked, `doorway width` cm wide (80 by default). A doorway that would not fit inside its wall is refused, with the wall's length in the message |
+| `Delete` | click a wall or a doorway to remove it |
+
+`Undo` restores the previous walls-and-openings snapshot (up to 50 steps), and the chip beside the
+buttons reads `unsaved` until **Save to device** writes the document with `PUT /map`. Saving is
+optimistic: the document carries the `meta.rev` this copy was read at, a device that has moved on
+answers `409` and the panel says to press **Reload** rather than overwriting somebody else's edit.
+`Reload` re-reads the map and discards unsaved work, which is why the poll never runs while the chip
+says `unsaved`.
 
 **Needs** — `state:read`.
 
@@ -386,8 +402,8 @@ nothing; a device whose `mapping.grid_enabled` is off or whose map file is empty
 and `python -m tools.map_inspect data/home_map.json` prints what the file actually holds. The dog
 triangle comes from the document, **not** from the live `localization.pose`: the runtime's pose is
 `(forward, left)` while the document's is `(left, forward)`, so plotting the live pose on this frame
-would mirror it (#347). There is nothing to edit here yet — drawing walls, naming rooms and correcting
-the pose are M3-M5.
+would mirror it (#347). Walls and doorways are editable here; naming rooms, painting surfaces and
+correcting the pose are M4 and M5.
 
 ### Modules
 
