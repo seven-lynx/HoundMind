@@ -110,7 +110,7 @@ The code is six digits, valid **five minutes**, **single use** (`services/auth.p
 | Scope | Device token | Paired client | What it unlocks |
 |---|---|---|---|
 | `state:read` | yes | yes | every read: state, scan, map, modules, decisions, history, camera ticket |
-| `move` | yes | yes | `POST /command`, `/stop`, `/mode` — Drive, Tricks, a routine, walking to a place |
+| `move` | yes | yes | `POST /command`, `/stop`, `/mode` — Drive, Tricks, a routine, walking to a place — plus correcting the dog's position (`PUT /map/pose`) and sending it to a point (`POST /map/go`) |
 | `config` | yes | yes | `PATCH /config`, place and routine writes, calibration probes |
 | `admin` | yes | **no** | People, Logs, the support bundle, opening a pairing window |
 
@@ -379,7 +379,7 @@ canvas, zoom with `+`/`-` or the wheel, and **drag to pan**. The view — scale 
 `localStorage` under `houndmind.map.view`, so a reload comes back where you left it; `Fit` throws it
 away. It polls every four seconds while visible, and **never while an edit is unsaved**.
 
-**Editing the walls (#309).** Four modes, chosen from the row under the canvas:
+**Editing the walls (#309).** Four drawing modes, chosen from the row under the canvas:
 
 | Mode | What a press does |
 |---|---|
@@ -405,6 +405,21 @@ half-drawn room left behind when the tab closes. A closed room takes the name in
 under the cursor (it gets an amber outline), and the button then reads `keep-out: on` or `off` and
 toggles it. A keep-out room is drawn with a dashed red edge. `Delete` removes a room or a surface you
 click, before it looks for a wall.
+
+**Position and go (M5).** Two more modes, and the only two that involve the dog rather than the house:
+
+| Mode | What a press does |
+|---|---|
+| `Pose` | drag the dog to where it really is. An amber ring marks the proposal and **nothing changes yet**; **Confirm position** sends it with `PUT /map/pose`, `Cancel` throws it away, and leaving `Pose` discards it too — a finger on a canvas is not a measurement |
+| `Go` | click a point to send the dog there (`POST /map/go`). With no pose to plan from, the click is refused and the reason appears under the canvas: `no_pose` means *correct the position first* |
+
+Confirming a position re-anchors odometry at that point and writes it into the map file, so it survives a
+restart, and `localization` reports the `user` tier until the correction ages out (30 s) or the dog has
+walked away from it. The chip in the header reads `pose: user` right after a correction and
+`pose: dead_reckoning` when it has expired; the chip beside it shows the route — the refusal reason when
+there is one, or `walking 2/5`. The dog itself is drawn from the `pose` on `GET /map`, which the device
+has already converted into the map's frame: the panel never converts, so it cannot mirror the dog (#347).
+
 
 The chip beside the surface picker is the point of the whole exercise: `18.4 cm measured` when
 `odometry.surface_step_cm` has a value for that paint, and `not measured` otherwise. The panel cannot

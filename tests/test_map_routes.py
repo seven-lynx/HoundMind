@@ -343,3 +343,155 @@ def test_get_map_publishes_an_empty_measurement_before_calibration(tmp_path) -> 
     assert body["map"] is None
     assert body["surface_step_cm"] == {}
 
+
+# ---- M5: position and go ----------------------------------------------------
+
+
+def test_put_map_pose_re_anchors_in_the_runtime_frame(tmp_path) -> None:
+    """The console sends document points; `pose_reset` is `(forward, left)`. Exactly one swap."""
+
+    async def scenario() -> tuple[int, dict, dict | None]:
+        plane, headers, _path = make_plane(tmp_path, document=wire_document())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.put(
+                f"{API_PREFIX}/map/pose",
+                headers=headers,
+                json={"x_cm": 30.0, "y_cm": 100.0, "heading_deg": 90.0},
+            )
+            body = await response.json()
+        return response.status, body, plane.context.get("pose_reset")
+
+    status, body, reset = asyncio.run(scenario())
+    assert status == 200
+    assert body["dog"]["x_cm"] == 30.0 and body["dog"]["y_cm"] == 100.0
+    assert reset is not None
+    # left 30 / forward 100 in the document is forward 100 / left 30 for odometry (#347).
+    assert reset["x_cm"] == 100.0 and reset["y_cm"] == 30.0
+    assert reset["source"] == "user"
+    assert isinstance(reset["frame_ts"], float)
+
+
+def test_put_map_pose_writes_the_dog_into_the_file(tmp_path) -> None:
+    """It has to survive a restart: the position is the one fact a restart cannot recompute."""
+
+    async def scenario() -> tuple[int, dict, Path]:
+        plane, headers, path = make_plane(tmp_path, document=wire_document(meta={"rev": 4}))
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.put(
+                f"{API_PREFIX}/map/pose", headers=headers, json={"x_cm": 12.5, "y_cm": -7.5}
+            )
+            return response.status, await response.json(), path
+
+    status, body, path = asyncio.run(scenario())
+    assert status == 200
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert raw["dog"]["x_cm"] == 12.5 and raw["dog"]["y_cm"] == -7.5
+    assert raw["meta"]["rev"] == 5, "the file changed, so the generation moved with it"
+    assert body["rev"] == 5
+
+
+def test_put_map_pose_needs_two_numbers(tmp_path) -> None:
+    """`"left"` is not a coordinate, and a guessed one moves the origin without anyone noticing."""
+
+    async def scenario() -> int:
+        plane, headers, _path = make_plane(tmp_path, document=wire_document())
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.put(
+                f"{API_PREFIX}/map/pose", headers=headers, json={"x_cm": "left", "y_cm": 5}
+            )
+            return response.status
+
+    assert asyncio.run(scenario()) == 400
+
+
+def test_get_map_publishes_the_pose_in_the_document_frame(tmp_path) -> None:
+    """A runtime pose drawn against the document mirrors the dog; the route does the swap once."""
+
+    async def scenario() -> dict:
+        plane, headers, _path = make_plane(tmp_path)
+        plane.context.set(
+            "localization",
+            {"tier": "user", "pose": {"x": 100.0, "y": 30.0, "yaw_deg": 90.0}, "confidence": 0.8},
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/map", headers=headers)
+            return await response.json()
+
+    body = asyncio.run(scenario())
+    assert body["pose"]["x_cm"] == 30.0 and body["pose"]["y_cm"] == 100.0
+    assert body["pose"]["heading_deg"] == 90.0, "yaw is already 0 = forward, positive = left"
+    assert body["pose"]["tier"] == "user"
+
+
+def test_map_go_refuses_without_a_pose_and_says_why(tmp_path) -> None:
+    """`202` followed by a refusal in `/state` reads as "accepted": say it now instead."""
+
+    async def scenario() -> tuple[int, dict, object]:
+        plane, headers, _path = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/go", headers=headers, json={"x_cm": 10, "y_cm": 20}
+            )
+            return response.status, await response.json(), plane.context.get("route_request")
+
+    status, body, request = asyncio.run(scenario())
+    assert status == 409
+    assert body["error"] == "no_pose" and body["tier"] is None
+    assert request is None, "a refused goal must not be queued for the follower"
+
+
+def test_map_go_hands_the_goal_to_the_follower_in_the_runtime_frame(tmp_path) -> None:
+    """One write: `route_follower` plans and walks it, which is the hand-off that already exists."""
+
+    async def scenario() -> tuple[int, object]:
+        plane, headers, _path = make_plane(tmp_path)
+        plane.context.set(
+            "localization", {"tier": "dead_reckoning", "pose": {"x": 0.0, "y": 0.0}}
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/go", headers=headers, json={"x_cm": 30.0, "y_cm": 100.0}
+            )
+            return response.status, plane.context.get("route_request")
+
+    status, request = asyncio.run(scenario())
+    assert status == 202
+    assert request == {"goal_cm": {"x_cm": 100.0, "y_cm": 30.0}}
+
+
+def test_map_go_does_not_queue_behind_a_walk_in_flight(tmp_path) -> None:
+    """One destination at a time, or the brake and the throttle stop being one control."""
+
+    async def scenario() -> int:
+        plane, headers, _path = make_plane(tmp_path)
+        plane.context.set("localization", {"tier": "user", "pose": {"x": 0.0, "y": 0.0}})
+        plane.context.set("route", {"state": "walking", "index": 0, "total": 3})
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/map/go", headers=headers, json={"x_cm": 10, "y_cm": 10}
+            )
+            return response.status
+
+    assert asyncio.run(scenario()) == 409
+
+
+def test_position_and_go_both_need_the_move_scope(tmp_path) -> None:
+    """`config` edits the map; only `move` may re-anchor the pose or send the dog somewhere."""
+
+    async def scenario() -> tuple[int, int]:
+        plane, _device, _path = make_plane(tmp_path, document=wire_document())
+        token, _principal = plane.authorizer.issue_client_token("Pen", scopes=["config"])
+        headers = {"Authorization": f"Bearer {token}"}
+        async with TestClient(TestServer(create_app(plane))) as client:
+            pose = await client.put(
+                f"{API_PREFIX}/map/pose", headers=headers, json={"x_cm": 1, "y_cm": 2}
+            )
+            go = await client.post(
+                f"{API_PREFIX}/map/go", headers=headers, json={"x_cm": 1, "y_cm": 2}
+            )
+        return pose.status, go.status
+
+    assert asyncio.run(scenario()) == (403, 403)
+
+
+

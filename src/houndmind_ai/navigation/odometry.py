@@ -21,7 +21,9 @@ matches the scan yaw `mapping/mapper.py` records (0 = forward, positive = left,
 `place_navigator.py:104`).
 
 Set `odometry_reset` in the context to re-anchor the pose at the origin, which is what a taught
-place or a fresh SLAM fix does.
+place or a fresh SLAM fix does. Set `pose_reset` to re-anchor it at a *point* instead — the console
+dragging the dog onto the map (M5) — and the anchor is published inside `odometry` so
+`navigation/localization.py` can say the pose was a human's rather than a measurement's.
 """
 
 from __future__ import annotations
@@ -168,15 +170,25 @@ class OdometryModule(Module):
         # The range-aided audit (#300): the step being watched, and the last record it produced.
         self._audit_pending: dict[str, Any] | None = None
         self._audit: dict[str, Any] | None = None
+        # Where a human put the dog, while that is still the newest statement about it (M5).
+        self._anchor: dict[str, Any] | None = None
         self._clock = time.time
 
-    def reset(self) -> None:
-        """Re-anchor the pose at the origin, keeping the counters' meaning for the next window."""
+    def reset(self, anchor: tuple[float, float] | None = None) -> None:
+        """Re-anchor the pose, at the origin or at a point someone else chose.
+
+        `anchor` is `(forward_cm, left_cm)` in the runtime frame — already swapped by whoever read
+        the document, so this never guesses which frame a number came from (#347). Zeroing the
+        counters as well is what resets `travelled_cm`, and that is what restarts the drift clock
+        `localization` measures a fix against.
+        """
         self._steps = 0
         self._distance_cm = 0.0
         self._travelled_cm = 0.0
         self._x_cm = 0.0
         self._y_cm = 0.0
+        if anchor is not None:
+            self._x_cm, self._y_cm = anchor
         self._reason = None
 
     def tick(self, context) -> None:
@@ -184,8 +196,18 @@ class OdometryModule(Module):
         scale = resolve_step_cm(settings)
         track_backward = bool(settings.get("track_backward", True))
 
-        if context.get("odometry_reset"):
+        # A `pose_reset` says where the dog *is*; a bare `odometry_reset` only says "this is the
+        # origin now". Both are one-shot, and the request is cleared here before it is applied: a key
+        # that outlived the tick would re-anchor on every tick and the dog would never appear to move.
+        pose_reset = context.get("pose_reset")
+        if isinstance(pose_reset, dict):
+            context.set("pose_reset", None)
+            self._apply_pose_reset(pose_reset)
+        elif context.get("odometry_reset"):
             self.reset()
+            # A new origin supersedes the old anchor; keeping it would attribute the next pose to a
+            # correction that no longer describes where the dog is.
+            self._anchor = None
 
         # Close the previous step's audit before consuming this one, so a reading that arrived
         # between ticks is credited to the step it belongs to.
@@ -196,6 +218,29 @@ class OdometryModule(Module):
             self._consume(command, context, scale, track_backward)
 
         self._publish(context, scale)
+
+    def _apply_pose_reset(self, request: dict) -> None:
+        """Place the pose at a point someone else chose, and remember who (`pose_reset`, M5).
+
+        A point that is not two finite numbers is refused rather than approximated: `float("nan")`
+        would poison every later step, and `(0, 0)` is a plausible-looking position that would put
+        the dog at the map's origin as if it had been measured there.
+        """
+        x_cm = _safe_float(request.get("x_cm"), math.nan)
+        y_cm = _safe_float(request.get("y_cm"), math.nan)
+        if not (math.isfinite(x_cm) and math.isfinite(y_cm)):
+            self._reason = "pose_reset carried no usable point"
+            return
+        self.reset((x_cm, y_cm))
+        self._anchor = {
+            "source": str(request.get("source") or "user"),
+            "x_cm": round(x_cm, 3),
+            "y_cm": round(y_cm, 3),
+            # Passed through, not interpreted: `localization` compares it for identity, so a
+            # corrected fix cannot be mistaken for the previous one.
+            "frame_ts": request.get("frame_ts"),
+            "ts": time.time(),
+        }
 
     def _consume(
         self, command: dict, context, scale: StepScale, track_backward: bool
@@ -259,6 +304,8 @@ class OdometryModule(Module):
                 # The last ranged comparison, or None until a step closed on a wall (#300). It is
                 # logged, never applied: the constant changes only through `step_calibrate --apply`.
                 "audit": self._audit,
+                # The point a human put the dog on, and `None` after a plain origin reset (M5).
+                "anchor": self._anchor,
             },
         )
 
