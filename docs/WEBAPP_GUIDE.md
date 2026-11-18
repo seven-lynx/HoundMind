@@ -228,6 +228,20 @@ that the console is broken. Cross-check Modules.
   `wait: true`, so the HAL finishes the step before the answer returns — it is the control to use
   when measuring distance, and there is no queue behind it.
 
+**Handing control back.** `idle` is *also* how you give the dog its autonomy again — it is the same
+list, not a separate control. There is no "resume autonomy" button and no confirmation: one selection
+returns the dog to self-driving. From a shell, with the token read on the device:
+
+```bash
+TOKEN=$(cat ~/.houndmind/api_token)
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"mode":"idle"}' http://127.0.0.1:8420/api/v1/mode      # {"mode": "idle"}
+```
+
+`GET /api/v1/mode` reads it back (`state:read`), and every change is published as `mode_changed`, so it
+appears in the ticker. `rest` and `idle` are one selection apart in both directions — the route table
+and what each mode admits are in [`CONTROL_API.md` §2](CONTROL_API.md#2-endpoints).
+
 **Needs** — `move`.
 
 **If it looks wrong** — an inline sentence, never silence: *Tilt latched: put the dog upright, then

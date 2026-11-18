@@ -186,6 +186,21 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/logs?tail=200&level=ERROR&contains=<text>` | `admin` | recent log lines, redacted; `level` (one of `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`) and `contains` (case-insensitive substring) are applied by the server across a bounded scan, not to the fetched tail |
 | `GET` | `/api/v1/support-bundle` | `admin` | zip: meta, state, modules, redacted config, audit, sessions |
 
+**The four modes gate sources, not verbs.** `services/api.py` validates the name; the table in
+`kernel/commands.py:113-122` decides what each one admits:
+
+| Mode | Sources that may command motion | Means |
+|---|---|---|
+| `idle` | every source | autonomy on: behaviour and the navigator may drive |
+| `patrol` | every source | the navigator roams on its own |
+| `manual` | client, routine, place, watchdog, system | a hand on the wheel: autonomy may not |
+| `rest` | watchdog and system | parked: only the two sources that exist to end a motion |
+
+`stop` is never gated by a mode, and any valid mode may be set from any other — including `rest` →
+`idle`, which hands the dog back to autonomy with no confirmation step and no intermediate state. An
+unknown name is a `400` listing the four accepted values, and each change is published as a
+`mode_changed` event on `/api/v1/events`.
+
 `PATCH /config` writes only `behavior.action_cooldown_s`, `led.brightness`,
 `motors.min_action_interval_s` and `navigation.safe_distance_cm` (`services/api.py:81`), each re-read
 every tick by its module. Any other key is refused with the live list in the body, because a config
