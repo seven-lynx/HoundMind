@@ -10,8 +10,9 @@ accepts a template substitution in place of a `{param}` segment, because that is
 call `/routines/${id}/run`. It is not a JS parser and it does not try to be - a false negative
 costs one allowlist entry, and a false positive is caught the moment the panel is opened.
 
-`_UI_EXCLUDED` is the escape hatch, and it is intentionally empty: an exclusion needs a written
-reason, so the next person can tell a decision from an oversight.
+`_UI_EXCLUDED` is the escape hatch: an exclusion needs a written reason, so the next person can tell
+a decision from an oversight. It holds one row today — `PUT /map`, whose editor lands in M3 — and
+that row goes when the editor does.
 """
 
 from __future__ import annotations
@@ -27,8 +28,11 @@ __all__ = ["test_every_route_is_reachable_from_the_web_app"]
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "src" / "houndmind_ai" / "services" / "web"
 
-# `"GET /path": "why the app does not call it"`. Empty on purpose; see the module docstring.
-_UI_EXCLUDED: dict[str, str] = {}
+# `"GET /path": "why the app does not call it"`. A row here is a decision with a segment named in
+# it, not a place to park a route nobody got round to.
+_UI_EXCLUDED: dict[str, str] = {
+    "PUT /map": "the editor that writes a map document lands in M3; M1 ships the route and its contract",
+}
 
 # A route segment that takes a parameter is called with a template substitution in the panels,
 # e.g. `/routines/${encodeURIComponent(id)}/run`. Anything without a quote, a backtick, a slash or

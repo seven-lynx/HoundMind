@@ -14,6 +14,7 @@ from houndmind_ai.mapping.home_map import (
     CURRENT_VERSION,
     build_document,
     load_home_map,
+    validate_document,
     write_document,
 )
 from houndmind_ai.mapping.mapper import MappingModule, nearest_wall
@@ -135,6 +136,46 @@ def test_entries_that_are_not_cells_are_dropped_with_a_note(tmp_path) -> None:
     assert result.ok and result.map is not None
     assert result.map.cells == {"1,2": 2}
     assert any("dropped" in note for note in result.notes)
+
+
+def test_a_scan_save_keeps_the_rev_and_the_users_sections() -> None:
+    """A snapshot every 30 s must not erase an edit or invalidate the `rev` behind it (M1)."""
+    previous = {
+        "version": CURRENT_VERSION,
+        "meta": {"rev": 4, "created_at": 1.0},
+        "cells": {"9,9": 1},
+        "rooms": [{"id": "r1", "name": "kitchen"}],
+        "dog": {"x_cm": 10, "y_cm": 20},
+    }
+
+    document = build_document({"grid": {"cells": {"1,1": 2}}}, {}, now=50.0, previous=previous)
+
+    assert document["meta"]["rev"] == 4
+    assert document["meta"]["created_at"] == 1.0
+    assert document["meta"]["updated_at"] == 50.0
+    assert document["meta"]["source"] == "scan"
+    assert document["rooms"] == [{"id": "r1", "name": "kitchen"}]
+    assert document["dog"] == {"x_cm": 10, "y_cm": 20}
+    assert document["grid"]["cells"] == {"1,1": 2}, "the scan owns the cells"
+
+
+def test_validate_document_reads_both_spellings_of_the_cells() -> None:
+    """The wire is flat and the file nests under `grid`; one validator has to read both (M1)."""
+    wire = validate_document({"version": CURRENT_VERSION, "cells": {"1,2": 3}})
+    stored = validate_document({"version": CURRENT_VERSION, "grid": {"cells": {"1,2": 3}}})
+
+    assert wire.map is not None and stored.map is not None
+    assert wire.map.cells == stored.map.cells == {"1,2": 3}
+    assert stored.map.to_document()["cells"] == {"1,2": 3}
+    assert stored.map.to_file_document()["grid"]["cells"] == {"1,2": 3}
+    assert "cells" not in stored.map.to_file_document()
+
+
+def test_validate_document_refuses_a_section_it_could_not_keep() -> None:
+    result = validate_document({"version": CURRENT_VERSION, "walls": "drawn"})
+
+    assert result.map is None
+    assert result.problems and "walls must be a list of objects" in result.problems[0]
 
 
 def test_start_without_a_configured_path_says_so() -> None:

@@ -47,6 +47,12 @@ from houndmind_ai.kernel.decisions import DecisionRing
 from houndmind_ai.kernel.place import slug
 from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.kernel.routine_store import RoutineConflict, RoutineStore, StoreReport
+from houndmind_ai.mapping.home_map import (
+    load_home_map,
+    map_path,
+    validate_document,
+    write_document,
+)
 from houndmind_ai.services.auth import (
     AuthError,
     Authorizer,
@@ -335,7 +341,7 @@ def _plane(request: web.Request) -> ControlPlane:
 
 
 _CORS_ALLOW_HEADERS = "Authorization, Content-Type"
-_CORS_ALLOW_METHODS = "GET, POST, PATCH, DELETE, OPTIONS"
+_CORS_ALLOW_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
 
 
 def _with_cors(response: web.StreamResponse, origin: str | None) -> web.StreamResponse:
@@ -550,8 +556,18 @@ async def _scan(request: web.Request) -> web.Response:
 _MAP_CELLS = 4000
 
 
+def _map_document(context) -> dict[str, Any] | None:
+    """The home-map document this runtime knows, or `None` when it has none (M1).
+
+    The same key the mapper publishes on load (`mapping/mapper.py:75`), so `GET /map` and
+    `PUT /map` never disagree about which map is current.
+    """
+    document = context.get("home_map")
+    return document if isinstance(document, dict) else None
+
+
 async def _map(request: web.Request) -> web.Response:
-    """The occupancy grid the mapper built, bounded (#175).
+    """The occupancy grid the mapper built, bounded (#175), and the home-map document (M1).
 
     `mapping` has kept a hit histogram per cell since P3 (`mapping/mapper.py::_ingest_into_grid`) and
     nothing could see it. Cells are published as `[ix, iy, hits]` **in cells, not centimetres**:
@@ -560,17 +576,22 @@ async def _map(request: web.Request) -> web.Response:
 
     `truncated` and `count` say what was left out, because an empty corner of a truncated map means
     "not sent", not "not mapped" - and only one of those is worth walking into.
+
+    `document` is the versioned home map, additively: `map` stays the capped cell list this route
+    has always served, and `document` is what `PUT /map` takes back. It is `null` when no map was
+    loaded and none was saved, which is a fact a client has to see rather than an empty map.
     """
     plane = _plane(request)
     state = plane.context.get("mapping_state")
     settings = (plane.context.get("settings") or {}).get("mapping", {})
     settings = settings if isinstance(settings, dict) else {}
+    document = _map_document(plane.context)
     grid_enabled = bool(settings.get("grid_enabled", True))
     grid = state.get("grid") if isinstance(state, dict) else None
     cells = grid.get("cells") if isinstance(grid, dict) else None
     if not isinstance(cells, dict) or not cells:
         return web.json_response(
-            {"map": None, "grid_enabled": grid_enabled},
+            {"map": None, "grid_enabled": grid_enabled, "document": document},
             headers={"Cache-Control": "no-store"},
         )
 
@@ -599,7 +620,106 @@ async def _map(request: web.Request) -> web.Response:
                 "truncated": truncated,
             },
             "grid_enabled": grid_enabled,
+            "document": document,
         },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def _map_save(request: web.Request) -> web.Response:
+    """Save the home-map document a console edited, guarded by `meta.rev` (M1).
+
+    The body carries the **client** shape `GET /map` published - `cells` flat, `samples` a count, the
+    user's sections beside them. The file keeps `grid.cells` and the sample log, which are the
+    mapper's and which a client never received; `mapping/home_map.py::validate_document` judges both
+    spellings, so a document this route accepts is one the next start can load.
+
+    `rev` is optimistic concurrency, not a lock: the client sends the generation it read, a mismatch
+    answers `409` with the current one, and nothing is overwritten. A scan save never bumps it, so a
+    30 s snapshot cannot invalidate an edit in progress.
+    """
+    plane = _plane(request)
+    settings = (plane.context.get("settings") or {}).get("mapping", {})
+    settings = settings if isinstance(settings, dict) else {}
+    path = map_path(settings.get("home_map_path", "data/home_map.json"), "data/home_map.json")
+
+    body = await _json_body(request)
+    raw = body.get("document")
+    if not isinstance(raw, dict):
+        return web.json_response(
+            {"error": "bad_request", "detail": "the body must carry a `document` object"}, status=400
+        )
+
+    result = validate_document(raw)
+    if result.map is None:
+        return web.json_response(
+            {
+                "error": "bad_request",
+                "detail": "the map document was refused",
+                "problems": list(result.problems) or [str(result.reason or "unknown")],
+            },
+            status=400,
+        )
+    incoming = result.map
+
+    # The file is the authority on what a restart would read: `home_map_load_path` ships empty, so a
+    # `rev` taken from the context alone would forget every edit made before the last restart, and
+    # the sample log the mapper writes is never on the wire at all.
+    stored_map = load_home_map(path).map
+    if stored_map is not None:
+        current_rev = stored_map.rev
+        created_at = stored_map.meta.get("created_at")
+        kept_samples: list[dict[str, Any]] | None = [
+            dict(entry) for entry in stored_map.samples
+        ]
+    else:
+        published_document = _map_document(plane.context) or {}
+        published_meta_raw = (
+            published_document.get("meta") if isinstance(published_document, dict) else None
+        )
+        published_meta = published_meta_raw if isinstance(published_meta_raw, dict) else {}
+        current = published_meta.get("rev")
+        current_rev = current if isinstance(current, int) and not isinstance(current, bool) else 0
+        created_at = published_meta.get("created_at")
+        kept_samples = None
+    if incoming.rev != current_rev:
+        return web.json_response(
+            {
+                "error": "conflict",
+                "detail": "the map changed since this copy was read; fetch it again",
+                "rev": current_rev,
+            },
+            status=409,
+        )
+
+    document = incoming.to_file_document()
+    if not incoming.samples and kept_samples:
+        # The client sent a count, not the log. Keeping the file's window is what stops an edit from
+        # quietly deleting evidence the mapper wrote.
+        document["samples"] = kept_samples
+    now = time.time()
+    document["meta"]["rev"] = current_rev + 1
+    created = _number(created_at)
+    document["meta"]["created_at"] = created if created is not None else now
+    document["meta"]["updated_at"] = now
+    document["meta"]["source"] = "user"
+
+    try:
+        write_document(path, document)
+    except OSError as exc:
+        logger.warning("Home map not written to %s: %s", path, exc)
+        return web.json_response(
+            {"error": "unavailable", "detail": f"the map file could not be written: {exc}"},
+            status=503,
+        )
+
+    # Publish what a restart would read, not what was sent: one shape answers `GET /map` and feeds
+    # the mapper's next snapshot.
+    verified = validate_document(document)
+    wire = verified.map.to_document() if verified.map is not None else incoming.to_document()
+    plane.context.set("home_map", wire)
+    return web.json_response(
+        {"rev": wire["meta"].get("rev"), "document": wire},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -1873,6 +1993,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("GET", "/state", "state:read", _state),
     ("GET", "/scan", "state:read", _scan),
     ("GET", "/map", "state:read", _map),
+    ("PUT", "/map", "config", _map_save),
     ("GET", "/modules", "state:read", _modules),
     ("GET", "/repertoire", "state:read", _repertoire),
     ("GET", "/routines", "state:read", _routines_list),

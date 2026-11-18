@@ -11,6 +11,7 @@ from houndmind_ai.mapping.home_map import (
     HomeMap,
     build_document,
     load_home_map,
+    map_path,
     write_document,
 )
 
@@ -20,14 +21,11 @@ logger = logging.getLogger(__name__)
 def _map_path(text: Any, default: str) -> Path:
     """Resolve a configured map path against the repository root, not the working directory.
 
-    A relative path is the shipped default (`data/home_map.json`) and the service does not run from
-    the repo root, so resolving against the cwd would put the map where nobody looks for it.
+    The rule lives beside the format (`mapping/home_map.py::map_path`), because the control plane
+    writes the same file this module reads: two copies of it is how a `PUT /map` lands somewhere the
+    mapper never looks.
     """
-    raw = text if isinstance(text, str) and text.strip() else default
-    path = Path(raw)
-    if not path.is_absolute():
-        path = Path(__file__).resolve().parents[3] / path
-    return path
+    return map_path(text, default)
 
 
 class MappingModule(Module):
@@ -184,19 +182,28 @@ class MappingModule(Module):
             settings.get("home_map_enabled", False)
             and now - self.last_save_ts >= save_interval
         ):
-            self.save_home_map(mapping_state, settings)
+            self.save_home_map(mapping_state, settings, previous=context.get("home_map"))
             self.last_save_ts = now
 
-    def save_home_map(self, mapping_state: dict, settings: dict) -> None:
+    def save_home_map(
+        self,
+        mapping_state: dict,
+        settings: dict,
+        previous: dict | None = None,
+    ) -> None:
         """Write the map so the next start can read it back (L1.1).
 
         The document is built by `mapping/home_map.py`, which also loads it: one description of the
         format, so the writer cannot drift from the reader.
+
+        `previous` is the document this runtime already knows. It carries the edit generation and
+        the user's sections, so a snapshot every 30 s neither erases a wall a human drew nor
+        invalidates the `rev` a client is editing against (M1).
         """
         output_path = _map_path(
             settings.get("home_map_path", "data/home_map.json"), "data/home_map.json"
         )
-        document = build_document(mapping_state, settings)
+        document = build_document(mapping_state, settings, previous=previous)
         try:
             write_document(output_path, document)
         except OSError as exc:
@@ -211,7 +218,7 @@ class MappingModule(Module):
         settings = (context.get("settings") or {}).get("mapping", {})
         if settings.get("home_map_enabled", False):
             mapping_state = context.get("mapping_state") or {"samples": []}
-            self.save_home_map(mapping_state, settings)
+            self.save_home_map(mapping_state, settings, previous=context.get("home_map"))
 
     def _ingest_into_grid(self, angles: dict, settings: dict, mapping_state: dict) -> None:
         if not isinstance(angles, dict) or not angles:

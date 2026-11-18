@@ -835,7 +835,11 @@ def test_the_scan_route_answers_null_before_the_first_sweep(tmp_path) -> None:
 
 
 def test_the_map_route_reports_nothing_until_a_cell_is_filled(tmp_path) -> None:
-    """`map: null` is an answer; `grid_enabled` says whether waiting will ever help (#175)."""
+    """`map: null` is an answer; `grid_enabled` says whether waiting will ever help (#175).
+
+    `document: null` rides beside them (M1): no map loaded and none saved is a third fact, and a
+    client that cannot tell it from an empty map draws a room the dog has never seen.
+    """
     async def scenario() -> None:
         plane = make_plane(tmp_path)
         headers = {"Authorization": f"Bearer {plane.tokens.ensure()}"}
@@ -847,8 +851,9 @@ def test_the_map_route_reports_nothing_until_a_cell_is_filled(tmp_path) -> None:
             disabled = await client.get(f"{API_PREFIX}/map", headers=headers)
             disabled_body = await disabled.json()
 
-        assert empty.status == 200 and empty_body == {"map": None, "grid_enabled": True}
-        assert disabled_body == {"map": None, "grid_enabled": False}
+        assert empty.status == 200
+        assert empty_body == {"map": None, "grid_enabled": True, "document": None}
+        assert disabled_body == {"map": None, "grid_enabled": False, "document": None}
 
     asyncio.run(scenario())
 
