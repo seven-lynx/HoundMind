@@ -1,11 +1,13 @@
 // Map: the home map the dog builds, drawn from the `document` M1 puts on `GET /map` (#307).
 //
-// **The frame comes from the document, and it is not the runtime's.** The document states
-// `x = left-positive`, `y = forward-positive`, centimetres from the map origin (M plan section 5), so
-// this panel draws nose-up with no conversion: screen x = centre - x * scale (left is left), screen
-// y = centre - y * scale (forward is up). The runtime's own pose is (forward, left) - a different
-// order under the same names - which is why the dog here comes from `document.dog` and never from
-// `localization.pose`: plotting the live pose against this frame would mirror it (#347).
+// **Two frames, both correct, both called x/y — and the document's is not the runtime's.** A document
+// point is `[x = left, y = forward]` (M plan section 5, `CONTROL_API.md`), which is what a person
+// reading a plan expects, so this panel draws nose-up with no conversion: screen x = centre - x * scale
+// (left is left), screen y = centre - y * scale (forward is up). The runtime speaks
+// `(forward_cm, left_cm)` — the pose, the planner and the grid cells all do — so when this panel plots
+// `localization.pose` it swaps once, through `document_point_to_runtime` on the server side (#347).
+// Until M5 does that, the dog here comes from `document.dog` alone: drawing a runtime pose against this
+// frame without the swap mirrors the dog, which is exactly the bug the swap exists to prevent.
 //
 // Four layers, each toggleable, because they answer different questions: cells are *evidence* (what
 // the sonar hit), walls and openings are *claims* (drawn by a person or lifted from the scan), rooms

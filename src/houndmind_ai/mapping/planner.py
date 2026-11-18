@@ -11,10 +11,16 @@ Two rules shape it.
    blocked" rather than "known clear". A route over unknown ground is a plan the reactive navigator
    still has to survive, and `clearance_cm` says how much room the plan believes it has.
 2. **The index is not the coordinate.** Cells are keyed `"ix,iy"` where `ix` counts the *left* axis
-   and `iy` the *forward* one, so `x_cm = iy * cell` and `y_cm = ix * cell`
-   (`mapping/mapper.py::cell_centre_cm`). Reading them the other way round yields a route that is
-   transposed — a valid-looking walk into the wrong room — which is why the mapping is inverted in
-   exactly one place here and pinned by a test.
+   and `iy` the *forward* one. A planner point is `(forward_cm, left_cm)` — the runtime's own order,
+   the same one `mapping/mapper.py::cell_centre_cm` returns — so `forward_cm = iy * cell` and
+   `left_cm = ix * cell`. Reading them the other way round yields a route that is transposed — a
+   valid-looking walk into the wrong room — which is why the mapping is inverted in exactly one place
+   here and pinned by a test.
+
+A **document** point is the other order, on purpose: `mapping/home_map.py` stores `[x = left,
+y = forward]`, because that is what a person tracing a floor plan reads. The two meet only where a
+console draws both, and `mapping/home_map.py::document_point_to_runtime` is the one written swap
+(#347) — never a second one here.
 """
 
 from __future__ import annotations
@@ -114,13 +120,13 @@ def _cells_by_index(cells: Any) -> dict[tuple[int, int], float]:
 
 
 def _index_of(point_cm: tuple[float, float], cell: float) -> tuple[int, int]:
-    """The cell a centimetre point falls in, in the mapper's own (ix = left, iy = forward) order."""
-    x_cm, y_cm = point_cm
-    return int(round(y_cm / cell)), int(round(x_cm / cell))
+    """The cell a `(forward_cm, left_cm)` point falls in, as the mapper's `(ix = left, iy = forward)`."""
+    forward_cm, left_cm = point_cm
+    return int(round(left_cm / cell)), int(round(forward_cm / cell))
 
 
 def _centre_of(index: tuple[int, int], cell: float) -> tuple[float, float]:
-    """The inverse of `_index_of`: the (x_cm, y_cm) a cell sits at."""
+    """The inverse of `_index_of`: the `(forward_cm, left_cm)` a cell sits at."""
     ix, iy = index
     return iy * cell, ix * cell
 
