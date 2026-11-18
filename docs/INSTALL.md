@@ -47,9 +47,11 @@ steps, and each one links to the detail further down.
 
 Two things that surprise people, both measured on a bench dog:
 
-- **The service resumes; motion never does.** After a reboot the modules come back and the dog stays
-  still. `motion_command` and the intent board are context-only and every intent expires, so a gait
-  cannot survive a restart and a routine mid-run is lost rather than replayed.
+- **The service resumes; a command in flight does not.** After a reboot the modules come back, and a
+  gait cannot survive it: `motion_command` and the intent board are context-only and every intent
+  expires, so a routine mid-run is lost rather than replayed. **Autonomy does come back** — the runtime
+  starts in `mode idle`, where `behavior` and the navigator may drive, so a dog with those modules
+  enabled can start moving on its own. Park it with `mode rest` if it must stay put.
 - **A second process cannot open the dog.** The runtime holds `~/.houndmind/run.lock`; a tool started
   while it runs exits **3** with `the servo bus is owned by pid N (runtime)` instead of hanging. That
   is the answer to "why did `hardware_checkup` print nothing?", not a dead tool.
@@ -461,10 +463,12 @@ The installer itself only runs `enable`, so an install never opens the servo bus
 `--now` above is the operator saying "start it too", which is the deliberate extra step. From then on
 `multi-user.target` starts it at every boot.
 
-**The service resumes; motion never does.** After a reboot the modules come back and the dog stays
-still: a gait cannot survive a restart, because `motion_command` and the intent board are
-context-only and every intent expires, and a routine that was mid-run is lost rather than replayed.
-The next start says how the previous one ended — `~/.houndmind/session.json`, #214.
+**The service resumes; a command in flight does not.** A gait cannot survive a restart, because
+`motion_command` and the intent board are context-only and every intent expires, and a routine that was
+mid-run is lost rather than replayed. What does come back is autonomy: the runtime starts in `mode
+idle`, where `behavior` and the navigator may drive, so a dog with those modules enabled can start
+moving on its own after a boot — set `mode rest` if it must stay put. The next start says how the
+previous one ended — `~/.houndmind/session.json`, #214.
 
 A unit that fails three times in a minute stops instead of looping, so a broken `settings.jsonc`
 gives a message rather than a restart storm: `journalctl -u houndmind -n 50`.

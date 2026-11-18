@@ -444,9 +444,16 @@ console shows that answer and never bypasses it.
 A routine is not an exception: it plays one step per tick through the same gateway, so the interlock,
 the obstacle stop and the mode gate apply to it exactly as they do to a hand on the pad.
 
-**A restart is not a resume.** After `systemctl restart houndmind` or a reboot, the modules come back
-and the dog stays still. A gait cannot survive a restart, and a routine that was mid-run is lost
-rather than replayed — that is the device's design, not a console limitation.
+**None of those stops a self-driving dog.** With autonomy on — the `idle` mode — the behaviour and the
+navigator publish a fresh intent on the very next tick, so a stop holds for about a tenth of a second
+and the dog walks on. That is #333, and until it is closed the brake is the **mode**: `manual` keeps
+autonomy out and leaves the pad working, `rest` leaves only stop and the watchdog.
+
+**A restart is not a resume — and not a park either.** After `systemctl restart houndmind` or a reboot,
+a gait in flight is gone and a routine that was mid-run is lost rather than replayed. But the runtime
+comes back in `mode idle`, where behaviour and the navigator may drive, so a dog with
+`modules.behavior` enabled can start moving again on its own. Parking is a mode, not a restart: set
+`rest` (or `manual`) once it is up.
 
 ## 7. Install it on a phone
 

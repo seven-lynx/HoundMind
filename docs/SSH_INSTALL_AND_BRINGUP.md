@@ -131,10 +131,12 @@ systemctl status houndmind            # active (running)
 sudo journalctl -u houndmind -n 50    # the first start, in its own words
 ```
 
-**The rule: the service resumes; motion never does.** After a reboot the modules come back and the dog
-stays still, because `motion_command` and the intent board are context-only and every intent expires.
-A routine that was mid-run is lost rather than replayed. The next start says how the previous one
-ended (`~/.houndmind/session.json`, exposed as `/state` → `session`).
+**The rule: the service resumes; a command in flight does not.** After a reboot the modules come back,
+and a gait cannot survive it, because `motion_command` and the intent board are context-only and every
+intent expires. A routine that was mid-run is lost rather than replayed. But **autonomy does come
+back**: the runtime starts in `mode idle`, where `behavior` and the navigator may drive, so a dog with
+those modules enabled can start moving on its own — set `mode rest` if it must stay put. The next start
+says how the previous one ended (`~/.houndmind/session.json`, exposed as `/state` → `session`).
 
 Stop it the same way a supervisor would:
 
