@@ -10,6 +10,18 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The home map is editable: walls and doorways, drawn in the console** — `PUT /map` shipped in M1
+  with no editor, and the panel could only look (#309). The Map panel now has four modes: `View` pans,
+  `Wall` drags a wall between two points, `Doorway` cuts an opening through a wall you click, and
+  `Delete` removes either. A drawn wall snaps to 5 cm and magnets to an existing endpoint within 15 cm,
+  because two walls meant to meet that miss by 2 cm leave a gap the planner will route through; `Shift`
+  constrains to the axis the drag is longer on, and a wall under 20 cm is refused rather than stored as
+  a dot. A doorway is centred on the click and refused with the wall's length when it would not fit
+  inside its own wall. `Undo` restores a snapshot (50 deep), the chip reads `unsaved` until **Save to
+  device** writes the document, and saving is optimistic: a `409` means somebody else moved the map and
+  the panel says to `Reload` rather than overwrite it. The four-second poll is suppressed while an edit
+  is unsaved — a poll that replaced the working copy would delete the wall being drawn.
+
 - **The map panel draws the home map, not just cells** — it drew the occupancy grid nose-up with the
   dog pinned at the canvas centre, a body-frame view rather than a home map, and it fetched the
   `document` M1 published and threw it away (#307). It now renders rooms as labelled polygons,
