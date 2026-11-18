@@ -35,6 +35,7 @@ from houndmind_ai.navigation.obstacle_avoidance import ObstacleAvoidanceModule
 from houndmind_ai.navigation.odometry import OdometryModule
 from houndmind_ai.navigation.orientation import OrientationModule
 from houndmind_ai.navigation.place_navigator import PlaceNavigatorModule
+from houndmind_ai.navigation.place_recognition import PlaceRecognitionModule
 from houndmind_ai.navigation.scanning import ScanningModule
 from houndmind_ai.optional.assistant import AssistantModule
 from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
@@ -118,6 +119,14 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     # `place_request`. Registered here, beside the runner, because both are asked by name.
     registry.register(
         PlaceNavigatorModule("place_navigator", **cfg("place_navigator")), [Capability.NAVIGATION]
+    )
+    # The other half of "go to the kitchen": recognising the one you are standing in. It reads
+    # `vision_frame` and publishes `place_match`, and a confirmed match is what promotes the tier to
+    # `place` and re-anchors odometry (#296-#301). Ships off: a camera consumer on the default path
+    # is a config change the owner asks for, not one a release makes.
+    registry.register(
+        PlaceRecognitionModule("place_recognition", **cfg("place_recognition")),
+        [Capability.VISION],
     )
     registry.register(EventLoggerModule("event_log", **cfg("event_log")), [Capability.TELEMETRY])
     # The decision feed ticks every loop tick and does not share the event logger's settings: a

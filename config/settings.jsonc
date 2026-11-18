@@ -196,6 +196,15 @@
       "enabled": true,
       "required": false
     },
+    "place_recognition": {
+      // Recognises the place the dog is standing in from a camera view (perception/place_views.py):
+      // publishes `place_match` every scored frame and, when two frames agree, re-anchors odometry
+      // and promotes localization to the `place` tier. Off by default: it is a second consumer of
+      // the camera, and enabling it costs CPU on every install that also runs vision.
+      // Tuning lives in `settings.place_recognition`, not here.
+      "enabled": false,
+      "required": false
+    },
     "calibration": {
       // Calibration workflows (disabled by default).
       "enabled": false,
@@ -783,7 +792,10 @@
       // ...and after this many seconds since the last fix.
       "dead_reckoning_horizon_s": 120.0,
       // Below this confidence the pose is withdrawn: the dog reports `reactive` with no pose.
-      "confidence_floor": 0.15
+      "confidence_floor": 0.15,
+      // A confirmed place match keeps the `place` tier this long. Standing still in a room is not
+      // evidence against it, so this is generous; the next match replaces the fix, not the clock.
+      "place_max_age_s": 30.0
     },
     // =====================================================================
     // MAPPING
@@ -1316,6 +1328,25 @@
       "timeout_s": 120,
       // How much one arrival raises a place's confidence, and one failed approach lowers it.
       "confidence_step": 0.1
+    },
+
+    // =====================================================================
+    // PLACE RECOGNITION (navigation/place_recognition.py + perception/place_views.py)
+    // =====================================================================
+    "place_recognition": {
+      // A view is the artefact a place is recognised by: a 32x24 thumbnail, the ORB keypoints and
+      // descriptors, and when it was taken. One `views.json` per directory, so a place taught on
+      // the dog can be scored off it by `python -m tools.place_match`.
+      "views_dir": "~/.houndmind/places/views",
+      // Below this share of matched descriptors the answer is "no idea" with the score attached.
+      // Measured on synthetic fixtures only so far: lower it and two doorways become one room.
+      "min_score": 0.45,
+      // How many consecutive frames must name the same place before the pose is corrected. 1 makes
+      // a single lucky frame move the dog's idea of where it is; 2 is the shipped compromise.
+      "confirm_frames": 2,
+      // At most one frame is scored per this many seconds. The camera may run at 30 Hz; matching is
+      // the expensive part and a place does not change between steps.
+      "interval_s": 1.0
     },
 
     // =====================================================================

@@ -28,6 +28,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 17. [`bench_tick`](#17-bench_tick)
 18. [`map_inspect`](#18-map_inspect)
 19. [`step_calibrate`](#19-step_calibrate)
+20. [`place_match`](#20-place_match)
 
 ---
 
@@ -52,6 +53,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Is the loop spending its tick where I think it is? | `bench_tick` |
 | What is actually inside `data/home_map.json`? | `map_inspect` |
 | How far does one `forward` really carry the dog? | `step_calibrate --confirm-clearance` |
+| Does the dog recognise a place from a camera frame? | `place_match <views-dir> <frames-dir>` |
 
 ## 2. Motion risk
 
@@ -61,7 +63,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
 | `step_calibrate` | **yes, unless `--fake`** — it walks toward a wall by design. `--confirm-clearance` is mandatory, `--stop-at` defaults to 45 cm, and every step passes the runtime's interlock |
-| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `bench_tick`, `map_inspect` | no |
+| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `bench_tick`, `map_inspect`, `place_match` | no |
 | `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
 
@@ -586,4 +588,33 @@ int` entry point, so `python -m tools.<name>` and a test can both call it. Anyth
 dog defaults to dry and requires an explicit flag — see `docs/HARDWARE_TEST.md` for why that rule is
 not negotiable. A new tool needs a section on this page and a row in the table above in the same
 change.
+
+
+## 20. `place_match`
+
+Scores a folder of frames against the place views a person taught, off the dog. No camera, no motion.
+
+```bash
+python -m tools.place_match ~/.houndmind/places/views ./frames
+python -m tools.place_match views/ frames/ --min-score 0.6 --json
+```
+
+| Flag | Meaning |
+|---|---|
+| `--min-score` | match threshold, default `0.45` — the same value `settings.place_recognition.min_score` uses |
+| `--json` | one JSON object per frame, with the full ranking |
+
+One line per frame: `frame place_id score verdict`, where the verdict is `match`, `no-match` (the best
+view scored below the threshold — the score is the evidence) or `featureless` (the frame had too
+little texture to match anything). Exit **0** when every frame was scored, **1** when there were no
+views, no frames, or a file that is not an image — a tool that silently scores nothing is the failure
+it exists to prevent.
+
+A view is a 32×24 thumbnail plus ORB keypoints and descriptors, stored in one `views.json` per
+directory (`perception/place_views.py`). `navigation/place_recognition.py` reads the same file on the
+dog: two frames naming the same place re-anchor odometry and promote `localization` to the `place`
+tier ([`FEATURES_GUIDE.md` §Localization tiers](FEATURES_GUIDE.md#localization-tiers)).
+
+The fixtures in `tests/fixtures/places/` are **synthetic**, drawn by the test rather than committed:
+a photograph of somebody's kitchen is personal data and says nothing about the code.
 

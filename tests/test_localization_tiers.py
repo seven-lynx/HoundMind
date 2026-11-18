@@ -192,3 +192,66 @@ def test_a_slam_fix_restores_the_drift_confidence() -> None:
     data = context.get("localization")
     assert data["tier"] == str(LocalizationTier.DEAD_RECKONING)
     assert data["confidence"] > 0.9
+
+
+def _place_fix(context: RuntimeContext, place_id: str = "kitchen", stamp: float = 5.0) -> None:
+    context.set(
+        "place_fix",
+        {"ts": 1_700_000_000.0, "place_id": place_id, "confidence": 0.8, "frame_ts": stamp},
+    )
+
+
+def test_a_confirmed_place_match_outranks_dead_reckoning() -> None:
+    """#297: a view match is an absolute fix, so the tier says which room the dog is in."""
+    module, context, _ = _setup()
+    context.set("odometry", _odometry())
+    _place_fix(context)
+
+    module.tick(context)
+
+    data = context.get("localization")
+    assert data["tier"] == str(LocalizationTier.PLACE)
+    assert data["frame"] == "odometry", "the pose is still odometry, measured from the new anchor"
+    assert data["reason"] == "kitchen"
+    assert data["confidence"] == 0.8
+
+
+def test_a_stale_place_fix_falls_back_to_dead_reckoning() -> None:
+    module, context, clock = _setup(place_max_age_s=30.0)
+    context.set("odometry", _odometry())
+    _place_fix(context)
+    module.tick(context)
+    assert context.get("localization")["tier"] == str(LocalizationTier.PLACE)
+
+    clock.advance(31.0)
+    module.tick(context)
+
+    data = context.get("localization")
+    assert data["tier"] == str(LocalizationTier.DEAD_RECKONING)
+    assert "stale" in data["reason"]
+
+
+def test_a_place_fix_without_a_pose_is_not_a_tier() -> None:
+    """The view says which room; only odometry can say where in it, and its absence is reported."""
+    module, context, _ = _setup()
+    context.set("odometry", _odometry(valid=False, reason="no heading"))
+    _place_fix(context)
+
+    module.tick(context)
+
+    data = context.get("localization")
+    assert data["tier"] == str(LocalizationTier.REACTIVE)
+    assert data["pose"] is None
+    assert "no odometry pose" in data["reason"]
+
+
+def test_slam_still_wins_over_a_place_match() -> None:
+    module, context, _ = _setup()
+    context.set("odometry", _odometry())
+    _slam(context)
+    _place_fix(context)
+
+    module.tick(context)
+
+    assert context.get("localization")["tier"] == str(LocalizationTier.SLAM)
+
