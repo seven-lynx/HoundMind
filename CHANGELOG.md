@@ -264,6 +264,17 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A mode change left every autonomy intent standing** — `MODE_ALLOWED_SOURCES` decides whether a
+  *new* intent is admitted and says nothing about one already published, so a hand on the wheel could
+  leave a behaviour or navigation slot live until it expired: exactly the stale intent a client command
+  then had to outrank (#270). `POST /mode` now retracts `AUTONOMY_SOURCES`
+  (`kernel/commands.py` — behaviour, routine, place, route, navigation) whenever the mode actually
+  changes, and the forced-`rest` path in `stop_now` does the same, because a stop that leaves a live
+  intent behind is a stop a later tick can be talked out of. The client's own request and the watchdog's
+  hold are not autonomy and are untouched; `set_mode` with the mode it already had changes nothing.
+  Two safety properties now have tests: that retraction, and that the interlock's tilt latch — and its
+  `tilt` refusal — survive switching modes, which they must, because the latch is a property of the dog
+  and not of a mode.
 - **`CONTROL_API.md` claimed the dog does not advertise itself** — it has published one mDNS record
   (`houndmind._houndmind._tcp.local`, `api.discovery_enabled`, on by default) since #38, so the contract
   told every client author to hardcode an IP that changes with the DHCP lease. The base-URL paragraph

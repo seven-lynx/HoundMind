@@ -16,6 +16,7 @@ from enum import IntEnum, StrEnum
 from typing import Any
 
 __all__ = [
+    "AUTONOMY_SOURCES",
     "DEFAULT_MODE",
     "DEFAULT_TTL_MS",
     "FORWARD_ACTIONS",
@@ -63,6 +64,15 @@ class Source(IntEnum):
     WATCHDOG = 40
     SYSTEM = 50
 
+
+# The sources autonomy publishes under (#270). A mode change retracts these and only these: the
+# client's intent is the human's own request and the watchdog's is a hold, so neither is autonomy and
+# neither may be withdrawn by switching a mode. `MODE_ALLOWED_SOURCES` decides whether a *new* intent
+# is admitted; it says nothing about one that is already published, which is how a stale slot survived
+# a manual switch until it expired.
+AUTONOMY_SOURCES: frozenset[Source] = frozenset(
+    {Source.BEHAVIOUR, Source.ROUTINE, Source.PLACE, Source.ROUTE, Source.NAVIGATION}
+)
 
 # Everything that changes where the dog is. `MOTION_ACTIONS` feeds the locomotion floor
 # (`kernel/actions.py`), the watchdog hold and the scan lock.
