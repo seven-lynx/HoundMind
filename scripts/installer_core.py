@@ -53,6 +53,10 @@ VENDOR_PIP_NAMES = {"serial": "pyserial"}
 # at install time, so this is a copy and never a runtime download.
 VENDOR_SOUNDS_DIR = "sounds"
 
+# The directory the runtime owns on the dog: routines, places, the face roster and the session
+# marker all live here, and an install or an upgrade must never rewrite it (#317).
+USER_DATA_DIRNAME = ".houndmind"
+
 # `robot_hat/tts.py`, `robot_hat/llm.py` and `robot_hat/stt.py` are one-line re-exports of
 # `sunfounder_voice_assistant`, a SunFounder git package that is not on PyPI - the vendor's own
 # installer carries it in `CUSTOM_INSTALL_LIST` (`robot-hat/install.py:153-155`). Nothing installed it,
@@ -256,6 +260,42 @@ def vendor_sounds_present(home: Path | None = None) -> bool:
         return any(item.is_file() for item in vendor_sounds_path(home).iterdir())
     except OSError:  # a directory that does not exist is the same answer as an empty one
         return False
+
+
+def user_data_inventory(home: Path | None = None) -> dict[str, dict[str, object]]:
+    """What a re-run must keep: the files under `~/.houndmind/`, plus `config/settings.jsonc`.
+
+    Re-running the installer is the advice a user gets when something is broken (#317), so the
+    upgrade path has to be additive by construction rather than by good intentions. Nothing in this
+    module writes `config/settings.jsonc` or anything under this directory; the one write that does
+    land in a user's home is `install_vendor_sounds`, which copies only files that are not there.
+    Printing the inventory is the visible half: an operator can see what survived.
+    """
+    root = Path(home).expanduser() if home is not None else Path("~").expanduser()
+    data = root / USER_DATA_DIRNAME
+    routines = data / "routines"
+    places = data / "places.json"
+    face = data / "face"
+    count = len(list(routines.glob("*.json"))) if routines.is_dir() else 0
+    return {
+        "routines": {"path": str(routines), "present": routines.is_dir(), "count": count},
+        "places": {"path": str(places), "present": places.exists()},
+        "people": {"path": str(face), "present": face.is_dir()},
+    }
+
+
+def print_user_data(home: Path | None = None, config_path: Path | None = None) -> None:
+    """Say what a re-run keeps, so additivity is a claim the operator can check."""
+    print("Re-run safety: config/settings.jsonc and ~/.houndmind/ are user data and are never")
+    print("rewritten by this installer. A key this build does not know is a load error that names")
+    print("it, not a silent ignore.")
+    if config_path is not None:
+        state = "present" if config_path.exists() else "absent"
+        print(f"  config: {state} ({config_path})")
+    for name, entry in user_data_inventory(home).items():
+        state = "kept" if entry["present"] else "absent"
+        detail = f", {entry['count']} routine(s)" if name == "routines" and entry["present"] else ""
+        print(f"  {name}: {state}{detail} ({entry['path']})")
 
 
 def install_vendor_sounds(source: Path, home: Path | None = None) -> int:
@@ -1227,7 +1267,18 @@ def main() -> int:
     if not verifier.exists():
         print("Installer verifier not found; skipping verification step.")
         return 0
-    return run([str(python), str(verifier), "--preset", preset])
+    code = run([str(python), str(verifier), "--preset", preset])
+    if code == 0:
+        # #317: re-running the installer is the advice a user gets when something is broken, so it
+        # has to be additive. Printing what it keeps is the visible half of that promise.
+        print_user_data(config_path=repo_root / "config" / "settings.jsonc")
+        # #315: the three post-install checks were a habit rather than a chain. They are printed
+        # rather than run here on purpose - the checkup and the smoke test both open the servo bus,
+        # and an installer that does that unasked is what the motion rules forbid.
+        print("Next, read-only verification in order (no motion):")
+        print(f"  {python} -m tools.installer_verify --chain      # print the three checks")
+        print(f"  {python} -m tools.installer_verify --run-chain  # run them")
+    return code
 
 
 if __name__ == "__main__":

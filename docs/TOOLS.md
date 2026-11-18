@@ -70,21 +70,40 @@ No motion-capable tool moves the dog unless asked, but read the second row twice
 
 ## 3. `installer_verify`
 
-Proves the environment can import what the runtime imports.
+Proves the environment can import what the runtime imports — and, on a Pi, that the HAT speaker has a
+route.
 
 ```bash
 python -m tools.installer_verify                 # lite preset (default)
 python -m tools.installer_verify --preset full
+python -m tools.installer_verify --chain         # print the three post-install checks, in order
+python -m tools.installer_verify --run-chain     # run them, stopping at the first failure
 ```
 
 | Flag | Meaning |
 |---|---|
 | `--preset {lite,full}` | which requirement set to check; `lite` by default |
+| `--chain` | print the three checks with their motion-safe flags; run none of them |
+| `--run-chain` | run `installer_verify`, `hardware_checkup --skip-motion`, `smoke_test` in order |
 
 Prints one line per package, ending in `Installer check: OK` and exit 0 — or `FAILED` with the single
 `MISSING` line to fix. Its Python check is the range `pyproject.toml` declares, 3.11 to 3.13, so
 `Python: 3.10 -> UNSUPPORTED` is a failure rather than a note: the next `pip install` would refuse
 that interpreter (#111).
+
+Three lines are not imports, and they exist because an install used to report green while the thing it
+existed to check was broken:
+
+| Line | Verdict | Why |
+|---|---|---|
+| `rtabmap-py: UNSUPPORTED` | not a failure | upstream ships no installable bindings, so `slam_pi4` stays off (#181) |
+| `audio: not applicable` | not a failure | no Pi boot config: this is a workstation |
+| `audio: WARN - dtoverlay=hifiberry-dac is absent` | not a failure | no overlay means no HAT speaker, which a dog without the voice stack does not need |
+| `audio: MISSING - ... has no pcm.!default pointing at robothat` | **failure** | the overlay is on and nothing routes to the card; every engine constructs and says nothing (#288, #254) |
+
+`--chain`/`--run-chain` exist so the flags that keep a post-install check motion-safe are not a thing
+a human has to remember: `hardware_checkup` needs `--skip-motion`, and `smoke_test` moves nothing
+without `--include-motion` (#315).
 
 ## 4. `hardware_checkup`
 

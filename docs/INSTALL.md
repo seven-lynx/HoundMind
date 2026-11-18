@@ -295,6 +295,13 @@ it comes from the `python3-picamera2` Debian package, and the venv has to be cre
 `modules.vision_pi4.enabled` at `false` — enabling it only buys a `Picamera2 unavailable` line on
 every start (#215).
 
+On a Pi it also probes the HAT speaker, because every layer that makes it work is outside importland:
+the `dtoverlay=hifiberry-dac` line in the boot config and an `/etc/asound.conf` whose `pcm.!default`
+is `robothat`. An overlay with no route is a **failure**, not a warning — that is the half-configured
+state in which every engine constructs, says nothing, and logs the failure once (#254, #288). A
+requirement that cannot be installed at all, like the RTAB-Map bindings, reports `UNSUPPORTED` rather
+than a red that can never go green (#181).
+
 An IMU that was never calibrated biases every angle derived from it: `|acc|` should read 1.00 g at
 rest, and `python -m tools.hardware_checkup --skip-motion` warns when it does not. The vendor's
 `examples/imu_calibration.py`, the only path this page used to point at, is not part of the
@@ -332,6 +339,30 @@ Three things worth knowing about that list:
   and the `stub` backend is dead reckoning, not visual SLAM
   (`FEATURES_GUIDE.md` [§23](FEATURES_GUIDE.md#23-slam-pi4), #181).
 
+## Upgrading an install
+
+Re-running the installer is the repair advice for a broken install, so it is additive by design
+(#317), and it says so on the way out: a green run prints a `Re-run safety:` block listing what it
+found under your home directory. What it never touches:
+
+| Path | What lives there |
+|---|---|
+| `config/settings.jsonc` | your configuration, including keys this version does not know |
+| `~/.houndmind/routines/` | saved routines, one JSON file each |
+| `~/.houndmind/places.json` | taught places |
+| `~/.houndmind/face/` | the face roster: embeddings, the LBPH model and its label map |
+| `~/.houndmind/session.json`, `run.lock`, `api_token` | the runtime's own state and credentials |
+
+The update is `git pull` in the checkout plus a fresh run of `scripts/install_houndmind.sh`: it
+re-installs the packages and rewrites the unit. A key a new version adds arrives in
+`config/settings.jsonc` when you merge it yourself — this repository never edits that file on your
+behalf. A key this build does not know is a **load error that names the key**
+(`kernel/config_schema.py`), never a silent ignore and never a deletion, so a config left over from a
+newer version fails loudly instead of quietly losing a setting.
+
+The one write the installer makes in a home directory is the vendor sound pack (`~/pidog/sounds`),
+and it copies only files that are not already there, so a sound you replaced stays replaced.
+
 ## Bench checklist (before calling a build done)
 
 Nothing on this list can be ticked from a workstation. [`docs/HARDWARE_TEST.md`](HARDWARE_TEST.md)
@@ -340,10 +371,12 @@ means, from the install verifier to the opt-in motion run.
 
 Two rules that hold whatever that document says:
 
-- Read-only first: `python -m tools.hardware_checkup --skip-motion`, then
-  `python -m tools.smoke_test`. Neither can move the dog — on a checkup, leaving `--skip-motion`
-  off *is* a motion run, and the smoke test disables `scanning` as well as the motors because it
-  drives the head itself (#184).
+- Read-only first, and in one command: `python -m tools.installer_verify --run-chain` runs
+  `installer_verify`, then `hardware_checkup --skip-motion`, then `smoke_test`, stopping at the first
+  failure. The flags are inside the chain, so they cannot be forgotten (#315). Run the same three by
+  hand if you prefer — neither `--skip-motion` nor a bare `smoke_test` can move the dog; on a checkup,
+  leaving `--skip-motion` off *is* a motion run, and the smoke test disables `scanning` as well as the
+  motors because it drives the head itself (#184).
 - `--include-motion` only with clearance around the dog and a hand on the power.
 - `sudo .venv/bin/robot_hat doctor` is the vendor's own health check, and its `Library` section
   should be all ticks now that `pyserial` is installed (#255). If that section is green and the
