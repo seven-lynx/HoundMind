@@ -395,6 +395,23 @@ answers `409` and the panel says to press **Reload** rather than overwriting som
 `Reload` re-reads the map and discards unsaved work, which is why the poll never runs while the chip
 says `unsaved`.
 
+**Rooms and surfaces (#308).** `Room` and `Surface` are lasso modes: click each corner (the points snap
+like walls do) and click back on the **first corner** to close the polygon — no button to forget, and no
+half-drawn room left behind when the tab closes. A closed room takes the name in the `room name` box, or
+`Room N` when it is empty, and the next colour from a five-colour cycle; a closed surface takes the
+`Surface` picker's value as both its name and its `step_scale`.
+
+`keep-out` acts on the room you have **selected** — in `View`, a click that does not pan selects the room
+under the cursor (it gets an amber outline), and the button then reads `keep-out: on` or `off` and
+toggles it. A keep-out room is drawn with a dashed red edge. `Delete` removes a room or a surface you
+click, before it looks for a wall.
+
+The chip beside the surface picker is the point of the whole exercise: `18.4 cm measured` when
+`odometry.surface_step_cm` has a value for that paint, and `not measured` otherwise. The panel cannot
+read the config, so `GET /map` publishes that table beside the document (see `docs/CONTROL_API.md`); a
+surface painted `hardwood` is then walked at the length someone measured on hardwood instead of the
+assumed one. Nothing is invented: no calibration, no number.
+
 **Needs** — `state:read`.
 
 **If it looks wrong** — "no map" with *no sweep has filled a cell yet* means the mapper has recorded
@@ -402,8 +419,8 @@ nothing; a device whose `mapping.grid_enabled` is off or whose map file is empty
 and `python -m tools.map_inspect data/home_map.json` prints what the file actually holds. The dog
 triangle comes from the document, **not** from the live `localization.pose`: the runtime's pose is
 `(forward, left)` while the document's is `(left, forward)`, so plotting the live pose on this frame
-would mirror it (#347). Walls and doorways are editable here; naming rooms, painting surfaces and
-correcting the pose are M4 and M5.
+would mirror it (#347). Walls and doorways are editable here, and so are rooms, surfaces and keep-out;
+correcting the pose and clicking a goal are M5.
 
 ### Modules
 

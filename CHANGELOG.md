@@ -21,6 +21,19 @@ Current Release: v2026.11.16
   device** writes the document, and saving is optimistic: a `409` means somebody else moved the map and
   the panel says to `Reload` rather than overwrite it. The four-second poll is suppressed while an edit
   is unsaved — a poll that replaced the working copy would delete the wall being drawn.
+- **Rooms, surfaces and keep-out are editable, and a paint carries the length it was measured at** —
+  the document has carried `rooms` and `surfaces` since M1 and **nothing wrote either** (#308). `Room`
+  and `Surface` are lasso modes: click the corners, click back on the first one to close, and the room
+  takes the name in the box (or `Room N`) plus the next colour of a five-colour cycle. `keep-out` acts
+  on the room selected by a non-panning click in `View`, which now outlines it in amber; a keep-out room
+  draws with a dashed red edge. `Delete` removes a room or a surface before it looks for a wall, and
+  `Undo` snapshots all four user sections, not just the one being edited.
+- **`GET /map` publishes `surface_step_cm`** — the measured step length per named surface, copied from
+  `odometry.surface_step_cm` with zeroes, negatives and strings dropped. The panel that names a surface
+  cannot read the config, so without this the picker offered `hardwood` with no number behind it; now it
+  reads `18.4 cm measured` or `not measured`, and never an assumed value dressed as an observation.
+  Additive: `map`, `grid_enabled` and `document` are unchanged, and a `{}` table ships before anyone
+  calibrates.
 
 - **The map panel draws the home map, not just cells** — it drew the occupancy grid nose-up with the
   dog pinned at the canvas centre, a body-frame view rather than a home map, and it fetched the

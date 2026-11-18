@@ -30,6 +30,30 @@ const SURFACE_HATCH = {
   unknown: ["#8f8f8f", "rgba(143, 143, 143, 0.16)"],
 };
 
+// Rooms and surfaces (#308). The vocabulary is fixed because `step_scale` is what odometry reads: a
+// paint the stepper does not know is a room that walks at the assumed length, silently.
+const ROOM_COLOURS = [
+  "rgba(120, 170, 220, 0.30)",
+  "rgba(220, 180, 120, 0.30)",
+  "rgba(150, 210, 160, 0.30)",
+  "rgba(210, 150, 200, 0.30)",
+  "rgba(180, 180, 230, 0.30)",
+];
+const MODES = ["view", "wall", "opening", "delete", "room", "surface"];
+
+function pointInPolygon(point, polygon) {
+  // Ray casting: a click inside a lasso selects that room, and a boundary hit counts as inside.
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    if (yi > point[1] !== yj > point[1] && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 // Editing (#309): a wall is two centimetre points, an opening is a gap in one. Everything a person
 // draws is snapped to 5 cm and magnets to an existing endpoint, because a wall that misses its
 // neighbour by 2 cm is a hole the planner will happily route through.
@@ -148,6 +172,18 @@ export const map = {
           <button id="mp-mode-wall" class="tiny">Wall</button>
           <button id="mp-mode-opening" class="tiny">Doorway</button>
           <button id="mp-mode-delete" class="tiny">Delete</button>
+          <button id="mp-mode-room" class="tiny">Room</button>
+          <button id="mp-mode-surface" class="tiny">Surface</button>
+          <input id="mp-room-name" class="tiny" placeholder="room name" style="width:7.5rem">
+          <select id="mp-surface" class="tiny">
+            <option value="hardwood">hardwood</option>
+            <option value="carpet">carpet</option>
+            <option value="tile">tile</option>
+            <option value="rug">rug</option>
+            <option value="unknown">unknown</option>
+          </select>
+          <span class="chip" id="mp-surface-cm">not measured</span>
+          <button id="mp-keepout" class="tiny">keep-out: -</button>
           <label class="tiny" style="margin:0">doorway width
             <input id="mp-opening-width" type="number" min="30" max="200" step="5" value="80"
               style="width:4.5rem;margin-left:.3rem">
@@ -178,6 +214,11 @@ export const map = {
     let mode = "view";
     let draft = null;
     let edited = false;
+    // A lasso is the polygon being clicked out, `selected` is the room the keep-out button acts on.
+    let lasso = null;
+    let cursorPoint = null;
+    let selected = null;
+    let measured = {};
     const dirty = root.querySelector("#mp-dirty");
     const widthInput = root.querySelector("#mp-opening-width");
 
@@ -188,8 +229,15 @@ export const map = {
 
     function pushHistory() {
       if (!document_) return;
+      // Every user section, not just the one this edit touched: Undo has to put back the document a
+      // step ago, and a snapshot missing `rooms` would restore a wall and lose a room.
       history.push(
-        JSON.stringify({ walls: document_.walls || [], openings: document_.openings || [] })
+        JSON.stringify({
+          walls: document_.walls || [],
+          openings: document_.openings || [],
+          rooms: document_.rooms || [],
+          surfaces: document_.surfaces || [],
+        })
       );
       if (history.length > 50) history.shift();
     }
@@ -199,6 +247,13 @@ export const map = {
       const previous = JSON.parse(history.pop());
       document_.walls = previous.walls;
       document_.openings = previous.openings;
+      document_.rooms = previous.rooms;
+      document_.surfaces = previous.surfaces;
+      // A snapshot restores the arrays, so an item the user had selected is gone: holding the old
+      // object would leave the keep-out button acting on a room that is no longer in the document.
+      selected = null;
+      lasso = null;
+      refreshKeepOut();
       markDirty(true);
       render();
     }
@@ -206,11 +261,109 @@ export const map = {
     function modeTo(next) {
       mode = next;
       draft = null;
-      for (const name of ["view", "wall", "opening", "delete"]) {
+      lasso = null;
+      cursorPoint = null;
+      for (const name of MODES) {
         const button = root.querySelector(`#mp-mode-${name}`);
         if (button) button.classList.toggle("active", name === next);
       }
       canvas.style.cursor = next === "view" ? "grab" : "crosshair";
+      render();
+    }
+
+    const roomName = root.querySelector("#mp-room-name");
+    const surfacePick = root.querySelector("#mp-surface");
+    const surfaceCm = root.querySelector("#mp-surface-cm");
+    const keepOutButton = root.querySelector("#mp-keepout");
+
+    function refreshSurface() {
+      const value = measured[surfacePick.value];
+      surfaceCm.textContent = Number.isFinite(value) ? `${value} cm measured` : "not measured";
+    }
+
+    function refreshKeepOut() {
+      const room = selected && selected.kind === "room" ? selected.item : null;
+      keepOutButton.disabled = !room;
+      keepOutButton.textContent = `keep-out: ${room ? (room.keep_out ? "on" : "off") : "-"}`;
+    }
+
+    function toggleKeepOut() {
+      const room = selected && selected.kind === "room" ? selected.item : null;
+      if (!room) return;
+      pushHistory();
+      room.keep_out = !room.keep_out;
+      markDirty(true);
+      refreshKeepOut();
+      render();
+    }
+
+    function roomUnder(point) {
+      for (const room of (document_ && document_.rooms) || []) {
+        const polygon = room.polygon || [];
+        if (polygon.length >= 3 && pointInPolygon(point, polygon)) return room;
+      }
+      return null;
+    }
+
+    function surfaceUnder(point) {
+      for (const surface of (document_ && document_.surfaces) || []) {
+        const polygon = surface.polygon || [];
+        if (polygon.length >= 3 && pointInPolygon(point, polygon)) return surface;
+      }
+      return null;
+    }
+
+    function addLassoPoint(point) {
+      const next = snapped(point, null, false);
+      if (!lasso) lasso = [];
+      if (lasso.length >= 3) {
+        const [first] = lasso;
+        // Clicking back on the first corner closes the polygon: there is no button to forget to press
+        // and no half-drawn room left behind when the tab is closed.
+        if (Math.hypot(next[0] - first[0], next[1] - first[1]) <= MAGNET_CM) {
+          closeLasso();
+          return;
+        }
+      }
+      lasso = [...lasso, next];
+      // Unsaved from the first corner: an open lasso is work, and the poll must not replace it.
+      markDirty(true);
+      render();
+    }
+
+    function closeLasso() {
+      if (!lasso || lasso.length < 3) return;
+      const polygon = lasso;
+      lasso = null;
+      cursorPoint = null;
+      if (mode === "surface") {
+        const key = surfacePick.value;
+        pushHistory();
+        document_.surfaces = [
+          ...(document_.surfaces || []),
+          { id: uid("surf"), name: key, step_scale: key, polygon },
+        ];
+        error.textContent = "";
+        markDirty(true);
+        render();
+        return;
+      }
+      const count = (document_.rooms || []).length;
+      const name = (roomName.value || "").trim() || `Room ${count + 1}`;
+      const room = {
+        id: uid("room"),
+        name,
+        polygon,
+        colour: ROOM_COLOURS[count % ROOM_COLOURS.length],
+        keep_out: false,
+      };
+      pushHistory();
+      document_.rooms = [...(document_.rooms || []), room];
+      selected = { kind: "room", item: room };
+      roomName.value = "";
+      error.textContent = "";
+      markDirty(true);
+      refreshKeepOut();
       render();
     }
 
@@ -334,6 +487,24 @@ export const map = {
     }
 
     function deleteAt(point) {
+      const room = roomUnder(point);
+      if (room) {
+        pushHistory();
+        document_.rooms = (document_.rooms || []).filter((item) => item !== room);
+        if (selected && selected.item === room) selected = null;
+        refreshKeepOut();
+        markDirty(true);
+        render();
+        return;
+      }
+      const surface = surfaceUnder(point);
+      if (surface) {
+        pushHistory();
+        document_.surfaces = (document_.surfaces || []).filter((item) => item !== surface);
+        markDirty(true);
+        render();
+        return;
+      }
       const hit = nearestSegment(point, (HIT_PX + 4) / view.scale);
       if (!hit) return;
       pushHistory();
@@ -592,6 +763,50 @@ export const map = {
       ctx.restore();
     }
 
+    function drawLasso(ctx) {
+      if (!lasso || !lasso.length) return;
+      ctx.save();
+      ctx.strokeStyle = "#f0c060";
+      ctx.fillStyle = "rgba(240, 192, 96, 0.12)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      lasso.forEach(([x, y], index) => {
+        const [sx, sy] = screen(x, y);
+        if (index === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      });
+      if (cursorPoint) {
+        const [sx, sy] = screen(cursorPoint[0], cursorPoint[1]);
+        ctx.lineTo(sx, sy);
+      }
+      // Three corners or more is a polygon the next click can close, so it gets the fill early: the
+      // shape reads as a room before the user commits to it.
+      if (lasso.length >= 3) {
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawSelection(ctx) {
+      const polygon = (selected && selected.item && selected.item.polygon) || [];
+      if (polygon.length < 3) return;
+      ctx.save();
+      ctx.strokeStyle = "#f0c060";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      polygon.forEach(([x, y], index) => {
+        const [sx, sy] = screen(x, y);
+        if (index === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      });
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function polygonCentre(polygon) {
       let x = 0;
       let y = 0;
@@ -615,6 +830,8 @@ export const map = {
         drawOpenings(ctx);
       }
       drawDraft(ctx);
+      drawLasso(ctx);
+      drawSelection(ctx);
       drawDog(ctx);
       drawScale(ctx);
     }
@@ -650,8 +867,18 @@ export const map = {
         // A copy, not the payload: every edit mutates this tree, and a poll must never merge a
         // half-finished edit into a fresh document.
         document_ = incoming ? JSON.parse(JSON.stringify(incoming)) : null;
+        // The measured step per surface rides beside the document (M4): the panel cannot read the
+        // config, and a vocabulary offered without its values behind it is a menu that lies.
+        measured =
+          payload && payload.surface_step_cm && typeof payload.surface_step_cm === "object"
+            ? payload.surface_step_cm
+            : {};
         history = [];
         draft = null;
+        lasso = null;
+        selected = null;
+        refreshSurface();
+        refreshKeepOut();
         markDirty(false);
         if (!document_) {
           count.textContent = "no document";
@@ -689,12 +916,14 @@ export const map = {
     root.querySelector("#mp-in").addEventListener("click", () => zoom(1.3));
     root.querySelector("#mp-out").addEventListener("click", () => zoom(1 / 1.3));
 
-    for (const name of ["view", "wall", "opening", "delete"]) {
+    for (const name of MODES) {
       root.querySelector(`#mp-mode-${name}`).addEventListener("click", () => modeTo(name));
     }
     root.querySelector("#mp-undo").addEventListener("click", undo);
     root.querySelector("#mp-save").addEventListener("click", save);
     root.querySelector("#mp-reload").addEventListener("click", () => load());
+    root.querySelector("#mp-keepout").addEventListener("click", toggleKeepOut);
+    surfacePick.addEventListener("change", refreshSurface);
 
     for (const name of LAYERS) {
       const box = root.querySelector(`#mp-layer-${name}`);
@@ -727,9 +956,13 @@ export const map = {
         deleteAt(point);
         return;
       }
+      if (mode === "room" || mode === "surface") {
+        addLassoPoint(point);
+        return;
+      }
       canvas.setPointerCapture(event.pointerId);
       canvas.style.cursor = "grabbing";
-      dragging = { x: event.clientX, y: event.clientY, view: { ...(view || {}) } };
+      dragging = { x: event.clientX, y: event.clientY, view: { ...(view || {}) }, moved: false };
     });
 
     canvas.addEventListener("pointermove", (event) => {
@@ -739,9 +972,15 @@ export const map = {
         render();
         return;
       }
+      if ((mode === "room" || mode === "surface") && lasso) {
+        cursorPoint = snapped(docPoint(event), null, false);
+        render();
+        return;
+      }
       if (!dragging || !view) return;
       const dx = event.clientX - dragging.x;
       const dy = event.clientY - dragging.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) dragging.moved = true;
       view = {
         ...view,
         cx: (dragging.view.cx || 0) + dx / view.scale,
@@ -759,9 +998,18 @@ export const map = {
         return;
       }
       if (!dragging) return;
+      const wasClick = !dragging.moved;
       dragging = null;
-      canvas.style.cursor = "grab";
+      canvas.style.cursor = mode === "view" ? "grab" : "crosshair";
       if (view) saveView(view);
+      // A click that did not pan is a selection: that is how the keep-out button learns which room
+      // it is about, without a second list of rooms to keep in sync.
+      if (wasClick && mode === "view") {
+        const room = roomUnder(docPoint(event));
+        selected = room ? { kind: "room", item: room } : null;
+        refreshKeepOut();
+        render();
+      }
     };
     canvas.addEventListener("pointerup", endDrag);
     canvas.addEventListener("pointercancel", endDrag);

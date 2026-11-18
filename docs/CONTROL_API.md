@@ -224,8 +224,9 @@ a `400` carrying the accepted set, because a misspelled filter and an empty resu
 answers. A traceback's continuation lines carry no level, so `level` keeps record lines only; `contains`
 still matches them.
 
-The `map` response is `{"map": {"cell_size_cm", "cells", "count", "truncated"}, "grid_enabled"}`.
-Cells are `[ix, iy, hits]` **in the mapper's own cell indices** — `ix` grows to the dog's left, `iy`
+The `map` response is `{"map": {"cell_size_cm", "cells", "count", "truncated"}, "grid_enabled",
+"surface_step_cm"}`. Cells are `[ix, iy, hits]` **in the mapper's own cell indices** — `ix` grows to
+the dog's left, `iy`
 forward, exactly what `mapping/mapper.py::_ingest_into_grid` writes — so a client scales them by
 `cell_size_cm` and does not re-derive a projection the producer might disagree with. The list is
 capped at 4000 cells and keeps the ones with the most hits; `count` is the uncapped total and
@@ -243,6 +244,12 @@ beside `map: null`, and a client that cannot tell it from an empty map draws a r
 Every coordinate in `document` is centimetres from the map origin with `x` left-positive and `y`
 forward-positive — the mapper's own axes (`mapping/mapper.py::_ingest_into_grid`) — so a console
 scales the cells and converts nothing.
+
+`surface_step_cm` (M4) is the **measured** step length per named surface, `{"hardwood": 18.4}`, copied
+from `odometry.surface_step_cm` with anything non-positive dropped. It rides beside `document` because
+the panel that names a surface cannot read the config, and a vocabulary offered without the values
+behind it is a menu that lies. It is `{}` when nothing has been calibrated — the map then says
+`not measured` rather than showing an assumed number as if it were an observation.
 
 `PUT /map` replaces the document under the `config` scope and bumps `meta.rev`. The body is
 `{"document": {...}}` carrying the generation it read; a stale generation is a `409` with the current
