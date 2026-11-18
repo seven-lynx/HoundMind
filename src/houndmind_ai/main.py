@@ -36,6 +36,7 @@ from houndmind_ai.navigation.odometry import OdometryModule
 from houndmind_ai.navigation.orientation import OrientationModule
 from houndmind_ai.navigation.place_navigator import PlaceNavigatorModule
 from houndmind_ai.navigation.place_recognition import PlaceRecognitionModule
+from houndmind_ai.navigation.route_follower import RouteFollowerModule
 from houndmind_ai.navigation.scanning import ScanningModule
 from houndmind_ai.optional.assistant import AssistantModule
 from houndmind_ai.optional.energy_emotion import EnergyEmotionModule
@@ -127,6 +128,14 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(
         PlaceRecognitionModule("place_recognition", **cfg("place_recognition")),
         [Capability.VISION],
+    )
+    # The walk that uses the planner: a `route_request` is planned once and then followed waypoint by
+    # waypoint through the gateway, at `Source.ROUTE` (19 - above a place goal, below the navigator,
+    # because a plan must never outvote an obstacle). Ships off with the camera module: a new motion
+    # producer on the default path is a config change the owner asks for (#306).
+    registry.register(
+        RouteFollowerModule("route_follower", **cfg("route_follower")),
+        [Capability.NAVIGATION],
     )
     registry.register(EventLoggerModule("event_log", **cfg("event_log")), [Capability.TELEMETRY])
     # The decision feed ticks every loop tick and does not share the event logger's settings: a

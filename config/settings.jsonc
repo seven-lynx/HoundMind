@@ -205,6 +205,15 @@
       "enabled": false,
       "required": false
     },
+    "route_follower": {
+      // Plans one route from the map and walks it waypoint by waypoint at `Source.ROUTE` (19): above
+      // a place goal, below the navigator, so a plan never outvotes an obstacle. Inert until
+      // something writes `route_request`, and it refuses to plan at all from the `reactive` tier -
+      // a route is drawn in map coordinates and a dog with no pose cannot say where along it it is.
+      // Tuning lives in `settings.route_follower`, not here.
+      "enabled": false,
+      "required": false
+    },
     "calibration": {
       // Calibration workflows (disabled by default).
       "enabled": false,
@@ -1356,6 +1365,19 @@
       // At most one frame is scored per this many seconds. The camera may run at 30 Hz; matching is
       // the expensive part and a place does not change between steps.
       "interval_s": 1.0
+    },
+
+    // =====================================================================
+    // ROUTE FOLLOWER (navigation/route_follower.py; plans with mapping/planner.py)
+    // =====================================================================
+    "route_follower": {
+      // A waypoint counts as reached inside this radius. Generous on purpose: a waypoint is a cell
+      // centre and the pose is dead reckoning, so a tight radius is a dog that never arrives.
+      "tolerance_cm": 12,
+      // Turn first when the bearing is off by more than this, walk second.
+      "heading_tolerance_deg": 20,
+      // Give up on a route that has not finished in this long. 0 means never.
+      "timeout_s": 300
     },
 
     // =====================================================================

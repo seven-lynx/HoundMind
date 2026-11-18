@@ -346,6 +346,7 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "modules": counts,
         "perf": _perf(context),
         "session": _session(context),
+        "route": context.get("route") if isinstance(context.get("route"), dict) else None,
     }
 
 

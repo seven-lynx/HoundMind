@@ -342,8 +342,33 @@ Two things about it are worth knowing before trusting a route:
 | `settings.mapping.clearance_cells` | `2` | The room a waypoint would like, in cells. |
 | `settings.mapping.clearance_weight` | `2.0` | What A* pays for entering a tighter cell. A preference, never a ban: a doorway is narrow by definition. |
 
-Routing is not wired to motion yet: the route consumer and its hand-off are #306, and the walk on the
-dog is #304.
+Routing is not wired to motion by an HTTP route yet: nothing in the API writes `route_request`, and
+the route that makes a map point a goal is #310.
+
+### Walking a route
+
+`navigation/route_follower.py` (ships **off**) is the consumer. It takes one `route_request` —
+`{"goal_cm": {"x_cm": ..., "y_cm": ...}}` — plans it with `plan_route`, publishes the result as `route`
+(waypoints, `index`, `total`, `state`), then walks it one waypoint at a time by publishing ordinary
+`Source.ROUTE` intents at priority 19: above a place goal, below the navigator, because a plan must
+never outvote an obstacle. The gateway, the interlock and the live sonar judge every step exactly as
+they judge a hand.
+
+- **No pose, no route.** Planning from the `reactive` tier is refused as `no_pose`: a route is drawn in
+  map coordinates, and a dog that does not know where it is cannot say where along it it stands.
+- **Arrival is the pose**, inside `tolerance_cm` of the waypoint — not a step count. The waypoint the
+  dog is already standing on is dropped, so `index` means "the next thing to walk to".
+- **One look per arrival.** At each arrival the follower reads `place_match` once and records the place
+  id on the route. It never re-plans and never moves the dog on the strength of a view: the correction
+  belongs to `place_recognition`, which owns the pose.
+- **It ends.** `done` at the last waypoint, or `refused` with a reason — `no_pose`, `start_unknown`,
+  `goal_blocked`, `no_path` (the planner's), `bad_request`, `no_board`, `timeout`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.route_follower.tolerance_cm` | `12` | How close to a waypoint counts as arrival |
+| `settings.route_follower.heading_tolerance_deg` | `20` | Turn first when the bearing is off by more than this |
+| `settings.route_follower.timeout_s` | `300` | Abandon a route that has not finished. `0` means never |
 
 ### Distance queries
 
