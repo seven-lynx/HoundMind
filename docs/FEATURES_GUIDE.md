@@ -185,6 +185,7 @@ honestly offer and names the reason when that is not the best one available. One
 | Tier | Pose comes from | Falls through to the next when |
 |---|---|---|
 | `slam` | `slam_pose` — rtabmap, or a LAN/remote backend | the backend is absent or `stub`, the slam module has no heartbeat, the pose is older than `slam_max_age_s`, or its confidence is below `slam_min_confidence` |
+| `place` | odometry, re-anchored at a place `place_recognition` recognised from the camera | the fix is older than `place_max_age_s`, or there is no odometry pose to place it on |
 | `dead_reckoning` | `navigation/odometry.py`: heading × counted steps | no heading for the steps taken, or the drift confidence decays past `confidence_floor` |
 | `reactive` | nothing — sonar and head scan only | never; this is the floor |
 
@@ -210,6 +211,14 @@ honestly offer and names the reason when that is not the best one available. One
   (`odometry.step_cm`, default 25 cm), so confidence falls with the metres walked and the seconds
   since an absolute fix. An absolute fix resets it. When it reaches `confidence_floor` the pose is
   withdrawn and the dog reports `reactive`.
+- **`place` is an absolute fix from a camera, not from a map.** `navigation/place_recognition.py`
+  scores the latest `vision_frame` against the views a person taught (`perception/place_views.py`:
+  a 32×24 thumbnail, ORB keypoints and descriptors, one `views.json` per directory). Two consecutive
+  frames naming the same place set `odometry_reset`, which re-anchors the origin at that place, and
+  `localization` reports `place` with the place id as `reason` — so "you are in the kitchen" is a
+  tier a client can render, and it outranks dead reckoning because the drift clock starts again.
+  One frame alone changes nothing; a frame that matched weakly publishes `place_match` with
+  `valid: false` and the score that lost, because "no idea, best 0.31" is a state worth showing.
 
 ### Measuring the stride
 
@@ -251,10 +260,15 @@ other.
 | `settings.localization.dead_reckoning_scale_m` | `10.0` | Metres walked before dead reckoning reaches zero confidence |
 | `settings.localization.dead_reckoning_horizon_s` | `120.0` | Seconds since the last fix before it reaches zero |
 | `settings.localization.confidence_floor` | `0.15` | Below this the pose is withdrawn |
+| `settings.localization.place_max_age_s` | `30.0` | How long a confirmed place match keeps the `place` tier |
+| `settings.place_recognition.views_dir` | `~/.houndmind/places/views` | Where the taught views live (one `views.json` per directory) |
+| `settings.place_recognition.min_score` | `0.45` | Below this share of matched descriptors the answer is "no idea", with the score attached |
+| `settings.place_recognition.confirm_frames` | `2` | Consecutive frames that must name the same place before the pose is corrected |
+| `settings.place_recognition.interval_s` | `1.0` | At most one frame is scored per this many seconds |
 
 **Disable:** `modules.navigation.enabled = false` (the navigator),
 `modules.localization.enabled = false` (the tier selection), `modules.odometry.enabled = false`
-(the step counter).
+(the step counter), `modules.place_recognition.enabled = false` (the camera match — it ships off).
 
 ---
 

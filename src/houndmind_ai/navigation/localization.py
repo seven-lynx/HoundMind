@@ -7,6 +7,10 @@ better. The ladder, best first:
 - ``slam`` - the pose from `slam_pose` (rtabmap, or a LAN backend). Drops out when the backend is
   absent or ``stub``, when there is no heartbeat, when the pose is stale, or when its confidence is
   below the floor.
+- ``place`` - odometry re-anchored at a place `place_recognition` recognised from the camera (#297).
+  It outranks dead reckoning because a confirmed view match is an absolute fix: the dog knows which
+  room it is in, and the odometry origin has just been moved to that place. It drops out when the fix
+  goes stale, and it is never reported from one frame alone - `place_recognition` requires two.
 - ``dead_reckoning`` - the pose from `odometry` (heading x counted steps). Drops out when there is
   no heading, no step it can place, or when its drift confidence decays past the floor.
 - ``reactive`` - no pose at all, sonar and head scan only. The floor; it cannot drop further.
@@ -61,6 +65,7 @@ def _safe_float(val: Any, default: float) -> float:
 
 class LocalizationTier(StrEnum):
     SLAM = "slam"
+    PLACE = "place"
     DEAD_RECKONING = "dead_reckoning"
     REACTIVE = "reactive"
 
@@ -75,6 +80,8 @@ class LocalizationModule(Module):
         self._tier: LocalizationTier | None = None
         self._slam_beat: object | None = None
         self._slam_seen_at: float | None = None
+        self._place_stamp: object | None = None
+        self._place_seen_at: float | None = None
         self._corrected_at = time.monotonic()
         self._corrected_travelled_cm = 0.0
         self._clock = time.monotonic
@@ -86,12 +93,16 @@ class LocalizationModule(Module):
         scale_m = _safe_float(settings.get("dead_reckoning_scale_m", 10.0), 10.0)
         horizon_s = _safe_float(settings.get("dead_reckoning_horizon_s", 120.0), 120.0)
         floor = _safe_float(settings.get("confidence_floor", 0.15), 0.15)
+        place_max_age_s = _safe_float(settings.get("place_max_age_s", 30.0), 30.0)
 
         now = self._clock()
         raw_odometry = context.get("odometry")
         odometry = raw_odometry if isinstance(raw_odometry, dict) else {}
 
         slam_pose, slam_reason = self._read_slam(context, now, max_age_s, min_confidence)
+        place_id, place_confidence, place_reason = self._read_place(
+            context, now, place_max_age_s, odometry
+        )
         if slam_pose is not None:
             tier = LocalizationTier.SLAM
             frame: str | None = "slam"
@@ -103,6 +114,22 @@ class LocalizationModule(Module):
             confidence = max(0.0, min(1.0, _safe_float(slam_pose.get("confidence"), 0.0)))
             reason = None
             # An absolute fix is what expires dead reckoning, so it restarts the drift clock.
+            self._corrected_at = now
+            self._corrected_travelled_cm = _safe_float(odometry.get("travelled_cm"), 0.0)
+        elif place_id is not None:
+            # The origin *is* the place: `place_recognition` set `odometry_reset` when it confirmed
+            # the match, so the pose odometry publishes is measured from the anchor the view was
+            # taught at. The tier says which place, because "you are somewhere" and "you are in the
+            # kitchen" are different answers to a client.
+            tier = LocalizationTier.PLACE
+            frame = "odometry"
+            pose = {
+                "x": _safe_float(odometry.get("x_cm"), 0.0),
+                "y": _safe_float(odometry.get("y_cm"), 0.0),
+                "yaw_deg": _safe_float(odometry.get("yaw_deg"), 0.0),
+            }
+            confidence = place_confidence
+            reason = place_id
             self._corrected_at = now
             self._corrected_travelled_cm = _safe_float(odometry.get("travelled_cm"), 0.0)
         elif bool(odometry.get("pose_valid")):
@@ -123,7 +150,10 @@ class LocalizationModule(Module):
                     "y": _safe_float(odometry.get("y_cm"), 0.0),
                     "yaw_deg": _safe_float(odometry.get("yaw_deg"), 0.0),
                 }
-                reason = slam_reason
+                # Losing a place fix is as much a reason as having no SLAM: a client that saw
+                # `place` and now sees `dead_reckoning` needs to know which fix expired.
+                parts = [str(place_reason or ""), str(slam_reason or "")]
+                reason = "; ".join(part for part in parts if part) or None
         else:
             tier = LocalizationTier.REACTIVE
             frame = None
@@ -134,10 +164,43 @@ class LocalizationModule(Module):
             parts = [
                 str(odometry.get("reason") or ""),
                 str(slam_reason or ""),
+                str(place_reason or ""),
             ]
             reason = "; ".join(part for part in parts if part) or "no pose source"
 
         self._publish(context, tier, frame, pose, confidence, reason, now)
+
+    def _read_place(
+        self, context, now: float, max_age_s: float, odometry: dict
+    ) -> tuple[str | None, float, str | None]:
+        """The place a confirmed view match anchored, while the fix is fresh and a pose exists.
+
+        Freshness is an identity comparison — did `frame_ts` change — not a clock subtraction: the
+        fix carries a monotonic stamp and an epoch `ts`, and mixing those two is how a fresh fix
+        reads ancient. `docs/CONTROL_API.md` makes the same point about `ts`.
+        """
+        fix = context.get("place_fix")
+        if not isinstance(fix, dict):
+            # No fix at all is not a fault worth naming on every tick; a fix that *was* rejected is.
+            return None, 0.0, None
+        stamp = fix.get("frame_ts")
+        if stamp != self._place_stamp:
+            self._place_stamp = stamp
+            self._place_seen_at = now
+        seen_at = self._place_seen_at if self._place_seen_at is not None else now
+        age_s = max(0.0, now - seen_at)
+        if age_s > max_age_s:
+            return None, 0.0, f"place fix stale ({age_s:.0f}s > {max_age_s:.0f}s)"
+        place_id = str(fix.get("place_id") or "")
+        if not place_id:
+            return None, 0.0, "place fix names no place"
+        if not bool(odometry.get("pose_valid")):
+            return None, 0.0, "place fix with no odometry pose behind it"
+        return (
+            place_id,
+            max(0.0, min(1.0, _safe_float(fix.get("confidence"), 0.0))),
+            None,
+        )
 
 
     def _read_slam(

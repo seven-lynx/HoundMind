@@ -268,6 +268,8 @@ BAD_SETTINGS_VALUES: list[tuple[str, str, object]] = [
     ("slam_pi4", "rtabmap", "on"),
     ("odometry", "step_cm", 0.0),
     ("localization", "confidence_floor", 1.5),
+    ("localization", "place_max_age_s", -1.0),
+    ("place_recognition", "min_score", 1.5),
 ]
 
 

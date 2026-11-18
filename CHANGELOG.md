@@ -10,6 +10,20 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A place can be recognised from the camera, and that is now a localization tier** — the dog knew
+  where it had been told to go and had no way to notice it had arrived (#296-#301). A *view* is a
+  32x24 thumbnail plus ORB keypoints and descriptors (`perception/place_views.py`), stored one
+  `views.json` per directory so a place taught on the dog can be scored off it. The matcher ranks
+  every view and refuses to guess: below `min_score` the answer is `place_id: null` **with** the score
+  that lost, and a frame with too little texture is `featureless` rather than 0.00 against every
+  place. `navigation/place_recognition.py` (ships **off**) scores at most one frame per second,
+  publishes `place_match` for every processed frame, and only when two consecutive frames name the
+  same place does it set `odometry_reset` and publish `place_fix`. `LocalizationTier.PLACE` sits
+  between `slam` and `dead_reckoning` and reports the place id as its `reason`, because a confirmed
+  view match is an absolute fix and restarts the drift clock. `tools.place_match <views-dir>
+  <frames-dir>` runs the whole question off the dog with `match` / `no-match` / `featureless` and an
+  exit code. `cv2` is imported inside `extract`, so `lite` still imports.
+
 - **The map can be read off the wire and written back** — `GET /map` served a picture a console
   could not correct: the versioned document existed on disk (`mapping/home_map.py`) and reached no
   client, and nothing could save one (M1). `GET /map` now carries `document` beside the capped

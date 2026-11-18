@@ -686,6 +686,22 @@ _LOCALIZATION = Section(
         "dead_reckoning_scale_m": _POSITIVE,
         "dead_reckoning_horizon_s": _POSITIVE,
         "confidence_floor": _FRACTION,
+        # How long a confirmed place match keeps the `place` tier. Long, because standing still in a
+        # room is not evidence against it; the fix is replaced by the next match, not by the clock.
+        "place_max_age_s": _NON_NEGATIVE,
+    }
+)
+
+# `navigation/place_recognition.py` + `perception/place_views.py` (#296-#301). A view is user data
+# under `~/.houndmind/places/views`, which is why `views_dir` is a path and not a content knob; the
+# rest are bounds on a guess: `min_score` below ~0.4 starts calling two doorways one room, and
+# `confirm_frames` is what makes a single good frame insufficient to move the pose.
+_PLACE_RECOGNITION = Section(
+    fields={
+        "views_dir": StrSpec(),
+        "min_score": _FRACTION,
+        "confirm_frames": _POSITIVE,
+        "interval_s": _NON_NEGATIVE,
     }
 )
 
@@ -1149,6 +1165,7 @@ _SETTINGS_SECTIONS: dict[str, Spec] = {
     "perception": _PERCEPTION,
     "performance": _PERFORMANCE,
     "personality": _PERSONALITY,
+    "place_recognition": _PLACE_RECOGNITION,
     "places": _PLACES,
     "quiet_mode": _QUIET_MODE,
     "routines": _ROUTINES,

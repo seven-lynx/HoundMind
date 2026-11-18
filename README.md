@@ -219,6 +219,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Behavior                       | Enabled     |                                       |
 | Routines                       | Enabled     | `modules.routine_runner`              |
 | Places (go to \<place\>)         | Enabled     | `modules.place_navigator`; intents at priority 17, under `navigation` |
+| Place recognition (camera)     | Disabled    | Opt-in; `modules.place_recognition` — matches a taught view and promotes `localization` to the `place` tier |
 | Attention                      | Enabled     |                                       |
 | Habituation                    | Enabled     | No `modules` entry; switch it off with `settings.habituation.enabled` |
 | Energy & Emotion               | Disabled    | Opt-in; `modules.energy_emotion`       |
