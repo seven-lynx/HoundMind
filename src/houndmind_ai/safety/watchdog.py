@@ -199,7 +199,8 @@ class WatchdogModule(Module):
         The shipped `ignore_modules` exempts `api`, and the consequence was a blind spot with no
         symptom: a wedged control plane is invisible, because the API is the only way anyone sees
         the dog at all. Naming the exemption keeps "exempt on purpose" distinct from "healthy"
-        for any client that is still connected (#25).
+        for any client that is still connected (#25). The dead-thread half of that blind spot is the
+        module's own problem now (`ControlPlaneModule.tick`, #330); a hang is still uncovered (#338).
 
         Only modules that are enabled *and* started are named: one that is off was never a
         candidate, so calling it exempt would invent a decision the watchdog did not make.

@@ -8,6 +8,7 @@ bound. All of it on loopback.
 from __future__ import annotations
 
 import socket
+import threading
 import urllib.request
 
 from houndmind_ai.kernel.commands import CommandBus
@@ -110,6 +111,62 @@ def test_a_disabled_module_never_binds(tmp_path) -> None:
     assert module.status.started is False
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.bind(("127.0.0.1", port))
+
+
+def test_a_plane_that_dies_after_start_is_noticed_and_restarted(tmp_path) -> None:
+    """#330: the runtime heartbeats every module, so only the thread can witness this.
+
+    A moved `status.started` and a fresh `last_tick_ts` are what made a dead console look green, so
+    the check has to read the thread itself - and the recovery has to go through the runtime.
+    """
+
+    port = free_port()
+    context = context_for(tmp_path, port)
+    module = ControlPlaneModule("api", bus=CommandBus())
+    module.start(context)
+    try:
+        module.tick(context)
+        assert context.get("api_alive") is True
+        assert not context.get("restart_modules")
+
+        # A finished thread is what a dead aiohttp loop leaves behind: the module's thread object is
+        # still there, because `stop()` is what clears it and nobody called `stop()`.
+        dead = threading.Thread(target=lambda: None)
+        dead.start()
+        dead.join()
+        module._thread = dead
+        module._error = "control plane failed: the loop stopped"
+
+        module.tick(context)
+
+        assert context.get("api_alive") is False
+        assert "api" in (context.get("restart_modules") or [])
+        assert module.status.last_error == "control plane failed: the loop stopped"
+        assert module.status.enabled is True, "one death is restarted, not fatal"
+    finally:
+        module.stop(context)
+
+
+def test_a_plane_that_keeps_dying_is_disabled_rather_than_looped(tmp_path) -> None:
+    """A restart loop with no backoff is the same blind spot with more noise (#330)."""
+
+    context = context_for(tmp_path, free_port())
+    module = ControlPlaneModule("api", bus=CommandBus())
+    module.start(context)
+    module._thread = None
+    module._error = "control plane failed: boom"
+    try:
+        for _ in range(10):
+            if not module.status.enabled:
+                break
+            module._dead_since = None  # pretend the cooldown between attempts has elapsed
+            module.tick(context)
+
+        assert module.status.enabled is False
+        assert "died" in (module.status.disabled_reason or "")
+        assert (module.status.disabled_reason or "").endswith("boom")
+    finally:
+        module.stop(context)
 
 
 def test_the_settings_reader_honours_the_shipped_section() -> None:

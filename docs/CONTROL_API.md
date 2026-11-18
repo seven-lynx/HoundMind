@@ -606,8 +606,9 @@ up on. `holding: true` never means the dog was posed — recovery is stop-and-re
 `exempt` names the modules the watchdog is configured never to restart, with the reason, so
 "exempt on purpose" is distinguishable from "healthy". The shipped `settings.watchdog.ignore_modules`
 exempts `api`, because restarting the control plane re-binds the port and drops every WebSocket
-client mid-request; the cost of that choice is that a wedged API cannot be restarted by anything,
-and this field is how it stays visible (`#25`).
+client mid-request. That exemption no longer hides a plane whose thread has exited: the module checks
+its own thread each tick, publishes `api_alive`, and asks the runtime to restart it (#330). A plane
+that hangs while its thread stays alive is still not restarted by anything (#338).
 
 **Validity flags are mandatory and clients must honour them.** `distance_cm: 42.5` with
 `distance_valid: false` means "no measurement" — render "—", never "42 cm". This is the one rule in
