@@ -440,8 +440,26 @@ sudo systemctl restart houndmind
 
 The unit is in the tree at `packaging/systemd/houndmind.service`, with three placeholders
 (`@HOUNDMIND_USER@`, `@HOUNDMIND_ROOT@`, `@HOUNDMIND_PYTHON@`) that the installer fills from the
-account and checkout it ran with. Passing `--no-service` skips the step; installing it by hand means
-substituting them yourself.
+account and checkout it ran with. Passing `--no-service` skips the step.
+
+To install it by hand — the case for a device that was set up before the unit existed — render the
+three values from the checkout that is actually there, rather than editing the template:
+
+```bash
+cd ~/HoundMind
+sed -e "s|@HOUNDMIND_USER@|$(whoami)|g" \
+    -e "s|@HOUNDMIND_ROOT@|$(pwd)|g" \
+    -e "s|@HOUNDMIND_PYTHON@|$(pwd)/.venv/bin/python|g" \
+    packaging/systemd/houndmind.service > /tmp/houndmind.service
+sudo install -m 0644 /tmp/houndmind.service /etc/systemd/system/houndmind.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now houndmind
+systemctl is-enabled houndmind      # enabled
+```
+
+The installer itself only runs `enable`, so an install never opens the servo bus on its own. The
+`--now` above is the operator saying "start it too", which is the deliberate extra step. From then on
+`multi-user.target` starts it at every boot.
 
 **The service resumes; motion never does.** After a reboot the modules come back and the dog stays
 still: a gait cannot survive a restart, because `motion_command` and the intent board are

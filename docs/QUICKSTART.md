@@ -52,7 +52,12 @@ python -m houndmind_ai
 # 6. In a second shell, read the live snapshot (the token is read from the file, never pasted).
 TOKEN=$(cat ~/.houndmind/api_token)
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8420/api/v1/state | head -c 400
+
+# 7. Open http://<pi-address>:8420/ in a browser and paste the token - the console.
 ```
+
+Step 7 opens the web app: `docs/WEBAPP_GUIDE.md` walks through the Connect card, the fourteen panels
+and the shortcuts. Nothing on that page moves the dog until you hold a direction on **Drive**.
 
 Step 5 keeps running until `Ctrl+C`. Let it exit on its own terms — the module `stop()` hooks run and
 the servo bus closes. Do not kill a moving dog with `kill -9`.
@@ -67,6 +72,7 @@ the servo bus closes. Do not kill a moving dog with `kill -9`.
 | 4 | `[smoke] PASS` |
 | 5 | `Board pi4 (…), profile pi4` and one log line per module as it starts |
 | 6 | JSON with `"tick"`, `"modules"`, and `distance_valid` / `imu_valid` flags |
+| 7 | the Connect card, then Overview with a `live` badge and four instruments |
 
 ## 4. One thing that will bite you
 
