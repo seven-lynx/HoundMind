@@ -33,6 +33,7 @@ from aiohttp import web
 from houndmind_ai.core.logging_setup import log_file_path
 from houndmind_ai.kernel.actions import repertoire_from_settings
 from houndmind_ai.kernel.commands import (
+    AUTONOMY_SOURCES,
     DEFAULT_MODE,
     KNOWN_ACTIONS,
     RUNTIME_MODES,
@@ -217,8 +218,25 @@ class ControlPlane:
         return mode if isinstance(mode, str) and mode in RUNTIME_MODES else DEFAULT_MODE
 
     def set_mode(self, mode: str) -> str:
+        """Switch the runtime mode, and drop every autonomy intent the old one left standing.
+
+        `MODE_ALLOWED_SOURCES` decides whether a *new* intent is admitted; it says nothing about one
+        that is already published, so without this a hand on the wheel keeps a behaviour or navigation
+        intent live until it expires — a stale slot a client command then has to outrank (#270).
+        """
+        previous = self.mode()
         self.context.set("runtime_mode", mode)
+        if previous != mode:
+            self._retract_autonomy()
         return mode
+
+    def _retract_autonomy(self) -> None:
+        """Withdraw every autonomy slot now. The client's request and the watchdog's hold stay."""
+        board = self.context.get("intent_board")
+        if board is None:
+            return
+        for source in AUTONOMY_SOURCES:
+            board.retract(source)
 
     # ---- commands ----------------------------------------------------------
 
@@ -248,6 +266,9 @@ class ControlPlane:
             # The queue is full. Rather than drop a stop, force the mode the gateway refuses to
             # drive in: the next tick sees it and the dog settles.
             self.context.set("runtime_mode", "rest")
+            # And withdraw what autonomy was asking for, for the same reason `set_mode` does: a stop
+            # that leaves a live intent behind is a stop a later tick can be talked out of.
+            self._retract_autonomy()
             logger.error("Command bus full; forced rest mode instead of dropping a stop")
         return command
 

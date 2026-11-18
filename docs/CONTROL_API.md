@@ -181,7 +181,7 @@ what stops the guard from looking redundant (`#39`).
 | `PATCH` | `/api/v1/places/{id}` | `config` | correct a place's `name`, `heading_deg`, `distance_cm` or `anchor`; the `id` cannot change ([§8](#8-places)) |
 | `POST` | `/api/v1/places/{id}/go` | `move` | ask the dog to walk to one place; optional `{"at_anchor": true}` ([§8](#8-places)) |
 | `GET` | `/api/v1/mode` | `state:read` | current mode |
-| `POST` | `/api/v1/mode` | `move` | switch `idle` \| `patrol` \| `manual` \| `rest` |
+| `POST` | `/api/v1/mode` | `move` | switch `idle` \| `patrol` \| `manual` \| `rest`; a real change retracts every autonomy intent (`AUTONOMY_SOURCES`) the old mode had published, and leaves a client request or a watchdog hold standing (#270) |
 | `GET` | `/api/v1/config` | `config` | effective config, secrets redacted |
 | `PATCH` | `/api/v1/config` | `config` | four live keys only, listed below |
 | `GET` | `/api/v1/calibration` | `config` | servo offsets, read-only |
