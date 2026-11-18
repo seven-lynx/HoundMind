@@ -295,6 +295,13 @@ it comes from the `python3-picamera2` Debian package, and the venv has to be cre
 `modules.vision_pi4.enabled` at `false` — enabling it only buys a `Picamera2 unavailable` line on
 every start (#215).
 
+On a Pi it also probes the HAT speaker, because every layer that makes it work is outside importland:
+the `dtoverlay=hifiberry-dac` line in the boot config and an `/etc/asound.conf` whose `pcm.!default`
+is `robothat`. An overlay with no route is a **failure**, not a warning — that is the half-configured
+state in which every engine constructs, says nothing, and logs the failure once (#254, #288). A
+requirement that cannot be installed at all, like the RTAB-Map bindings, reports `UNSUPPORTED` rather
+than a red that can never go green (#181).
+
 An IMU that was never calibrated biases every angle derived from it: `|acc|` should read 1.00 g at
 rest, and `python -m tools.hardware_checkup --skip-motion` warns when it does not. The vendor's
 `examples/imu_calibration.py`, the only path this page used to point at, is not part of the
@@ -340,10 +347,12 @@ means, from the install verifier to the opt-in motion run.
 
 Two rules that hold whatever that document says:
 
-- Read-only first: `python -m tools.hardware_checkup --skip-motion`, then
-  `python -m tools.smoke_test`. Neither can move the dog — on a checkup, leaving `--skip-motion`
-  off *is* a motion run, and the smoke test disables `scanning` as well as the motors because it
-  drives the head itself (#184).
+- Read-only first, and in one command: `python -m tools.installer_verify --run-chain` runs
+  `installer_verify`, then `hardware_checkup --skip-motion`, then `smoke_test`, stopping at the first
+  failure. The flags are inside the chain, so they cannot be forgotten (#315). Run the same three by
+  hand if you prefer — neither `--skip-motion` nor a bare `smoke_test` can move the dog; on a checkup,
+  leaving `--skip-motion` off *is* a motion run, and the smoke test disables `scanning` as well as the
+  motors because it drives the head itself (#184).
 - `--include-motion` only with clearance around the dog and a hand on the power.
 - `sudo .venv/bin/robot_hat doctor` is the vendor's own health check, and its `Library` section
   should be all ticks now that `pyserial` is installed (#255). If that section is green and the

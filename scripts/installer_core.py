@@ -1227,7 +1227,15 @@ def main() -> int:
     if not verifier.exists():
         print("Installer verifier not found; skipping verification step.")
         return 0
-    return run([str(python), str(verifier), "--preset", preset])
+    code = run([str(python), str(verifier), "--preset", preset])
+    if code == 0:
+        # #315: the three post-install checks were a habit rather than a chain. They are printed
+        # rather than run here on purpose - the checkup and the smoke test both open the servo bus,
+        # and an installer that does that unasked is what the motion rules forbid.
+        print("Next, read-only verification in order (no motion):")
+        print(f"  {python} -m tools.installer_verify --chain      # print the three checks")
+        print(f"  {python} -m tools.installer_verify --run-chain  # run them")
+    return code
 
 
 if __name__ == "__main__":
