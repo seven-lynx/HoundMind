@@ -581,12 +581,12 @@ If the unit is missing entirely,
 manual install, and `packaging/systemd/houndmind.service` is the template it renders.
 
 **One honest limitation.** The control plane runs *inside* the runtime process. systemd restarts the
-process if it exits (`Restart=on-failure`), and the watchdog restarts other modules — but a plane that
-hangs without the process exiting is not restarted by anything today, and it is exempt from the
-watchdog by config (`settings.watchdog.ignore_modules`). When that happens the console is simply dead
-while `systemctl status` looks healthy, and `sudo systemctl restart houndmind` is the fix. The gap is
-tracked in **#330**; until it is closed, treat "the console stopped answering but the service is
-active" as a restart, not a mystery.
+process if it exits (`Restart=on-failure`), and the watchdog restarts other modules. A plane whose
+thread *exits* is now noticed by the module itself and restarted through the runtime (#330), so
+"the console stopped answering" after a crash is a recovery rather than a mystery. What is still
+uncovered is a plane that hangs with its thread alive: the process looks healthy, the thread is up, and
+the watchdog is configured not to touch `api` (`settings.watchdog.ignore_modules`). When that happens
+`sudo systemctl restart houndmind` is the fix, and the gap is **#338**.
 
 ## 11. Security
 

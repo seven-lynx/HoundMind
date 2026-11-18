@@ -628,13 +628,17 @@ that key instead of deriving a second window, and applies it to the `scan_servic
 too. `navigation.scan_stale_s` was retired with it — a second knob for one question is how the two
 came to disagree about the same timestamp (#22).
 
-**The control plane is exempt, and says so.** `ignore_modules` ships as `["api"]`: restarting the
-control plane re-binds the port and drops every connected client, and a restart triggered by a
-heartbeat lag looks to a phone exactly like the dog going offline. The cost of that choice is a
-blind spot, because the API is the only way anyone sees the dog - so `/state` reports the exemption
-in `supervisor.exempt` with its reason. A wedged control plane therefore reads as `exempt`, never
-as healthy, and an operator with a client still connected can see it. Anything else in
-`ignore_modules` is reported the same way.
+**The control plane supervises itself, and the watchdog leaves it alone.** `ignore_modules` ships as
+`["api"]`: restarting the control plane re-binds the port and drops every connected client, and a
+restart triggered by a heartbeat lag looks to a phone exactly like the dog going offline. The cost of
+that choice was a blind spot, because the API is the only way anyone sees the dog — and worse, the
+runtime stamps `last_tick_ts` for every module it ticks, so a plane whose thread had died read as
+healthy. The module now checks its own thread on each tick
+(`services/module.py::ControlPlaneModule.tick`), publishes `api_alive`, and asks the runtime for a
+restart through `restart_modules` — the same key the watchdog writes — with a 5 s cooldown, disabling
+itself with the count after three deaths rather than looping. A first death is recovered; a plane that
+keeps dying is named. `/state` still reports the exemption in `supervisor.exempt` with its reason, so
+"exempt" never reads as "healthy". A *hang* — thread alive, loop wedged — is still uncovered (#338).
 
 **Default:** Enabled (it does nothing unless the dog is asked to move on stale data).
 

@@ -28,6 +28,14 @@ __all__ = ["ControlPlaneModule"]
 
 _START_TIMEOUT_S = 10.0
 _STOP_TIMEOUT_S = 5.0
+# A plane that dies *after* it started used to look healthy (#330): the runtime stamps
+# `last_tick_ts` for every module it ticks, so the supervisor saw a fresh heartbeat whether or not
+# anything was still listening, `/modules` said started, and systemd saw a live process. The thread
+# is the only witness, so this module asks the runtime for a restart itself - through the same
+# `restart_modules` key the watchdog writes, because the runtime owns `start()`.
+_RESTART_COOLDOWN_S = 5.0
+_HEALTHY_AFTER_S = 30.0
+_MAX_SELF_RESTARTS = 3
 
 
 class ControlPlaneModule(Module):
@@ -51,6 +59,12 @@ class ControlPlaneModule(Module):
         self._ready = threading.Event()
         self._error: str | None = None
         self._plane: Any = None
+        # Liveness bookkeeping for `tick()` (see `_RESTART_COOLDOWN_S`). `_restarts` is deliberately
+        # *not* reset by `start()`: a plane that dies immediately after every restart must run out
+        # of budget instead of looping forever.
+        self._dead_since: float | None = None
+        self._alive_since: float | None = None
+        self._restarts = 0
 
     # ---- lifecycle ---------------------------------------------------------
 
@@ -71,6 +85,8 @@ class ControlPlaneModule(Module):
 
         self._ready.clear()
         self._error = None
+        self._dead_since = None
+        self._alive_since = None
         self._thread = threading.Thread(
             target=self._run,
             args=(context, settings, bus),
@@ -83,6 +99,58 @@ class ControlPlaneModule(Module):
             return
         if self._error:
             self.disable(self._error)
+
+    def tick(self, context) -> None:
+        """Notice a plane that died after it started, and ask the runtime to bring it back (#330).
+
+        Nothing downstream can notice: the runtime stamps `last_tick_ts` for every module it ticks,
+        so the supervisor saw a healthy `api` whether or not the thread was alive, `/modules` said
+        started, and systemd saw a live process. The thread is the only witness, so the check lives
+        here and the recovery goes through `restart_modules` - the same context key the watchdog
+        writes - because the runtime owns `start()` and a module must not reach around it.
+
+        A plane that keeps dying is disabled with the count in the reason rather than restarted
+        forever: a silent restart loop is the failure this issue was about.
+        """
+        thread = self._thread
+        now = time.monotonic()
+        if thread is not None and thread.is_alive():
+            context.set("api_alive", True)
+            if self._alive_since is None:
+                self._alive_since = now
+            elif now - self._alive_since >= _HEALTHY_AFTER_S:
+                # Up long enough to be trusted again, so the restart budget resets.
+                self._restarts = 0
+            return
+
+        context.set("api_alive", False)
+        reason = self._error or "the control plane thread exited without an error"
+        self.status.last_error = reason
+        if self._dead_since is None:
+            # First sighting: say it once, then fall through to the first restart attempt.
+            self._dead_since = now
+            self._alive_since = None
+            logger.error("Control plane thread is gone: %s", reason)
+        elif now - self._dead_since < _RESTART_COOLDOWN_S:
+            return
+        if self._restarts >= _MAX_SELF_RESTARTS:
+            self.disable(f"the control plane died {self._restarts} times: {reason}")
+            return
+        self._restarts += 1
+        self._dead_since = now
+        requested = context.get("restart_modules") or []
+        if isinstance(requested, str):
+            requested = [requested]
+        names = [str(name) for name in requested] if isinstance(requested, list) else []
+        if self.name not in names:
+            names.append(self.name)
+        context.set("restart_modules", names)
+        logger.warning(
+            "Control plane dead (%s); asked the runtime to restart it (%d/%d)",
+            reason,
+            self._restarts,
+            _MAX_SELF_RESTARTS,
+        )
 
     def stop(self, context) -> None:
         loop, stop_event = self._loop, self._stop_event
