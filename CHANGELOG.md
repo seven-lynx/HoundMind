@@ -10,6 +10,21 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A walk is held inside its room, and a gate that lets it back in (H5)** — the planner only knew what
+  was blocked, so a route could leave the room it was drawn for and a doorway the user had not finished
+  with was as walkable as any other. `mapping/planner.py::plan_route` now takes an optional `region` (a
+  room polygon in its own `(forward_cm, left_cm)`) and `sealed_openings` (`(a, b)` pairs in the same
+  frame): **the door stays open, the plan simply does not use it**. Two refusals name themselves,
+  `goal_outside_region` and `route_leaves_region`, and they ask the same predicate keep-out does
+  (`mapping/rooms.py::point_in_polygon`) — keep-out and keep-in are one question asked twice. Neither
+  is an interlock: `act/gateway.py`, the interlock and the tilt latch never learn that geometry exists,
+  because a region is user data and a drawing that is wrong must not become a safety device. The hold is
+  directional — a walk that *starts* outside the region is planned unconstrained, so a dog outside can
+  always plan its way back in. What holds an autonomous run is
+  `mapping/rooms.py::step_inside_region(pose, heading_deg, step_cm, region, margin_cm)`: the pose after
+  one stride, `REGION_MARGIN_CM` (15 cm) clear of the drawn wall, in the document frame, and a step toward
+  the region is never refused. Both are library functions — no route, config key, module or panel changed,
+  and the run itself is H6.
 - **The stride is measured inside a room the dog was shown (H4)** — `step_cm` shipped as 25 cm for a
   body about 25 cm long (#285), and every place anchor and every centimetre of the map inherits it.
   `mapping/room_scale.py` measures the real number inside a drawn room, where the walls are already

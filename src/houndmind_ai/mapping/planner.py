@@ -16,6 +16,12 @@ Two rules shape it.
    `left_cm = ix * cell`. Reading them the other way round yields a route that is transposed — a
    valid-looking walk into the wrong room — which is why the mapping is inverted in exactly one place
    here and pinned by a test.
+3. **A region is a plan, not an interlock (H5).** `region` confines a route to the room a run is held
+   in; `sealed_openings` refuse a doorway the user is not finished with, so the door is still open and
+   the route simply does not use it. Both come back as named refusals, which keeps `act/gateway.py`
+   and the interlock ignorant of geometry: a region is user data, and a drawing that is wrong must not
+   become a safety device. The hold is directional too — a walk that *starts* outside the region is
+   planned unconstrained, because a dog outside has to be able to plan its way back in.
 
 A **document** point is the other order, on purpose: `mapping/home_map.py` stores `[x = left,
 y = forward]`, because that is what a person tracing a floor plan reads. The two meet only where a
@@ -27,8 +33,11 @@ from __future__ import annotations
 
 import heapq
 import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
+
+from houndmind_ai.mapping.rooms import point_in_polygon, polygon_points
 
 __all__ = ["RoutePlan", "Waypoint", "plan_route"]
 
@@ -84,8 +93,9 @@ class Waypoint:
 class RoutePlan:
     """A route, or a refusal that names itself.
 
-    `refusal` is one of `no_path`, `goal_blocked`, `start_unknown` — never prose a consumer has to
-    parse — and `detail` is the sentence a person reads in a log.
+    `refusal` is one of `no_path`, `goal_blocked`, `start_unknown`, `goal_outside_region`,
+    `route_leaves_region` — never prose a consumer has to parse — and `detail` is the sentence a person
+    reads in a log.
     """
 
     waypoints: tuple[Waypoint, ...] = ()
@@ -166,6 +176,56 @@ def _step_cost(
 
 
 
+def _segment(value: Any) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """A sealed opening's two ends as `(forward_cm, left_cm)` pairs, or `None`.
+
+    A hand-edited document can put anything here, and one unreadable opening must not become a wall
+    across the map: it is dropped, and a route through a door nobody can describe stays a route.
+    """
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or len(value) < 2:
+        return None
+    ends: list[tuple[float, float]] = []
+    for end in (value[0], value[1]):
+        if not isinstance(end, Sequence) or isinstance(end, (str, bytes)) or len(end) < 2:
+            return None
+        ends.append((_safe_float(end[0], math.nan), _safe_float(end[1], math.nan)))
+    for forward, left in ends:
+        if not (math.isfinite(forward) and math.isfinite(left)):
+            return None
+    return ends[0], ends[1]
+
+
+def _sealed_cells(openings: Any, cell: float) -> set[tuple[int, int]]:
+    """The cells a sealed doorway spans, sampled every half cell so none of them is skipped.
+
+    Each opening is an `(a, b)` pair of planner points. A caller holding the document's
+    `{"a": [x, y], "b": [x, y]}` converts through `home_map.document_point_to_runtime` first: the frame
+    swap lives in one place (#347), and a door sealed along a transposed line is a route the dog takes.
+    """
+    blocked: set[tuple[int, int]] = set()
+    if not isinstance(openings, Sequence) or isinstance(openings, (str, bytes)):
+        return blocked
+    for value in openings:
+        segment = _segment(value)
+        if segment is None:
+            continue
+        (forward_a, left_a), (forward_b, left_b) = segment
+        span = math.hypot(forward_b - forward_a, left_b - left_a)
+        steps = max(1, int(math.ceil(span / max(cell / 2.0, 1.0))))
+        for step in range(steps + 1):
+            fraction = step / steps
+            blocked.add(
+                _index_of(
+                    (
+                        forward_a + (forward_b - forward_a) * fraction,
+                        left_a + (left_b - left_a) * fraction,
+                    ),
+                    cell,
+                )
+            )
+    return blocked
+
+
 def _astar(
     start: tuple[int, int],
     goal: tuple[int, int],
@@ -175,10 +235,15 @@ def _astar(
     cell: float,
     clearance_cells: float,
     weight: float,
+    inside: Callable[[tuple[int, int]], bool] | None = None,
 ) -> list[tuple[int, int]] | None:
     """A* over the four neighbours of each free cell, with the clearance penalty in the step cost.
 
     Four-way rather than eight: a diagonal step cuts a corner, and a corner is where a wall is.
+
+    `inside` is the optional region test (H5): a cell it refuses is never entered, so the route that
+    comes back cannot leave the polygon. The start cell is never tested - that is where the dog is, and
+    refusing to plan from its own feet is not a constraint, it is a lock.
     """
 
     def heuristic(node: tuple[int, int]) -> float:
@@ -199,6 +264,8 @@ def _astar(
         for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
             neighbour = (current[0] + dx, current[1] + dy)
             if neighbour in occupied or not _in_bounds(neighbour, half_x, half_y):
+                continue
+            if inside is not None and not inside(neighbour):
                 continue
             step = cost_so_far[current] + _step_cost(
                 neighbour, occupied, cell, clearance_cells, weight
@@ -231,13 +298,28 @@ def plan_route(
     start_cm: tuple[float, float],
     goal_cm: tuple[float, float],
     settings: dict | None = None,
+    *,
+    region: Any = None,
+    sealed_openings: Any = None,
 ) -> RoutePlan:
     """A route from `start_cm` to `goal_cm` over the mapped cells, or a named refusal.
 
     `cells` is the mapper's grid (`{"ix,iy": hits}`). The start and the goal are centimetres in the
-    same frame the map is drawn in. Everything a caller can get wrong about the request comes back as
-    a refusal: a start that is not on the map or is inside an obstacle is `start_unknown`, a goal in
-    an obstacle is `goal_blocked`, and a goal walled off from the start is `no_path`.
+    planner's own frame, `(forward_cm, left_cm)` — **not** the document's `[x = left, y = forward]`.
+    Everything a caller can get wrong about the request comes back as a refusal: a start that is not on
+    the map or is inside an obstacle is `start_unknown`, a goal in an obstacle is `goal_blocked`, and a
+    goal walled off from the start is `no_path`.
+
+    `region` is an optional room polygon in the same frame, and `sealed_openings` are `(a, b)` point
+    pairs in it (H5). A goal outside the region is `goal_outside_region`; a goal inside it that can only
+    be reached by walking out of it is `route_leaves_region`; a doorway listed as sealed is a wall for
+    this plan, though the door itself is still open. A caller holding drawn geometry converts through
+    `home_map.document_point_to_runtime` first — the swap lives in one place (#347), and a region or a
+    doorway read in the wrong order is a route into the wrong room.
+
+    A walk that **starts** outside `region` is planned unconstrained, on purpose: a dog outside has to
+    be able to plan its way back in, and a hold that refused the return would be the trap it exists to
+    prevent. The goal is still held, so the exemption cannot be used to wander further out.
     """
     settings = settings or {}
     cell = _safe_float(settings.get("cell_size_cm"), CELL_CM)
@@ -262,10 +344,19 @@ def plan_route(
                 f"(cell {start}, bounds +/-{half_x},{half_y})"
             ),
         )
+    # A sealed doorway is a wall for this plan. The cell the dog already stands in is not: it may be
+    # standing in that doorway, and refusing to plan from its own feet would hold it there.
+    occupied |= _sealed_cells(sealed_openings, cell) - {start}
     if not _in_bounds(goal, half_x, half_y) or goal in occupied:
         return RoutePlan(
             refusal="goal_blocked",
             detail=f"the goal {goal_cm} is inside an obstacle or off the map (cell {goal})",
+        )
+    region_points = polygon_points(region)
+    if region_points and not point_in_polygon(goal_cm, region_points):
+        return RoutePlan(
+            refusal="goal_outside_region",
+            detail=f"the goal {goal_cm} is outside the region this walk is held in",
         )
     if start == goal:
         point = _centre_of(start, cell)
@@ -279,8 +370,34 @@ def plan_route(
             )
         )
 
-    path = _astar(start, goal, occupied, half_x, half_y, cell, clearance_cells, weight)
+    confine = bool(region_points) and point_in_polygon(start_cm, region_points)
+
+    def inside(index: tuple[int, int]) -> bool:
+        """Is this cell's centre inside the region? The route may not enter a cell that is not."""
+        return point_in_polygon(_centre_of(index, cell), region_points)
+
+    path = _astar(
+        start,
+        goal,
+        occupied,
+        half_x,
+        half_y,
+        cell,
+        clearance_cells,
+        weight,
+        inside if confine else None,
+    )
     if path is None:
+        if confine:
+            loose = _astar(start, goal, occupied, half_x, half_y, cell, clearance_cells, weight)
+            if loose is not None:
+                return RoutePlan(
+                    refusal="route_leaves_region",
+                    detail=(
+                        f"every route from {start_cm} to {goal_cm} leaves the region "
+                        f"(a free route exists, and it does not stay inside)"
+                    ),
+                )
         return RoutePlan(
             refusal="no_path", detail=f"no free route from cell {start} to cell {goal}"
         )

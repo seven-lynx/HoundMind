@@ -13,7 +13,9 @@ work needs before it can compare a drawn wall with a ranged one.
 It deliberately does **not** decide what a route may do. `mapping/planner.py` owns the route, and a
 caller asks here whether a point or a path is off limits, then turns the answer into its own named
 refusal. Nothing here knows which rooms the dog may *enter* either: a room the dog may enter changes no
-answer this module gives, and a keep-in region (H5) is a caller's question, not a predicate here.
+answer this module gives. The keep-in **region** (H5) is the one question that is not about refusal and
+not about a route: `step_inside_region` answers whether one stride would take the body out of the room a
+run is held in, which is the layer that holds a patrol in, because a patrol never asks for a route.
 
 Everything is in the **document** frame (`[x = left, y = forward]`), because that is the frame `rooms`
 is stored and drawn in. A caller holding runtime points swaps once, through
@@ -28,13 +30,16 @@ from typing import Any
 
 __all__ = [
     "KEEP_OUT_SAMPLE_CM",
+    "REGION_MARGIN_CM",
     "edge_distances",
     "keep_out_room_at",
     "keep_out_rooms",
     "point_in_polygon",
+    "polygon_points",
     "polyline_in_keep_out",
     "room_at",
     "room_label",
+    "step_inside_region",
 ]
 
 #: How far apart a polyline is sampled when it is tested against a room. A route is corners, and the
@@ -42,6 +47,23 @@ __all__ = [
 #: Five centimetres is below one sonar cell and below one gait step, so no room the dog could walk
 #: through fits between two samples.
 KEEP_OUT_SAMPLE_CM = 5.0
+
+#: How much room the body needs between a predicted pose and the drawn wall before the step counts as
+#: inside the region (H5). A stride that ends nearer than this to the edge is a body against a wall, not a
+#: walk inside a room; a step that moves *toward* the region is never refused on it.
+REGION_MARGIN_CM = 15.0
+
+
+def _safe_float(value: Any, default: float) -> float:
+    """A finite float, or `default`. A heading, a step and a drawn coordinate all arrive as `Any`."""
+    try:
+        if value is None:
+            return default
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if math.isfinite(number) else default
+
 
 
 def _point(value: Any) -> tuple[float, float] | None:
@@ -123,6 +145,16 @@ def point_in_polygon(point: Any, polygon: Any) -> bool:
             if x_at_y > x:
                 inside = not inside
     return inside
+
+
+def polygon_points(polygon: Any) -> list[tuple[float, float]]:
+    """A polygon's usable vertices, in order; fewer than three means the shape is not a polygon.
+
+    The one place that decides what counts as a room's shape, so a module that has to know whether it was
+    handed a region **at all** asks this instead of re-deriving the rule: a two-corner lasso is not a
+    room, and a caller that treated it as one would hold a walk against a line.
+    """
+    return _vertices(polygon)
 
 
 def room_label(room: Any) -> str:
@@ -236,3 +268,59 @@ def polyline_in_keep_out(points: Any, document: Any) -> dict[str, Any] | None:
             if room is not None:
                 return room
     return None
+
+
+def _nearest_edge_cm(point: tuple[float, float], vertices: list[tuple[float, float]]) -> float:
+    """Distance from `point` to the nearest edge of a polygon already known to be usable."""
+    count = len(vertices)
+    return min(
+        _distance_to_segment(point, vertices[index], vertices[(index + 1) % count])
+        for index in range(count)
+    )
+
+
+def step_inside_region(
+    pose: Any,
+    heading_deg: Any,
+    step_cm: Any,
+    region: Any,
+    margin_cm: float = REGION_MARGIN_CM,
+) -> bool:
+    """Would one stride from `pose` at `heading_deg` stay inside `region`? H5's keep-in gate.
+
+    `True` means the step is legal. Three things make it `False`: the pose lands outside the polygon, it
+    lands inside but nearer than `margin_cm` to the drawn wall (a body against a wall is not a body in a
+    room), or the dog is already outside and the step does not bring it closer.
+
+    **The hold is directional**, and that is the whole safety argument for it: a dog outside the polygon
+    has to be able to walk back in, or the escape hatch becomes the trap. So a step that *moves toward*
+    the region is never refused, even when it ends within the margin or still outside.
+
+    Everything is in the **document** frame (`[x = left, y = forward]`), because a drawn room is stored
+    and drawn in it; a runtime pose swaps once through `home_map.runtime_point_to_document` (#347).
+    `heading_deg` is the odometry convention - 0 is forward, positive is left - so a stride of `step_cm`
+    moves `+step * cos` along `y` and `+step * sin` along `x`.
+
+    A region that is not a polygon and a pose that cannot be read both answer `True`: this is a routing
+    constraint, not an interlock, and the run refuses to start without a usable region (H6). A gate that
+    failed closed here would hold every step of a dog whose drawing was wrong, with no sensor at fault.
+    """
+    vertices = _vertices(region)
+    current = _point(pose)
+    if not vertices or current is None:
+        return True
+    heading = math.radians(_safe_float(heading_deg, 0.0))
+    step = _safe_float(step_cm, 0.0)
+    margin = _safe_float(margin_cm, REGION_MARGIN_CM)
+    predicted = (
+        current[0] + step * math.sin(heading),
+        current[1] + step * math.cos(heading),
+    )
+    if point_in_polygon(predicted, vertices):
+        if margin <= 0.0 or _nearest_edge_cm(predicted, vertices) >= margin:
+            return True
+    if point_in_polygon(current, vertices):
+        return False
+    # Outside before: only a step that closes the distance to the room is legal.
+    return _nearest_edge_cm(predicted, vertices) < _nearest_edge_cm(current, vertices)
+

@@ -444,11 +444,12 @@ grid this process is already building wins, because merging would double every h
 
 ### Routing across the map
 
-`mapping/planner.py::plan_route(cells, start_cm, goal_cm, settings)` turns the grid into a route: a
-list of `{x_cm, y_cm, clearance_cm}` waypoints, or a refusal that names itself — `start_unknown`
-(the pose is off the map or inside an obstacle), `goal_blocked` (the goal is), `no_path` (a free
-route does not exist). It is a pure function: no context, no HAL, no mapper instance, so a synthetic
-grid is the whole test.
+`mapping/planner.py::plan_route(cells, start_cm, goal_cm, settings, *, region=None, sealed_openings=None)`
+turns the grid into a route: a list of `{x_cm, y_cm, clearance_cm}` waypoints, or a refusal that names
+itself — `start_unknown` (the pose is off the map or inside an obstacle), `goal_blocked` (the goal is),
+`no_path` (a free route does not exist), `goal_outside_region` (the goal is outside the room a walk is
+held in) and `route_leaves_region` (the only way there leaves that room). It is a pure function: no
+context, no HAL, no mapper instance, so a synthetic grid is the whole test.
 
 Two things about it are worth knowing before trusting a route:
 
@@ -476,6 +477,22 @@ reads (`mapping/rooms.py`): a goal inside one refuses as `goal_in_keep_out`, and
 refuses as `route_in_keep_out`. The straight run between two waypoints is sampled at 5 cm, because a route
 is corners and a corner-only check calls a walk through a room clear. A dog already standing inside a
 keep-out room is **not** refused: the room is marked to keep it out, not to imprison it.
+
+**Keep-in asks the same predicate the opposite question (H5).** `region` is a room polygon in the
+planner's `(forward_cm, left_cm)` — a drawn room is converted through
+`home_map.document_point_to_runtime`, because the frame swap lives in one place (#347) — and a route
+planned with one never steps outside it. `sealed_openings` are `(a, b)` point pairs in that frame: **the
+door stays open, the plan simply does not use it**, which is how a first run keeps to one doorway while
+the next room is still being drawn. Both are *plan* constraints: nothing in `act/gateway.py`, the
+interlock or the tilt latch knows a region exists, because a region is user data and a drawing that is
+wrong must not become a safety device. The hold is directional too — a walk that **starts** outside the
+region is planned unconstrained, so a dog outside can always plan its way back in.
+
+What actually holds an autonomous run is `mapping/rooms.py::step_inside_region(pose, heading_deg,
+step_cm, region, margin_cm)`: the pose after one stride, `REGION_MARGIN_CM` (15 cm) clear of the drawn
+wall, in the document frame — `plan_route` confines *routes*, and a patrol never asks for one. A step that
+moves toward the region is never refused, and a region that is not a polygon gates nothing: the run
+refuses to start instead (H6).
 
 ### Walking a route
 
