@@ -39,11 +39,17 @@ Publishes `localization`::
 `frame` is not decoration: an `odometry` pose is in **centimetres** from the origin the dog was
 reset at, while a `slam` pose is in whatever unit the backend uses (rtabmap reports metres). The
 two are never mixed in one key without saying which it is.
+
+It also publishes `pose_trail` (M6): the walk so far, `[{x_cm, y_cm, yaw_deg, tier, ts}, ...]` in the
+odometry frame, one point per `TRAIL_MIN_STEP_CM` of movement, capped at `TRAIL_MAX_POINTS` and emptied
+when a correction re-anchors the origin. Separate from `localization` because a trail is history:
+`localization` is what the dog believes *now*, and a client that wants the walk asks for the walk.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import time
 from enum import StrEnum
 from typing import Any
@@ -62,6 +68,13 @@ NON_SLAM_BACKENDS = ("", "stub")
 #: rather than tuning a feature, and an age nobody can lengthen is what stops a stale declaration
 #: from outliving the moment it was true. Thirty seconds is a slow walk across a room.
 USER_FIX_MAX_AGE_S = 30.0
+
+#: How far the dog must move before the breadcrumb gets another point. Below one counted step, so a
+#: trail is a walk and not the jitter of a pose that is recomputed every tick.
+TRAIL_MIN_STEP_CM = 5.0
+#: A trail is a picture, not a recording: 240 points at 5 cm is twelve metres of walking, which is
+#: several rooms. Older points fall off the front rather than the trail growing without a bound.
+TRAIL_MAX_POINTS = 240
 
 
 def _safe_float(val: Any, default: float) -> float:
@@ -95,6 +108,8 @@ class LocalizationModule(Module):
         self._place_seen_at: float | None = None
         self._user_stamp: object | None = None
         self._user_seen_at: float | None = None
+        # The walk, in the odometry frame: where the dog has been, for the console to draw (M6).
+        self._trail: list[dict[str, Any]] = []
         self._corrected_at = time.monotonic()
         self._corrected_travelled_cm = 0.0
         self._clock = time.monotonic
@@ -200,6 +215,40 @@ class LocalizationModule(Module):
             reason = "; ".join(part for part in parts if part) or "no pose source"
 
         self._publish(context, tier, frame, pose, confidence, reason, now)
+        self._record_trail(context, tier, frame, pose, now)
+
+    def _record_trail(self, context, tier, frame, pose, now: float) -> None:
+        """Remember where the dog has been, so the console can draw the walk (M6).
+
+        Only `odometry`-framed poses are recorded. A SLAM pose is in whatever unit its backend uses -
+        rtabmap reports metres - and a trail that mixed the two would draw a walk through rooms the
+        dog was never in, which is the same class of defect as drawing one frame in the other's axes.
+
+        A point is added once the dog has moved `TRAIL_MIN_STEP_CM`, not once per tick: at 5 Hz a
+        fifteen-minute walk is four and a half thousand identical points, and a canvas that has to
+        re-project them every frame is a canvas that stutters.
+        """
+        if frame != "odometry" or not isinstance(pose, dict):
+            return
+        x_cm = _safe_float(pose.get("x"), 0.0)
+        y_cm = _safe_float(pose.get("y"), 0.0)
+        if self._trail:
+            last = self._trail[-1]
+            moved = math.hypot(x_cm - last["x_cm"], y_cm - last["y_cm"])
+            if moved < TRAIL_MIN_STEP_CM:
+                return
+        self._trail.append(
+            {
+                "x_cm": round(x_cm, 1),
+                "y_cm": round(y_cm, 1),
+                "yaw_deg": round(_safe_float(pose.get("yaw_deg"), 0.0), 1),
+                "tier": str(tier),
+                "ts": round(now, 3),
+            }
+        )
+        if len(self._trail) > TRAIL_MAX_POINTS:
+            del self._trail[: len(self._trail) - TRAIL_MAX_POINTS]
+        context.set("pose_trail", list(self._trail))
 
     def _read_place(
         self, context, now: float, max_age_s: float, odometry: dict
@@ -258,6 +307,10 @@ class LocalizationModule(Module):
             self._user_seen_at = now
             self._corrected_at = now
             self._corrected_travelled_cm = _safe_float(odometry.get("travelled_cm"), 0.0)
+            # Every point before a correction is in the origin that correction just replaced, so the
+            # trail restarts with the dog where a human says it is. Keeping them would draw a walk
+            # that begins in a frame nobody is using any more.
+            self._trail.clear()
         seen_at = self._user_seen_at if self._user_seen_at is not None else now
         if max(0.0, now - seen_at) > USER_FIX_MAX_AGE_S:
             return None

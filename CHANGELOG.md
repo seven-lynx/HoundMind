@@ -10,6 +10,18 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The map earns its keep — route preview, breadcrumb, health badge (M6), and keep-out becomes a rule
+  (#353)** — a room drawn `keep_out` refused nothing: the planner never read `rooms`, so the dog would walk
+  through a red-dashed room the user had marked off-limits. `mapping/rooms.py` now answers that question at
+  the runtime — a point in a room, and a *walk* through one, sampled every 5 cm because a route is corners
+  and a corner-only check calls a walk through a room clear. `POST /map/preview` plans the walk without
+  taking it (`state:read`, the same `plan_route` the follower walks) and answers the route with its
+  `distance_cm`, or `goal_in_keep_out` / `route_in_keep_out` naming the room. The Map panel's `Go` mode is
+  now two steps: click to preview, **Send route** to walk — the refusal draws a cross, not a line. A dog
+  already standing inside a keep-out room is not refused: the room keeps it out, it does not trap it. `GET
+  /map` also carries `trail` (the recent walk, one point per 5 cm, emptied by a position correction) and
+  `health` (loaded + how long ago, the stride's source, and the loader's own conflicts and notes), both
+  drawn in the panel as a breadcrumb and a header badge.
 - **The dog can be put where it is, and sent where you clicked — position and go (M5)** — the console
   could edit the house and could not say where the dog was in it. `Pose` drags the dog to its real place
   and **Confirm position** sends it with `PUT /map/pose`: odometry re-anchors at that point, the

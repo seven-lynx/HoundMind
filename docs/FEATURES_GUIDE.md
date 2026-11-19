@@ -343,8 +343,14 @@ Two things about it are worth knowing before trusting a route:
 | `settings.mapping.clearance_cells` | `2` | The room a waypoint would like, in cells. |
 | `settings.mapping.clearance_weight` | `2.0` | What A* pays for entering a tighter cell. A preference, never a ban: a doorway is narrow by definition. |
 
-Routing is not wired to motion by an HTTP route yet: nothing in the API writes `route_request`, and
-the route that makes a map point a goal is #310.
+`POST /map/go` is what writes `route_request` (M5), and `POST /map/preview` (M6) plans the same walk
+without taking it — which is where a route can be read, and its distance seen, before the dog commits.
+
+**Keep-out is a runtime rule now (#353).** A room the console marked `keep_out` is geometry the runtime
+reads (`mapping/rooms.py`): a goal inside one refuses as `goal_in_keep_out`, and a walk that crosses one
+refuses as `route_in_keep_out`. The straight run between two waypoints is sampled at 5 cm, because a route
+is corners and a corner-only check calls a walk through a room clear. A dog already standing inside a
+keep-out room is **not** refused: the room is marked to keep it out, not to imprison it.
 
 ### Walking a route
 
@@ -363,7 +369,8 @@ they judge a hand.
   id on the route. It never re-plans and never moves the dog on the strength of a view: the correction
   belongs to `place_recognition`, which owns the pose.
 - **It ends.** `done` at the last waypoint, or `refused` with a reason — `no_pose`, `start_unknown`,
-  `goal_blocked`, `no_path` (the planner's), `bad_request`, `no_board`, `timeout`.
+  `goal_blocked`, `no_path` (the planner's), `goal_in_keep_out`, `route_in_keep_out`, `bad_request`,
+  `no_board`, `timeout`.
 
 | Key | Default | Meaning |
 |---|---|---|

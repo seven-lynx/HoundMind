@@ -411,7 +411,7 @@ click, before it looks for a wall.
 | Mode | What a press does |
 |---|---|
 | `Pose` | drag the dog to where it really is. An amber ring marks the proposal and **nothing changes yet**; **Confirm position** sends it with `PUT /map/pose`, `Cancel` throws it away, and leaving `Pose` discards it too — a finger on a canvas is not a measurement |
-| `Go` | click a point to send the dog there (`POST /map/go`). With no pose to plan from, the click is refused and the reason appears under the canvas: `no_pose` means *correct the position first* |
+| `Go` | click a point to **preview** the walk (`POST /map/preview`): the route is drawn dashed with its distance at the goal, and nothing moves. **Send route** then sends it (`POST /map/go`); a refused route draws a red cross at the point and prints the reason instead |
 
 Confirming a position re-anchors odometry at that point and writes it into the map file, so it survives a
 restart, and `localization` reports the `user` tier until the correction ages out (30 s) or the dog has
@@ -419,6 +419,18 @@ walked away from it. The chip in the header reads `pose: user` right after a cor
 `pose: dead_reckoning` when it has expired; the chip beside it shows the route — the refusal reason when
 there is one, or `walking 2/5`. The dog itself is drawn from the `pose` on `GET /map`, which the device
 has already converted into the map's frame: the panel never converts, so it cannot mirror the dog (#347).
+
+**The map's own health, and the walk so far (M6).** The header carries a badge —
+`map: loaded 4m ago · stride measured:hardwood · 0 conflicts`. It is the device's answer, not the panel's
+guess: `loaded` and its age come from the module that read the file, `stride` from `odometry` (so a
+calibration shows before the next save), and `conflicts` is what the loader could not take at face value —
+the tooltip lists them, with the softer `notes` beside them. The faint dashed line behind everything is the
+**breadcrumb**: the recent walk, one point per five centimetres and capped at 240 points. Confirming a new
+position starts it again, because the points before a correction are in an origin that no longer exists.
+
+A preview is what a keep-out room finally refuses: a goal inside one answers `goal_in_keep_out` and a walk
+that crosses one `route_in_keep_out`, both naming the room. A dog already standing inside a keep-out room is
+still allowed to plan its way out — the room keeps the dog out, it does not trap it.
 
 
 The chip beside the surface picker is the point of the whole exercise: `18.4 cm measured` when

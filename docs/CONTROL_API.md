@@ -156,10 +156,11 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/whoami` | any valid token | the caller's `device` name, `scopes` and `kind` — the same shape as the `welcome` frame, so a client can say what its token cannot do before a request fails (#168) |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
 | `GET` | `/api/v1/scan` | `state:read` | the last head sweep verbatim — `mode` plus `forward`/`right`/`left`, or `mode` plus `angles` `{yaw: cm}`; `{"scan": null}` before the first one (#169) |
-| `GET` | `/api/v1/map` | `state:read` | the occupancy grid as `[ix, iy, hits]` cells with `cell_size_cm`, `count` and `truncated`, plus `document`, the versioned home map (see below); `{"map": null}` when no cell has been filled (#175) |
+| `GET` | `/api/v1/map` | `state:read` | the occupancy grid as `[ix, iy, hits]` cells with `cell_size_cm`, `count` and `truncated`, plus `document` (the versioned home map), `pose` (the live pose in the document's frame), `trail` (the walk so far) and `health` (loaded, stride, conflicts) — see below; `{"map": null}` when no cell has been filled (#175) |
 | `PUT` | `/api/v1/map` | `config` | replace the home-map document: body `{"document": {...}}`, judged by the same validator that loads the file; `meta.rev` must match or the answer is `409` with the current one (M1) |
 | `PUT` | `/api/v1/map/pose` | `move` | the dog's position on the map as a human just corrected it: body `{"x_cm", "y_cm", "heading_deg"?}` in the **document** frame; re-anchors odometry and writes `dog` into the file, bumping `meta.rev` (M5) |
-| `POST` | `/api/v1/map/go` | `move` | send the dog to a point: body `{"x_cm", "y_cm"}` in the document frame, handed to `route_follower` as `route_request`; `409 no_pose` with no pose to plan from, `409 conflict` while a route walks (M5) |
+| `POST` | `/api/v1/map/go` | `move` | send the dog to a point: body `{"x_cm", "y_cm"}` in the document frame, handed to `route_follower` as `route_request`; `409 no_pose` with no pose to plan from, `409 conflict` while a route walks (M5). The follower refuses a keep-out room in `route` — `goal_in_keep_out` / `route_in_keep_out` — so a client that skips the preview still cannot walk through one (M6) |
+| `POST` | `/api/v1/map/preview` | `state:read` | what a walk to a point would look like: body `{"x_cm", "y_cm"}` in the document frame; waypoints, `distance_cm`, or a named refusal — `goal_in_keep_out` / `route_in_keep_out` name the room (M6) |
 | `GET` | `/api/v1/modules` | `state:read` | every module: `ok`/`degraded`/`disabled`/`failed` + reason |
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
@@ -289,6 +290,35 @@ while walking simply re-anchors mid-walk.
 refused **here** — `409 no_pose`, naming the tier — rather than accepting a goal that would be silently
 refused in `/state`. A route already in flight is `409 conflict`, because one destination at a time is
 what keeps the brake and the throttle one control.
+
+`POST /map/preview` plans the same walk and does not take it (M6). It is a **read** — `state:read`, not
+`move` — because a client that may not drive is exactly the client that should be able to see the route
+first; the plan is `mapping/planner.py::plan_route`, the function `route_follower` walks, so a preview and
+a walk cannot disagree. The answer carries `waypoints` (in the document frame), `distance_cm` measured
+from the live pose to the goal, or a named refusal. A refusal is a **`200`**: it is a true answer about a
+hypothetical, and only a malformed body or a missing pose is a `4xx`.
+
+Two refusals are this route's own, and they are what a `keep_out` room finally means (#353):
+
+- `goal_in_keep_out` — the clicked point is inside a room the user marked keep-out.
+- `route_in_keep_out` — the planned walk crosses one. The straight run between two waypoints is sampled,
+  not just the waypoints: a route that enters and leaves a room between two corners is exactly the walk a
+  corner-only check calls clear.
+
+Both name the room in `keep_out: {id, name, label}`. The one case that is **not** refused is a dog already
+standing inside a keep-out room: a room is marked to keep the dog out, not to imprison it, so the walk out
+is allowed and `note` says why.
+
+`GET /map` also carries the walk and the map's own account of itself (M6):
+
+- `trail` — the last `localization.TRAIL_MAX_POINTS` poses, `[[x, y], ...]` in the **document** frame,
+  one point per five centimetres of movement. The swap happens here for the same reason `pose`'s does,
+  and a correction empties it: points from before a re-anchor are in an origin that no longer exists.
+- `health` — `loaded`/`reason`/`path` from `home_map_status`, `conflicts` (what the loader could not take
+  at face value), `notes` (what it accepted with a caveat), `loaded_at`, `updated_at`, `rev`, `cells`,
+  and `step_cm` + `step_cm_source` read from `odometry` first: the document's copy of the stride is only
+  as fresh as the last save.
+
 
 
 A value the config **file** would have rejected is refused too: the write is checked against the same

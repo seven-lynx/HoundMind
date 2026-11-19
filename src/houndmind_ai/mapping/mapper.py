@@ -79,6 +79,9 @@ class MappingModule(Module):
                 "version": result.map.version,
                 "cells": result.map.cell_count,
                 "notes": list(result.notes),
+                # When the file was read, so a console can say "loaded 3 minutes ago" instead of
+                # implying the map it draws was written by this process (M6).
+                "loaded_at": time.time(),
             },
         )
         logger.info("Loaded home map from %s (%d cells)", path, result.map.cell_count)

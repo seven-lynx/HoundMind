@@ -16,6 +16,8 @@ __all__ = [
     "test_a_request_is_planned_and_published_as_a_route",
     "test_planning_from_reactive_is_refused_and_publishes_nothing",
     "test_a_goal_inside_an_obstacle_carries_the_planner_refusal",
+    "test_a_goal_inside_a_keep_out_room_is_never_walked",
+    "test_a_walk_through_a_keep_out_room_is_refused_before_it_starts",
     "test_a_malformed_request_is_refused_by_name",
     "test_it_walks_forward_when_the_bearing_is_right",
     "test_it_turns_before_it_walks",
@@ -72,6 +74,62 @@ def _context(
 
 def _request(context: RuntimeContext, x_cm: float, y_cm: float) -> None:
     context.set("route_request", {"goal_cm": {"x_cm": x_cm, "y_cm": y_cm}})
+
+
+def test_a_goal_inside_a_keep_out_room_is_never_walked() -> None:
+    """#353: the refusal lives where the walking happens, not only in the console's preview.
+
+    A room polygon is a **document** shape (`[x = left, y = forward]`), so this is also the test that the
+    follower swaps before it asks - a runtime point tested against a document polygon would miss.
+    """
+    module, context, _ = _context()
+    context.set(
+        "home_map",
+        {
+            "rooms": [
+                {
+                    "id": "stairs",
+                    "name": "stairs",
+                    "keep_out": True,
+                    "polygon": [[-50, 40], [50, 40], [50, 160], [-50, 160]],
+                }
+            ]
+        },
+    )
+    # forward 100 / left 0 is document (0, 100): inside the room.
+    _request(context, 100.0, 0.0)
+
+    module.tick(context)
+
+    route = context.get("route")
+    assert route["state"] == "refused"
+    assert route["refusal"] == "goal_in_keep_out"
+    assert "stairs" in (route["detail"] or "")
+    assert _actions(context) == [], "a refused goal publishes no motion"
+
+
+def test_a_walk_through_a_keep_out_room_is_refused_before_it_starts() -> None:
+    """Neither end is in the room; the straight run between them is."""
+    module, context, _ = _context()
+    context.set(
+        "home_map",
+        {
+            "rooms": [
+                {
+                    "id": "stairs",
+                    "name": "stairs",
+                    "keep_out": True,
+                    "polygon": [[-50, 80], [50, 80], [50, 120], [-50, 120]],
+                }
+            ]
+        },
+    )
+    _request(context, 200.0, 0.0)
+
+    module.tick(context)
+
+    assert context.get("route")["refusal"] == "route_in_keep_out"
+    assert _actions(context) == []
 
 
 def _actions(context: RuntimeContext) -> list[str]:

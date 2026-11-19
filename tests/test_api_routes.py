@@ -852,20 +852,28 @@ def test_the_map_route_reports_nothing_until_a_cell_is_filled(tmp_path) -> None:
             disabled_body = await disabled.json()
 
         assert empty.status == 200
+        # The health shape has its own test (`test_get_map_publishes_the_trail_and_the_health`); this
+        # one is about what the map route reports *before* there is a map, so it is popped here rather
+        # than pinned twice.
+        assert empty_body.pop("health")["loaded"] is False
         assert empty_body == {
             "map": None,
             "grid_enabled": True,
             "document": None,
             # The live pose beside the document is `None` here too (M5): no pose is an answer.
             "pose": None,
+            # No walk has been recorded yet, and an empty trail is an answer too (M6).
+            "trail": [],
             # The measured step table rides beside the document (M4), `{}` until someone calibrates.
             "surface_step_cm": {},
         }
+        assert disabled_body.pop("health")["loaded"] is False
         assert disabled_body == {
             "map": None,
             "grid_enabled": False,
             "document": None,
             "pose": None,
+            "trail": [],
             "surface_step_cm": {},
         }
 
