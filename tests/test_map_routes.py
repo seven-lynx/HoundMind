@@ -136,6 +136,55 @@ def test_a_saved_document_is_what_the_next_get_serves(tmp_path) -> None:
     assert served["cells"] == {"1,2": 3}
 
 
+def test_an_exported_document_imports_back_and_the_sample_log_stays(tmp_path) -> None:
+    """Export is `GET /map.document`; import is that body through `PUT /map` (M8).
+
+    The panel's **Export JSON** writes what `GET /map` served and **Import…** sends it back, so the
+    two failures worth pinning are the ones a happy path misses. A copy was taken at some generation,
+    and its `meta.rev` is rebased before the save or the import is a `409`. And on the wire `samples`
+    is a *count*: read as a log, it would delete every sample the mapper wrote.
+    """
+    path = tmp_path / "home_map.json"
+    write_document(
+        path,
+        {
+            "version": CURRENT_VERSION,
+            "meta": {"rev": 4, "cell_size_cm": 10.0},
+            "grid": {"cells": {"0,0": 2}},
+            "sweep": {"0": 120.0},
+            "samples": [{"timestamp": 1.0}, {"timestamp": 2.0}],
+        },
+    )
+
+    async def scenario() -> tuple[dict, int, dict, Path]:
+        plane, headers, _path = make_plane(tmp_path)
+        plane.context.set(
+            "home_map",
+            wire_document(meta={"rev": 4, "cell_size_cm": 10.0}, cells={"0,0": 2}, samples=2),
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            served = await client.get(f"{API_PREFIX}/map", headers=headers)
+            exported = (await served.json())["document"]
+            response = await client.put(
+                f"{API_PREFIX}/map", headers=headers, json={"document": exported}
+            )
+            body = await response.json()
+        return exported, response.status, body, path
+
+    exported, status, body, path = asyncio.run(scenario())
+
+    assert exported["samples"] == 2, "the wire carries the count, never the device's log"
+    assert status == 200, body
+    assert body["document"]["meta"]["rev"] == 5
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert raw["meta"]["rev"] == 5 and raw["meta"]["source"] == "user"
+    assert raw["grid"]["cells"] == {"0,0": 2}
+    assert raw["samples"] == [{"timestamp": 1.0}, {"timestamp": 2.0}], (
+        "the imported copy sent a count; the file's sample log is the mapper's and stays"
+    )
+
+
 def test_a_stale_rev_is_a_conflict_and_writes_nothing(tmp_path) -> None:
     """Two consoles editing one map: the second learns the generation, it does not overwrite it."""
     first = wire_document(rooms=[{"id": "r1", "name": "kitchen"}])

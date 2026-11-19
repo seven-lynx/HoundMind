@@ -278,6 +278,14 @@ document this route accepts is one the next start can read. Writes are atomic, a
 every `home_map_save_interval_s` carries the user's sections and the `rev` forward, so the map's own
 log never erases an edit.
 
+Export and import are those two routes, not a third (M8). The console's **Export JSON** saves the
+`document` `GET /map` served — the wire shape above — and **Import…** reads such a file back and sends
+it through `PUT /map`: the file's sections are copied in, `meta.rev` is rebased onto the live
+generation, and `dog` is dropped, because a position that is not this dog's would become the origin a
+taught place is measured from. The wire `samples` is a count, so an imported copy never carries the
+device's log — the save keeps the file's window. A PNG export is the console's own canvas and never
+travels through this API.
+
 `GET /map` also carries `pose` (M5): the live `localization` pose **already converted into the
 document's frame**, with `x_cm`/`y_cm` in the document's axes, `heading_deg`, the `tier` it came from and
 its `confidence`. It is `null` when the dog cannot place itself. The conversion belongs on the device

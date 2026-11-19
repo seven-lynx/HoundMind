@@ -23,6 +23,7 @@ __all__ = [
     "test_every_dark_colour_token_has_a_light_value",
     "test_notifications_are_asked_for_on_a_click_and_checked_before_use",
     "test_the_manifest_points_at_an_icon_that_exists",
+    "test_the_map_panel_exports_json_and_png_and_imports_a_document",
     "test_the_stylesheet_honours_the_hidden_attribute",
     "test_the_worker_is_registered_only_in_a_secure_context",
     "test_the_worker_never_caches_the_api",
@@ -206,4 +207,30 @@ def test_no_panel_builds_an_origin_of_its_own() -> None:
             if needle in text:
                 offenders.append(f"{panel.name}: {needle}")
     assert offenders == [], f"panels must stay relative: {offenders}"
+
+
+# ------------------------------------------------------------- map export (M8)
+
+
+def test_the_map_panel_exports_json_and_png_and_imports_a_document() -> None:
+    """The map is user data: it has to leave the tab, and come back through the one write path.
+
+    There is no browser here, so the guard is textual. It fails when a control is deleted, when the
+    PNG stops coming from the panel's own canvas, when an import keeps a foreign `dog` or a foreign
+    `rev`, or when importing grows a second `PUT` beside `save()`.
+    """
+    panel = (WEB / "panels" / "map.js").read_text(encoding="utf-8")
+
+    for control in ('id="mp-export-json"', 'id="mp-export-png"', 'id="mp-import"'):
+        assert control in panel, f"the Map panel lost {control} (M8)"
+    assert 'accept="application/json"' in panel, "the import offers a file picker that takes JSON"
+
+    exports = panel[panel.index("function exportJson(") : panel.index("function importDocument(")]
+    assert "download(" in exports, "both exports go through lib.js's download()"
+    assert "canvas.toBlob(" in exports, "the PNG is the canvas as drawn, not a second renderer"
+
+    importer = panel[panel.index("function importDocument(") :]
+    assert "delete next.dog" in importer, "a foreign pose must not become this dog's origin"
+    assert "markDirty(true)" in importer, "an import is unsaved work until Save to device"
+    assert panel.count('method: "PUT"') == 2, "only /map and /map/pose are written from this panel"
 

@@ -18,8 +18,13 @@
 //
 // A truncated map says so, and a map with no cells says why it is empty - `grid_enabled: false` and
 // "no sweep has filled a cell yet" are different problems.
+//
+// The map is user data, so it can leave the tab (M8): **Export JSON** is the document `GET /map`
+// publishes, which is exactly what `PUT /map` takes back; **Export PNG** is this canvas; and
+// **Import…** copies a document into the live generation and lets **Save to device** carry it, so
+// there is one write path and one validator rather than a second pair for files.
 
-import { api, errorText, fmt } from "../lib.js";
+import { api, download, errorText, fmt } from "../lib.js";
 
 const VIEW_KEY = "houndmind.map.view";
 const PAD = 18;
@@ -205,6 +210,10 @@ export const map = {
           <button id="mp-undo" class="tiny">Undo</button>
           <button id="mp-save" class="tiny">Save to device</button>
           <button id="mp-reload" class="tiny">Reload</button>
+          <button id="mp-export-json" class="tiny">Export JSON</button>
+          <button id="mp-export-png" class="tiny">Export PNG</button>
+          <button id="mp-import" class="tiny">Import…</button>
+          <input id="mp-import-file" type="file" accept="application/json" hidden>
           <span class="chip" id="mp-dirty">saved</span>
         </div>
         <p class="hint" id="mp-note"></p>
@@ -662,6 +671,98 @@ export const map = {
       }
     }
 
+
+    // ---- export and import (M8) --------------------------------------------
+
+    function exportName(extension) {
+      // The generation rides in the name: a map is exactly the file a person keeps several of, and
+      // two copies in one folder are otherwise indistinguishable.
+      const generation = document_ && document_.meta ? document_.meta.rev : null;
+      const label = generation === null || generation === undefined ? "unversioned" : generation;
+      return `houndmind-map-${label}.${extension}`;
+    }
+
+    function exportJson() {
+      if (!document_) return;
+      // The wire document, not a file shape invented here: it is what `PUT /map` accepts, so a backup
+      // and a hand-over to another console are the same artefact.
+      const blob = new Blob([JSON.stringify(document_, null, 2)], { type: "application/json" });
+      download(blob, exportName("json"));
+      note.textContent = `exported rev ${
+        document_.meta && document_.meta.rev != null ? document_.meta.rev : "-"
+      } as JSON`;
+    }
+
+    function exportPng() {
+      // The canvas is the floor plan: no second renderer, and what is on screen - legend, scale bar
+      // and all - is what ends up on the fridge. A browser that cannot encode it says so.
+      canvas.toBlob((blob) => {
+        if (blob) download(blob, exportName("png"));
+        else error.textContent = "this browser could not encode the canvas as a PNG";
+      }, "image/png");
+    }
+
+    function importDocument(file) {
+      if (!document_) {
+        // There is no live generation to import *into*, and a document adopted here would carry a
+        // `rev` nobody measured on the one field a save must get right.
+        error.textContent = "load the map from the device before importing one";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => {
+        error.textContent = `${file.name} could not be read`;
+      };
+      reader.onload = () => {
+        let parsed = null;
+        try {
+          parsed = JSON.parse(String(reader.result));
+        } catch (err) {
+          error.textContent = `${file.name} is not JSON`;
+          return;
+        }
+        // Two spellings, one document: the export is the bare document and a `PUT /map` body wraps
+        // it, so a file this panel wrote and a request copied out of a log both import.
+        const carried =
+          parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? parsed.document || parsed
+            : null;
+        if (!carried || typeof carried !== "object" || Array.isArray(carried)) {
+          error.textContent = `${file.name} does not carry a map document`;
+          return;
+        }
+        const next = JSON.parse(JSON.stringify(carried));
+        // The device's own file nests the cells under `grid`; the wire shape is flat and `PUT /map`
+        // takes either, so lifting them is what lets a file copied off the Pi draw here.
+        if (!next.cells && next.grid && next.grid.cells) next.cells = next.grid.cells;
+        delete next.grid;
+        // The position on this map is *this* dog's: `_pose_origin` falls back to `document.dog` when
+        // there is no live pose, so a foreign one would become the origin a taught place is measured
+        // from. The live dog stays.
+        delete next.dog;
+        if (document_.dog) next.dog = document_.dog;
+        // One generation: the copy is imported into this device's map, not beside it. A foreign `rev`
+        // would make the save a 409 that reads as "the map changed since this copy was read".
+        const live = document_.meta ? document_.meta.rev : 0;
+        next.meta = { ...(next.meta || {}), rev: live };
+        document_ = next;
+        // The imported tree replaced the one the cursor was working on, so a half-drawn wall, a lasso
+        // and a snapshot of the old document all refer to something that is no longer there.
+        history = [];
+        draft = null;
+        lasso = null;
+        selected = null;
+        ghost = null;
+        preview = null;
+        error.textContent = "";
+        markDirty(true);
+        describe(document_);
+        fit(document_);
+        render();
+        note.textContent = `${file.name} imported: Save to device writes it`;
+      };
+      reader.readAsText(file);
+    }
 
     async function previewRoute(point) {
       error.textContent = "";
@@ -1397,6 +1498,17 @@ export const map = {
     root.querySelector("#mp-undo").addEventListener("click", undo);
     root.querySelector("#mp-save").addEventListener("click", save);
     root.querySelector("#mp-reload").addEventListener("click", () => load());
+    root.querySelector("#mp-export-json").addEventListener("click", exportJson);
+    root.querySelector("#mp-export-png").addEventListener("click", exportPng);
+    const importFile = root.querySelector("#mp-import-file");
+    root.querySelector("#mp-import").addEventListener("click", () => importFile.click());
+    importFile.addEventListener("change", () => {
+      const file = importFile.files && importFile.files[0];
+      // Cleared first: importing the same file twice is a thing people do, and an unchanged value
+      // fires no `change` event the second time.
+      importFile.value = "";
+      if (file) importDocument(file);
+    });
     root.querySelector("#mp-keepout").addEventListener("click", toggleKeepOut);
     root.querySelector("#mp-pin-here").addEventListener("click", teachHere);
     confirmButton.addEventListener("click", confirmPose);

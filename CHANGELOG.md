@@ -10,6 +10,19 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The map leaves the console and comes back — export JSON, export PNG, import (M8)** — the home map
+  is user data (rooms drawn by hand, walls traced, surfaces painted, places taught with a picture) and
+  it lived in exactly one file on one device, so a reflash, a corrupt file or a replacement unit lost
+  all of it. The Map panel now has **Export JSON**, which downloads the document `GET /map` publishes —
+  the same shape `PUT /map` accepts, so the file is both a backup and a floor plan to hand to another
+  console — **Export PNG**, which saves the canvas as drawn, and **Import…**, which reads a JSON
+  document back through the existing `PUT /map`: the file's sections are copied in, `meta.rev` is
+  rebased onto this device's generation, `dog` is left alone (a foreign pose would become the origin a
+  taught place is measured from), and the result is unsaved work until **Save to device**. No new route
+  and no second validator, and the device's sample log survives the save because the wire carries a
+  count. The `ARCHITECTURE` web listing now names `lib.js`, `sw.js`, the manifest, the icon and
+  `panels/` (#359).
+
 - **Photo pins and teach-a-place (M7), and a place at zero distance (#313)** — a place could not carry a
   picture and could not be taught from the map. `POST /places/teach` is one act: it creates the place
   through the same store (so a duplicate name is the same `problems[]` a `POST /places` body gets) and
