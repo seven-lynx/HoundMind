@@ -36,6 +36,7 @@ from houndmind_ai.core.module import Module
 from houndmind_ai.hal.iface import SensorSnapshot, as_float
 from houndmind_ai.kernel.actions import repertoire_from_settings
 from houndmind_ai.kernel.commands import (
+    AUTONOMY_SOURCES,
     DEFAULT_MODE,
     RUNTIME_MODES,
     Command,
@@ -113,6 +114,10 @@ class MotionGatewayModule(Module):
         #: payload's identity alone cannot tell "a new step" from "still walking".
         self._issued = 0
         self._last_cancelled: frozenset[tuple[str, Source]] = frozenset()
+        # The mode the last tick executed under. `None` until the first tick seeds it: a fresh
+        # gateway has executed under nothing yet, and treating "unset" as "changed" would withdraw
+        # the intent a producer legitimately published before this gateway ever ran (#270).
+        self._mode: str | None = None
 
     def start(self, context) -> None:
         # Producing modules find the board through the context, so that not one constructor has
@@ -130,6 +135,7 @@ class MotionGatewayModule(Module):
 
     def tick(self, context) -> None:
         now = self._clock()
+        self._retract_on_mode_change(context)
         snapshot = self._snapshot(context)
         resolution = self._resolve(context, now, snapshot)
         self._publish_cancellations(context, resolution.cancelled)
@@ -170,6 +176,26 @@ class MotionGatewayModule(Module):
         self._last_verdict = verdict
         self._publish(context, winner, verdict)
         context.set("tilt_latched", self.interlock.tilt_latched)
+
+    def _retract_on_mode_change(self, context) -> None:
+        """Withdraw every autonomy intent on the first tick that sees a new mode (#270).
+
+        `_resolve`'s mode gate refuses a *new* intent a mode does not allow; it says nothing about
+        one already on the board, so an intent published under `manual` was still there when the
+        mode returned to `patrol` and the dog walked on a request that outlived its mode.
+        `ControlPlane.set_mode` retracts at the write, where the decision is made; the gateway
+        retracts at the observation, so a writer added later cannot forget. Two places, one rule —
+        the shape `_vet` already uses for the mode gate.
+
+        The first tick only seeds: retracting there would withdraw what a producer published before
+        the gateway ran, which is not a mode change.
+        """
+        mode = _mode_name(context)
+        previous, self._mode = self._mode, mode
+        if previous is None or previous == mode:
+            return
+        for source in AUTONOMY_SOURCES:
+            self.board.retract(source)
 
     def _publish(self, context, command: Command | None, verdict: Verdict | None) -> None:
         if command is None:
