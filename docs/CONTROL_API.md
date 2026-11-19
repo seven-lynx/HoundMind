@@ -584,7 +584,7 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "battery_v": 7.6, "battery_valid": true
   },
   "actuators": {
-    "last_command": "forward", "source": "navigation", "since_s": 0.8,
+    "last_command": "forward", "source": "navigation", "since_s": 0.8, "verdict": "accepted",
     "vetoed": false, "veto": null, "tilt_latched": false, "displaced": 0
   },
   "safety": { "active": false, "emergency_stop": false },
@@ -595,8 +595,9 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "confidence": 0.94, "age_s": 6.2, "reason": "no SLAM backend (stub)"
   },
   "decision": {
-    "schema_version": 1, "ts": 4212.3, "trace_id": "trace123",
+    "schema_version": 2, "ts": 4212.3, "trace_id": "trace123",
     "mode": "patrol", "state": "alert", "intent": "forward", "source": "navigation",
+    "driver": "navigation",
     "vetoes": [
       { "action": "sit", "source": "behaviour", "reason": "precedence", "detail": "navigation outranks behaviour" }
     ],
@@ -629,13 +630,19 @@ by signal — so the placeholder is a promise, not a field a client should look 
 
 `decision` is the tick's decision record (`kernel/decisions.py`) — the same object
 `GET /api/v1/decisions` returns a list of. `intent` and `source` name the intent that won the tick;
+`driver` names the **autonomy input that shaped it**: the winning source when autonomy won, and
+otherwise the highest-ranked autonomy source the tick refused, displaced or withdrew — so "the human
+overrode navigation" is readable rather than lost. It is `null` when no autonomy source was on the
+board at all.
 `vetoes` names every intent that lost and why, where `reason` is the interlock's own veto
-(`obstacle`, `tilt`, `low_voltage`, `expired`, `unknown_action`) or `mode`/`precedence` for an intent
-the mode policy dropped or a higher rank displaced; `inputs` carries the readings the decision used,
+(`obstacle`, `tilt`, `low_voltage`, `expired`, `unknown_action`) or `mode`/`precedence`/`mode_change`
+for an intent the mode policy dropped, a higher rank displaced, or a mode change withdrew;
+`inputs` carries the readings the decision used,
 **with their validity flags**. It is `null` until the gateway's first tick. `confidence` is `null` —
 never `0.0` — when nothing measured it. A client that diffs on `ts` sees one new record per tick; the
 WS `decision` event ([§5](#5-websocket)) fires only when the *choice* changes, so treat the two as different
-cadences over the same object.
+cadences over the same object. `schema_version` is `2`; the reader also accepts a `1` line, which has
+no `driver`.
 
 `routines` is the run the runner is playing — the **same object** `GET /api/v1/routines` returns as
 `current` — or `null` before the first run and after a restart. `state` is `running`, `done`,
@@ -679,6 +686,13 @@ higher-priority one overrode this tick — a client that pressed forward and see
 can tell "someone else is driving" from "the dog ignored me". `actuators.veto` carries the reason the
 last command was refused, and `actuators.tilt_latched` reports the latch state the client must
 surface.
+
+`actuators.verdict` is the name of the tick's outcome, and it exists because `vetoed: false` could
+not answer two very different questions: `accepted` (an intent won and the interlock allowed it),
+`refused` (an intent won and was vetoed), `undecided` (intents existed and none of them won) or
+`silent` (nothing was published at all). Without the last two, "the dog could not decide" and
+"nobody asked" were the same `null` (#270). `vetoed` stays true for `refused` and `undecided` — in
+both, something asked and was refused — and is false for `silent`, where nothing was refused.
 
 `safety` answers the narrower question `actuators` cannot: is the safety module overriding right now
 (`active`), and is the emergency stop set (`emergency_stop`). Both are `false` while
@@ -1076,7 +1090,7 @@ no playback timing.
         "records": 3,
         "served": 3,
         "last_intent": "stand",
-        "last_source": "behavior",
+        "last_source": "behaviour",
         "last_veto_reasons": ["obstacle"],
         "distance_valid_on_last": true
       }
@@ -1090,6 +1104,10 @@ no playback timing.
 - `expect` names only what a replay can actually check. A key outside
   [§11.2](#112-the-expectation-keys) is refused rather than ignored, so a typo cannot pass as
   "nothing to assert".
+- The manifest's `version` is the **corpus format's** version and is separate from a record's
+  `schema_version`. Every shipped fixture line carries `schema_version: 2`, the shape this build
+  writes; the reader still accepts a `1` line, so a corpus can hold a stream recorded by an older
+  build without being rewritten.
 
 ### 11.2 The expectation keys
 

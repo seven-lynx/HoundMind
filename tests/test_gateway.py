@@ -114,7 +114,38 @@ def test_no_producer_publishes_nothing() -> None:
     gateway, context = build()
     gateway.tick(context)
     assert context.get("motion_command") is None
-    assert context.get("motion_verdict") is None
+    # Not `None`: a quiet tick is `silent`, which is an answer. See the two tests below (#270).
+    assert context.get("motion_verdict")["status"] == "silent"
+    assert context.get("motion_verdict")["sources"] == []
+
+
+def test_a_quiet_tick_reads_silent_and_a_refused_one_reads_undecided() -> None:
+    """The pair a client could not tell apart: nothing asked, versus nothing could be decided."""
+    gateway, context = build()
+    gateway.tick(context)
+    assert context.get("motion_verdict")["status"] == "silent"
+
+    gateway, context = build()
+    context.set("runtime_mode", "rest")
+    ask(context, "forward", Source.NAVIGATION)
+    ask(context, "sit", Source.BEHAVIOUR)
+    gateway.tick(context)
+
+    verdict = context.get("motion_verdict")
+    assert verdict["status"] == "undecided"
+    # Named, in rank order, so "the dog could not decide" says what it could not decide about.
+    assert verdict["sources"] == ["navigation", "behaviour"]
+    assert verdict["accepted"] is False
+
+
+def test_an_accepted_tick_says_so() -> None:
+    gateway, context = build(reading=reading(100.0))
+    ask(context, "forward", Source.NAVIGATION)
+    gateway.tick(context)
+
+    verdict = context.get("motion_verdict")
+    assert verdict["status"] == "accepted"
+    assert verdict["accepted"] is True
 
 
 def test_navigation_alone_wins() -> None:
@@ -515,12 +546,16 @@ def test_every_tick_publishes_a_record_even_when_nobody_asks() -> None:
         "state",
         "intent",
         "source",
+        "driver",
         "vetoes",
         "inputs",
         "confidence",
     }
     assert record["intent"] is None
     assert record["source"] is None
+    # No autonomy source was on the board, so there was no autonomy input to name — different
+    # from autonomy that was overruled, which the next tests pin.
+    assert record["driver"] is None
     assert record["vetoes"] == []
     assert record["ts"] == 1000.0
     assert record["mode"] == DEFAULT_MODE
@@ -534,6 +569,34 @@ def test_the_record_names_the_winner_and_where_it_came_from() -> None:
     record = published(context)
     assert record["intent"] == "forward"
     assert record["source"] == "navigation"
+    assert record["driver"] == "navigation"
+
+
+def test_the_record_keeps_the_autonomy_a_hand_overruled() -> None:
+    """`source` says the human won; without `driver` the thing they overruled is lost (#270)."""
+    bus = CommandBus()
+    gateway, context = build(bus=bus, reading=reading(100.0))
+    ask(context, "sit", Source.BEHAVIOUR)
+    assert bus.submit(Command("forward", source=Source.CLIENT, issued_at=1000.0)) is True
+    gateway.tick(context)
+
+    record = published(context)
+    assert record["source"] == "client"
+    assert record["driver"] == "behaviour"
+    assert [refusal["reason"] for refusal in record["vetoes"]] == ["precedence"]
+
+
+def test_the_driver_is_the_highest_ranked_autonomy_that_lost() -> None:
+    """Two autonomy inputs refused: the record names the one that was closest to winning."""
+    gateway, context = build(reading=reading(100.0))
+    context.set("runtime_mode", "rest")
+    ask(context, "sit", Source.BEHAVIOUR)
+    ask(context, "forward", Source.ROUTE)
+    gateway.tick(context)
+
+    record = published(context)
+    assert record["intent"] is None
+    assert record["driver"] == "route"
 
 
 def test_a_displaced_intent_is_recorded_with_its_reason() -> None:

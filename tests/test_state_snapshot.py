@@ -44,6 +44,25 @@ def test_a_veto_is_reported_with_its_reason() -> None:
     assert actuators["veto"] == "obstacle"
 
 
+def test_a_silent_tick_is_not_a_veto_and_says_which_it_was() -> None:
+    """`silent` and `undecided` were both `null` before #270; a client could not tell them apart."""
+    silent = RuntimeContext()
+    silent.set("motion_verdict", {"accepted": False, "status": "silent", "sources": []})
+    actuators = build_state(silent, now=0.0)["actuators"]
+    assert actuators["verdict"] == "silent"
+    assert actuators["vetoed"] is False
+
+    undecided = RuntimeContext()
+    undecided.set(
+        "motion_verdict",
+        {"accepted": False, "status": "undecided", "sources": ["navigation"]},
+    )
+    actuators = build_state(undecided, now=0.0)["actuators"]
+    assert actuators["verdict"] == "undecided"
+    # Something asked and was refused, so this is a veto even though no intent won the tick.
+    assert actuators["vetoed"] is True
+
+
 def test_displaced_counts_the_intents_that_lost() -> None:
     context = RuntimeContext()
     context.set("motion_cancel", [{"action": "forward"}, {"action": "sit"}])

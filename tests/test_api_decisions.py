@@ -11,7 +11,7 @@ import asyncio
 from aiohttp.test_utils import TestClient, TestServer
 
 from houndmind_ai.kernel.commands import CommandBus
-from houndmind_ai.kernel.decisions import DecisionRecord, DecisionRing
+from houndmind_ai.kernel.decisions import SCHEMA_VERSION, DecisionRecord, DecisionRing
 from houndmind_ai.services.api import API_PREFIX, ControlPlane, create_app
 from houndmind_ai.services.settings import ApiSettings
 
@@ -68,7 +68,7 @@ def test_the_feed_is_oldest_first(tmp_path) -> None:
             body = await response.json()
         assert body["count"] == 3
         assert [record["ts"] for record in body["decisions"]] == [0.0, 1.0, 2.0]
-        assert body["decisions"][-1]["schema_version"] == 1
+        assert body["decisions"][-1]["schema_version"] == SCHEMA_VERSION
 
     asyncio.run(scenario())
 

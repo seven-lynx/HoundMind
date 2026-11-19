@@ -296,7 +296,7 @@ flags of its own last tick: its age is still the consumer's to check.
 |---|---|
 | `intent_board` | `IntentBoard` — what each source asks for right now |
 | `motion_command` | `dict \| None` — the winning command |
-| `motion_verdict` | `dict \| None` — accepted/vetoed, with reason |
+| `motion_verdict` | `dict` — the tick's outcome: `status` is `accepted`, `refused`, `undecided` or `silent`, with `veto`/`detail` on a refusal and `sources` naming the refusals behind `undecided` |
 | `motion_cancel` | `list` — lower-priority intents this tick displaced |
 | `tilt_latched` | `bool` |
 

@@ -14,15 +14,22 @@ ring that keeps the last few seconds of them. Four rules ride on it.
 2. **`confidence` is `None`, never `0.0`, when nothing measured it.** The same rule the rest of
    the runtime follows for a sensor that did not answer.
 3. **A refusal keeps its reason.** `Refusal.reason` is the interlock's own `veto` string
-   (``obstacle``, ``tilt``, ``low_voltage``, ``expired``, ``unknown_action``) or one of two
-   precedence words this module adds: ``mode`` for an intent the mode policy dropped before
-   ranking, ``precedence`` for one the interlock accepted and a higher rank then displaced.
+   (``obstacle``, ``tilt``, ``low_voltage``, ``expired``, ``unknown_action``) or one of three
+   words this module adds: ``mode`` for an intent the mode policy dropped before ranking,
+   ``precedence`` for one the interlock accepted and a higher rank then displaced, and
+   ``mode_change`` for an autonomy intent the gateway withdrew because `runtime_mode` moved.
 4. **Nothing is invented.** `inputs` carries the readings the decision used, with their validity
    flags, and a missing reading is absent rather than zero.
-5. **The wire shape is read back by the module that writes it.** `to_dict` is what the route, the
+5. **`source` says who won; `driver` says which autonomy input shaped the tick.** A client can
+   read the first from the second only when autonomy won, so an override would lose the thing it
+   overrode: `driver` names the highest-ranked autonomy source that was on the board — the winner
+   when autonomy won, otherwise the first autonomy source in `vetoes` (refused, displaced or
+   withdrawn) — and is `None` only when no autonomy input was present at all (#270).
+6. **The wire shape is read back by the module that writes it.** `to_dict` is what the route, the
    socket and the JSONL emit; `from_dict` is the reader `SCHEMA_VERSION` exists for. A log from a
    build that writes a different shape is refused by name, never half-understood, because a replay
-   tool that guesses is a replay of a dog that never existed.
+   tool that guesses is a replay of a dog that never existed. `SCHEMA_VERSION` 2 adds `driver` and
+   reads v1 lines unchanged, so the replay tool keeps working over logs an older build wrote.
 
 The record's per-tick identity is `ts`, from the producer's monotonic clock. `trace_id` identifies
 the *run* — it is generated once per process (`core/runtime.py`) — so it joins a record to the log
@@ -45,6 +52,7 @@ from houndmind_ai.hal.iface import as_int
 __all__ = [
     "DEFAULT_MAX_ENTRIES",
     "SCHEMA_VERSION",
+    "SUPPORTED_SCHEMA_VERSIONS",
     "DecisionRecord",
     "DecisionRing",
     "Refusal",
@@ -52,8 +60,11 @@ __all__ = [
 ]
 
 # The JSONL and the wire both carry this, so a replay tool can refuse a shape it does not know.
-# Matches `logging/event_logger.py::SCHEMA_VERSION`.
-SCHEMA_VERSION = 1
+# Independent of `logging/event_logger.py::SCHEMA_VERSION` (the event envelope's own version): one
+# moving must not renumber the other. v2 adds `driver` (#270); `SUPPORTED_SCHEMA_VERSIONS` is what
+# `from_dict` accepts, so the replay tool still reads the v1 logs older builds left behind.
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS: tuple[int, ...] = (1, 2)
 
 # About twenty seconds at the 10 Hz loop the Pi 4 profile runs. Long enough to explain the last
 # few decisions to a user, short enough that a client cannot mistake it for history.
@@ -101,6 +112,10 @@ class DecisionRecord:
     state: str | None = None
     intent: str | None = None
     source: str | None = None
+    #: The autonomy input that shaped this tick: the winning source when autonomy won, otherwise
+    #: the highest-ranked autonomy source that was refused, displaced or withdrawn. `None` when no
+    #: autonomy source was on the board at all — distinct from a hand that won against one.
+    driver: str | None = None
     vetoes: tuple[Refusal, ...] = ()
     inputs: Mapping[str, object] = field(default_factory=dict)
     confidence: float | None = None
@@ -122,6 +137,7 @@ class DecisionRecord:
             "state": self.state,
             "intent": self.intent,
             "source": self.source,
+            "driver": self.driver,
             "vetoes": [refusal.to_dict() for refusal in self.vetoes],
             "inputs": dict(self.inputs),
             "confidence": self.confidence,
@@ -132,20 +148,21 @@ class DecisionRecord:
         """Read `to_dict` output back — the reader `SCHEMA_VERSION` exists for.
 
         Every refusal is by name and specific, because the callers are a replay tool and anything
-        else that stored a line: "unsupported schema_version 2" is actionable, while a record that
+        else that stored a line: "unsupported schema_version 3" is actionable, while a record that
         silently loses its `vetoes` would show a client a dog that refused nothing for no reason.
         A missing optional field stays `None`; a missing `ts` or `mode` is an error, since neither
-        can be defaulted without claiming something that was never recorded.
+        can be defaulted without claiming something that was never recorded. A v1 line is read
+        unchanged: it has no `driver`, and absence is exactly what v1 meant.
         """
         if not isinstance(data, Mapping):
             raise ValueError(f"a decision record must be a mapping, not {type(data).__name__}")
 
         raw_version = data.get("schema_version")
         version = as_int(raw_version, -1)
-        if version != SCHEMA_VERSION:
+        if version not in SUPPORTED_SCHEMA_VERSIONS:
             raise ValueError(
                 f"unsupported decision schema_version {raw_version!r}"
-                f" (this build reads {SCHEMA_VERSION})"
+                f" (this build reads {SUPPORTED_SCHEMA_VERSIONS})"
             )
 
         ts = _opt_float(data.get("ts"))
@@ -175,6 +192,7 @@ class DecisionRecord:
             state=_opt_str(data.get("state")),
             intent=_opt_str(data.get("intent")),
             source=_opt_str(data.get("source")),
+            driver=_opt_str(data.get("driver")),
             vetoes=tuple(_refusal_from_dict(item) for item in raw_vetoes),
             inputs=raw_inputs,
             confidence=confidence_or_none(data.get("confidence")),

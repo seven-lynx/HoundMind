@@ -833,6 +833,14 @@ used for the badge.
 `decision` socket event, and can mirror them to JSONL. One record per tick — including the ticks
 where the dog did nothing, because "did nothing" is also a decision.
 
+Each record names the winning intent (`intent`, `source`), **which autonomy input shaped it**
+(`driver` — the winning source when autonomy won, otherwise the highest-ranked autonomy source that
+was refused, displaced or withdrawn, so "the human overrode navigation" stays readable), and `vetoes`,
+every intent that did not win with its reason. A mode change that withdraws an autonomy intent
+appears there as `mode_change` with the source and both modes. The record is `schema_version: 2`
+(`driver` is new in it); the reader still accepts a `1` line. The wire shape is documented in
+`docs/CONTROL_API.md` [§4](CONTROL_API.md#4-state-snapshot).
+
 **Defaults:** the ring holds `logging.decision_log_max_entries` records (200). The JSONL is
 **off** (`logging.decision_log_file_enabled: false`): at 10 Hz it would write about 9 MB an hour,
 so turn it on for a post-mortem or a replay run. When on, it rotates to `.1` at

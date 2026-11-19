@@ -10,6 +10,15 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The decision record says which autonomy input shaped the tick (#270)** — `intent`/`source` name
+  the intent that won, so when a hand overrode the navigator the record kept the winner and lost what
+  it beat. `DecisionRecord` now carries `driver`: the winning source when autonomy won, otherwise the
+  highest-ranked autonomy source the tick refused, displaced or withdrew, and `null` when no autonomy
+  source was on the board at all — which is the difference between "autonomy was silent" and "autonomy
+  was overruled". That moves the record's `SCHEMA_VERSION` to `2`; `from_dict` still reads `1` so a
+  replay of an older log works, `to_dict` writes `2`, `CONTROL_API.md` §4 documents the field and §11
+  says the shipped streams are v2, and the three corpus fixtures carry `schema_version: 2`.
+
 - **The map leaves the console and comes back — export JSON, export PNG, import (M8)** — the home map
   is user data (rooms drawn by hand, walls traced, surfaces painted, places taught with a picture) and
   it lived in exactly one file on one device, so a reflash, a corrupt file or a replacement unit lost
@@ -335,6 +344,15 @@ Current Release: v2026.11.16
   Two safety properties now have tests: that retraction, and that the interlock's tilt latch — and its
   `tilt` refusal — survive switching modes, which they must, because the latch is a property of the dog
   and not of a mode.
+- **A tick the dog could not decide looked exactly like a tick nobody asked for** — `motion_verdict`
+  was `None` in both cases, so a place goal waiting on an answer and an idle dog were the same value
+  on the wire, and the device run had no way to check either (#270). It now always carries a `status`:
+  `accepted`, `refused`, `undecided` (intents existed and none of them won, with `sources` naming them
+  in rank order) or `silent` (nothing was published), and `actuators.verdict` offers the same word to
+  `/state`. `vetoed` stays true for `refused` and `undecided` — something asked and was refused — and
+  is false for `silent`. The gateway's half of the mode change is recorded rather than silent too: a
+  withdrawn autonomy intent appears in `vetoes` as `mode_change`, naming the intent and both modes,
+  where the tick used to read as if nothing had ever asked.
 - **`CONTROL_API.md` claimed the dog does not advertise itself** — it has published one mDNS record
   (`houndmind._houndmind._tcp.local`, `api.discovery_enabled`, on by default) since #38, so the contract
   told every client author to hardcode an IP that changes with the DHCP lease. The base-URL paragraph

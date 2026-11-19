@@ -170,3 +170,46 @@ def test_the_first_tick_does_not_retract_a_producers_intent() -> None:
 
     assert board.find(Source.NAVIGATION) is not None
     assert context.get("motion_command")["action"] == "forward"
+
+
+def test_the_record_names_the_withdrawal_rather_than_looking_idle() -> None:
+    """A retracted intent must not read as "nobody asked" in the record (#270, B3).
+
+    This is the row C3 of the device run reads back: after `manual` -> `idle` with a live autonomy
+    intent, the record has to say that autonomy was withdrawn, and by which mode change.
+    """
+    clock = Clock()
+    gateway, context = make_gateway(clock)
+    board = context.get("intent_board")
+    context.set("runtime_mode", "manual")
+    gateway.tick(context)
+    board.publish("forward", Source.NAVIGATION)
+    board.publish("wag_tail", Source.BEHAVIOUR)
+
+    context.set("runtime_mode", "idle")
+    gateway.tick(context)
+
+    record = context.get("decision_record").to_dict()
+    assert record["intent"] is None
+    # The highest-ranked autonomy source that lost the tick, so a reader sees what was withdrawn.
+    assert record["driver"] == "navigation"
+    assert [(refusal["source"], refusal["reason"]) for refusal in record["vetoes"]] == [
+        ("navigation", "mode_change"),
+        ("behaviour", "mode_change"),
+    ]
+    assert "manual" in record["vetoes"][0]["detail"]
+    assert "idle" in record["vetoes"][0]["detail"]
+
+
+def test_a_tick_that_withdraws_nothing_names_no_driver() -> None:
+    """No autonomy on the board is not the same as autonomy withdrawn."""
+    clock = Clock()
+    gateway, context = make_gateway(clock)
+    gateway.tick(context)
+
+    context.set("runtime_mode", "manual")
+    gateway.tick(context)
+
+    record = context.get("decision_record").to_dict()
+    assert record["driver"] is None
+    assert record["vetoes"] == []

@@ -103,7 +103,13 @@ def _actuators(context, now: float) -> dict[str, object]:
         # `vetoed: false` can tell "someone else is driving" from "the dog ignored me".
         "source": command.get("source"),
         "since_s": None if issued_at is None else max(0.0, now - issued_at),
-        "vetoed": bool(verdict) and verdict.get("accepted") is False,
+        # `accepted`, `refused`, `undecided` or `silent` (#270). The last two used to be the same
+        # `None`, so "the dog could not decide" and "nobody asked" looked identical on the wire.
+        "verdict": verdict.get("status"),
+        # A silent board is not a veto: nothing asked, so nothing was refused.
+        "vetoed": bool(verdict)
+        and verdict.get("accepted") is False
+        and verdict.get("status") != "silent",
         "veto": verdict.get("veto"),
         "tilt_latched": bool(context.get("tilt_latched", False)),
         "displaced": len(context.get("motion_cancel") or []),
