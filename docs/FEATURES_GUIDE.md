@@ -381,6 +381,48 @@ deliberately: a dimension the dog has not confirmed is a note on the drawing, no
 planner may use. The console labels the unmeasured case instead of refusing the save —
 `scale: not measured - run the room to measure it`.
 
+### The stride, measured inside a room (H4)
+
+`settings.odometry.step_cm` is a **guess** — 25 cm for a body about 25 cm long (#285) — and every
+place anchor and every centimetre of the map inherits it. `tools/step_calibrate.py` measures the real
+number by walking into a wall; `mapping/room_scale.py` measures it by walking inside a room someone
+drew, where the walls are already there, with no tape measure and no dimension the user has to
+supply. It is a **library**, not a module: nothing ticks it, nothing is registered, and no runtime key
+is published by it yet.
+
+Two modes, and the room decides which one:
+
+- **Confirm** — the room carries `size_cm`, so the drawing is in real centimetres and the distance
+  from the pose to the wall it ranges is a *drawn* number. The mode compares that with the ranged
+  distance, and the factor between the two is how short or long the assumed stride is.
+- **Discover** — no dimension exists, so the drawing's numbers are not centimetres and nothing reads
+  them as such. The dog differences its own ranges along one wall instead: the range it lost per
+  dead-reckoned centimetre travelled *is* the ratio between the true stride and the assumed one. The
+  drawing is still used — it says which wall was ranged and how much of the outline was covered — but
+  never how long anything is.
+
+The sufficiency table is the contract, and every row is published in `scale_progress` so a console
+can show how far along a run is:
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `SCALE_MIN_RANGES` | `12` | Accepted ranges before a value is named. One echo is noise, and the planner already treats two hits in a cell as "a thing". |
+| `SCALE_MIN_SPREAD_CM` | `150` | How far apart the ranged positions must be; closer than this cannot separate a 10 % error from echo noise. |
+| `SCALE_MIN_EDGES_RANGED` | `2` | Walls that fitted a ratio. One wall gives a ratio, not a scale — any single range fits any stride. |
+| `SCALE_MIN_PERIMETER_COVERAGE` | `0.8` | Share of the drawn perimeter observed. A wall nobody ranged is unproven. |
+| `SCALE_AGREEMENT_PCT` | `5` | How closely the per-wall ratios must agree, in per cent of their median. |
+| `SCALE_RUN_CAP_S` | `600` | The run extends itself until the thresholds are met, then stops. |
+| `SCALE_RUN_CAP_CM` | `2000` | ...and it cannot walk the house looking for evidence. |
+
+A run that hits a cap **refuses by naming the criterion it missed** — `north edge never ranged;
+7/12 ranges; run cap reached: 600 s` — and `step_cm_source` stays `assumed`, because a guessed scale
+is never applied. Applying a value is a separate step a person takes, and the gate is one gate:
+`navigation/odometry.py::apply_step_value` asks for at least five samples, refuses a set that spreads
+more than 10 %, and never moves the constant by more than 20 % in one apply — the policy
+`tools/step_calibrate.py --apply` has always used, now shared rather than copied. Nothing writes
+`config/settings.jsonc`: the clamped number is printed for a human to paste. The run on the dog, the
+`scale_progress` on the wire and the console that draws it are the next segments.
+
 ### Export, import, and a plan on the fridge
 
 The Map panel takes the map out of the console and puts it back (M8). **Export JSON** saves the

@@ -10,6 +10,24 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The stride is measured inside a room the dog was shown (H4)** — `step_cm` shipped as 25 cm for a
+  body about 25 cm long (#285), and every place anchor and every centimetre of the map inherits it.
+  `mapping/room_scale.py` measures the real number inside a drawn room, where the walls are already
+  the reference: the dog ranges a wall, walks, ranges it again, and the distance the echo lost is the
+  distance it gained — `tools/step_calibrate.py`'s method minus the walk-into-a-wall. Two modes, and
+  the room decides which: **confirm**, when `size_cm` makes the drawing real centimetres, fits range
+  against the *drawn* distance; **discover**, when no dimension exists, differences the dog's own
+  ranges along a wall, because a drawing without a dimension is not centimetres and nothing may read
+  it as one. Seven constants are the contract (`SCALE_MIN_RANGES` 12, `SCALE_MIN_SPREAD_CM` 150,
+  `SCALE_MIN_EDGES_RANGED` 2, `SCALE_MIN_PERIMETER_COVERAGE` 0.8, `SCALE_AGREEMENT_PCT` 5,
+  `SCALE_RUN_CAP_S` 600, `SCALE_RUN_CAP_CM` 2000), each published in `scale_progress` with how far
+  the run has got, and a run that falls short **refuses by naming the criterion it missed** —
+  `north edge never ranged; 7/12 ranges` — with no value to apply. It is a library, not a module:
+  nothing ticks it, nothing is registered, and no runtime key is published yet (the run is H6, the
+  console H8). `step_cm_source` stays `assumed` until a person runs `--apply`. The clamp that
+  `--apply` enforces moved out of `tools/step_calibrate.py` into
+  `navigation/odometry.py::apply_step_value`, so the gait tool and a room run share one policy
+  instead of two copies of it; the tool's output and messages are unchanged.
 - **Furniture against a wall, and a map version that says so (H3)** — a home modelled room by room had
   walls, openings, rooms and surfaces but nowhere to put the kitchen counter, so the map could not say
   what stood where. `objects` is a new user section: `{id, wall_id, start_cm, width_cm, depth_cm, kind,

@@ -290,6 +290,18 @@ flags of its own last tick: its age is still the consumer's to check.
 | `behavior_habituation` | `dict` — `{stimulus, count}`, the per-stimulus counter `behavior/fsm.py` keeps |
 | `orientation_calibration_ok` | `bool` — a calibration run produced the z-axis bias (`orientation_bias_z`); `False` when it had no samples. Served as `nav.heading_calibrated` |
 
+`mapping/room_scale.py::RoomScale` is the H4 half of the mapping story: fed one sample per sonar tick
+— the pose, the heading, the range and its validity — it returns `scale_progress`, with the
+sufficiency table's seven criteria and how far the run has got against each, plus a verdict. It is a
+**library**: nothing ticks it and it publishes no key, so a run's `scale_progress` is the room run's
+to publish (H6) and the console's to draw (H8). The distinction it exists for is *discover* versus
+*confirm*: a room that carries `size_cm` is drawn in centimetres, so its walls can confirm a stride,
+while a room without one cannot and the measurement comes from the ranged **differences** along a
+wall the dog walked beside — the method `tools/step_calibrate.py` uses, minus the walk-into-a-wall.
+Neither mode writes anything: `step_cm_source` stays `assumed` until an `--apply` passes
+`navigation/odometry.py::apply_step_value`'s gates (five samples, within 10 % of each other, clamped
+to ±20 % per apply).
+
 **Motion** — the only keys `hal_motors` reads
 
 | Key | Type |
@@ -638,6 +650,11 @@ exist and the module publishes nothing.
   the hook and the `path_planning` key were retired because a route needs a position estimate this
   stack does not have (#121). The example below is the whole feature surface. Goal-directed walking
   is `navigation/place_navigator.py` (`docs/CONTROL_API.md` [§8](CONTROL_API.md#8-places)).
+- `mapping/room_scale.py::RoomScale` is the same shape of helper for the stride: a room the user drew
+  supplies the reference, so a walk inside it measures `step_cm` with no tape measure and no
+  dimension the user has to type (#285, H4). Fed samples, it returns `scale_progress`; it ticks
+  nothing and publishes nothing. Its sufficiency table is in
+  [FEATURES_GUIDE.md §6](FEATURES_GUIDE.md#6-mapping).
 
 ```python
 from houndmind_ai.mapping.path_planner import astar
