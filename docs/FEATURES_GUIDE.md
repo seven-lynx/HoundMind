@@ -124,6 +124,8 @@ load, because widening this one is how a dog cooks a servo (#208).
 The fused snapshot is the `perception` context key: `obstacle`, `touch`, `sound`,
 `sound_direction`, `distance`, and — since P4 PL3 — occupancy. Every key in it is a measurement, so
 every key can fail, and the failed read has to stay distinguishable from a real one.
+[`HOUNDMIND_PROGRAMMING_GUIDE.md` §4](HOUNDMIND_PROGRAMMING_GUIDE.md#4-context-keys) documents it
+key by key, with the companion flag beside each value; this section covers the occupancy half only.
 
 **Occupancy** answers one question: is somebody in front of the dog? It is read from the `faces`
 payload a detector publishes (`modules.face_recognition`, `opencv`/Haar backend — presence, no
