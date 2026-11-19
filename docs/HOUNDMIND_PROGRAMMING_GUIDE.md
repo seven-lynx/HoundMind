@@ -263,7 +263,8 @@ Four of these five sensor keys carry their flag as a **target**: only `occupancy
 dict today, and `behavior/fsm.py:83-85` plus `navigation/obstacle_avoidance.py:78-84` read the other
 four with a default, which is how "the sensor did not answer" became "nothing is there". The
 snapshot is rewritten every tick from whatever `sensor_reading` holds, so a reading the sensor loop
-stopped refreshing stays in place: its age is the consumer's to check.
+stopped refreshing stays in place: its age is the consumer's to check. The missing four are #270's
+remaining slice; until they land, treat every one of them as unproven.
 
 **Navigation, mapping and behaviour**
 
