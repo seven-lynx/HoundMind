@@ -85,7 +85,8 @@ src/houndmind_ai/
   optional/   vision.py  vision_pi4.py  vision_preprocessing.py  vision_inference_scheduler.py
               face_recognition.py  semantic_labeler.py  slam_pi4.py  voice.py  energy_emotion.py
   services/   api.py  auth.py  camera.py  module.py  sessions.py  settings.py  state.py
-              stream.py  tls.py  web/  (index.html, app.js, style.css)
+              stream.py  tls.py  web/  (index.html, app.js, lib.js, style.css, sw.js,
+                          manifest.webmanifest, icon.svg, panels/)
 src/tools/    calibrate_servos.py  camera_check.py  collect_support_bundle.py
               download_opencv_models.py  hardware_checkup.py  installer_verify.py
               list_audio_devices.py  replay_decisions.py  smoke_test.py

@@ -320,6 +320,20 @@ uncertainty_cm}` in the document frame, with `id` naming the catalogue entry the
 the place is what the dog can be sent to, the pin is where it is drawn, and the picture comes from
 `GET /places` by that id.
 
+### Export, import, and a plan on the fridge
+
+The Map panel takes the map out of the console and puts it back (M8). **Export JSON** saves the
+document `GET /map` publishes — the same shape `PUT /map` accepts, so one file is both a backup and a
+floor plan to hand to the next dog's device. **Export PNG** saves the canvas exactly as drawn, legend
+and scale bar included, because it is the renderer's own picture rather than a second drawing.
+**Import…** reads a JSON document back: its sections are copied in, `meta.rev` is rebased onto this
+device's generation (a copy's `rev` would be a `409` that reads as "the map changed since this copy was
+read"), and `dog` is not imported — a position that belongs to another dog would become the origin a
+taught place is measured from. The imported document is **unsaved work** until **Save to device**
+writes it through the same `PUT /map`, which is also why an import cannot grow a second validator. The
+sample log is not part of either direction: the wire carries a count, and the device keeps the log it
+wrote. `python -m tools.map_inspect <file>` reads an exported copy without a runtime.
+
 When a map loads, `MappingModule.start` publishes `home_map` (the document) and `home_map_status`
 (`{loaded, cells, reason, problems, notes}`). The first tick seeds `mapping_state["grid"]` from it; a
 grid this process is already building wins, because merging would double every hit the two share.
