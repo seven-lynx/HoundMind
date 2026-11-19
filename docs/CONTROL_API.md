@@ -594,6 +594,9 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "pose": { "x": 118.4, "y": -32.0, "yaw_deg": 92.5 },
     "confidence": 0.94, "age_s": 6.2, "reason": "no SLAM backend (stub)"
   },
+  "room": {
+    "id": "kitchen", "name": "Kitchen", "valid": true, "source": "odometry", "reason": null
+  },
   "decision": {
     "schema_version": 2, "ts": 4212.3, "trace_id": "trace123",
     "mode": "patrol", "state": "alert", "intent": "forward", "source": "navigation",
@@ -679,6 +682,19 @@ to place itself on, which is the `reactive` tier), `start_unknown`, `goal_blocke
 planner's own names), `bad_request`, `no_board`, or `timeout` — and carries the sentence a person reads
 in `detail`. `place` is the last place the camera confirmed at an arrival, or `null`: the follower
 never moves the dog on the strength of a view.
+
+`room` is the room the pose falls in (`navigation/room_context.py`), or `null` before that module's
+first tick: `{id, name, valid, source, reason}`. `id` and `name` are `null` whenever `valid` is
+`false` — there is no room to name. `source` says how the claim was earned, and it is required,
+because the same sentence from three different poses is three different claims: `user_pose` (a human
+confirmed the position on the console map), `place` (a camera matched a taught view) or `odometry`
+(heading × counted steps; a SLAM pose folds in here, since it is a measurement too rather than a
+confirmed fix). `valid: false` always carries a `reason`, and the four are different answers:
+`no_pose` (`localization` is `reactive` or published no usable pose), `pose_frame:<frame>` (the pose is
+in SLAM's own coordinates — rtabmap reports metres — so it cannot be tested against a drawing measured
+in centimetres; named rather than converted), `no_rooms` (the home map names no room, which is not the
+same as being outside one) and `outside_every_room` (a good pose that no drawn room contains). Rooms
+may overlap: the first one in document order wins, so the map is not a partition.
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
 `navigation`, `route`, `place`, `routine`, `behaviour`). `actuators.displaced` counts the intents a

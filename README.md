@@ -215,6 +215,7 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Perception                     | Enabled     |                                       |
 | Scanning                       | Enabled     |                                       |
 | Navigation & Obstacle Avoidance| Enabled     |                                       |
+| Room context                   | Enabled     | `modules.room_context` — names the room the pose falls in (`/state.room`), with `valid`/`source`/`reason` |
 | Mapping                        | Enabled     |                                       |
 | Behavior                       | Enabled     |                                       |
 | Routines                       | Enabled     | `modules.routine_runner`              |

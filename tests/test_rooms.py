@@ -7,11 +7,15 @@ waypoints would call that walk clear.
 
 from __future__ import annotations
 
+import pytest
+
 from houndmind_ai.mapping.rooms import (
+    edge_distances,
     keep_out_room_at,
     keep_out_rooms,
     point_in_polygon,
     polyline_in_keep_out,
+    room_at,
 )
 
 SQUARE = [[0, 0], [100, 0], [100, 100], [0, 100]]
@@ -92,3 +96,63 @@ def test_a_document_with_no_keep_out_room_answers_none() -> None:
     document = _document({"id": "kitchen", "name": "kitchen", "polygon": SQUARE})
     assert polyline_in_keep_out([(0, 0), (1000, 1000)], document) is None
     assert polyline_in_keep_out([(0, 0), (1, 1)], {}) is None
+
+
+def test_room_at_names_a_room_that_is_not_keep_out() -> None:
+    """H1: the room the dog is in is a fact, not a refusal, so keep-out must not filter it."""
+    document = _document({"id": "kitchen", "name": "Kitchen", "polygon": SQUARE})
+    assert room_at((50, 50), document)["name"] == "Kitchen"
+    assert room_at((500, 500), document) is None
+
+
+def test_room_at_skips_a_lasso_that_is_not_a_room() -> None:
+    document = _document({"id": "half", "polygon": [[0, 0], [100, 100]]})
+    assert room_at((50, 50), document) is None
+
+
+def test_room_at_answers_the_first_room_drawn_when_two_overlap() -> None:
+    """The map is not a partition, so the rule is first-match-wins, exactly as keep-out's is."""
+    document = _document(
+        {"id": "hall", "name": "Hall", "polygon": SQUARE},
+        {"id": "kitchen", "name": "Kitchen", "polygon": SQUARE},
+    )
+    assert room_at((50, 50), document)["id"] == "hall"
+
+
+def test_room_at_on_an_unusable_point_is_none_not_a_guess() -> None:
+    document = _document({"id": "kitchen", "name": "Kitchen", "polygon": SQUARE})
+    assert room_at("nope", document) is None
+    assert room_at((50, "x"), document) is None
+
+
+def test_edge_distances_measure_the_walls_not_the_corners() -> None:
+    """An off-centre point: 25 cm from the left wall and 75 from the right one, not the corner."""
+    nearest, farthest = edge_distances((25, 50), {"polygon": SQUARE})
+    assert nearest == pytest.approx(25.0)
+    assert farthest == pytest.approx(75.0)
+
+
+def test_the_centre_of_a_square_is_equally_far_from_every_wall() -> None:
+    """A corner is not an edge point, so the projection clamps to the wall and both read 50."""
+    assert edge_distances((50, 50), {"polygon": SQUARE}) == pytest.approx((50.0, 50.0))
+
+
+def test_edge_distances_from_outside_a_room() -> None:
+    """Outside, right of the square: 50 to that wall and 150 across to the far one."""
+    nearest, farthest = edge_distances((150, 50), {"polygon": SQUARE})
+    assert nearest == pytest.approx(50.0)
+    assert farthest == pytest.approx(150.0)
+
+
+def test_a_point_on_the_wall_is_zero_away() -> None:
+    """A real measurement, which is why an unusable room is `None` rather than this."""
+    nearest, _ = edge_distances((0, 50), {"polygon": SQUARE})
+    assert nearest == pytest.approx(0.0)
+
+
+def test_edge_distances_on_an_unusable_room_is_none() -> None:
+    """Zero must not read as a wall distance for a caller deciding whether a room can take a stride."""
+    assert edge_distances((50, 50), {"polygon": [[0, 0], [100, 100]]}) is None
+    assert edge_distances((50, 50), {"polygon": "nope"}) is None
+    assert edge_distances((50, 50), {}) is None
+    assert edge_distances("nope", {"polygon": SQUARE}) is None

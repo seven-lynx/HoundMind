@@ -10,6 +10,20 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **The dog can name the room it is in (H1)** — `rooms` were drawn in the console and read only by the
+  keep-out refusal, so nothing could answer "which room am I in" even with a good pose. `mapping/rooms.py`
+  gains `room_at` (any room, not only keep-out; first match wins, document frame, the same ray cast) and
+  `edge_distances` (nearest and farthest wall in cm, for the scale work), with one segment-distance
+  helper behind both the boundary test and the measurement rather than a second geometry path.
+  `navigation/room_context.py` publishes `current_room` — `{id, name, valid, source, reason}` — from the
+  pose `localization` published that tick, swapped into the document frame once (#347), and `/state`
+  carries it as `room`. `source` says how the claim was earned: `user_pose` (a human confirmed the
+  position), `place` (a camera matched a taught view) or `odometry` (heading × counted steps, with a
+  SLAM pose folded in — it is a measurement too, and its frame makes it unusable against a drawing in
+  centimetres). The four refusals are distinct and named: `no_pose`, `pose_frame:slam`, `no_rooms` and
+  `outside_every_room`, so an empty map never answers confidently. `CONTROL_API.md` [§4](docs/CONTROL_API.md#4-state-snapshot)
+  documents the block and `modules.room_context` ships enabled: it moves nothing.
+
 - **A clip replayed inside the real loop, with the numbers a SLAM verdict needs (SLAM ladder S2)** —
   `tools.slam_replay --host pi|pi5|pc` publishes a recorded clip into the runtime with `slam_pi4`
   switched on and every motion-capable module off, so the measurement includes the loop instead of a
@@ -41,6 +55,7 @@ Current Release: v2026.11.16
   disagree on resolution, timestamps that go backwards or repeat, jitter past `--tolerance-pct`
   (25% by default), or a cadence that does not match the manifest. Nothing moves, nothing listens,
   and publishing a clip into the real runtime is a later segment.
+
 
 - **The decision record says which autonomy input shaped the tick (#270)** — `intent`/`source` name
   the intent that won, so when a hand overrode the navigator the record kept the winner and lost what

@@ -166,6 +166,12 @@
       "enabled": true,
       "required": false
     },
+    "room_context": {
+      // Names the room the pose falls in, from the home map (`/state.room`). An observer: it reads
+      // the localization pose and the drawn rooms, and moves nothing.
+      "enabled": true,
+      "required": false
+    },
     "behavior": {
       // High-level behavior selection.
       "enabled": true,

@@ -223,6 +223,45 @@ honestly offer and names the reason when that is not the best one available. One
   One frame alone changes nothing; a frame that matched weakly publishes `place_match` with
   `valid: false` and the score that lost, because "no idea, best 0.31" is a state worth showing.
 
+### The room the dog is in
+
+`navigation/room_context.py` turns the pose into the question a person actually asks of it: which room.
+It reads the pose `localization` published that tick, swaps the runtime point `(forward_cm, left_cm)` into
+the frame the rooms are drawn in — `mapping/home_map.py::runtime_point_to_document`, the one place that
+swap is written (#347) — and publishes `current_room`, which `/state` carries as `room`:
+
+```json
+{ "id": "kitchen", "name": "Kitchen", "valid": true, "source": "odometry", "reason": null }
+```
+
+`source` is not decoration: "you are in the Kitchen" from a position a human confirmed, from a room a
+camera recognised and from heading × counted steps are three different claims, and a consumer that will
+act on the room has to know which one it was given.
+
+| `source` | The pose it came from | Localization tier |
+|---|---|---|
+| `user_pose` | the point a human confirmed on the console map | `user` |
+| `place` | a place `place_recognition` matched from the camera | `place` |
+| `odometry` | heading × counted steps — a `slam` pose is folded in here, because it is a measurement too rather than a confirmed fix | `dead_reckoning`, `slam` |
+
+`valid: false` always carries a `reason`, and they are four different answers rather than one shrug:
+
+| `reason` | What it means |
+|---|---|
+| `no_pose` | `localization` is `reactive` or published no usable pose; a pose missing a coordinate is not a pose at the origin |
+| `pose_frame:slam` | the pose is in SLAM's own coordinates (rtabmap reports metres), not centimetres from the odometry origin, so it cannot be tested against a drawing measured in centimetres. Named rather than converted: a unit guess is a confident wrong room |
+| `no_rooms` | the home map names no room — an empty map is not "outside every room" |
+| `outside_every_room` | a good pose that no drawn room contains |
+
+- **Rooms may overlap, and the map is not a partition.** The first room in document order wins, the same
+  rule the keep-out check follows, so a doorway alcove drawn inside a hall answers with the room drawn
+  first rather than an error.
+- **`keep_out` does not filter this.** A room the dog must stay out of is still the room it is standing
+  in; `room` says where it is, and the keep-out refusal stays a separate rule about walking.
+- **Nothing here moves the dog.** It reads the pose and the drawing, and publishes a name.
+
+**Disable:** `modules.room_context.enabled = false` (then `/state.room` stays `null`).
+
 ### Measuring the stride
 
 `step_cm` shipped as 25 cm for a dog about 25 cm long, and the vendor reference itself lists how far

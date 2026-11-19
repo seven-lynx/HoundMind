@@ -344,6 +344,7 @@ def build_state(context, *, now: float | None = None) -> dict[str, object]:
         "safety": _safety(context),
         "nav": _nav(context),
         "localization": _localization(context),
+        "room": context.get("current_room") if isinstance(context.get("current_room"), dict) else None,
         "decision": _decision(context),
         "scan": _scan(context),
         "routines": _routines(context),
