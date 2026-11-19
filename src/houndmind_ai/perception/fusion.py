@@ -203,6 +203,11 @@ class PerceptionModule(Module):
         touch = getattr(reading, "touch", "N")
         sound_detected = getattr(reading, "sound_detected", False)
         sound_direction = getattr(reading, "sound_direction", None)
+        # The reading's own flags, and `False` when it carries none: a producer that answers
+        # without saying whether it measured anything has not measured anything.
+        distance_valid = bool(getattr(reading, "distance_valid", False))
+        touch_valid = bool(getattr(reading, "touch_valid", False))
+        sound_valid = bool(getattr(reading, "sound_valid", False))
 
         settings = (context.get("settings") or {}).get("perception", {})
         obstacle_cm = settings.get("obstacle_cm", 20)
@@ -214,18 +219,29 @@ class PerceptionModule(Module):
         anchor_max_cm = _safe_float(fusion_cfg.get("fusion_anchor_distance_cm", 120), 120.0)
         min_conf = _safe_float(fusion_cfg.get("fusion_min_confidence", 0.3), 0.3)
 
+        # `obstacle` keeps the shape it shipped with — a positive range under the threshold, and
+        # `False` when there is no range at all — because a client reading the bool must not have to
+        # learn a null. What the bool never said is whether anything proved it: `obstacle_valid` is
+        # that, and it is `False` for a sonar that answered without a validated range, so a silent
+        # sonar reads `obstacle: False, obstacle_valid: False` — unproven, not clear.
+        has_range = isinstance(distance, (int, float)) and distance > 0
         obstacle = False
-        if isinstance(distance, (int, float)) and distance > 0:
+        if has_range:
             obstacle = distance < obstacle_cm
+        obstacle_valid = bool(distance_valid and has_range)
 
         context.set(
             "perception",
             {
                 "obstacle": obstacle,
+                "obstacle_valid": obstacle_valid,
                 "touch": touch,
+                "touch_valid": touch_valid,
                 "sound": bool(sound_detected),
+                "sound_valid": sound_valid,
                 "sound_direction": sound_direction,
                 "distance": distance,
+                "distance_valid": distance_valid,
                 # Occupancy is not a sensor-reading key, but it rides the snapshot so there is one
                 # place that says what the dog currently believes rather than two that disagree.
                 **self._occupancy_fields(),
