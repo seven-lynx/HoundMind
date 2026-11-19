@@ -8,6 +8,7 @@ where `opencv-contrib-python` is installed.
 
 from __future__ import annotations
 
+import base64
 import json
 
 import pytest
@@ -22,11 +23,18 @@ from houndmind_ai.perception.place_views import (
     match,
     save_views,
     score,
+    thumb_b64,
+    upsert_view,
     views_path,
 )
 
 __all__ = [
     "test_a_featureless_frame_is_refused_before_any_comparison",
+    "test_a_pin_from_bytes_that_are_not_an_image_is_refused",
+    "test_a_pin_keeps_the_other_places_pictures",
+    "test_a_pin_thumbnail_is_published_as_base64",
+    "test_a_second_pin_for_one_place_replaces_the_first",
+    "test_a_textured_jpeg_teaches_a_pin",
     "test_a_view_below_the_descriptor_floor_is_refused",
     "test_a_view_round_trips_through_the_file",
     "test_an_empty_directory_is_no_views_not_an_error",
@@ -138,6 +146,64 @@ def test_the_score_is_symmetric_between_a_short_view_and_a_long_frame() -> None:
     frame = view.descriptors + tuple(_descriptor(90 + index) for index in range(MIN_DESCRIPTORS))
 
     assert score(frame, view) == pytest.approx(1.0), "the smaller set is the denominator"
+
+
+def test_a_second_pin_for_one_place_replaces_the_first(tmp_path) -> None:
+    """One view per place: `save_views` writes the whole file, so an append would duplicate it."""
+    first = _view("kitchen", rows=MIN_DESCRIPTORS)
+    again = _view("kitchen", rows=MIN_DESCRIPTORS + 2, offset=40)
+
+    kept = upsert_view((first, _view("hall", offset=100)), again)
+
+    assert [view.place_id for view in kept] == ["hall", "kitchen"]
+    assert kept[-1] is again
+    save_views(tmp_path, kept)
+    assert {view.place_id: view for view in load_views(tmp_path)}["kitchen"] == again
+
+
+def test_a_pin_keeps_the_other_places_pictures(tmp_path) -> None:
+    """The read-modify-write a teach does: the file it rewrites still holds every other view."""
+    save_views(tmp_path, (_view("hall", offset=100),))
+
+    save_views(tmp_path, upsert_view(load_views(tmp_path), _view("kitchen")))
+
+    assert sorted(view.place_id for view in load_views(tmp_path)) == ["hall", "kitchen"]
+
+
+def test_a_pin_thumbnail_is_published_as_base64() -> None:
+    """The panel draws it, so it is published beside the place rather than in the file entry."""
+    view = _view("kitchen")
+
+    assert thumb_b64(view) == base64.b64encode(view.thumb).decode("ascii")
+
+
+def test_a_pin_from_bytes_that_are_not_an_image_is_refused() -> None:
+    """Empty bytes are not an OpenCV problem, so they are refused before the wheel is asked for."""
+    from houndmind_ai.perception.place_views import view_from_jpeg
+
+    with pytest.raises(ValueError, match="got nothing"):
+        view_from_jpeg(b"", "kitchen")
+
+
+def test_a_textured_jpeg_teaches_a_pin() -> None:
+    """The control plane's camera hands over JPEG bytes, not an array (M7)."""
+    pytest.importorskip("cv2")
+    numpy = pytest.importorskip("numpy")
+    import cv2
+
+    from houndmind_ai.perception.place_views import view_from_jpeg
+
+    rng = numpy.random.default_rng(11)
+    frame = rng.integers(0, 255, (240, 320, 3)).astype("uint8")
+    ok, buffer = cv2.imencode(".jpg", frame)
+    assert ok
+
+    view = view_from_jpeg(buffer.tobytes(), "kitchen", now=7.0)
+
+    assert view.place_id == "kitchen"
+    assert view.created_at == 7.0
+    assert len(view.thumb) == THUMB_W * THUMB_H
+    assert len(view.descriptors) >= MIN_DESCRIPTORS
 
 
 def test_a_blank_frame_teaches_nothing() -> None:

@@ -52,6 +52,7 @@ def entry(**overrides) -> dict:
         "confidence": 0.55,
         "created_ts": 0,
         "visits": 3,
+        "has_view": False,
     }
     doc.update(overrides)
     return doc
@@ -130,7 +131,7 @@ def test_one_bad_entry_does_not_cost_the_others(tmp_path: Path) -> None:
     subject = store(tmp_path)
     written(
         subject.path,
-        {"version": 1, "places": [entry(), entry(name="hall", distance_cm=0)]},
+        {"version": 1, "places": [entry(), entry(name="hall", distance_cm=5000)]},
     )
 
     report = subject.load()
@@ -138,6 +139,53 @@ def test_one_bad_entry_does_not_cost_the_others(tmp_path: Path) -> None:
     assert report.ids() == ("kitchen",)
     assert [problem.path for problem in report.refusals] == ["places[1].distance_cm"]
     assert report.refused == 1
+
+
+def test_a_place_taught_where_the_dog_stands_is_allowed() -> None:
+    """M7: a pin is taken *at* the place, so zero is a distance and not a typo (#313).
+
+    `navigation/place_navigator.py` decides arrival before it ever considers a heading, which is
+    what makes a zero-distance place walkable rather than a special case.
+    """
+    assert check_places_document({"places": [entry(distance_cm=0.0)]}) == []
+
+
+def test_a_negative_distance_is_still_not_a_range() -> None:
+    """The bound moved to include zero; it did not stop being a bound."""
+    problems = check_places_document({"places": [entry(distance_cm=-5.0)]})
+
+    assert [problem.path for problem in problems] == ["places[0].distance_cm"]
+
+
+def test_a_place_records_that_it_has_a_view(tmp_path: Path) -> None:
+    """The flag is a catalogue fact, and a round-trip has to keep it or the file refuses itself."""
+    subject = store(tmp_path)
+    written(subject.path, {"version": 1, "places": [entry(id="kitchen", has_view=True)]})
+
+    (place,) = subject.load().places
+
+    assert place.has_view is True
+    assert place.to_dict()["has_view"] is True
+
+
+def test_a_view_flag_that_is_not_a_boolean_is_refused() -> None:
+    """`has_view: "yes"` would be a second vocabulary for a yes-or-no fact."""
+    problems = check_places_document({"places": [entry(has_view="yes")]})
+
+    assert [problem.path for problem in problems] == ["places[0].has_view"]
+
+
+def test_a_taught_place_keeps_the_view_flag_across_a_write(tmp_path: Path) -> None:
+    """The route sets the flag last, through the store, so it lands in the file like any other field."""
+    subject = store(tmp_path)
+    created, problems = subject.add("kitchen", heading_deg=0.0, distance_cm=0.0)
+    assert created is not None and problems == ()
+    assert created.has_view is False
+
+    flagged, _ = subject.update(created.id, has_view=True)
+
+    assert flagged is not None and flagged.has_view is True
+    assert store(tmp_path).load().places[0].has_view is True
 
 
 def test_a_duplicate_name_in_the_file_keeps_the_first(tmp_path: Path) -> None:

@@ -10,10 +10,11 @@
 // keeps no second copy of the frame rule, and `document.dog` is only the fallback - the position last
 // confirmed, not a pose.
 //
-// Four layers, each toggleable, because they answer different questions: cells are *evidence* (what
+// Five layers, each toggleable, because they answer different questions: cells are *evidence* (what
 // the sonar hit), walls and openings are *claims* (drawn by a person or lifted from the scan), rooms
-// and surfaces are *meaning*. Unknown ground is hatched and floor is solid: a single hit is a
-// maybe, not a floor, and the two must not look the same.
+// and surfaces are *meaning*, and places are *pins* - a taught spot with the camera's picture of it
+// (M7). Unknown ground is hatched and floor is solid: a single hit is a maybe, not a floor, and the
+// two must not look the same.
 //
 // A truncated map says so, and a map with no cells says why it is empty - `grid_enabled: false` and
 // "no sweep has filled a cell yet" are different problems.
@@ -24,7 +25,7 @@ const VIEW_KEY = "houndmind.map.view";
 const PAD = 18;
 // A cell with this many hits or more is floor; fewer is "seen once", which is a maybe.
 const FLOOR_HITS = 2;
-const LAYERS = ["cells", "rooms", "walls", "surfaces"];
+const LAYERS = ["cells", "rooms", "walls", "surfaces", "places"];
 const SURFACE_HATCH = {
   hardwood: ["#c58b4a", "rgba(197, 139, 74, 0.18)"],
   carpet: ["#6f9bd1", "rgba(111, 155, 209, 0.20)"],
@@ -42,7 +43,7 @@ const ROOM_COLOURS = [
   "rgba(210, 150, 200, 0.30)",
   "rgba(180, 180, 230, 0.30)",
 ];
-const MODES = ["view", "wall", "opening", "delete", "room", "surface", "pose", "go"];
+const MODES = ["view", "wall", "opening", "delete", "room", "surface", "pose", "go", "pin"];
 
 function pointInPolygon(point, polygon) {
   // Ray casting: a click inside a lasso selects that room, and a boundary hit counts as inside.
@@ -182,6 +183,8 @@ export const map = {
           <button id="mp-mode-surface" class="tiny">Surface</button>
           <button id="mp-mode-pose" class="tiny">Pose</button>
           <button id="mp-mode-go" class="tiny">Go</button>
+          <button id="mp-mode-pin" class="tiny">Pin</button>
+          <button id="mp-pin-here" class="tiny">Here</button>
           <button id="mp-pose-confirm" class="tiny" disabled>Confirm position</button>
           <button id="mp-pose-cancel" class="tiny" disabled>Cancel</button>
           <button id="mp-send" class="tiny" disabled>Send route</button>
@@ -247,6 +250,9 @@ export const map = {
     let trail = [];
     let health = null;
     let preview = null;
+    // M7: the picture of each place, from `GET /places`, keyed by place id. A pin draws a thumbnail
+    // when one exists and reads as a plain ring when it does not - never as a broken image.
+    let thumbs = new Map();
     const dirty = root.querySelector("#mp-dirty");
     const widthInput = root.querySelector("#mp-opening-width");
 
@@ -265,6 +271,7 @@ export const map = {
           openings: document_.openings || [],
           rooms: document_.rooms || [],
           surfaces: document_.surfaces || [],
+          places: document_.places || [],
         })
       );
       if (history.length > 50) history.shift();
@@ -277,6 +284,7 @@ export const map = {
       document_.openings = previous.openings;
       document_.rooms = previous.rooms;
       document_.surfaces = previous.surfaces;
+      document_.places = previous.places || [];
       // A snapshot restores the arrays, so an item the user had selected is gone: holding the old
       // object would leave the keep-out button acting on a room that is no longer in the document.
       selected = null;
@@ -388,6 +396,19 @@ export const map = {
       for (const surface of (document_ && document_.surfaces) || []) {
         const polygon = surface.polygon || [];
         if (polygon.length >= 3 && pointInPolygon(point, polygon)) return surface;
+      }
+      return null;
+    }
+
+    function pinUnder(point) {
+      // The same tolerance the wall picker uses, so a click near a pin means the pin whether the
+      // user meant to delete it or not: a 6 cm ring is one pixel wide at a fitted zoom.
+      const tolerance = (HIT_PX + 4) / (view ? view.scale : 1);
+      for (const pin of (document_ && document_.places) || []) {
+        const x = Number(pin.x_cm);
+        const y = Number(pin.y_cm);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        if (Math.hypot(x - point[0], y - point[1]) <= tolerance) return pin;
       }
       return null;
     }
@@ -566,6 +587,16 @@ export const map = {
     }
 
     function deleteAt(point) {
+      const pin = pinUnder(point);
+      if (pin) {
+        // The pin is the map's annotation, the place is the catalogue's entry: deleting this one
+        // forgets where it is drawn, and the place stays until it is Forgotten in the Places panel.
+        pushHistory();
+        document_.places = (document_.places || []).filter((item) => item !== pin);
+        markDirty(true);
+        render();
+        return;
+      }
       const room = roomUnder(point);
       if (room) {
         pushHistory();
@@ -716,6 +747,120 @@ export const map = {
       }
     }
 
+
+    // ---- pins (M7) ----------------------------------------------------------
+
+    const THUMB_W = 32;
+    const THUMB_H = 24;
+    // A thumbnail is 768 raw grey bytes, not an image file (`perception/place_views.py` stores the
+    // pixels). It becomes a canvas once per distinct picture: grey in, grey out, drawn scaled with
+    // smoothing off so 32x24 stays recognisable instead of turning to mush.
+    const thumbCache = new Map();
+
+    function thumbCanvas(b64) {
+      if (typeof b64 !== "string" || !b64) return null;
+      if (thumbCache.has(b64)) return thumbCache.get(b64);
+      let raw;
+      try {
+        raw = atob(b64);
+      } catch (err) {
+        return null;
+      }
+      if (raw.length !== THUMB_W * THUMB_H) return null;
+      const pixels = new ImageData(THUMB_W, THUMB_H);
+      for (let index = 0; index < raw.length; index += 1) {
+        const grey = raw.charCodeAt(index);
+        pixels.data[index * 4] = grey;
+        pixels.data[index * 4 + 1] = grey;
+        pixels.data[index * 4 + 2] = grey;
+        pixels.data[index * 4 + 3] = 255;
+      }
+      const off = document.createElement("canvas");
+      off.width = THUMB_W;
+      off.height = THUMB_H;
+      off.getContext("2d").putImageData(pixels, 0, 0);
+      thumbCache.set(b64, off);
+      return off;
+    }
+
+    async function refreshThumbs() {
+      const next = new Map();
+      try {
+        const catalogue = await api("/places");
+        for (const place of (catalogue && catalogue.places) || []) {
+          if (!place || !place.id) continue;
+          const picture = thumbCanvas(place.thumb);
+          if (picture) next.set(String(place.id), picture);
+        }
+      } catch (err) {
+        // A 503 here is the normal state with `place_navigator` off and a 403 is a token that
+        // cannot read places: pins still draw, they just have no picture. Nothing to report over a
+        // map that is otherwise fine.
+      }
+      thumbs = next;
+    }
+
+    async function teachAt(point) {
+      if (!document_) return;
+      error.textContent = "";
+      const name = window.prompt("Name this spot", "");
+      if (name === null) return;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      try {
+        const answer = await api("/places/teach", {
+          method: "POST",
+          body: JSON.stringify({ name: trimmed, x_cm: point[0], y_cm: point[1] }),
+        });
+        const place = answer && answer.place ? answer.place : null;
+        if (!place || !place.id) {
+          error.textContent = "the device answered without a place";
+          return;
+        }
+        // The pin is a `places[]` entry in this document - a user section `PUT /map` already
+        // carries - not a second store. It stays unsaved until **Save to device**.
+        pushHistory();
+        const pin = {
+          id: String(place.id),
+          name: String(place.name || trimmed),
+          x_cm: point[0],
+          y_cm: point[1],
+          heading_deg: Number(place.heading_deg) || 0,
+          uncertainty_cm: null,
+        };
+        document_.places = (document_.places || [])
+          .filter((item) => item.id !== pin.id)
+          .concat(pin);
+        const picture = thumbCanvas(place.thumb);
+        if (picture) thumbs.set(pin.id, picture);
+        markDirty(true);
+        describe(document_);
+        const assumed = !(document_.meta && document_.meta.step_cm_source === "measured");
+        // The stride is what turns a distance into a walk, and it is a guess until it is measured
+        // (#285): saying so beside the pin is the difference between a fact and a claim.
+        note.textContent = `pin "${pin.name}" added · ${fmt(
+          Number(place.distance_cm),
+          "cm"
+        )} and ${fmt(Number(place.heading_deg), "°")} from the dog · ${
+          assumed ? "stride assumed, so the distance is a guess" : "stride measured"
+        } · Save to device keeps it`;
+        render();
+      } catch (err) {
+        const payload = err.payload || {};
+        error.textContent = payload.detail
+          ? `${payload.error || "refused"}: ${payload.detail}`
+          : errorText(err);
+      }
+    }
+
+    async function teachHere() {
+      const pose = livePose || (document_ && document_.dog ? document_.dog : null);
+      if (!pose) {
+        error.textContent = "no position to teach from - correct the dog's position first";
+        return;
+      }
+      await teachAt([Number(pose.x_cm) || 0, Number(pose.y_cm) || 0]);
+    }
 
     const toScreen = (x, y) => [canvas.width / 2 - x * view.scale, canvas.height / 2 - y * view.scale];
 
@@ -951,6 +1096,41 @@ export const map = {
       ctx.restore();
     }
 
+    function drawPins(ctx) {
+      const places = document_ && Array.isArray(document_.places) ? document_.places : [];
+      for (const pin of places) {
+        const x = Number(pin.x_cm);
+        const y = Number(pin.y_cm);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        const [sx, sy] = screen(x, y);
+        const name = String(pin.name || pin.id || "place");
+        const picture = thumbs.get(String(pin.id));
+        ctx.save();
+        if (picture) {
+          // The picture is the point of a pin: it is how a person recognises the room months later.
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(picture, sx - THUMB_W, sy - 40, THUMB_W * 2, THUMB_H * 2);
+          ctx.strokeStyle = "#7fd4c1";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(sx - THUMB_W, sy - 40, THUMB_W * 2, THUMB_H * 2);
+        }
+        // A ring, not a filled dot: the dog is the brightest thing on the canvas and a pin must not
+        // compete with it for that reading.
+        ctx.strokeStyle = "#7fd4c1";
+        ctx.fillStyle = "rgba(12, 26, 24, .8)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#d6efe9";
+        ctx.font = "12px ui-monospace, monospace";
+        ctx.textAlign = "left";
+        ctx.fillText(name, sx + 10, sy + 4);
+        ctx.restore();
+      }
+    }
+
     function drawDog(ctx) {
       // The live pose first: it is the runtime's answer, already swapped into this frame by
       // `GET /map`. `document.dog` is the fallback and answers a different question - where the dog
@@ -1100,6 +1280,7 @@ export const map = {
         drawWalls(ctx);
         drawOpenings(ctx);
       }
+      if (layers.has("places")) drawPins(ctx);
       drawDraft(ctx);
       drawLasso(ctx);
       drawSelection(ctx);
@@ -1112,12 +1293,17 @@ export const map = {
     function describe(document) {
       const cells = Object.keys(document.cells || {}).length;
       rev.textContent = `rev ${document.meta && document.meta.rev ? document.meta.rev : "-"}`;
-      if (!cells && !(document.walls || []).length && !(document.rooms || []).length) {
+      if (
+        !cells &&
+        !(document.walls || []).length &&
+        !(document.rooms || []).length &&
+        !(document.places || []).length
+      ) {
         count.textContent = "no map";
         note.textContent =
           document.meta && document.meta.source === "scan"
             ? "no sweep has filled a cell yet"
-            : "this document carries no cells, walls or rooms yet";
+            : "this document carries no cells, walls, rooms or pins yet";
         legend.textContent = "";
         return;
       }
@@ -1129,7 +1315,9 @@ export const map = {
       )}, nose up; stride ${stepSource}. Solid squares are floor, outlines are seen once.`;
       legend.textContent = `walls ${(document.walls || []).length} · openings ${
         (document.openings || []).length
-      } · rooms ${(document.rooms || []).length} · surfaces ${(document.surfaces || []).length}`;
+      } · rooms ${(document.rooms || []).length} · surfaces ${
+        (document.surfaces || []).length
+      } · places ${(document.places || []).length}`;
     }
 
     async function load() {
@@ -1154,6 +1342,9 @@ export const map = {
         trail = payload && Array.isArray(payload.trail) ? payload.trail : [];
         health =
           payload && payload.health && typeof payload.health === "object" ? payload.health : null;
+        // M7: pins are places, and only `GET /places` carries their picture. Awaiting it here keeps
+        // one refresh per poll; a device with the navigator off answers 503 and the pins draw plain.
+        await refreshThumbs();
         preview = null;
         history = [];
         draft = null;
@@ -1207,6 +1398,7 @@ export const map = {
     root.querySelector("#mp-save").addEventListener("click", save);
     root.querySelector("#mp-reload").addEventListener("click", () => load());
     root.querySelector("#mp-keepout").addEventListener("click", toggleKeepOut);
+    root.querySelector("#mp-pin-here").addEventListener("click", teachHere);
     confirmButton.addEventListener("click", confirmPose);
     cancelButton.addEventListener("click", () => {
       ghost = null;
@@ -1251,6 +1443,11 @@ export const map = {
       if (mode === "go") {
         // Preview first, walk second: the user sees the route and its distance before the dog does.
         previewRoute(point);
+        return;
+      }
+      if (mode === "pin") {
+        // One click, one place: the name and the picture are the whole act (M7).
+        teachAt(point);
         return;
       }
       if (mode === "wall") {

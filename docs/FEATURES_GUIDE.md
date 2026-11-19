@@ -312,6 +312,14 @@ from a **newer** version is refused by name rather than guessed at, and a corrup
 here is why", never an empty room. Writes are atomic (temp file, then replace), so a brownout costs
 the last snapshot rather than the whole map.
 
+The sections a **person** owns ride in the same document — `walls`, `openings`, `rooms`, `surfaces`,
+`places` and `dog` (`mapping/home_map.py::USER_SECTIONS`). The console writes them through `PUT /map`,
+and every scan save carries them forward, so a 30-second snapshot never erases a wall someone drew or a
+pin someone taught. `places` is the pin layer (M7): `{id, name, x_cm, y_cm, heading_deg,
+uncertainty_cm}` in the document frame, with `id` naming the catalogue entry the spot was taught as —
+the place is what the dog can be sent to, the pin is where it is drawn, and the picture comes from
+`GET /places` by that id.
+
 When a map loads, `MappingModule.start` publishes `home_map` (the document) and `home_map_status`
 (`{loaded, cells, reason, problems, notes}`). The first tick seeds `mapping_state["grid"]` from it; a
 grid this process is already building wins, because merging would double every hit the two share.
@@ -451,6 +459,33 @@ global path plan, which is why the stored pose is a bearing and a range.
   the tick thread, a create or delete on the event loop — so `add`, `remove` and `record_visit` hold a
   lock across their read-modify-write pair (`kernel/place_store.py`). A second store over the same
   path would be a second writer holding a second lock.
+
+### A place can carry a picture, and be taught from the map
+
+M7 closes the loop between a place and the camera's idea of it. `POST /places/teach` creates the place
+through the same store — so the same `problems[]` refuse a duplicate name — and saves the **view** of
+the spot beside it: `perception/place_views.py`'s 32x24 thumbnail, ORB keypoints and descriptors, the
+artefact `navigation/place_recognition.py` matches later. That is one act because a place is recognised
+*by what it looks like*; a place with a name and no view is one only the map can point at.
+
+The body names the place and may carry `x_cm`/`y_cm`, the pin's point in the document frame. Leaving
+them out means *here*: the stored pose is the bearing and range **from the dog to that point**, so a pin
+on the dog is a place at `distance_cm: 0`. That is a real place, not a degenerate one —
+`place_navigator` checks arrival before it ever considers a heading, so the local sequence is already a
+no-op and the view is what makes the spot recognisable next time.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `settings.place_recognition.views_dir` | `~/.houndmind/places/views` | Where a taught view lands, one `views.json` per directory. The teach route and `place_recognition` read the same key, so a place taught from the console is one the dog can recognise. |
+
+`has_view` in the places file is the catalogue's record that a view was written; `GET /places` also
+publishes `thumb` (the raw 768-byte greyscale thumbnail, base64) read from the views file. Where the two
+disagree both are published as they are — a disagreement a client can see is fixable, one resolved
+silently is not. Forgetting a place does not yet drop its view (#356).
+
+Nothing here moves the dog: the teach route needs `config` (it writes user data), reads a frame that a
+vision module is already publishing, and answers `503` with the reason when there is no frame or no
+OpenCV.
 
 ---
 

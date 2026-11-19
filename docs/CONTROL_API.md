@@ -165,7 +165,7 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/repertoire` | `state:read` | every action this dog can run, with its class and params ([§3](#3-commands)) |
 | `GET` | `/api/v1/routines` | `state:read` | every routine the runner loaded, the files it refused, and the run in progress ([§3](#3-commands)) |
 | `POST` | `/api/v1/routines` | `config` | write one routine file, judged by the loader's own `check_routine`; `?replace=true` to overwrite ([§3](#3-commands)) |
-| `GET` | `/api/v1/places` | `state:read` | every place the file holds, the entries it refused, and the walk in progress ([§8](#8-places)) |
+| `GET` | `/api/v1/places` | `state:read` | every place the file holds (each with `has_view` and, when the views file has one, its 32x24 thumbnail as base64), the entries it refused, and the walk in progress ([§8](#8-places)) |
 | `GET` | `/api/v1/people` | `admin` | enrolled people: ids and names only, never an embedding ([§9](#9-people)) |
 | `POST` | `/api/v1/people` | `admin` | teach one face: `202` with the handle to poll; a refusal lands in `last_enroll` ([§9](#9-people)) |
 | `DELETE` | `/api/v1/people/{id}` | `admin` | forget one person: the embedding and every reference face go, not just the name ([§9](#9-people)) |
@@ -183,6 +183,7 @@ what stops the guard from looking redundant (`#39`).
 | `DELETE` | `/api/v1/places/{id}` | `config` | forget one place by id or name; a second call is `404` ([§8](#8-places)) |
 | `PATCH` | `/api/v1/places/{id}` | `config` | correct a place's `name`, `heading_deg`, `distance_cm` or `anchor`; the `id` cannot change ([§8](#8-places)) |
 | `POST` | `/api/v1/places/{id}/go` | `move` | ask the dog to walk to one place; optional `{"at_anchor": true}` ([§8](#8-places)) |
+| `POST` | `/api/v1/places/teach` | `config` | teach the spot the dog is standing in: one place **and** the camera's view of it, so a photo pin exists ([§8](#8-places)) |
 | `GET` | `/api/v1/mode` | `state:read` | current mode |
 | `POST` | `/api/v1/mode` | `move` | switch `idle` \| `patrol` \| `manual` \| `rest`; a real change retracts every autonomy intent (`AUTONOMY_SOURCES`) the old mode had published, and leaves a client request or a watchdog hold standing (#270) |
 | `GET` | `/api/v1/config` | `config` | effective config, secrets redacted |
@@ -246,6 +247,12 @@ beside `map: null`, and a client that cannot tell it from an empty map draws a r
 
 Every coordinate in `document` is centimetres from the map origin, `[x = left, y = forward]` — the order
 a person tracing a floor plan reads, and the one the console's canvas draws.
+
+`places` is one of the user sections a client writes back through `PUT /map` (M7). A pin is
+`{id, name, x_cm, y_cm, heading_deg, uncertainty_cm}`, where `id` is the **catalogue** place's id: the
+pin is where the spot is drawn, the place is what the dog can be sent to, and the picture is joined on by
+that id from `GET /places` ([§8](#8-places)). A save keeps the pins it was given, like any other section a
+person drew.
 
 **That is not the runtime's order, and both are called `x` and `y` (#347).** The runtime speaks
 `(forward_cm, left_cm)`: the pose (`navigation/odometry.py`), the planner (`mapping/planner.py`) and
@@ -825,7 +832,7 @@ display verbatim — it must never contain a path, a token, or a stack trace.
 ## 8. Places
 
 A place is a named pose a person taught: `{id, name, heading_deg, distance_cm, anchor, confidence,
-created_ts, visits}`. `id` is the slug of the name at creation (`"Living Room"` → `living_room`) and is
+created_ts, visits, has_view}`. `id` is the slug of the name at creation (`"Living Room"` → `living_room`) and is
 what every other route takes. **The id never changes**, including on a rename: goals and the navigator
 address a place by id, so correcting a name must not move the handle out from under a walk that is
 already under way. Nothing infers a place from a scan, and `DELETE` is the only way one disappears.
@@ -836,6 +843,7 @@ already under way. Nothing infers a place from a scan, and `DELETE` is the only 
 | `PATCH /api/v1/places/{id}` | any of `{"name", "heading_deg", "distance_cm", "anchor"}` — omitted fields keep their value | `200 {"place": {...}, "path"}` · `400 {"problems": [...]}` · `404` + `suggestion` · `503` |
 | `DELETE /api/v1/places/{id}` | none — the path segment may be an id **or** a name | `200 {"removed": {...}}` · `404` + `suggestion` · `503` |
 | `POST /api/v1/places/{id}/go` | `{"at_anchor": true}` — optional, see below | `202 {"accepted", "id", "name", "at_anchor"}` · `404` · `409` · `503` |
+| `POST /api/v1/places/teach` | `{"name"}` required; `{"x_cm", "y_cm"}` optional — the pin's point in the document frame | `201 {"place": {...}, "view_path"}` · `400 {"problems": [...]}` or a refused frame · `409 no_pose` · `503` |
 
 `400` bodies carry `problems[]` in the `{path, message, hint}` shape [§2](#2-endpoints)'s config validator already
 uses, so a client shows them without translating: a duplicate name, a heading the format does not
@@ -845,6 +853,30 @@ allow, a name with no characters usable in an id (`"///"` slugs to `""`), or the
 nothing is how a client comes to believe it edited something), and `id` in the body is a `400` that says
 to delete and recreate, because ignoring it would look like success. Renaming onto an existing name is
 the duplicate-name `Problem` a second `POST` would return.
+
+**A place can carry a picture (M7).** `POST /places/teach` is one act with two halves: it creates the
+place the way `POST /places` does — same validator, same `problems[]` — and it saves the camera's view
+of the spot beside it, which is the artefact `navigation/place_recognition.py` matches later
+(`perception/place_views.py`). The body names the place; `x_cm`/`y_cm` are the pin's point in the
+**document** frame and may be left out, which means *here*, where the dog is standing. The stored pose is
+the bearing and range **from the dog to that point**, taken in the runtime frame, so a pin on the dog is a
+place at `distance_cm: 0` — `place_navigator` decides arrival before it ever considers a heading, which is
+what makes such a place walkable rather than a special case. `has_view` is written **after** the picture,
+so it is true only once a view really is on disk.
+
+`503` names which half is missing: no vision module publishing a frame, or no OpenCV on the device. A
+featureless frame is a `400` carrying the reason ("point the camera at something with texture"), and a
+refused name writes no picture at all. If the picture cannot be written after the place exists, the answer
+is `503` **with the place in the body**: the two halves are reported, not merged into a claim that nothing
+happened. `409 no_pose` means there is neither a live pose nor a confirmed position to measure the pin
+from — a bearing from the map's corner is a claim nothing made.
+
+`GET /places` publishes the picture with the place: `thumb` is the 32x24 greyscale thumbnail as base64
+(raw 768 bytes, not an image file — the console builds the pixels), and `null` when the views file has
+none. `has_view` is what the **places file** claims; `thumb` is what the **views file** actually holds.
+Where the two disagree both are published as they are, because a disagreement reported can be fixed and
+one silently resolved cannot. Forgetting a place does not yet drop its view (#356), so a forgotten spot
+can still be recognised by `place_recognition` and named in `localization.reason`.
 
 **Types are not coerced.** `{"heading_deg": true}` is a `400`, not 1.0 — `true` is an `int` in
 Python — and `{"heading_deg": "90"}` is a `400`, not 90 degrees.

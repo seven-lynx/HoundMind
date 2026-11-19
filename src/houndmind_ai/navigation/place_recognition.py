@@ -23,6 +23,7 @@ from typing import Any
 
 from houndmind_ai.core.module import Module
 from houndmind_ai.perception.place_views import (
+    DEFAULT_VIEWS_DIR,
     PlaceView,
     load_views,
     match_frame,
@@ -31,10 +32,6 @@ from houndmind_ai.perception.place_views import (
 logger = logging.getLogger(__name__)
 
 __all__ = ["DEFAULT_MIN_SCORE", "DEFAULT_VIEWS_DIR", "PlaceRecognitionModule"]
-
-#: Where a teach request leaves a view. Beside the places file, so a user who moves
-#: `settings.places.path` finds the views next to it.
-DEFAULT_VIEWS_DIR = "~/.houndmind/places/views"
 
 #: The shipped threshold. ORB on a 320x240 frame separates rooms; anything lower starts calling two
 #: doorways the same room, which is what the two-frame confirmation exists to catch.

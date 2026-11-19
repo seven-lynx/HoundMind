@@ -10,6 +10,22 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **Photo pins and teach-a-place (M7), and a place at zero distance (#313)** — a place could not carry a
+  picture and could not be taught from the map. `POST /places/teach` is one act: it creates the place
+  through the same store (so a duplicate name is the same `problems[]` a `POST /places` body gets) and
+  saves the camera's view of the spot — the 32x24 thumbnail, ORB keypoints and descriptors that
+  `place_recognition` matches later. `save_views` had no caller in `src/` until now. The body's
+  `x_cm`/`y_cm` are the pin's point in the document frame; leaving them out means *here*, so "the dog is
+  here, call it the kitchen" stores `distance_cm: 0` — which `kernel/place.py` refused until this
+  release, even though `place_navigator` already decided arrival before it considered a heading. Every
+  place now carries `has_view`, written **after** the picture lands, and `GET /places` publishes each
+  place's `thumb` (raw 768-byte greyscale, base64) from the views file — additively, so no second route
+  needs a UI caller. The Map panel grows a `places` layer, a `Pin` mode and a **Here** button: click a
+  point, type a name, and the pin is drawn with its picture, unsaved until **Save to device** carries it
+  in the document's `places[]` section. Failures name their half: `503` for no camera frame or no
+  OpenCV, `400` for a blank wall, `409 no_pose` with nothing to measure from. Forgetting a place does not
+  yet drop its view (#356).
+
 - **The map earns its keep — route preview, breadcrumb, health badge (M6), and keep-out becomes a rule
   (#353)** — a room drawn `keep_out` refused nothing: the planner never read `rooms`, so the dog would walk
   through a red-dashed room the user had marked off-limits. `mapping/rooms.py` now answers that question at

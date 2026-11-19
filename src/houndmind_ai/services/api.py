@@ -46,7 +46,7 @@ from houndmind_ai.kernel.commands import (
 )
 from houndmind_ai.kernel.config_schema import Problem, validate_settings_section
 from houndmind_ai.kernel.decisions import DecisionRing
-from houndmind_ai.kernel.place import slug
+from houndmind_ai.kernel.place import Place, slug
 from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.kernel.routine_store import RoutineConflict, RoutineStore, StoreReport
 from houndmind_ai.mapping.home_map import (
@@ -62,6 +62,16 @@ from houndmind_ai.mapping.rooms import (
     keep_out_room_at,
     polyline_in_keep_out,
     room_label,
+)
+from houndmind_ai.perception.place_views import (
+    DEFAULT_VIEWS_DIR,
+    PlaceView,
+    load_views,
+    save_views,
+    thumb_b64,
+    upsert_view,
+    view_from_frame,
+    view_from_jpeg,
 )
 from houndmind_ai.services.auth import (
     AuthError,
@@ -1637,17 +1647,75 @@ def _place_not_found(store: PlaceStore, wanted: str, detail: str) -> web.Respons
     )
 
 
+def _views_dir(plane: ControlPlane) -> Path:
+    """Where taught views live: `settings.place_recognition.views_dir`, else the shipped default.
+
+    The same key `navigation/place_recognition.py` reads, so a place taught here is one it can
+    recognise later. `~` is expanded once, here, because a `Path` handed to `save_views` unexpanded
+    would write a directory literally called `~` in the working directory.
+    """
+    settings = (plane.context.get("settings") or {}).get("place_recognition", {})
+    settings = settings if isinstance(settings, dict) else {}
+    raw = settings.get("views_dir")
+    return Path(raw if isinstance(raw, str) and raw.strip() else DEFAULT_VIEWS_DIR).expanduser()
+
+
+def _view_entry(place: Place, views: dict[str, PlaceView]) -> dict[str, object]:
+    """One place as `GET /places` publishes it: its stored keys, plus the picture when there is one.
+
+    Additive on purpose (M7). `has_view` is what the **places file** claims; `thumb` is what the
+    **views file** actually holds. Where the two disagree both are published as they are — the
+    disagreement is the report, and resolving it silently is how a map stops matching the dog.
+    """
+    entry: dict[str, object] = dict(place.to_dict())
+    view = views.get(place.id)
+    entry["thumb"] = thumb_b64(view) if view is not None else None
+    return entry
+
+
+def _pose_origin(plane: ControlPlane) -> tuple[float, float, float | None] | None:
+    """Where the dog believes it is, in the document frame: `(x_cm, y_cm, heading_deg | None)`.
+
+    The live pose first — that is what `localization` publishes. Then the `dog` section the map
+    file's last correction wrote, because a correction outlives the tier that produced it and is
+    still the most recent thing a human said about where the dog is. `None` when neither exists:
+    a bearing measured from the map's corner is a claim nothing made.
+    """
+    localization = plane.context.get("localization")
+    pose = localization.get("pose") if isinstance(localization, dict) else None
+    if isinstance(pose, dict):
+        forward_cm = _number(pose.get("x"))
+        left_cm = _number(pose.get("y"))
+        if forward_cm is not None and left_cm is not None:
+            doc_x, doc_y = runtime_point_to_document((forward_cm, left_cm))
+            return doc_x, doc_y, _number(pose.get("yaw_deg"))
+    document = _map_document(plane.context) or {}
+    dog = document.get("dog")
+    if isinstance(dog, dict):
+        stored_x = _number(dog.get("x_cm"))
+        stored_y = _number(dog.get("y_cm"))
+        if stored_x is not None and stored_y is not None:
+            return stored_x, stored_y, _number(dog.get("heading_deg"))
+    return None
+
+
 async def _places_list(request: web.Request) -> web.Response:
-    """The catalogue, whatever the file refused, and the walk in progress."""
+    """The catalogue, whatever the file refused, and the walk in progress.
+
+    Each place carries its `has_view` flag and, when the views file holds one, the 32x24 thumbnail
+    as base64 (M7). Additive: a client that has never heard of a pin reads exactly what it read
+    before, and one that has draws the photo the dog will recognise the place by.
+    """
     plane = _plane(request)
     store = _place_store(plane)
     if store is None:
         return _no_places()
     report = store.load()
+    views = {view.place_id: view for view in load_views(_views_dir(plane))}
     return web.json_response(
         {
             "path": str(report.path),
-            "places": [place.to_dict() for place in report.places],
+            "places": [_view_entry(place, views) for place in report.places],
             "refusals": [_problem_dict(problem) for problem in report.refusals],
             "goal": plane.context.get("place_goal"),
         }
@@ -1702,6 +1770,144 @@ async def _places_create(request: web.Request) -> web.Response:
             status=400,
         )
     return web.json_response({"place": place.to_dict()}, status=201)
+
+
+async def _places_teach(request: web.Request) -> web.Response:
+    """Teach the spot the dog is standing in, with the camera's view of it (M7).
+
+    Four things happen in an order that cannot leave a lie behind. The frame is turned into a view
+    **in memory**, so a featureless wall costs nothing; the place is created by the store, so a
+    duplicate name is the same `problems[]` a `POST /places` body gets; the view is written; and
+    `has_view` is flipped **last**, so the flag is true only once a picture really is on disk. A
+    failure after the place exists names which half landed instead of claiming nothing happened.
+
+    `x_cm`/`y_cm` are the pin's point in the **document** frame, like every other point the console
+    sends, and the bearing and range stored in the place are measured from the dog's own pose —
+    because that is the only thing `place_navigator` can walk. A pin under the dog is a place at
+    zero distance: the dog is here, and the view is what recognises it next time.
+    """
+    plane = _plane(request)
+    store = _place_store(plane)
+    if store is None:
+        return _no_places()
+
+    body = await _json_body(request)
+    name = body.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return _bad_place("name must be a non-empty string")
+    # The id the view is filed under, before the place exists to ask. `slug` is exactly the rule
+    # `PlaceStore.add` applies to the same name (`place_store.py::_add`), and if the two ever part
+    # company the flag lands true on a place whose picture is filed elsewhere — which `GET /places`
+    # publishes as `has_view` beside a null `thumb` rather than hiding.
+    place_id = slug(name.strip())
+    if not place_id:
+        return _bad_place("name needs letters, digits, '_' or '-' so the place can be given an id")
+
+    # 1. A view, or a reason. `vision_frame` is the raw array `vision`/`vision_pi4` publish; the
+    #    control plane's camera holds encoded frames and only `vision_pi4` publishes those too, so
+    #    trying both is what keeps a teach working on the Pi 3 path as well.
+    frame = plane.context.get("vision_frame")
+    try:
+        if frame is not None:
+            view = view_from_frame(frame, place_id)
+        else:
+            jpeg, _stamp = plane.camera.latest()
+            if jpeg is None:
+                return web.json_response(
+                    {
+                        "error": "unavailable",
+                        "detail": "no camera frames are being published; enable a vision module "
+                        "to teach a place by its picture",
+                    },
+                    status=503,
+                )
+            view = view_from_jpeg(jpeg, place_id)
+    except ImportError as exc:
+        return web.json_response(
+            {
+                "error": "unavailable",
+                "detail": f"OpenCV is not installed ({exc.name or 'cv2'}); a view needs it",
+            },
+            status=503,
+        )
+    except ValueError as exc:
+        # `view_from_frame` already says what to do about a blank wall, and that sentence is the
+        # point of the refusal — restating it here is how two messages drift apart.
+        return _bad_place(str(exc))
+
+    # 2. Where the pin is, relative to the dog.
+    pin_x = _number(body.get("x_cm"))
+    pin_y = _number(body.get("y_cm"))
+    if (pin_x is None) != (pin_y is None):
+        return _bad_place("x_cm and y_cm must both be numbers, or both be left out")
+    _localization, tier = _localization_of(plane.context)
+    origin = _pose_origin(plane)
+    if origin is None:
+        # No live pose and no confirmed position: a bearing from here is a claim nothing measured.
+        return _no_pose_response(tier)
+    if pin_x is None or pin_y is None:
+        pin_x, pin_y = origin[0], origin[1]
+
+    # `home_map`'s swap, once per point (#347): the pin and the dog are both document points, and
+    # the vector between them is taken in the runtime frame so no reader has to decide which of the
+    # two orders `x` and `y` are in.
+    pin_forward, pin_left = document_point_to_runtime((pin_x, pin_y))
+    dog_forward, dog_left = document_point_to_runtime((origin[0], origin[1]))
+    delta_forward = pin_forward - dog_forward
+    delta_left = pin_left - dog_left
+    distance_cm = math.hypot(delta_forward, delta_left)
+    # A place at zero distance needs no heading: arrival is decided before a turn is ever considered
+    # (`navigation/place_navigator.py`). Keeping the dog's own reading beats inventing a zero.
+    heading_deg = origin[2] if origin[2] is not None else 0.0
+    if distance_cm > 0.0:
+        heading_deg = math.degrees(math.atan2(delta_left, delta_forward))
+
+    places_settings = (plane.context.get("settings") or {}).get("places", {})
+    places_settings = places_settings if isinstance(places_settings, dict) else {}
+    anchor = str(places_settings.get("anchor") or "")
+
+    # 3. The place, judged by the store — the same rules a `POST /places` body meets.
+    place, problems = store.add(
+        name,
+        heading_deg=round(heading_deg, 3),
+        distance_cm=round(distance_cm, 3),
+        anchor=anchor,
+    )
+    if place is None:
+        return web.json_response(
+            {
+                "error": "bad_request",
+                "detail": "the place was refused",
+                "problems": [_problem_dict(problem) for problem in problems],
+            },
+            status=400,
+        )
+
+    # 4. The picture, then the flag.
+    views_dir = _views_dir(plane)
+    try:
+        written = save_views(views_dir, upsert_view(load_views(views_dir), view))
+    except OSError as exc:
+        logger.warning("View for %s not written to %s: %s", place.id, views_dir, exc)
+        return web.json_response(
+            {
+                "error": "unavailable",
+                "detail": f"the place was created but its picture could not be written: {exc}",
+                "place": place.to_dict(),
+            },
+            status=503,
+        )
+
+    flagged, flag_problems = store.update(place.id, has_view=True)
+    if flagged is None:
+        # The view is on disk either way; only the catalogue's record of it is missing, and
+        # `GET /places` shows that as a thumbnail beside `has_view: false` instead of hiding it.
+        logger.warning(
+            "Place %s has a view but its flag was not written: %s", place.id, flag_problems
+        )
+    entry: dict[str, object] = dict((flagged or place).to_dict())
+    entry["thumb"] = thumb_b64(view)
+    return web.json_response({"place": entry, "view_path": str(written)}, status=201)
 
 
 async def _place_delete(request: web.Request) -> web.Response:
@@ -2477,6 +2683,7 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("PATCH", "/places/{id}", "config", _place_update),
     ("DELETE", "/people/{id}", "admin", _people_delete),
     ("POST", "/places/{id}/go", "move", _place_go),
+    ("POST", "/places/teach", "config", _places_teach),
     ("GET", "/mode", "state:read", _mode_get),
     ("POST", "/mode", "move", _mode_post),
     ("GET", "/config", "config", _config_get),

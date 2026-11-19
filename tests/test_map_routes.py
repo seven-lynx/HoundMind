@@ -313,6 +313,40 @@ def test_put_map_keeps_a_room_and_the_surface_painted_over_it(tmp_path) -> None:
     assert body["document"]["rooms"] == rooms
 
 
+def test_put_map_keeps_a_pin_the_console_taught(tmp_path) -> None:
+    """A pin is a `places[]` entry in the existing document, so a save must carry it like a room (M7).
+
+    The place itself lives in the catalogue (`~/.houndmind/places.json`); this is where it is drawn,
+    and a save that dropped it would leave a taught spot with no mark on the map.
+    """
+    pins = [
+        {
+            "id": "kitchen",
+            "name": "Kitchen",
+            "x_cm": 0.0,
+            "y_cm": 300.0,
+            "heading_deg": 0.0,
+            "uncertainty_cm": None,
+        }
+    ]
+    document = wire_document(meta={"rev": 0, "cell_size_cm": 10.0}, places=pins)
+
+    async def scenario() -> tuple[int, dict, dict]:
+        plane, headers, path = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.put(
+                f"{API_PREFIX}/map", headers=headers, json={"document": document}
+            )
+            body = await response.json()
+        return response.status, body, json.loads(path.read_text(encoding="utf-8"))
+
+    status, body, written = asyncio.run(scenario())
+
+    assert status == 200
+    assert written["places"] == pins
+    assert body["document"]["places"] == pins
+
+
 def test_get_map_publishes_the_measured_step_per_surface(tmp_path) -> None:
     """A vocabulary without values is a menu that lies: the panel cannot read the config, so it rides here."""
     odometry = {"surface_step_cm": {"hardwood": 18.4, "carpet": 0, "tile": "nonsense", "rug": -3}}
