@@ -86,7 +86,28 @@ class PlaceRecognitionModule(Module):
             return
         settings = self._section(context)
         self._views_dir = str(settings.get("views_dir") or DEFAULT_VIEWS_DIR)
-        self._views = load_views(self._views_dir)
+        views = load_views(self._views_dir)
+        # A view whose place has been forgotten must not keep recognising it (#356). The catalogue is
+        # `place_store`, published by `place_navigator`, and it is the authority on which places
+        # exist; a hand-edited `views.json` therefore cannot name a place nobody can walk to. An
+        # absent store means "not published yet", not "no places", so nothing is dropped then.
+        store = context.get("place_store")
+        load = getattr(store, "load", None)
+        if callable(load):
+            try:
+                known = {place.id for place in load().places}
+            except Exception:  # noqa: BLE001 - a catalogue that will not load is not a place filter
+                logger.warning("Place catalogue unreadable: views kept unfiltered", exc_info=True)
+            else:
+                orphaned = [view.place_id for view in views if view.place_id not in known]
+                if orphaned:
+                    logger.warning(
+                        "Ignoring %d view(s) for places the catalogue does not hold: %s",
+                        len(orphaned),
+                        ", ".join(sorted(set(orphaned))),
+                    )
+                    views = tuple(view for view in views if view.place_id in known)
+        self._views = views
         context.set("place_match_candidates", [view.place_id for view in self._views])
         if self._views:
             logger.info(

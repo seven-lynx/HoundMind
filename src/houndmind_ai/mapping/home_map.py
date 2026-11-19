@@ -358,7 +358,10 @@ def load_home_map(path: Path) -> HomeMapLoad:
     """
     target = Path(path)
     try:
-        text = target.read_text(encoding="utf-8")
+        # `utf-8-sig` is a superset of `utf-8`: a file written by a Windows editor that adds a
+        # byte-order mark loads instead of failing `json.loads` with "Unexpected UTF-8 BOM".
+        # A backup that a desktop tool has touched is the normal case for user data (#361).
+        text = target.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         return HomeMapLoad(None, reason=f"no home map at {target}")
     except OSError as exc:

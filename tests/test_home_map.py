@@ -97,6 +97,18 @@ def test_malformed_json_names_the_problem(tmp_path) -> None:
     assert result.problems and "not JSON" in result.problems[0]
 
 
+def test_a_byte_order_mark_is_read_not_blamed_on_the_json(tmp_path) -> None:
+    """A backup a Windows editor has saved carries a BOM, and `json.loads` refuses it (#361)."""
+    path = tmp_path / "home_map.json"
+    document = json.dumps({"version": CURRENT_VERSION, "grid": {"cells": {}}})
+    path.write_text("\ufeff" + document, encoding="utf-8")
+
+    result = load_home_map(path)
+
+    assert result.map is not None, result.problems
+    assert result.problems == ()
+
+
 def test_a_newer_version_is_refused_rather_than_guessed(tmp_path) -> None:
     path = tmp_path / "home_map.json"
     _write(path, {"version": CURRENT_VERSION + 1, "grid": {"cells": {}}})

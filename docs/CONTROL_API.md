@@ -897,8 +897,9 @@ from — a bearing from the map's corner is a claim nothing made.
 (raw 768 bytes, not an image file — the console builds the pixels), and `null` when the views file has
 none. `has_view` is what the **places file** claims; `thumb` is what the **views file** actually holds.
 Where the two disagree both are published as they are, because a disagreement reported can be fixed and
-one silently resolved cannot. Forgetting a place does not yet drop its view (#356), so a forgotten spot
-can still be recognised by `place_recognition` and named in `localization.reason`.
+one silently resolved cannot. Forgetting a place drops its view in the same act, and a view whose place
+the catalogue does not hold is ignored at start, so a removed spot cannot still be recognised by
+`place_recognition` and named in `localization.reason`.
 
 **Types are not coerced.** `{"heading_deg": true}` is a `400`, not 1.0 — `true` is an `int` in
 Python — and `{"heading_deg": "90"}` is a `400`, not 90 degrees.

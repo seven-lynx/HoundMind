@@ -8,10 +8,12 @@ into `sys.modules` for `start()`, which only checks that the wheel is importable
 
 from __future__ import annotations
 
+import json
 import sys
 import types
 
 from houndmind_ai.core.runtime import RuntimeContext
+from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.navigation.place_recognition import PlaceRecognitionModule
 from houndmind_ai.perception.place_views import (
     DESCRIPTOR_BYTES,
@@ -29,6 +31,7 @@ __all__ = [
     "test_a_frame_that_cannot_be_read_is_reported",
     "test_a_match_is_published_with_its_score",
     "test_a_refusal_is_published_too",
+    "test_a_view_for_a_forgotten_place_is_not_a_candidate",
     "test_a_visit_is_anchored_once",
     "test_one_frame_does_not_move_the_pose",
     "test_start_publishes_the_candidate_places",
@@ -107,6 +110,29 @@ def test_start_publishes_the_candidate_places(tmp_path, monkeypatch) -> None:
     module.start(ctx)
 
     assert ctx.get("place_match_candidates") == ["kitchen", "hall"]
+
+
+def test_a_view_for_a_forgotten_place_is_not_a_candidate(tmp_path, monkeypatch) -> None:
+    """A view outlives the place it was taught for, and must not keep naming it (#356)."""
+    views_dir = tmp_path / "views"
+    save_views(views_dir, (_view("kitchen"), _view("hall")))
+    places = tmp_path / "places.json"
+    places.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "places": [{"name": "Kitchen", "heading_deg": 0.0, "distance_cm": 100.0}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    ctx = _context(tmp_path)
+    ctx.set("place_store", PlaceStore(str(places)))
+    module = _module(monkeypatch)
+
+    module.start(ctx)
+
+    assert ctx.get("place_match_candidates") == ["kitchen"]
 
 
 def test_a_match_is_published_with_its_score(tmp_path, monkeypatch) -> None:

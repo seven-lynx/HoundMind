@@ -67,6 +67,7 @@ from houndmind_ai.perception.place_views import (
     DEFAULT_VIEWS_DIR,
     PlaceView,
     load_views,
+    remove_views,
     save_views,
     thumb_b64,
     upsert_view,
@@ -1911,7 +1912,14 @@ async def _places_teach(request: web.Request) -> web.Response:
 
 
 async def _place_delete(request: web.Request) -> web.Response:
-    """Forget one place. A second call is a 404, never a silent success (P4 PL6)."""
+    """Forget one place. A second call is a 404, never a silent success (P4 PL6).
+
+    The view goes with it (#356). `PlaceStore.remove` rewrites only the places file, so a view left
+    behind kept `place_recognition` naming a place the user had just removed — a `localization.reason`
+    for a spot that no longer exists, and a stale entry competing in every later `match`. The place is
+    already gone when the second write is attempted, so a failure to drop the view is a warning, not a
+    500 that says nothing happened.
+    """
     plane = _plane(request)
     store = _place_store(plane)
     if store is None:
@@ -1921,6 +1929,11 @@ async def _place_delete(request: web.Request) -> web.Response:
     if removed is None:
         detail = problems[0].message if problems else f"no place with id or name {wanted!r}"
         return _place_not_found(store, wanted, detail)
+    views_dir = _views_dir(plane)
+    try:
+        save_views(views_dir, remove_views(load_views(views_dir), removed.id))
+    except OSError as exc:
+        logger.warning("View for %s not removed from %s: %s", removed.id, views_dir, exc)
     return web.json_response({"removed": removed.to_dict(), "path": str(store.path)})
 
 

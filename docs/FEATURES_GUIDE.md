@@ -497,7 +497,8 @@ no-op and the view is what makes the spot recognisable next time.
 `has_view` in the places file is the catalogue's record that a view was written; `GET /places` also
 publishes `thumb` (the raw 768-byte greyscale thumbnail, base64) read from the views file. Where the two
 disagree both are published as they are — a disagreement a client can see is fixable, one resolved
-silently is not. Forgetting a place does not yet drop its view (#356).
+silently is not. Forgetting a place drops its view in the same act, and a view whose place the catalogue
+does not hold is ignored when `place_recognition` starts.
 
 Nothing here moves the dog: the teach route needs `config` (it writes user data), reads a frame that a
 vision module is already publishing, and answers `503` with the reason when there is no frame or no
