@@ -171,6 +171,30 @@ def test_a_scan_save_keeps_the_rev_and_the_users_sections() -> None:
     assert document["grid"]["cells"] == {"1,1": 2}, "the scan owns the cells"
 
 
+def test_a_scan_save_keeps_the_scale_source() -> None:
+    """A dimension a person typed is user data, and `meta` is the one dict a scan rebuilds (H2)."""
+    previous = {
+        "version": CURRENT_VERSION,
+        "meta": {"rev": 4, "created_at": 1.0, "scale_source": "user"},
+        "cells": {"9,9": 1},
+        "rooms": [{"id": "r1", "name": "kitchen", "size_cm": {"width_cm": 200, "depth_cm": 150}}],
+    }
+
+    document = build_document({"grid": {"cells": {"1,1": 2}}}, {}, now=50.0, previous=previous)
+
+    assert document["meta"]["scale_source"] == "user"
+    assert document["rooms"][0]["size_cm"] == {"width_cm": 200, "depth_cm": 150}
+
+
+def test_a_scan_save_never_invents_a_scale() -> None:
+    """No claim in, no claim out: a snapshot that defaults this would measure rooms nobody measured."""
+    previous = {"version": CURRENT_VERSION, "meta": {"rev": 1, "created_at": 1.0}, "cells": {}}
+
+    document = build_document({"grid": {"cells": {}}}, {}, now=50.0, previous=previous)
+
+    assert "scale_source" not in document["meta"]
+
+
 def test_validate_document_reads_both_spellings_of_the_cells() -> None:
     """The wire is flat and the file nests under `grid`; one validator has to read both (M1)."""
     wire = validate_document({"version": CURRENT_VERSION, "cells": {"1,2": 3}})

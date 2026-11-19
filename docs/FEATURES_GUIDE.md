@@ -361,6 +361,15 @@ uncertainty_cm}` in the document frame, with `id` naming the catalogue entry the
 the place is what the dog can be sent to, the pin is where it is drawn, and the picture comes from
 `GET /places` by that id.
 
+A room also carries the two numbers a person typed when they drew it, as `rooms[].size_cm`
+(`{width_cm, depth_cm}`, document frame). The key is **absent** on a room nobody measured rather
+than zero, and `meta.scale_source` states whether the document as a whole has a real dimension —
+`"user"` when at least one room does, `"unmeasured"` otherwise. One measured room does not measure
+the rest, so a per-room question reads the room. Nothing on the device consumes a size yet,
+deliberately: a dimension the dog has not confirmed is a note on the drawing, not a scale the
+planner may use. The console labels the unmeasured case instead of refusing the save —
+`scale: not measured - run the room to measure it`.
+
 ### Export, import, and a plan on the fridge
 
 The Map panel takes the map out of the console and puts it back (M8). **Export JSON** saves the

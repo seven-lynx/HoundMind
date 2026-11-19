@@ -41,6 +41,7 @@ __all__ = [
     "load_home_map",
     "map_path",
     "runtime_point_to_document",
+    "scale_source_for",
     "validate_document",
     "write_document",
 ]
@@ -112,6 +113,33 @@ def _point2(point: Any) -> tuple[float, float]:
     while len(values) < 2:
         values.append(0.0)
     return _safe_float(values[0], 0.0), _safe_float(values[1], 0.0)
+
+
+def scale_source_for(rooms: Any) -> str:
+    """Whether the document carries a real dimension: `"user"` or `"unmeasured"` (H2).
+
+    A room's size lives beside its polygon as `size_cm: {width_cm, depth_cm}` — the two numbers a
+    person typed when they drew it, not something the dog inferred. Both have to be **positive**,
+    because half a rectangle and a zero are how an unmeasured room would otherwise claim a scale,
+    and H4's discovery run is the only thing allowed to turn a guess into a measurement.
+
+    `validate_document` keeps section entries verbatim, so this is the only place the shape is read.
+    It is a claim about the *document*, though, and a document can hold one measured room beside an
+    unmeasured one: a caller that needs the per-room truth reads `size_cm` itself, which is what the
+    console's label does.
+    """
+    rooms_raw = rooms if isinstance(rooms, Sequence) else ()
+    for room in rooms_raw:
+        if not isinstance(room, Mapping):
+            continue
+        size = room.get("size_cm")
+        if not isinstance(size, Mapping):
+            continue
+        width = _safe_float(size.get("width_cm"), 0.0)
+        depth = _safe_float(size.get("depth_cm"), 0.0)
+        if width > 0 and depth > 0:
+            return "user"
+    return "unmeasured"
 
 
 def map_path(text: Any, default: str = "data/home_map.json") -> Path:
@@ -329,6 +357,13 @@ def build_document(
         "sweep": sweep,
         "samples": _windowed_samples(mapping_state.get("samples"), settings, stamp),
     }
+    # `meta` above is rebuilt from the settings, so the user's own dimension claim is the one key
+    # that has to be carried forward by hand — without it the next 30 s snapshot erases what a
+    # `PUT /map` stamped (H2). An absent claim stays absent: defaulting it here would let the scan
+    # write a measurement nobody took.
+    scale_source = previous_meta.get("scale_source")
+    if isinstance(scale_source, str) and scale_source:
+        document["meta"]["scale_source"] = scale_source
     for name in USER_SECTIONS:
         if isinstance(previous, Mapping) and name in previous:
             document[name] = previous[name]

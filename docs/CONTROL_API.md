@@ -248,6 +248,16 @@ beside `map: null`, and a client that cannot tell it from an empty map draws a r
 Every coordinate in `document` is centimetres from the map origin, `[x = left, y = forward]` — the order
 a person tracing a floor plan reads, and the one the console's canvas draws.
 
+A room carries the two numbers a person typed when they drew it: `rooms[].size_cm` is
+`{width_cm, depth_cm}` in the same document frame, and the key is **absent** on a room nobody
+measured — absent rather than zero, because a zero is a size no one entered and a scale the dog would
+have to invent. `meta.scale_source` is the claim that follows from those rooms: `"user"` when at least
+one of them carries a positive width and depth, `"unmeasured"` otherwise. It is a claim about the
+*document*, so one measured room beside an unmeasured one still reads `"user"`; a client that labels
+a single room reads that room's `size_cm`, which is what the console does. Nothing on the device
+consumes a size yet, deliberately — a dimension the dog has not confirmed is a note on the drawing,
+not a scale a planner or an odometry step may use.
+
 `places` is one of the user sections a client writes back through `PUT /map` (M7). A pin is
 `{id, name, x_cm, y_cm, heading_deg, uncertainty_cm}`, where `id` is the **catalogue** place's id: the
 pin is where the spot is drawn, the place is what the dog can be sent to, and the picture is joined on by
@@ -276,7 +286,9 @@ refused document is a `400` with `problems[]` (the shape `POST /places` already 
 `mapping/home_map.py::validate_document` — the same function that loads the file, which is why a
 document this route accepts is one the next start can read. Writes are atomic, and a scan snapshot
 every `home_map_save_interval_s` carries the user's sections and the `rev` forward, so the map's own
-log never erases an edit.
+log never erases an edit. A save also stamps `meta.scale_source` from the rooms it accepted, in the
+same block as `meta.source`, because that claim is derived on the device rather than sent by the
+console — one writer per fact — and the scan saves above carry it forward like `rev`.
 
 Export and import are those two routes, not a third (M8). The console's **Export JSON** saves the
 `document` `GET /map` served — the wire shape above — and **Import…** reads such a file back and sends

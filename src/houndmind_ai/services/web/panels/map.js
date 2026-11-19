@@ -194,6 +194,12 @@ export const map = {
           <button id="mp-pose-cancel" class="tiny" disabled>Cancel</button>
           <button id="mp-send" class="tiny" disabled>Send route</button>
           <input id="mp-room-name" class="tiny" placeholder="room name" style="width:7.5rem">
+          <label class="tiny" style="margin:0">room size cm
+            <input id="mp-room-width" type="number" min="0" step="5" placeholder="width"
+              style="width:4.5rem;margin-left:.3rem">
+            <input id="mp-room-depth" type="number" min="0" step="5" placeholder="depth"
+              style="width:4.5rem;margin-left:.25rem">
+          </label>
           <select id="mp-surface" class="tiny">
             <option value="hardwood">hardwood</option>
             <option value="carpet">carpet</option>
@@ -324,6 +330,8 @@ export const map = {
     }
 
     const roomName = root.querySelector("#mp-room-name");
+    const roomWidth = root.querySelector("#mp-room-width");
+    const roomDepth = root.querySelector("#mp-room-depth");
     const surfacePick = root.querySelector("#mp-surface");
     const surfaceCm = root.querySelector("#mp-surface-cm");
     const keepOutButton = root.querySelector("#mp-keepout");
@@ -440,6 +448,15 @@ export const map = {
       render();
     }
 
+    // The room's real size, when the person who drew it typed one (H2). Both numbers or nothing:
+    // half a rectangle is not a measurement, and the absent key is what makes the room unmeasured.
+    function roomSize() {
+      const width = Number(roomWidth.value);
+      const depth = Number(roomDepth.value);
+      if (!(width > 0) || !(depth > 0)) return null;
+      return { width_cm: width, depth_cm: depth };
+    }
+
     function closeLasso() {
       if (!lasso || lasso.length < 3) return;
       const polygon = lasso;
@@ -459,17 +476,23 @@ export const map = {
       }
       const count = (document_.rooms || []).length;
       const name = (roomName.value || "").trim() || `Room ${count + 1}`;
+      const size = roomSize();
       const room = {
         id: uid("room"),
         name,
         polygon,
         colour: ROOM_COLOURS[count % ROOM_COLOURS.length],
         keep_out: false,
+        // Omitted rather than zeroed: `size_cm` absent is the room nobody measured, and the server
+        // reads that same absence into `meta.scale_source` (H2).
+        ...(size ? { size_cm: size } : {}),
       };
       pushHistory();
       document_.rooms = [...(document_.rooms || []), room];
       selected = { kind: "room", item: room };
       roomName.value = "";
+      roomWidth.value = "";
+      roomDepth.value = "";
       error.textContent = "";
       markDirty(true);
       refreshKeepOut();
@@ -1047,9 +1070,21 @@ export const map = {
         ctx.font = "600 12px ui-sans-serif, system-ui";
         ctx.textAlign = "center";
         ctx.fillText(room.name || "room", sx, sy);
+        // H2: a room nobody measured says so on the drawing rather than leaving the save to imply a
+        // scale the dog has not discovered. The per-room field is the truth here, not
+        // `meta.scale_source`, which is only the document-wide claim.
+        ctx.font = "10px ui-sans-serif, system-ui";
+        const size = room.size_cm;
+        const measured = Boolean(size) && Number(size.width_cm) > 0 && Number(size.depth_cm) > 0;
+        ctx.fillText(
+          measured
+            ? `${size.width_cm} x ${size.depth_cm} cm`
+            : "scale: not measured - run the room to measure it",
+          sx,
+          sy + 12
+        );
         if (room.keep_out) {
-          ctx.font = "10px ui-sans-serif, system-ui";
-          ctx.fillText("keep out", sx, sy + 12);
+          ctx.fillText("keep out", sx, sy + 24);
         }
       }
     }

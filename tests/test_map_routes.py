@@ -362,6 +362,92 @@ def test_put_map_keeps_a_room_and_the_surface_painted_over_it(tmp_path) -> None:
     assert body["document"]["rooms"] == rooms
 
 
+def test_put_map_marks_an_unmeasured_room_scale(tmp_path) -> None:
+    """A room drawn without width x depth saves normally, and the document admits it (H2).
+
+    The requirement is the save, not the refusal: a console that refused an unmeasured room would
+    make H4's discovery run impossible to start from a fresh map.
+    """
+    rooms = [
+        {
+            "id": "room_1",
+            "name": "kitchen",
+            "keep_out": False,
+            "polygon": [[0, 0], [200, 0], [200, 150], [0, 150]],
+        }
+    ]
+    document = wire_document(rooms=rooms)
+
+    async def scenario() -> tuple[int, dict, dict]:
+        plane, headers, path = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.put(
+                f"{API_PREFIX}/map", headers=headers, json={"document": document}
+            )
+            body = await response.json()
+        return response.status, body, json.loads(path.read_text(encoding="utf-8"))
+
+    status, body, written = asyncio.run(scenario())
+
+    assert status == 200, body
+    assert "size_cm" not in written["rooms"][0], "unmeasured is an absent key, not a zero"
+    assert written["meta"]["scale_source"] == "unmeasured"
+    assert body["document"]["meta"]["scale_source"] == "unmeasured"
+
+
+def test_put_map_keeps_a_measured_room_and_marks_the_scale(tmp_path) -> None:
+    """The two numbers a person typed round-trip verbatim, and the document claims a real size (H2)."""
+    size_cm = {"width_cm": 320.0, "depth_cm": 240.0}
+    rooms = [
+        {
+            "id": "room_1",
+            "name": "kitchen",
+            "size_cm": size_cm,
+            "polygon": [[0, 0], [320, 0], [320, 240], [0, 240]],
+        }
+    ]
+    document = wire_document(rooms=rooms)
+
+    async def scenario() -> tuple[int, dict, dict]:
+        plane, headers, path = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.put(
+                f"{API_PREFIX}/map", headers=headers, json={"document": document}
+            )
+            body = await response.json()
+        return response.status, body, json.loads(path.read_text(encoding="utf-8"))
+
+    status, body, written = asyncio.run(scenario())
+
+    assert status == 200, body
+    assert written["rooms"][0]["size_cm"] == size_cm
+    assert written["meta"]["scale_source"] == "user"
+
+
+def test_a_v2_map_without_a_scale_still_loads(tmp_path) -> None:
+    """A file written before H2 carries neither field, and reading it is not a problem (H2)."""
+    path = tmp_path / "home_map.json"
+    write_document(
+        path,
+        {
+            "version": 2,
+            "meta": {"rev": 2, "cell_size_cm": 10.0},
+            "grid": {"cells": {"0,0": 1}},
+            "sweep": {"0": 120.0},
+            "rooms": [{"id": "r1", "name": "hall", "polygon": [[0, 0], [100, 0], [100, 100]]}],
+        },
+    )
+
+    loaded = load_home_map(path)
+
+    assert loaded.map is not None, loaded.problems
+    assert not loaded.problems
+    assert loaded.map.sections["rooms"] == [
+        {"id": "r1", "name": "hall", "polygon": [[0, 0], [100, 0], [100, 100]]}
+    ]
+    assert "scale_source" not in loaded.map.meta
+
+
 def test_put_map_keeps_a_pin_the_console_taught(tmp_path) -> None:
     """A pin is a `places[]` entry in the existing document, so a save must carry it like a room (M7).
 

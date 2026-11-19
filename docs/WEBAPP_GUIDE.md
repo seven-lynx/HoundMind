@@ -406,6 +406,13 @@ half-drawn room left behind when the tab closes. A closed room takes the name in
 `Room N` when it is empty, and the next colour from a five-colour cycle; a closed surface takes the
 `Surface` picker's value as both its name and its `step_scale`.
 
+The two boxes beside `room name` take that room's real `width` and `depth` in centimetres. Both or
+neither: half a rectangle is not a measurement, and a room drawn with neither is simply unmeasured —
+the save is accepted, and the drawing labels it
+`scale: not measured - run the room to measure it` under the name. That label reads the room's own
+`size_cm`, never the document-wide `meta.scale_source`, because one measured room does not measure
+the rest of the house.
+
 `keep-out` acts on the room you have **selected** — in `View`, a click that does not pan selects the room
 under the cursor (it gets an amber outline), and the button then reads `keep-out: on` or `off` and
 toggles it. A keep-out room is drawn with a dashed red edge. `Delete` removes a room or a surface you

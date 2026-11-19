@@ -10,6 +10,20 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A room remembers its real size, and a room without one still saves (H2)** — the Map panel asked
+  for a name and a polygon, so a drawn room had no dimension and nothing could say how big the kitchen
+  was. A room now carries `size_cm: {width_cm, depth_cm}` when the person drawing it typed the two
+  numbers, and the key is **absent** rather than zeroed when they did not: an unmeasured room saves
+  normally, and the drawing labels it `scale: not measured - run the room to measure it` under its
+  name instead of the console refusing the edit. `PUT /map` derives `meta.scale_source` — `"user"`
+  when at least one accepted room carries a positive width and depth, `"unmeasured"` otherwise — in
+  the same block that stamps `meta.source`, and `build_document` carries that claim forward so a
+  30-second scan snapshot cannot rebuild it away with the rest of `meta`.
+  `mapping/home_map.py::scale_source_for` is the one place the shape is read, and `validate_document`
+  keeps room entries verbatim as it already did, so a file written before this change loads with both
+  fields absent. Nothing on the device consumes a size yet, deliberately: a dimension the dog has not
+  confirmed is a note on the drawing, not a scale the planner or an odometry step may use.
+
 - **The dog can name the room it is in (H1)** — `rooms` were drawn in the console and read only by the
   keep-out refusal, so nothing could answer "which room am I in" even with a good pose. `mapping/rooms.py`
   gains `room_at` (any room, not only keep-out; first match wins, document frame, the same ray cast) and
