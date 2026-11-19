@@ -56,7 +56,7 @@ __all__ = [
 ]
 
 # The keys a place may carry, in the order `robot-pet-design.md` §6.3 writes them. `id` first because
-# it is what a client stores; `created_ts` and `visits` last because they are bookkeeping.
+# it is what a client stores; `created_ts`, `visits` and `has_view` last because they are bookkeeping.
 PLACE_KEYS: tuple[str, ...] = (
     "id",
     "name",
@@ -66,6 +66,7 @@ PLACE_KEYS: tuple[str, ...] = (
     "confidence",
     "created_ts",
     "visits",
+    "has_view",
 )
 
 # The anchor every place starts with: the sonar baseline the mapper already samples. A free string
@@ -139,6 +140,10 @@ class Place:
     confidence: float | None = None
     created_ts: float = 0.0
     visits: int = 0
+    # The catalogue's record that a camera view was written for this place (M7). The view itself
+    # lives beside the places file (`perception/place_views.py`, one `views.json` per directory), and
+    # that file is the evidence: this flag says only what the catalogue believes about it.
+    has_view: bool = False
 
     def to_dict(self) -> dict[str, object]:
         """The stored form: every key of `PLACE_KEYS`, so a round-trip loses nothing."""
@@ -151,6 +156,7 @@ class Place:
             "confidence": self.confidence,
             "created_ts": self.created_ts,
             "visits": self.visits,
+            "has_view": self.has_view,
         }
 
     def after_visit(self, *, arrived: bool, step: float = DEFAULT_CONFIDENCE_STEP) -> Place:
@@ -276,12 +282,15 @@ def check_place_entry(entry: Any, index: int) -> list[Problem]:
                 f"expected a number of centimetres, got {entry.get('distance_cm')!r}",
             )
         )
-    elif not 0.0 < distance <= MAX_DISTANCE_CM:
+    elif not 0.0 <= distance <= MAX_DISTANCE_CM:
+        # Zero is a place the dog was taught where it stands (M7): a photo pin is taken *at* the
+        # place, and `place_navigator` arrives at one before it ever asks which way to face. Negative
+        # is still not a range, and past the bound it is a typo rather than a measurement.
         problems.append(
             Problem(
                 f"{path}.distance_cm",
-                f"{distance!r} is outside 0..{MAX_DISTANCE_CM:g} cm; a place is taught from where "
-                "the dog stands, so this is a typo rather than a measurement",
+                f"{distance!r} is outside 0..{MAX_DISTANCE_CM:g} cm; a place may be taught where "
+                "the dog stands, but a negative range is not a distance",
             )
         )
 
@@ -326,6 +335,12 @@ def check_place_entry(entry: Any, index: int) -> list[Problem]:
     ):
         problems.append(Problem(f"{path}.visits", f"expected a whole number >= 0, got {visits!r}"))
 
+    # A flag, not a count: `true`/`false` is the whole vocabulary, because the view it names is a
+    # file this store does not own (`perception/place_views.py`) and a number here would imply one.
+    has_view = entry.get("has_view")
+    if has_view is not None and not isinstance(has_view, bool):
+        problems.append(Problem(f"{path}.has_view", f"expected true or false, got {has_view!r}"))
+
     return problems
 
 
@@ -364,6 +379,7 @@ def parse_place(entry: Any) -> Place | None:
         confidence=_safe_float(confidence, 0.0) if confidence is not None else None,
         created_ts=_safe_float(entry.get("created_ts"), 0.0),
         visits=_safe_int(entry.get("visits"), 0),
+        has_view=entry.get("has_view") is True,
     )
 
 

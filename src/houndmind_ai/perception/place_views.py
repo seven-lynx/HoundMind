@@ -13,9 +13,9 @@ Two rules shape this module.
    threshold, so "no idea, best 0.12" is visible instead of silent. The caller decides; this module
    never upgrades a guess to a place.
 
-cv2 is imported **inside** `extract`: `lite` does not carry OpenCV, and `perception/__init__.py` must
-stay importable on an install without it. The scoring and the refusal rules are plain Python, which is
-also why they are testable on a workstation with no wheel at all.
+cv2 is imported **inside** `extract` and `view_from_jpeg`: `lite` does not carry OpenCV, and
+`perception/__init__.py` must stay importable on an install without it. The scoring and the refusal
+rules are plain Python, which is also why they are testable on a workstation with no wheel at all.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = [
+    "DEFAULT_VIEWS_DIR",
     "DESCRIPTOR_BYTES",
     "MATCH_BITS",
     "MIN_DESCRIPTORS",
@@ -41,7 +42,10 @@ __all__ = [
     "match_frame",
     "save_views",
     "score",
+    "thumb_b64",
+    "upsert_view",
     "view_from_frame",
+    "view_from_jpeg",
     "views_path",
 ]
 
@@ -61,6 +65,12 @@ MIN_DESCRIPTORS = 8
 MATCH_BITS = 64
 
 VIEWS_FILENAME = "views.json"
+
+# Where a teach request leaves a view, and where `place_recognition` looks for one. Beside the places
+# file, so a user who moves `settings.places.path` finds the views next to it. It lives here — with
+# the format, not with a consumer — because the control plane writes views too and `services` may not
+# import `navigation` (`services/api.py` states that rule where it compares `place_goal` as a string).
+DEFAULT_VIEWS_DIR = "~/.houndmind/places/views"
 
 
 def views_path(directory: str | Path) -> Path:
@@ -179,10 +189,30 @@ def load_views(directory: str | Path) -> tuple[PlaceView, ...]:
     return tuple(views)
 
 
+def upsert_view(views: tuple[PlaceView, ...], view: PlaceView) -> tuple[PlaceView, ...]:
+    """`views` with `view` in place of every view for the same place, or appended.
+
+    `save_views` writes the whole file, so a second teach that appended blindly would duplicate the
+    one view a place has. One view per place is the file's shape: a re-teach replaces what the place
+    looked like from there, and a place taught before still keeps its own view.
+    """
+    kept = tuple(existing for existing in views if existing.place_id != view.place_id)
+    return kept + (view,)
+
+
+def thumb_b64(view: PlaceView) -> str:
+    """The 32x24 thumbnail as base64, for a listing that draws it (#313).
+
+    Published beside a place rather than inside it: the places file carries the flag
+    (`kernel/place.py::PLACE_KEYS`), the views file carries the image, and a client joins them by id.
+    """
+    return _b64(view.thumb)
+
+
 def extract(
     frame: Any, *, max_features: int = 200
 ) -> tuple[bytes, tuple[tuple[float, float], ...], tuple[bytes, ...]]:
-    """The three parts of a view from one frame. The only place OpenCV is used.
+    """The three parts of a view from one frame. OpenCV's feature extraction, and only here.
 
     `ImportError` is left to the caller: a module disables with a reason, a tool exits non-zero.
     """
@@ -202,6 +232,27 @@ def extract(
     points = tuple((float(kp.pt[0]), float(kp.pt[1])) for kp in keypoints or ())
     rows = tuple(bytes(row) for row in (descriptors if descriptors is not None else []))
     return thumb.astype("uint8").tobytes(), points, rows
+
+
+def view_from_jpeg(data: Any, place_id: str, *, now: float | None = None) -> PlaceView:
+    """A view of `place_id` from encoded JPEG bytes, or `ValueError` when they are not an image.
+
+    `view_from_frame` takes the raw array, which is what `vision_frame` carries. The control plane's
+    camera holds **encoded** frames (`services/camera.py::CameraService.latest`), so this decodes
+    them here rather than in an HTTP handler — the same reason `extract` imports OpenCV itself.
+    """
+    if not isinstance(data, (bytes, bytearray)) or not data:
+        # Checked before the import: empty bytes are not an OpenCV problem, and a `lite` install
+        # should hear that rather than "OpenCV is not installed".
+        raise ValueError("a view needs an encoded frame and got nothing")
+
+    import cv2  # imported here so `lite` can import this module without OpenCV
+    import numpy as np
+
+    array = cv2.imdecode(np.frombuffer(bytes(data), dtype="uint8"), cv2.IMREAD_COLOR)
+    if array is None:
+        raise ValueError("those bytes are not an image OpenCV can read")
+    return view_from_frame(array, place_id, now=now)
 
 
 def view_from_frame(frame: Any, place_id: str, *, now: float | None = None) -> PlaceView:

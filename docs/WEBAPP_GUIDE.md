@@ -301,6 +301,11 @@ flight.
 checkbox: a walk across the room is refused unless you assert the dog is standing at the anchor,
 because nothing on the device can verify that pose. A refused body lists every problem, not one.
 
+A place taught from the **Map** panel — a pin — arrives here too, in the same table and the same
+catalogue: its heading and distance were measured from where the dog stood to the point that was
+clicked. This panel has no camera, so it cannot give a place a picture; teaching it from the map is
+what does that.
+
 **Needs** — `config` to teach or forget, `move` to go.
 
 **If it looks wrong** — "nothing in flight" is the normal state, not an error. A `503` means
@@ -374,7 +379,7 @@ Solid squares are floor (two or more hits in a cell); outlines are ground seen *
 maybe rather than a floor, and the two are drawn differently on purpose. A truncated map says
 `(truncated)`: an empty corner is "not sent", not "not mapped".
 
-**You can** toggle the four layers (`cells`, `rooms`, `walls`, `surfaces`), `Fit` the map to the
+**You can** toggle the five layers (`cells`, `rooms`, `walls`, `surfaces`, `places`), `Fit` the map to the
 canvas, zoom with `+`/`-` or the wheel, and **drag to pan**. The view — scale and centre — is kept in
 `localStorage` under `houndmind.map.view`, so a reload comes back where you left it; `Fit` throws it
 away. It polls every four seconds while visible, and **never while an edit is unsaved**.
@@ -431,6 +436,22 @@ position starts it again, because the points before a correction are in an origi
 A preview is what a keep-out room finally refuses: a goal inside one answers `goal_in_keep_out` and a walk
 that crosses one `route_in_keep_out`, both naming the room. A dog already standing inside a keep-out room is
 still allowed to plan its way out — the room keeps the dog out, it does not trap it.
+
+**Pins: name the spot, and see its picture (M7).** `Pin` teaches a place. Click a point on the map, type a
+name, and the device answers with the new place **and the camera's picture of it**: the panel draws a ring
+with the name beside it and the 32x24 thumbnail above, and `GET /places` is where the picture comes from
+(joined by the place's id). **Here** does the same at the dog's own position — "the dog is here, call it
+the kitchen" — which is a place at zero distance, so asking the dog to go there arrives at once.
+
+The pin itself is a `places[]` entry in this document, so it is **unsaved** until **Save to device**, like
+every other edit here; `Undo` takes it back. `Delete` removes a pin from the map and leaves the place in
+the catalogue, where `Places` is the panel that can Forget it. The `places` layer toggles the whole pin
+layer, and the legend counts them.
+
+The device needs three things for a pin to work, and each one fails with its own sentence: a vision module
+publishing frames (`503 no camera frames are being published`), OpenCV on the device (`503 OpenCV is not
+installed`), and something with texture in view — a blank wall answers `400` and says to point the camera
+at something else. Teaching needs `config`, not `move`: it writes user data and moves nothing.
 
 
 The chip beside the surface picker is the point of the whole exercise: `18.4 cm measured` when

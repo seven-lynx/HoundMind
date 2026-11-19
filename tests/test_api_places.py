@@ -16,11 +16,21 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from houndmind_ai.core.config import load_config
 from houndmind_ai.kernel.commands import CommandBus
 from houndmind_ai.kernel.place_store import PlaceStore
+from houndmind_ai.perception.place_views import (
+    DESCRIPTOR_BYTES,
+    MIN_DESCRIPTORS,
+    THUMB_H,
+    THUMB_W,
+    PlaceView,
+    load_views,
+    save_views,
+)
 from houndmind_ai.services.api import API_PREFIX, ControlPlane, create_app
 from houndmind_ai.services.settings import ApiSettings
 
@@ -46,12 +56,24 @@ def place_model(**overrides) -> dict:
     return body
 
 
-def plane_for(tmp_path: Path, *places: dict, with_navigator: bool = True) -> ControlPlane:
-    """A control plane whose context carries a store over a real file, as the navigator publishes it."""
+def plane_for(
+    tmp_path: Path, *places: dict, with_navigator: bool = True, views_dir: Path | None = None
+) -> ControlPlane:
+    """A control plane whose context carries a store over a real file, as the navigator publishes it.
+
+    `views_dir` defaults inside `tmp_path` on purpose: `GET /places` and `POST /places/teach` read and
+    write that directory, and a test that used the shipped default would be reading (and writing) the
+    developer's own `~/.houndmind`.
+    """
     path = tmp_path / "places.json"
     if places:
         path.write_text(json.dumps({"version": 1, "places": list(places)}), encoding="utf-8")
-    context = DummyContext(load_config().settings)
+    base = load_config().settings
+    settings = dict(base)
+    recognition = dict(base.get("place_recognition") or {})
+    recognition["views_dir"] = str(tmp_path / "views" if views_dir is None else views_dir)
+    settings["place_recognition"] = recognition
+    context = DummyContext(settings)
     if with_navigator:
         context.set("place_store", PlaceStore(str(path)))
     api_settings = ApiSettings(
@@ -417,4 +439,256 @@ def test_a_patch_without_the_navigator_is_a_503(tmp_path) -> None:
         assert body["error"] == "unavailable"
 
     asyncio.run(scenario())
+
+
+# ---- M7: photo pins and teach-a-place ---------------------------------------
+
+
+def _picture(place_id: str) -> PlaceView:
+    """A view with synthetic descriptors, the way `test_place_recognition.py` stands in for ORB.
+
+    OpenCV is not installed in every development venv, and the ORB path itself is covered by
+    `tests/test_place_views.py` under `importorskip`. What these tests are about is the wiring: which
+    frame was read, where the view was filed, and what reached the places file.
+    """
+    return PlaceView(
+        place_id=place_id,
+        created_at=1.0,
+        thumb=bytes(THUMB_W * THUMB_H),
+        keypoints=tuple((0.0, float(index)) for index in range(MIN_DESCRIPTORS)),
+        descriptors=tuple(bytes([index]) * DESCRIPTOR_BYTES for index in range(MIN_DESCRIPTORS)),
+    )
+
+
+def _standing_at(plane: ControlPlane, forward_cm: float = 100.0, heading: float = 0.0) -> None:
+    """Publish a live pose the way `localization` does: runtime frame, `(x = forward, y = left)`."""
+    plane.context.set(
+        "localization",
+        {"tier": "dead_reckoning", "pose": {"x": forward_cm, "y": 0.0, "yaw_deg": heading}},
+    )
+
+
+def _stub_picture(monkeypatch) -> None:
+    """Make the extractor answer with a view for whichever place id it is asked about."""
+    monkeypatch.setattr(
+        "houndmind_ai.services.api.view_from_frame",
+        lambda _frame, place_id: _picture(place_id),
+    )
+
+
+def test_teach_writes_the_place_and_files_its_picture(tmp_path, monkeypatch) -> None:
+    """One act: the place in the catalogue, and the view `place_recognition` will match (M7)."""
+    _stub_picture(monkeypatch)
+
+    async def scenario() -> tuple[int, dict]:
+        plane = plane_for(tmp_path)
+        plane.context.set("vision_frame", b"frame")
+        _standing_at(plane)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/places/teach",
+                headers=auth(plane),
+                json={"name": "Kitchen", "x_cm": 0.0, "y_cm": 300.0},
+            )
+            return response.status, await response.json()
+
+    status, body = asyncio.run(scenario())
+
+    assert status == 201
+    place = body["place"]
+    assert place["id"] == "kitchen"
+    assert place["has_view"] is True
+    assert place["thumb"], "the panel draws the picture from the answer"
+    # The pin is a document point; the place is the vector from the dog, in the runtime frame.
+    assert place["distance_cm"] == pytest.approx(200.0)
+    assert place["heading_deg"] == pytest.approx(0.0)
+    (view,) = load_views(Path(body["view_path"]).parent)
+    assert view.place_id == "kitchen"
+    assert stored(tmp_path)[0]["has_view"] is True
+
+
+def test_teaching_where_the_dog_stands_is_a_place_at_zero_distance(tmp_path, monkeypatch) -> None:
+    """The dog is here, call it the kitchen: no point in the body means the dog's own (M7)."""
+    _stub_picture(monkeypatch)
+
+    async def scenario() -> tuple[int, dict]:
+        plane = plane_for(tmp_path)
+        plane.context.set("vision_frame", b"frame")
+        _standing_at(plane, forward_cm=250.0, heading=90.0)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/places/teach", headers=auth(plane), json={"name": "Kitchen"}
+            )
+            return response.status, await response.json()
+
+    status, body = asyncio.run(scenario())
+
+    assert status == 201
+    assert body["place"]["distance_cm"] == 0.0
+    # Arrival is decided before a turn is considered, so the heading of a place at zero distance is
+    # the dog's own reading rather than an invented zero.
+    assert body["place"]["heading_deg"] == pytest.approx(90.0)
+
+
+def test_teach_without_a_camera_is_a_503_and_writes_nothing(tmp_path) -> None:
+    async def scenario() -> tuple[int, dict]:
+        plane = plane_for(tmp_path)
+        _standing_at(plane)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/places/teach", headers=auth(plane), json={"name": "Kitchen"}
+            )
+            return response.status, await response.json()
+
+    status, body = asyncio.run(scenario())
+
+    assert status == 503
+    assert body["error"] == "unavailable"
+    assert "vision" in body["detail"]
+    assert stored(tmp_path) == [], "no camera is not a reason to leave a place behind"
+
+
+def test_teach_names_the_wheel_that_is_missing(tmp_path, monkeypatch) -> None:
+    """A `lite` install has no OpenCV; that is a 503 naming the package, not a traceback."""
+
+    def no_wheel(_frame, _place_id):
+        raise ImportError("No module named 'cv2'", name="cv2")
+
+    monkeypatch.setattr("houndmind_ai.services.api.view_from_frame", no_wheel)
+
+    async def scenario() -> tuple[int, dict]:
+        plane = plane_for(tmp_path)
+        plane.context.set("vision_frame", b"frame")
+        _standing_at(plane)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/places/teach", headers=auth(plane), json={"name": "Kitchen"}
+            )
+            return response.status, await response.json()
+
+    status, body = asyncio.run(scenario())
+
+    assert status == 503
+    assert "cv2" in body["detail"]
+    assert stored(tmp_path) == []
+
+
+def test_a_featureless_frame_is_refused_before_anything_is_written(tmp_path, monkeypatch) -> None:
+    """The refusal is `view_from_frame`'s own sentence, which says what to do about a blank wall."""
+
+    def blank(_frame, _place_id):
+        raise ValueError(
+            "a view needs at least 8 descriptors and this frame gave 0: point the camera at "
+            "something with texture"
+        )
+
+    monkeypatch.setattr("houndmind_ai.services.api.view_from_frame", blank)
+
+    async def scenario() -> tuple[int, dict]:
+        plane = plane_for(tmp_path)
+        plane.context.set("vision_frame", b"blank")
+        _standing_at(plane)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/places/teach", headers=auth(plane), json={"name": "Kitchen"}
+            )
+            return response.status, await response.json()
+
+    status, body = asyncio.run(scenario())
+
+    assert status == 400
+    assert "texture" in body["detail"]
+    assert stored(tmp_path) == []
+    assert not (tmp_path / "views" / "views.json").exists()
+
+
+def test_a_refused_name_files_no_picture(tmp_path, monkeypatch) -> None:
+    """The store owns the catalogue rules, and a duplicate must not leave a view behind either."""
+    _stub_picture(monkeypatch)
+
+    async def scenario() -> tuple[int, dict]:
+        plane = plane_for(tmp_path, place_model())
+        plane.context.set("vision_frame", b"frame")
+        _standing_at(plane)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            # `Kitchen` is already in the file; the store refuses the second one by name.
+            response = await client.post(
+                f"{API_PREFIX}/places/teach", headers=auth(plane), json={"name": "Kitchen"}
+            )
+            return response.status, await response.json()
+
+    status, body = asyncio.run(scenario())
+
+    assert status == 400
+    assert body["problems"], "a refusal a client can show a user"
+    assert not (tmp_path / "views" / "views.json").exists()
+    assert len(stored(tmp_path)) == 1
+    assert not stored(tmp_path)[0].get("has_view"), "the file was not rewritten at all"
+
+
+def test_teach_with_no_position_to_measure_from_is_a_409(tmp_path, monkeypatch) -> None:
+    """A bearing from a dog that cannot place itself is a claim nothing measured."""
+    _stub_picture(monkeypatch)
+
+    async def scenario() -> tuple[int, dict]:
+        plane = plane_for(tmp_path)
+        plane.context.set("vision_frame", b"frame")
+        # No `localization` and no `document.dog`: there is nothing to measure the pin from.
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/places/teach",
+                headers=auth(plane),
+                json={"name": "Kitchen", "x_cm": 10.0, "y_cm": 10.0},
+            )
+            return response.status, await response.json()
+
+    status, body = asyncio.run(scenario())
+
+    assert status == 409
+    assert body["error"] == "no_pose"
+    assert stored(tmp_path) == []
+
+
+def test_teach_needs_the_config_scope(tmp_path, monkeypatch) -> None:
+    """A token that may read the catalogue must not be able to teach a place."""
+    _stub_picture(monkeypatch)
+
+    async def scenario() -> int:
+        plane = plane_for(tmp_path)
+        plane.context.set("vision_frame", b"frame")
+        _standing_at(plane)
+        token, _principal = plane.authorizer.issue_client_token("Phone", scopes=["state:read"])
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.post(
+                f"{API_PREFIX}/places/teach",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"name": "Kitchen"},
+            )
+        return response.status
+
+    assert asyncio.run(scenario()) == 403
+
+
+def test_the_catalogue_publishes_the_picture_beside_the_flag(tmp_path) -> None:
+    """`has_view` is the places file's claim and `thumb` is the views file's evidence."""
+    save_views(tmp_path / "views", (_picture("kitchen"),))
+
+    async def scenario() -> dict:
+        plane = plane_for(
+            tmp_path,
+            place_model(has_view=True),
+            place_model(name="Hall", id="hall", has_view=True),
+        )
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.get(f"{API_PREFIX}/places", headers=auth(plane))
+            return await response.json()
+
+    body = asyncio.run(scenario())
+
+    by_id = {place["id"]: place for place in body["places"]}
+    assert by_id["kitchen"]["has_view"] is True
+    assert by_id["kitchen"]["thumb"], "the picture is what the map panel draws"
+    # A flag with no picture is published as exactly that, not quietly corrected in either direction.
+    assert by_id["hall"]["has_view"] is True
+    assert by_id["hall"]["thumb"] is None
 

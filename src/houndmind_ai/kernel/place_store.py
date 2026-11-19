@@ -182,6 +182,7 @@ class PlaceStore:
         distance_cm: float,
         anchor: str = DEFAULT_ANCHOR,
         confidence: float | None = None,
+        has_view: bool = False,
     ) -> tuple[Place | None, tuple[Problem, ...]]:
         """Create one place and persist it, or return the reasons it was refused.
 
@@ -194,6 +195,7 @@ class PlaceStore:
                 distance_cm=distance_cm,
                 anchor=anchor,
                 confidence=confidence,
+                has_view=has_view,
             )
 
     def _add(
@@ -204,6 +206,7 @@ class PlaceStore:
         distance_cm: float,
         anchor: str = DEFAULT_ANCHOR,
         confidence: float | None = None,
+        has_view: bool = False,
     ) -> tuple[Place | None, tuple[Problem, ...]]:
         """The unlocked body of `add`; call `add`.
 
@@ -232,6 +235,7 @@ class PlaceStore:
             anchor=anchor.strip() if isinstance(anchor, str) and anchor.strip() else DEFAULT_ANCHOR,
             confidence=confidence,
             created_ts=self._clock(),
+            has_view=has_view,
         )
         document = [place.to_dict() for place in report.places]
         document.append(candidate.to_dict())
@@ -275,6 +279,7 @@ class PlaceStore:
         heading_deg: float | None = None,
         distance_cm: float | None = None,
         anchor: str | None = None,
+        has_view: bool | None = None,
     ) -> tuple[Place | None, tuple[Problem, ...]]:
         """Correct one place and persist it, or return the reasons it was refused (#173).
 
@@ -294,6 +299,7 @@ class PlaceStore:
                 heading_deg=heading_deg,
                 distance_cm=distance_cm,
                 anchor=anchor,
+                has_view=has_view,
             )
 
     def _update(
@@ -304,6 +310,7 @@ class PlaceStore:
         heading_deg: float | None,
         distance_cm: float | None,
         anchor: str | None,
+        has_view: bool | None,
     ) -> tuple[Place | None, tuple[Problem, ...]]:
         """The unlocked body of `update`; call `update`."""
         report = self.load()
@@ -327,6 +334,8 @@ class PlaceStore:
             corrected = replace(
                 corrected, anchor=anchor.strip() if anchor.strip() else DEFAULT_ANCHOR
             )
+        if has_view is not None:
+            corrected = replace(corrected, has_view=has_view)
         if corrected == target:
             # A no-op edit is still a 200: the client asked for a state the file already has, and
             # writing the same bytes back would only churn `created_ts`-adjacent metadata.
