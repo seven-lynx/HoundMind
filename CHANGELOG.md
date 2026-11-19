@@ -10,6 +10,22 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A camera clip every host can replay, and a check that says whether it is one (SLAM ladder S1)** —
+  the SLAM verdict this repo owes (#304) has to compare a Pi 4 with a PC on the *same* footage, and
+  nothing could record footage. `tools/camera_record.py` starts the runtime with every motion-capable
+  module switched off, **borrows** the frame `services/camera.py` already holds (the camera routes now
+  demand a ticket, so a client would need the device token and a ticket to read bytes the process
+  already has in memory) and writes `clip.jsonl` + `manifest.json` through
+  `optional/slam_clip.py`: one line per new frame — timestamp, wall clock, the JPEG exactly as
+  published, the IMU with its own validity flag, and pitch/roll when something published them — plus
+  the resolution, cadence, `|acc|`, gyro bias, host and commit under test, so a number cannot be
+  quoted against the wrong tree. `tools/slam_replay.py --verify` reads that clip with no camera, no
+  SLAM library and no OpenCV — the dimensions come from each frame's own JPEG header — and names
+  what is wrong: a count the manifest does not agree with, a line that is not JPEG, frames that
+  disagree on resolution, timestamps that go backwards or repeat, jitter past `--tolerance-pct`
+  (25% by default), or a cadence that does not match the manifest. Nothing moves, nothing listens,
+  and publishing a clip into the real runtime is a later segment.
+
 - **The map leaves the console and comes back — export JSON, export PNG, import (M8)** — the home map
   is user data (rooms drawn by hand, walls traced, surfaces painted, places taught with a picture) and
   it lived in exactly one file on one device, so a reflash, a corrupt file or a replacement unit lost

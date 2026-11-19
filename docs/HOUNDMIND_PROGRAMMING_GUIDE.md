@@ -743,6 +743,28 @@ stay invalid in `state.sensors`; `POST /command` answers 503, because nothing dr
 and `decision.ts` is the device's monotonic clock, not this machine's. The token file *path* is
 printed, never the token.
 
+A camera clip is the one dataset a SLAM claim can be measured on, so it is recorded once and
+replayed everywhere. `tools.camera_record` starts the runtime with every motion-capable module
+switched off, borrows the frame `services/camera.py` already holds — it does not open the camera a
+second time — and writes `clip.jsonl` plus `manifest.json`: resolution, cadence, IMU magnitude and
+gyro bias, the host and the commit under test (`houndmind_ai/optional/slam_clip.py`). It needs the
+camera, not the legs, and it never binds the control plane:
+
+```bash
+python -m tools.camera_record --seconds 60 --out data/clips/room-01
+python -m tools.camera_record --seconds 5 --frames 20 --out /tmp/clip   # a short check
+```
+
+`tools.slam_replay --verify` reads that clip with no camera, no SLAM library and no OpenCV — the
+dimensions come from each frame's own JPEG header — and refuses it by name when the count is not
+the one the manifest promises, a line is not a JPEG, or the cadence is too irregular to pace
+(`--tolerance-pct`, default 25). It verifies a clip; it does not yet publish one into the runtime:
+
+```bash
+python -m tools.slam_replay --verify data/clips/room-01
+python -m tools.slam_replay --verify data/clips/room-01 --json
+```
+
 Installer:
 
 ```bash
