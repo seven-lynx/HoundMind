@@ -34,6 +34,36 @@ def test_json_mode_is_the_document_not_a_picture(capsys) -> None:
     assert document["samples"] == 1
 
 
+def test_it_reports_the_objects_a_document_carries(tmp_path, capsys) -> None:
+    """H3: furniture is user data on the drawing, so the report has to say it is there."""
+    path = tmp_path / "with_objects.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "walls": [{"id": "wall_kitchen", "a": [0, 0], "b": [200, 0]}],
+                "objects": [
+                    {
+                        "id": "obj_sink",
+                        "wall_id": "wall_kitchen",
+                        "start_cm": 20,
+                        "width_cm": 60,
+                        "depth_cm": 50,
+                        "kind": "counter",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert map_inspect.main([str(path)]) == 0
+    assert "objects:  1 on 1 wall(s)" in capsys.readouterr().out
+
+    assert map_inspect.main([str(path), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["objects"][0]["kind"] == "counter"
+
+
 def test_a_broken_file_exits_one_and_names_the_problem(tmp_path, capsys) -> None:
     broken = tmp_path / "broken.json"
     broken.write_text("{ not json", encoding="utf-8")

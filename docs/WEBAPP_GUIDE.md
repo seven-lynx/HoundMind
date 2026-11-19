@@ -380,11 +380,13 @@ maybe rather than a floor, and the two are drawn differently on purpose. A trunc
 `(truncated)`: an empty corner is "not sent", not "not mapped".
 
 **You can** toggle the five layers (`cells`, `rooms`, `walls`, `surfaces`, `places`), `Fit` the map to the
-canvas, zoom with `+`/`-` or the wheel, and **drag to pan**. The view — scale and centre — is kept in
-`localStorage` under `houndmind.map.view`, so a reload comes back where you left it; `Fit` throws it
-away. It polls every four seconds while visible, and **never while an edit is unsaved**.
+canvas, zoom with `+`/`-` or the wheel, and **drag to pan**. Furniture drawn against a wall is part of the
+`rooms` layer rather than a sixth toggle, because it is context for the floor it stands on (H3). The
+view — scale and centre — is kept in `localStorage` under `houndmind.map.view`, so a reload comes back
+where you left it; `Fit` throws it away. It polls every four seconds while visible, and **never while an
+edit is unsaved**.
 
-**Editing the walls (#309).** Four drawing modes, chosen from the row under the canvas:
+**Editing the walls (#309).** Four drawing modes for the walls, chosen from the row under the canvas:
 
 | Mode | What a press does |
 |---|---|
@@ -417,6 +419,15 @@ the rest of the house.
 under the cursor (it gets an amber outline), and the button then reads `keep-out: on` or `off` and
 toggles it. A keep-out room is drawn with a dashed red edge. `Delete` removes a room or a surface you
 click, before it looks for a wall.
+
+**Objects against a wall (H3).** `Object` stands a piece of furniture against a wall you have drawn. Pick
+a `kind` from the list beside the boxes, type its size in the two `object cm` boxes — the first `along`
+the wall, the second `out` from it — and click the wall where it should sit. The rectangle is centred on
+the click, snapped to 5 cm and kept inside its wall; an object that would overhang the wall is refused
+with the wall's length in the message, the way a doorway is. It is drawn on the side a room is drawn on
+where one contains the wall, and it rides the `rooms` layer. `Undo` puts one back with everything else,
+because the snapshot carries every user section. Nothing on the device reads an object yet: this is the
+drawing the dog will be given, not a rule it obeys.
 
 **Position and go (M5).** Two more modes, and the only two that involve the dog rather than the house:
 

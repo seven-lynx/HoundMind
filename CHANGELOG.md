@@ -10,6 +10,22 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **Furniture against a wall, and a map version that says so (H3)** — a home modelled room by room had
+  walls, openings, rooms and surfaces but nowhere to put the kitchen counter, so the map could not say
+  what stood where. `objects` is a new user section: `{id, wall_id, start_cm, width_cm, depth_cm, kind,
+  source}`, a rectangle anchored to a drawn wall rather than a freehand polygon — drawable with a thumb,
+  and the shape a planner needs. `start_cm` is measured from the wall's `a` end, `width_cm` runs along the
+  wall and `depth_cm` out from it; `kind` is a closed vocabulary (`cabinet`, `counter`, `sofa`, `table`,
+  `shelf`, `other`) because nothing downstream may parse prose. `mapping/home_map.py::validate_document`
+  refuses a rectangle that starts before its wall or runs past the wall's length, and one whose `wall_id`
+  no drawn wall answers, as a `problems[]` entry naming the number that did not fit — never a silent
+  clamp. `USER_SECTIONS` gains `objects` and `joints`, so a scan save cannot erase either, and
+  `CURRENT_VERSION` moves to 3: a document written before them has no such key and reads both as an empty
+  list, while `PUT /map` stamps the version it writes rather than the one it read, because an older
+  reader refuses a newer file by name instead of dropping a section it does not know. `tools.map_inspect`
+  prints the count and the walls they sit on, and the Map panel gains an `Object` mode with a kind picker
+  and two sizes, drawing the rectangle on the side a room is drawn on and snapshotting it in `Undo`.
+  Nothing on the device consumes an object yet, deliberately.
 - **A room remembers its real size, and a room without one still saves (H2)** — the Map panel asked
   for a name and a polygon, so a drawn room had no dimension and nothing could say how big the kitchen
   was. A room now carries `size_cm: {width_cm, depth_cm}` when the person drawing it typed the two

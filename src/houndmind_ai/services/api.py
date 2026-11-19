@@ -50,6 +50,7 @@ from houndmind_ai.kernel.place import Place, slug
 from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.kernel.routine_store import RoutineConflict, RoutineStore, StoreReport
 from houndmind_ai.mapping.home_map import (
+    CURRENT_VERSION,
     document_point_to_runtime,
     load_home_map,
     map_path,
@@ -898,6 +899,11 @@ async def _map_save(request: web.Request) -> web.Response:
         # The client sent a count, not the log. Keeping the file's window is what stops an edit from
         # quietly deleting evidence the mapper wrote.
         document["samples"] = kept_samples
+    # The version is the writer's claim, not the reader's. `validate_document` accepts any older
+    # document, so a v2 file edited here is written as v3 rather than left labelled with a shape it no
+    # longer has: an older reader refuses a newer file *by name*, and that refusal is the only thing
+    # that stops it dropping a section it does not know (H3).
+    document["version"] = CURRENT_VERSION
     now = time.time()
     document["meta"]["rev"] = current_rev + 1
     created = _number(created_at)

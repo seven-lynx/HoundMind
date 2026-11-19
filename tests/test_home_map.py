@@ -214,6 +214,72 @@ def test_validate_document_refuses_a_section_it_could_not_keep() -> None:
     assert result.problems and "walls must be a list of objects" in result.problems[0]
 
 
+def _object(**overrides) -> dict:
+    """A counter against a 200 cm wall, the shape the console writes (H3)."""
+    entry = {
+        "id": "obj_sink",
+        "wall_id": "wall_kitchen",
+        "start_cm": 20,
+        "width_cm": 60,
+        "depth_cm": 50,
+        "kind": "counter",
+        "source": "user",
+    }
+    entry.update(overrides)
+    return entry
+
+
+def _wall_map(**overrides) -> dict:
+    document = {
+        "version": CURRENT_VERSION,
+        "walls": [{"id": "wall_kitchen", "a": [0, 0], "b": [200, 0], "source": "user"}],
+        "objects": [_object()],
+    }
+    document.update(overrides)
+    return document
+
+
+def test_objects_survive_validation_into_both_spellings() -> None:
+    """Objects are user data: the wire shape and the file shape both carry them verbatim (H3)."""
+    result = validate_document(_wall_map())
+
+    assert result.map is not None
+    for document in (result.map.to_document(), result.map.to_file_document()):
+        assert document["objects"][0]["wall_id"] == "wall_kitchen"
+        assert document["objects"][0]["width_cm"] == 60
+    assert result.map.sections["joints"] == [], "a v3 section nobody wrote yet is empty, not absent"
+
+
+def test_objects_longer_than_their_wall_name_the_walls_length() -> None:
+    """A clamp would draw furniture through the next room; the answer is a problem, by name."""
+    result = validate_document(_wall_map(objects=[_object(start_cm=180, width_cm=60)]))
+
+    assert result.map is None
+    assert result.problems and "which is 200 cm long" in result.problems[0]
+
+
+def test_objects_name_a_wall_and_a_kind_the_document_knows() -> None:
+    result = validate_document(
+        _wall_map(objects=[_object(wall_id="wall_nobody_drew", kind="hot_tub")])
+    )
+
+    assert result.map is None
+    problems = " ".join(result.problems)
+    assert "wall_nobody_drew" in problems
+    # The vocabulary is closed, because nothing downstream may parse prose.
+    assert "other" in problems
+
+
+def test_a_document_written_before_objects_reads_an_empty_list() -> None:
+    """A v2 file has no `objects` key at all, and absent is empty rather than a refusal (H3)."""
+    result = validate_document({"version": 2, "cells": {"1,2": 3}})
+
+    assert result.map is not None
+    assert result.map.sections["objects"] == []
+    assert result.map.to_document()["objects"] == []
+    assert result.map.to_file_document()["joints"] == []
+
+
 def test_start_without_a_configured_path_says_so() -> None:
     context = _Context({"settings": {"mapping": {}}})
 

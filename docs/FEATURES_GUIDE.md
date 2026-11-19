@@ -338,7 +338,10 @@ that the next start loads back.
 ### What is saved, and what is read back
 
 The map is a versioned JSON document (`mapping/home_map.py`). Since v2 it carries the **grid**, the
-last sweep and a window of samples — the grid is the map, the samples are the log around it.
+last sweep and a window of samples — the grid is the map, the samples are the log around it. Since **v3**
+the sections a person draws also include `objects` (furniture as a rectangle against a wall) and `joints`
+(the join between two rooms, which the room-joining work fills); a document written before either key
+reads both as an empty list rather than being refused.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -354,12 +357,20 @@ here is why", never an empty room. Writes are atomic (temp file, then replace), 
 the last snapshot rather than the whole map.
 
 The sections a **person** owns ride in the same document — `walls`, `openings`, `rooms`, `surfaces`,
-`places` and `dog` (`mapping/home_map.py::USER_SECTIONS`). The console writes them through `PUT /map`,
-and every scan save carries them forward, so a 30-second snapshot never erases a wall someone drew or a
-pin someone taught. `places` is the pin layer (M7): `{id, name, x_cm, y_cm, heading_deg,
+`places`, `objects`, `joints` and `dog` (`mapping/home_map.py::USER_SECTIONS`). The console writes them
+through `PUT /map`, and every scan save carries them forward, so a 30-second snapshot never erases a wall
+someone drew or a pin someone taught. `places` is the pin layer (M7): `{id, name, x_cm, y_cm, heading_deg,
 uncertainty_cm}` in the document frame, with `id` naming the catalogue entry the spot was taught as —
 the place is what the dog can be sent to, the pin is where it is drawn, and the picture comes from
 `GET /places` by that id.
+
+An `objects` entry is furniture standing against a drawn wall (H3):
+`{id, wall_id, start_cm, width_cm, depth_cm, kind, source}` — a rectangle rather than a freehand polygon,
+so a planner can use it. `start_cm` is measured from the wall's `a` end, `width_cm` runs along the wall
+and `depth_cm` out from it. `kind` is a closed vocabulary (`cabinet`, `counter`, `sofa`, `table`,
+`shelf`, `other`), and the validator refuses a rectangle that runs past its wall or names a wall no
+drawing answers, putting the number that did not fit in `problems[]`. Nothing on the device consumes an
+object yet, deliberately.
 
 A room also carries the two numbers a person typed when they drew it, as `rooms[].size_cm`
 (`{width_cm, depth_cm}`, document frame). The key is **absent** on a room nobody measured rather

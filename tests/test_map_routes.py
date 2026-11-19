@@ -290,6 +290,51 @@ def test_a_section_of_the_wrong_type_is_refused_rather_than_dropped(tmp_path) ->
     assert not path.exists(), "a refused document writes nothing"
 
 
+def test_objects_round_trip_and_a_save_stamps_the_version(tmp_path) -> None:
+    """Objects are user data on a v2 file, and the save writes the version this runtime writes (H3).
+
+    The version field is the *writer's* claim, so a v2 document carrying furniture is written as v3
+    rather than left labelled with a shape it no longer has — an older reader refuses a newer file by
+    name, which is the only thing that stops it dropping a section it does not know.
+    """
+    document = wire_document(
+        version=2,
+        walls=[{"id": "wall_kitchen", "a": [0, 0], "b": [200, 0], "source": "user"}],
+        objects=[
+            {
+                "id": "obj_sink",
+                "wall_id": "wall_kitchen",
+                "start_cm": 20,
+                "width_cm": 60,
+                "depth_cm": 50,
+                "kind": "counter",
+                "source": "user",
+            }
+        ],
+    )
+
+    async def scenario() -> tuple[int, dict, dict, Path]:
+        plane, headers, path = make_plane(tmp_path)
+        async with TestClient(TestServer(create_app(plane))) as client:
+            saved = await client.put(
+                f"{API_PREFIX}/map", headers=headers, json={"document": document}
+            )
+            saved_body = await saved.json()
+            response = await client.get(f"{API_PREFIX}/map", headers=headers)
+            served = await response.json()
+        return saved.status, saved_body, served["document"], path
+
+    status, saved_body, served, path = asyncio.run(scenario())
+
+    assert status == 200
+    assert saved_body["document"]["version"] == CURRENT_VERSION
+    assert served["objects"] == document["objects"]
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert raw["version"] == CURRENT_VERSION
+    assert raw["objects"] == document["objects"]
+    assert raw["joints"] == [], "the second v3 section is written empty, never left out"
+
+
 def test_put_map_needs_a_document_object(tmp_path) -> None:
     async def scenario() -> tuple[int, dict]:
         plane, headers, _path = make_plane(tmp_path)

@@ -264,6 +264,17 @@ pin is where the spot is drawn, the place is what the dog can be sent to, and th
 that id from `GET /places` ([§8](#8-places)). A save keeps the pins it was given, like any other section a
 person drew.
 
+`objects` is furniture standing against a drawn wall (H3):
+`{id, wall_id, start_cm, width_cm, depth_cm, kind, source}`. A rectangle rather than a freehand polygon,
+because that is what a thumb can draw and what a planner can use: `start_cm` is where it begins, measured
+from the wall's `a` end, `width_cm` runs along the wall and `depth_cm` stands out from it, so the same
+object survives a wall redrawn from the other end. `kind` is a closed vocabulary — `cabinet`, `counter`,
+`sofa`, `table`, `shelf`, `other` — because nothing downstream may parse prose. `validate_document`
+refuses a rectangle that starts before its wall or runs past the wall's length, and one whose `wall_id`
+no drawn wall answers: a `problems[]` entry naming the number that did not fit, never a clamp. Nothing on
+the device consumes an object yet, deliberately. The `objects` and `joints` sections are v3: a document
+written before them has no such key, and that absence reads as an empty list rather than a refusal.
+
 **That is not the runtime's order, and both are called `x` and `y` (#347).** The runtime speaks
 `(forward_cm, left_cm)`: the pose (`navigation/odometry.py`), the planner (`mapping/planner.py`) and
 the grid cells (`mapping/mapper.py::cell_centre_cm`) all use it. Nothing was wrong while the two never
@@ -288,7 +299,9 @@ document this route accepts is one the next start can read. Writes are atomic, a
 every `home_map_save_interval_s` carries the user's sections and the `rev` forward, so the map's own
 log never erases an edit. A save also stamps `meta.scale_source` from the rooms it accepted, in the
 same block as `meta.source`, because that claim is derived on the device rather than sent by the
-console — one writer per fact — and the scan saves above carry it forward like `rev`.
+console — one writer per fact — and the scan saves above carry it forward like `rev`. It also stamps
+`version: 3` whatever version the body carried: the version field is the *writer's* claim, and an older
+reader refuses a newer file **by name** instead of dropping a section it does not know.
 
 Export and import are those two routes, not a third (M8). The console's **Export JSON** saves the
 `document` `GET /map` served — the wire shape above — and **Import…** reads such a file back and sends
