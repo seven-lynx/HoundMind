@@ -295,7 +295,22 @@ class ControlPlane:
         return command
 
     def _on_link_loss(self, session_key: str) -> None:
+        """A client that stopped pinging loses its command *and* the mode that would resume it.
+
+        The same brake as `POST /stop` (#337): under `idle` the behaviour and the navigator
+        publish a fresh intent about 100 ms later, so a stop that only reached the actuators was
+        undone on the next tick. `rest` is the mode the gateway refuses to drive in, so the dog
+        stays parked while nobody is holding the leash. `command_expired` is the hub's to publish:
+        this path raises no `command_accepted`, because no client asked for anything.
+        """
         self.stop_now(f"link loss from {session_key}")
+        # A running routine publishes its next step on the following tick, exactly as it does for
+        # `POST /stop`; only when a runner is loaded, so the flag cannot outlive the stop.
+        if self.context.get("routine_report") is not None:
+            self.context.set("routine_stop", True)
+        if self.mode() != "rest":
+            self.set_mode("rest")
+            self.hub.publish_event("mode_changed", {"mode": "rest"})
 
     # ---- lifecycle ---------------------------------------------------------
 

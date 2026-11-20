@@ -438,6 +438,14 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A dropped browser parks the dog instead of only dropping its command** — link loss
+  (`services/api.py::_on_link_loss`) submitted one `stop` command, and under `idle` the behaviour
+  publishes a fresh intent about 100 ms later, so the deadman for clients was undone on the next
+  tick: the same hole #333 closed for `POST /stop` (#337). The path now takes `_stop`'s shape —
+  `stop_now`, the routine-stop flag when a runner is loaded, then `rest` and one `mode_changed`
+  when the mode was not already there. The client's own notice is unchanged (`command_expired`,
+  `reason: "link_loss"`), and a pad release is still a `stop` *command* through `/command`, which
+  stops the motion in flight and leaves the mode alone.
 - **Deleting a wall orphaned the furniture standing on it, and the map could never be saved again** —
   `Delete` (`web/panels/map.js::deleteAt`) filtered the clicked wall out of `document_.walls` and never
   looked at `document_.objects`, whose entries carry the `wall_id` they are anchored to (#370). With the

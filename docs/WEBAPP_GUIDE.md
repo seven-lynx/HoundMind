@@ -584,17 +584,21 @@ console shows that answer and never bypasses it.
 2. Hiding the tab does the same (`web/app.js:566`).
 3. If neither happens — a laptop lid closes, WiFi dies — the command simply expires: the client renews
    every 150 ms and the server drops a command 300 ms after the last renewal (`web/lib.js:21`). A
-   client that stops pinging loses its command after `settings.api.link_loss_s` (6 s).
+   client that stops pinging loses its command after `settings.api.link_loss_s` (6 s), and the runtime
+   then parks in `rest` — the same brake as `POST /stop` (#337), so a dropped browser cannot leave an
+   autonomous dog walking.
 
 A routine is not an exception: it plays one step per tick through the same gateway, so the interlock,
 the obstacle stop and the mode gate apply to it exactly as they do to a hand on the pad.
 
-**STOP is the fourth path, and the only one that parks.** The STOP button, `Space` and the palette's
+**STOP is the fourth path, and the operator's.** The STOP button, `Space` and the palette's
 `Stop the dog` call `POST /api/v1/stop`, which stops the command *and* sets `rest` (#333). With
 autonomy on — the `idle` mode — the behaviour and the navigator publish a fresh intent on the very
 next tick, so a path that only cleared the motion in flight held for about a tenth of a second and the
 dog walked on. `rest` is the mode the gateway refuses to drive in, so the press sticks until a mode
-change; `manual` is the other way to keep autonomy out while leaving the pad working.
+change; `manual` is the other way to keep autonomy out while leaving the pad working. Link loss
+reaches the same `rest` on its own timer, so a console that reconnects finds the dog parked and has
+to ask for a mode before the pad works again.
 
 **A restart is not a resume — and not a park either.** After `systemctl restart houndmind` or a reboot,
 a gait in flight is gone and a routine that was mid-run is lost rather than replayed. But the runtime

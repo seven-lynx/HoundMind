@@ -1514,7 +1514,7 @@ runtime in `rest` as well as stopping the motion in flight (#333).
 | `pairing_attempts_per_minute` | `5` | Rate limit per peer. |
 | `command_queue` | `64` | Bounded inbox; a full queue is `429`, never added latency. |
 | `command_ack_timeout_s` | `0.5` | How long a `POST /command` waits for the interlock before `503`. |
-| `link_loss_s` | `6.0` | A client that stops pinging loses its command. |
+| `link_loss_s` | `6.0` | A client that stops pinging loses its command and the runtime parks in `rest`. |
 | `max_clients` | `8` | Sessions kept; the least recently seen idle one is evicted. |
 | `log_tail` | `200` | Default and maximum `?tail=` for `/logs`. |
 | `discovery_enabled` | `true` | Advertise the control plane over mDNS so a client finds it by name (#38). Off means address-only. |
