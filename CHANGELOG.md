@@ -347,6 +347,18 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **Place recognition scored one frame and then went quiet for a producer that sets no stamp** —
+  `navigation/place_recognition.py` read `vision_frame_ts` through `_safe_float(..., 0.0)` and returned
+  early whenever the value matched the last one it scored, so a publisher that sets `vision_frame`
+  alone got exactly one match for the life of the process: the first frame passed the guard, the
+  module recorded `0.0`, and every later frame read `0.0` too and returned before the matcher ran.
+  `place_match` kept being published, so a client showed a working module that had stopped looking,
+  and the `place` tier — the one that corrects the pose from the camera — never re-anchored. The
+  guard now keeps the raw stamp and falls back to object identity when there is none, the case
+  `optional/slam_pi4.py` settled in #366, and the frames are never compared with `==` because
+  `vision_frame` is a numpy array on the Pi. `place_match` and `place_fix` still carry a numeric
+  identity for `localization` to age: the producer's own stamp, or the tick's monotonic read when the
+  producer publishes none (#367).
 - **A published frame was buffered again on every due tick, so the SLAM counters overcounted** —
   `optional/slam_pi4.py` read `vision_frame` on every tick it was due and appended whatever it found,
   so the loop re-reading one still image spent `max_process_per_tick` on copies of it and `frames_in`
