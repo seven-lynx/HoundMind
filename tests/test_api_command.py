@@ -243,6 +243,53 @@ def test_a_pad_release_stop_does_not_park_the_dog(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_link_loss_parks_the_dog_so_the_next_tick_does_not_move(tmp_path) -> None:
+    """#337: the deadman for clients has to park, not just stop.
+
+    A browser that stops pinging is the same emergency as the panic press in #333, and the same
+    intent comes back about 100 ms later, so a stop that only reached the actuators was undone on
+    the next tick. Link loss now takes the `_stop` shape: the mode moves to `rest` once, and the
+    autonomy slots are withdrawn with it, so a stale client leaves a dog that cannot be walked on
+    by the tick that follows.
+    """
+
+    async def scenario() -> None:
+        world = World(tmp_path)
+        board = world.context.get("intent_board")
+        assert board is not None
+        world.context.set("runtime_mode", "idle")
+        board.publish("forward", Source.BEHAVIOUR)
+        plane = world.plane
+        events: list[tuple[str, dict]] = []
+        publish = plane.hub.publish_event
+
+        def record(name: str, data: dict | None = None) -> None:
+            events.append((name, data or {}))
+            publish(name, data)
+
+        plane.hub.publish_event = record  # type: ignore[method-assign]
+        # Connected, then silent for longer than `api.link_loss_s`: a phone whose WiFi died.
+        session, _evicted = plane.sessions.attach(world.token, "Phone", ["state:read"])
+        session.last_seen -= 60.0
+        await plane.hub.start()
+        try:
+            # Several pump ticks at the shipped 10 Hz. Only the first one may find the client gone.
+            await asyncio.sleep(0.35)
+        finally:
+            await plane.hub.stop()
+
+        assert plane.mode() == "rest", "a dropped browser parks the dog"
+        assert [name for name, _data in events].count("mode_changed") == 1
+        assert Source.BEHAVIOUR not in {command.source for command in board.latest()}
+
+        # The next tick: under `idle` the behaviour asks for a step again, and `rest` refuses it.
+        board.publish("forward", Source.BEHAVIOUR)
+        world.step()
+        assert ("forward", {}) not in world.hal.calls
+
+    asyncio.run(scenario())
+
+
 def test_two_identical_actions_from_two_ids_are_two_commands(tmp_path) -> None:
     """H-10: the old gateway deduplicated on the action string and dropped the second."""
     world = World(tmp_path)

@@ -216,6 +216,12 @@ publish a fresh intent about 100 ms later (#333). The answer carries `{"accepted
 motion *without* parking issues a `stop` command through `/command`, which every mode admits
 (`act/gateway.py::_vet`) — that is what the console's pad release does.
 
+**A client that goes quiet gets the same brake.** No `ping` for `api.link_loss_s` and the stream
+treats that client as gone: the runtime stops its command *and* sets `rest` (#337), because a stop
+that only cleared the motion in flight would be overwritten by the next autonomous intent exactly as
+#333 described. The mode change is published as `mode_changed`, and only when the mode was not
+already `rest`; the client's own notice is `command_expired` with `reason: "link_loss"`.
+
 `PATCH /config` writes only `behavior.action_cooldown_s`, `led.brightness`,
 `motors.min_action_interval_s` and `navigation.safe_distance_cm` (`services/api.py:81`), each re-read
 every tick by its module. Any other key is refused with the live list in the body, because a config
@@ -843,7 +849,8 @@ tolerate an unknown `name` and ignore it.
 Client rules:
 
 - **Send `ping` every 2 s.** No ping for `api.link_loss_s` (default 6 s) and the server treats the
-  client as gone and stops its command, publishing `command_expired` with `reason: "link_loss"`.
+  client as gone: it stops that client's command and parks the runtime in `rest`, publishing
+  `command_expired` with `reason: "link_loss"` (and `mode_changed` when the mode actually moved).
 - **Backpressure is drop-oldest for `state` and `log`, fatal for `event`.** A slow client silently
   skips `state` frames and loses `log` lines (newest batch wins); a client that cannot absorb 64
   queued event frames is disconnected, because losing `command_vetoed` is how a user ends up shouting

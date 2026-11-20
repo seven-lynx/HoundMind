@@ -281,6 +281,59 @@ def event_names(frames: list[dict]) -> list[str]:
     return [frame["data"]["name"] for frame in frames if frame.get("type") == "event"]
 
 
+class SteppingClock:
+    """A clock the test moves by hand: the pump's sleep is real, a session's age is not."""
+
+    def __init__(self, start: float = 1000.0) -> None:
+        self.t = start
+
+    def __call__(self) -> float:
+        return self.t
+
+
+def test_a_quiet_client_loses_its_command_once(tmp_path) -> None:
+    """#337: link loss is the deadman for clients, and it must not become an event storm.
+
+    The pump finds the same silent session on every tick, so the `_quiet` bookkeeping is what
+    keeps `command_expired` to one frame per client that actually went away.
+    """
+
+    async def scenario() -> None:
+        clock = SteppingClock()
+        settings = ApiSettings(
+            host="127.0.0.1",
+            port=0,
+            token_path=str(tmp_path / "api_token"),
+            state_hz=50.0,
+            link_loss_s=2.0,
+        )
+        plane = ControlPlane(DummyContext(), settings, CommandBus(), clock=clock)
+        published: list[tuple[str, dict]] = []
+        publish = plane.hub.publish_event
+
+        def record(name: str, data: dict | None = None) -> None:
+            published.append((name, data or {}))
+            publish(name, data)
+
+        plane.hub.publish_event = record  # type: ignore[method-assign]
+        # Connected, then silent: no ping for longer than `link_loss_s`.
+        plane.sessions.attach("phone-token", "Phone", ["state:read"])
+        await plane.hub.start()
+        try:
+            clock.t += 3.0
+            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.2)  # still quiet, and still the same client
+        finally:
+            await plane.hub.stop()
+
+        expired = [data for name, data in published if name == "command_expired"]
+        assert len(expired) == 1, expired
+        assert expired[0]["reason"] == "link_loss"
+        assert expired[0]["client"], "the event names which client went quiet"
+
+    asyncio.run(scenario())
+
+
 def test_a_new_choice_is_published_as_a_decision_event(tmp_path) -> None:
     """The pump is the only producer, so the event has to come from it, not from a module."""
     async def scenario() -> None:
