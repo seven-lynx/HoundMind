@@ -1,6 +1,13 @@
 ## Summary
 
-<!-- What changed and why, in one or two sentences. "Closes #<n>" if it resolves an issue. -->
+<!--
+What changed and why, in one or two sentences. Name the issues it resolves: "Closes #<n>".
+
+GitHub closes an issue only on a merge into the default branch, so a pull request based on
+anything other than `main` - a stacked pull request - closes nothing, whatever that line says.
+List the issues it leaves open here, and close them by hand when the squash lands, quoting the
+squash commit hash.
+-->
 
 ## Verification
 

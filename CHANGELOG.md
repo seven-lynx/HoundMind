@@ -119,7 +119,6 @@ Current Release: v2026.11.16
   (25% by default), or a cadence that does not match the manifest. Nothing moves, nothing listens,
   and publishing a clip into the real runtime is a later segment.
 
-
 - **The decision record says which autonomy input shaped the tick (#270)** — `intent`/`source` name
   the intent that won, so when a hand overrode the navigator the record kept the winner and lost what
   it beat. `DecisionRecord` now carries `driver`: the winning source when autonomy won, otherwise the
