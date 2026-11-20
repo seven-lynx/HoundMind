@@ -438,6 +438,18 @@ export const map = {
       return null;
     }
 
+    // The object hit test is the drawn rectangle, not its wall: a click on the sofa is a click on the
+    // shape the user sees, so it reuses the corners `drawObjects` paints rather than a second geometry
+    // that could disagree with the picture (#365).
+    function objectUnder(point) {
+      for (const entry of (document_ && document_.objects) || []) {
+        const corners = objectCorners(entry);
+        if (!corners) continue;
+        if (pointInPolygon(point, corners)) return entry;
+      }
+      return null;
+    }
+
     function pinUnder(point) {
       // The same tolerance the wall picker uses, so a click near a pin means the pin whether the
       // user meant to delete it or not: a 6 cm ring is one pixel wide at a fitted zoom.
@@ -698,6 +710,17 @@ export const map = {
         render();
         return;
       }
+      // Furniture is drawn *inside* a room, so it is tested before the room: a click on the counter
+      // would otherwise delete the kitchen it stands in. It goes through `pushHistory` like every other
+      // delete, because the snapshot already carries `objects` and Undo has to take it back (#365).
+      const object = objectUnder(point);
+      if (object) {
+        pushHistory();
+        document_.objects = (document_.objects || []).filter((item) => item !== object);
+        markDirty(true);
+        render();
+        return;
+      }
       const room = roomUnder(point);
       if (room) {
         pushHistory();
@@ -722,7 +745,15 @@ export const map = {
       if (hit.kind === "opening") {
         document_.openings = (document_.openings || []).filter((item) => item !== hit.item);
       } else {
-        document_.walls = (document_.walls || []).filter((item) => item !== hit.item);
+        // A rectangle is anchored to its wall (`objects[].wall_id`), so it cannot outlive it: an object
+        // left behind is not drawn (objectCorners needs the wall), Delete cannot reach something that is
+        // not drawn, and `mapping/home_map.py` refuses the whole document on the next save. The same
+        // snapshot restores the wall and its furniture together (#370). A doorway cut through the wall
+        // stays: it carries its own points, the server never checks one against a wall, and it is only a
+        // mark on the drawing.
+        const wall = hit.item;
+        document_.walls = (document_.walls || []).filter((item) => item !== wall);
+        document_.objects = (document_.objects || []).filter((item) => item.wall_id !== wall.id);
       }
       markDirty(true);
       render();

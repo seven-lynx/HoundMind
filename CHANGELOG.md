@@ -439,6 +439,25 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **Deleting a wall orphaned the furniture standing on it, and the map could never be saved again** —
+  `Delete` (`web/panels/map.js::deleteAt`) filtered the clicked wall out of `document_.walls` and never
+  looked at `document_.objects`, whose entries carry the `wall_id` they are anchored to (#370). With the
+  wall gone `objectCorners` could not draw the rectangle, so the object was not on the canvas and
+  `Delete` could not reach it, while `mapping/home_map.py` reported `stands against <wall_id>, which no
+  drawn wall answers` on the next **Save to device** and `PUT /map` refused the whole document - every
+  other edit of the session with it. The wall branch now drops the objects anchored to that wall inside
+  the `pushHistory()` step it already opens, so `Undo` puts the wall and its furniture back together. A
+  doorway cut through the deleted wall is left alone: it carries its own points and nothing on the
+  device checks one against a wall.
+- **A piece of furniture could not be taken off the map once it was saved** — `Object` mode could stand a
+  rectangle against a wall, and `Delete` (`web/panels/map.js::deleteAt`) looked for a pin, a room, a
+  surface, a wall and a doorway but never for an object, so a counter clicked onto the wrong wall was
+  permanent after **Save to device** emptied the Undo history; the only way back was **Export JSON**, a
+  text editor and **Import...** (#365). `objectUnder` tests the point against the rectangle
+  `objectCorners` already draws, and `deleteAt` asks it before the room, because furniture stands inside
+  one — a click on the counter would otherwise delete the kitchen. The delete goes through `pushHistory`
+  like every other one, so the Undo snapshot that already carries `objects` takes it back.
+
 - **Place recognition scored one frame and then went quiet for a producer that sets no stamp** —
   `navigation/place_recognition.py` read `vision_frame_ts` through `_safe_float(..., 0.0)` and returned
   early whenever the value matched the last one it scored, so a publisher that sets `vision_frame`
