@@ -140,6 +140,15 @@ class SlamPi4Module(Module):
         # Buffers for frame+imu pairing: store tuples (timestamp, frame, imu)
         self._buffer: deque = deque()
 
+        # What the backend did with what it was given (plan S). A replay that quotes a pose needs
+        # to say whether the track saw every frame or lost most of them, and nothing else in the
+        # tree counted: `frames_in` is what reached the buffer (the loop re-reads one published
+        # frame until the producer replaces it, so this can exceed the clip's own frame count).
+        self._frames_in = 0
+        self._frames_processed = 0
+        self._frames_dropped = 0
+        self._frames_failed = 0
+
         # Track last map export time
         self._last_map_export_ts = 0.0
 
@@ -210,12 +219,14 @@ class SlamPi4Module(Module):
 
         if frame is not None or imu is not None:
             self._buffer.append((ts, frame, imu))
+            self._frames_in += 1
 
         # Trim buffer to configured max age
         max_buffer_s = _safe_float(settings.get("max_buffer_s", 2.0), 2.0)
         cutoff = now - max_buffer_s
         while self._buffer and (self._buffer[0][0] < cutoff):
             self._buffer.popleft()
+            self._frames_dropped += 1
 
         # Process buffer with RTAB-Map adapter if available
         if self._adapter and not self._rtabmap_failed:
@@ -225,7 +236,9 @@ class SlamPi4Module(Module):
                 item_ts, item_frame, item_imu = self._buffer.popleft()
                 try:
                     self._adapter.process(item_frame, imu=item_imu, timestamp=item_ts)
+                    self._frames_processed += 1
                 except Exception as exc:
+                    self._frames_failed += 1
                     if not self._process_warned:
                         logger.warning(
                             "RTAB-Map adapter cannot process a frame: %s; the pose will not move",
@@ -308,6 +321,19 @@ class SlamPi4Module(Module):
 
         context.set("slam_pose", self._pose)
         context.set("slam_status", {"status": "running", "backend": ("rtabmap" if self._adapter else "stub")})
+        # The counters a replay quotes (plan S): what arrived, what the backend took, what aged
+        # out of the buffer, and what it refused. Cumulative for the run, so a reader never has to
+        # diff two snapshots to know how much of a clip was actually seen.
+        context.set(
+            "slam_stats",
+            {
+                "frames_in": self._frames_in,
+                "frames_processed": self._frames_processed,
+                "frames_dropped": self._frames_dropped,
+                "frames_failed": self._frames_failed,
+                "buffered": len(self._buffer),
+            },
+        )
         self._emit_nav_hint(context, settings)
         self._last_ts = now
 

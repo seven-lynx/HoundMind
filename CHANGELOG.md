@@ -10,6 +10,22 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A clip replayed inside the real loop, with the numbers a SLAM verdict needs (SLAM ladder S2)** —
+  `tools.slam_replay --host pi|pi5|pc` publishes a recorded clip into the runtime with `slam_pi4`
+  switched on and every motion-capable module off, so the measurement includes the loop instead of a
+  bare benchmark. A frame goes on the context when its own recorded timestamp comes round and the
+  loop keeps ticking in between; `--speed` compresses a 60 s clip without speeding the loop, at most
+  one frame is published per tick (a frame replaced inside its own tick was never visible to the
+  consumer), and `hal_sensors` stays off because the IMU has to come from the clip rather than from
+  the dog it was recorded on. OpenCV is used when it is present to hand the backend an array; a host
+  without it delivers the JPEG bytes and the report says so, because a backend that cannot read them
+  processes nothing. Each run writes one JSON report beside the clip — sustained fps, CPU per core,
+  temperature before and after, the loop and `slam_pi4` tick percentiles, the ticks that overran the
+  budget, the frames buffered/processed/dropped/failed, the platform that actually ran under the
+  host label, and a verdict sentence — and `slam_pi4` now publishes `slam_stats` (new context key)
+  so processed-versus-lost is a counter rather than a guess. The Pi 4 number itself is still owed:
+  this lands the instrument, not the measurement.
+
 - **A camera clip every host can replay, and a check that says whether it is one (SLAM ladder S1)** —
   the SLAM verdict this repo owes (#304) has to compare a Pi 4 with a PC on the *same* footage, and
   nothing could record footage. `tools/camera_record.py` starts the runtime with every motion-capable

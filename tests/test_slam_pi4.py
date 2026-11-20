@@ -118,3 +118,63 @@ def test_usable_bindings_are_reported_as_the_rtabmap_backend(monkeypatch) -> Non
     assert m._adapter is not None
     assert m._adapter._rtab.params == {"RGB/Enabled": "true"}
 
+
+def test_the_module_counts_what_it_did_with_the_frames(monkeypatch) -> None:
+    """A replay quotes processed-versus-lost, so the module has to count both (plan S)."""
+    import sys
+    import types
+
+    fake = types.ModuleType("rtabmap")
+
+    class Rtabmap:
+        def __init__(self) -> None:
+            self.frames = 0
+
+        def process(self, frame, imu=None, timestamp=None) -> None:
+            self.frames += 1
+
+        def get_pose(self):
+            return None
+
+    fake.Rtabmap = Rtabmap
+    monkeypatch.setitem(sys.modules, "rtabmap", fake)
+
+    ctx = RuntimeContext()
+    ctx.set(
+        "settings",
+        {"slam_pi4": {"enabled": True, "backend": "rtabmap", "interval_s": 0.0}},
+    )
+    ctx.set("vision_frame", b"frame")
+    ctx.set("sensor_reading", {"gyro": [0.0, 0.0, 0.0], "acc": [0.0, 0.0, 9.81], "timestamp": time.time()})
+
+    m = SlamPi4Module("slam", enabled=True)
+    m.start(ctx)
+    m.tick(ctx)
+
+    stats = ctx.get("slam_stats")
+    assert stats == {
+        "frames_in": 1,
+        "frames_processed": 1,
+        "frames_dropped": 0,
+        "frames_failed": 0,
+        "buffered": 0,
+    }
+
+
+def test_the_stub_counts_frames_it_never_processed() -> None:
+    ctx = RuntimeContext()
+    ctx.set("settings", {"slam_pi4": {"enabled": True, "backend": "stub", "interval_s": 0.0}})
+    ctx.set("vision_frame", b"frame")
+    ctx.set("sensor_reading", {"gyro": [0.0, 0.0, 0.0], "acc": None, "timestamp": time.time()})
+
+    m = SlamPi4Module("slam", enabled=True)
+    m.start(ctx)
+    m.tick(ctx)
+
+    stats = ctx.get("slam_stats")
+    # Dead reckoning does not consume frames; saying so is the honest report.
+    assert stats["frames_in"] == 1
+    assert stats["frames_processed"] == 0
+    assert stats["buffered"] == 1
+
+
