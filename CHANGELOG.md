@@ -439,6 +439,15 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A piece of furniture could not be taken off the map once it was saved** — `Object` mode could stand a
+  rectangle against a wall, and `Delete` (`web/panels/map.js::deleteAt`) looked for a pin, a room, a
+  surface, a wall and a doorway but never for an object, so a counter clicked onto the wrong wall was
+  permanent after **Save to device** emptied the Undo history; the only way back was **Export JSON**, a
+  text editor and **Import...** (#365). `objectUnder` tests the point against the rectangle
+  `objectCorners` already draws, and `deleteAt` asks it before the room, because furniture stands inside
+  one — a click on the counter would otherwise delete the kitchen. The delete goes through `pushHistory`
+  like every other one, so the Undo snapshot that already carries `objects` takes it back.
+
 - **Place recognition scored one frame and then went quiet for a producer that sets no stamp** —
   `navigation/place_recognition.py` read `vision_frame_ts` through `_safe_float(..., 0.0)` and returned
   early whenever the value matched the last one it scored, so a publisher that sets `vision_frame`
