@@ -14,6 +14,7 @@ import pytest
 from houndmind_ai.kernel.decisions import (
     DEFAULT_MAX_ENTRIES,
     SCHEMA_VERSION,
+    SUPPORTED_SCHEMA_VERSIONS,
     DecisionRecord,
     DecisionRing,
     Refusal,
@@ -79,6 +80,7 @@ def test_the_wire_shape_is_the_documented_one() -> None:
         state="patrolling",
         intent="forward",
         source="navigation",
+        driver="navigation",
         vetoes=(Refusal("sit", "behaviour", "precedence"),),
         inputs={"distance_cm": 42.0, "distance_valid": True, "battery_v": 7.6},
         confidence=None,
@@ -94,14 +96,50 @@ def test_the_wire_shape_is_the_documented_one() -> None:
         "state",
         "intent",
         "source",
+        "driver",
         "vetoes",
         "inputs",
         "confidence",
     }
+    assert payload["driver"] == "navigation"
     assert payload["vetoes"] == [
         {"action": "sit", "source": "behaviour", "reason": "precedence", "detail": None}
     ]
     assert payload["confidence"] is None
+
+
+def test_the_reader_still_reads_a_v1_line() -> None:
+    """A replay tool that refuses its own older logs is a regression, so v1 stays readable."""
+    v1_line = {
+        "schema_version": 1,
+        "ts": 900.0,
+        "trace_id": "trace-old",
+        "mode": "patrol",
+        "state": "idle",
+        "intent": "stand",
+        "source": "behaviour",
+        "vetoes": [],
+        "inputs": {"distance_cm": None},
+        "confidence": None,
+    }
+
+    read = DecisionRecord.from_dict(v1_line)
+
+    assert read.driver is None
+    # Reading upgrades on the way out: one shape is written, even when two are read.
+    assert read.to_dict()["schema_version"] == SCHEMA_VERSION
+
+
+def test_the_reader_refuses_a_shape_it_does_not_know() -> None:
+    payload = record(1.0).to_dict()
+    payload["schema_version"] = max(SUPPORTED_SCHEMA_VERSIONS) + 1
+
+    with pytest.raises(ValueError, match="unsupported decision schema_version"):
+        DecisionRecord.from_dict(payload)
+
+
+def test_a_record_with_no_autonomy_input_names_no_driver() -> None:
+    assert record(1.0).to_dict()["driver"] is None
 
 
 def test_a_tick_where_nothing_happened_is_still_a_record() -> None:

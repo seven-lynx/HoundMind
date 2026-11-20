@@ -36,6 +36,7 @@ from houndmind_ai.core.module import Module
 from houndmind_ai.hal.iface import SensorSnapshot, as_float
 from houndmind_ai.kernel.actions import repertoire_from_settings
 from houndmind_ai.kernel.commands import (
+    AUTONOMY_SOURCES,
     DEFAULT_MODE,
     RUNTIME_MODES,
     Command,
@@ -60,6 +61,13 @@ __all__ = ["MotionGatewayModule", "canonical_action", "legacy_action"]
 _MODE_DETAIL = {
     "rest": "the dog is in rest mode; switch to manual to drive it",
     "manual": "the dog is in manual mode; autonomy is off until you switch back to idle",
+}
+
+# Which refusals came from autonomy, and how they rank. The record's `driver` is a *source name*
+# (`behaviour`, `navigation`, ...), the spelling `Command.to_dict` and `Refusal.source` already use,
+# so this table maps that spelling back to the rank `Source` declares (#270).
+_AUTONOMY_RANK: dict[str, int] = {
+    source.name.lower(): int(source) for source in AUTONOMY_SOURCES
 }
 
 
@@ -113,6 +121,10 @@ class MotionGatewayModule(Module):
         #: payload's identity alone cannot tell "a new step" from "still walking".
         self._issued = 0
         self._last_cancelled: frozenset[tuple[str, Source]] = frozenset()
+        # The mode the last tick executed under. `None` until the first tick seeds it: a fresh
+        # gateway has executed under nothing yet, and treating "unset" as "changed" would withdraw
+        # the intent a producer legitimately published before this gateway ever ran (#270).
+        self._mode: str | None = None
 
     def start(self, context) -> None:
         # Producing modules find the board through the context, so that not one constructor has
@@ -130,8 +142,9 @@ class MotionGatewayModule(Module):
 
     def tick(self, context) -> None:
         now = self._clock()
+        withdrawn = self._retract_on_mode_change(context)
         snapshot = self._snapshot(context)
-        resolution = self._resolve(context, now, snapshot)
+        resolution = self._resolve(context, now, snapshot, withdrawn)
         self._publish_cancellations(context, resolution.cancelled)
         # Published before the branches below, and only here: "nobody asked", "refused" and
         # "the same intent as last tick" are decisions too, and four publish sites would drift.
@@ -147,14 +160,14 @@ class MotionGatewayModule(Module):
             # its intent, or dies, stops the dog on the next tick instead of leaving it walking.
             self._last_key = None
             self._last_verdict = None
-            self._publish(context, None, None)
+            self._publish(context, None, None, resolution)
             context.set("tilt_latched", self.interlock.tilt_latched)
             return
 
         if not verdict.accepted:
             self._last_key = None
             self._last_verdict = verdict
-            self._publish(context, None, verdict)
+            self._publish(context, None, verdict, resolution)
             # Publish the latch *after* evaluation: the veto above may have just set it.
             context.set("tilt_latched", self.interlock.tilt_latched)
             return
@@ -163,15 +176,56 @@ class MotionGatewayModule(Module):
         if key == self._last_key:
             # Same intent as last tick: keep the verdict visible but do not re-issue, or the
             # motor cooldown is bypassed and the action queue floods.
-            context.set("motion_verdict", verdict.to_dict())
+            context.set("motion_verdict", _verdict_payload(verdict, resolution))
             context.set("tilt_latched", self.interlock.tilt_latched)
             return
         self._last_key = key
         self._last_verdict = verdict
-        self._publish(context, winner, verdict)
+        self._publish(context, winner, verdict, resolution)
         context.set("tilt_latched", self.interlock.tilt_latched)
 
-    def _publish(self, context, command: Command | None, verdict: Verdict | None) -> None:
+    def _retract_on_mode_change(self, context) -> tuple[Refusal, ...]:
+        """Withdraw every autonomy intent on the first tick that sees a new mode (#270).
+
+        `_resolve`'s mode gate refuses a *new* intent a mode does not allow; it says nothing about
+        one already on the board, so an intent published under `manual` was still there when the
+        mode returned to `patrol` and the dog walked on a request that outlived its mode.
+        `ControlPlane.set_mode` retracts at the write, where the decision is made; the gateway
+        retracts at the observation, so a writer added later cannot forget. Two places, one rule —
+        the shape `_vet` already uses for the mode gate.
+
+        The first tick only seeds: retracting there would withdraw what a producer published before
+        the gateway ran, which is not a mode change.
+
+        Each withdrawal comes back as a :class:`Refusal`, because a withdrawn intent is an intent
+        that did not run: without it the record would show a tick where nothing asked for anything,
+        and the operator would have no way to see that autonomy was stopped rather than idle (#270).
+        """
+        mode = _mode_name(context)
+        previous, self._mode = self._mode, mode
+        if previous is None or previous == mode:
+            return ()
+        withdrawn: list[Refusal] = []
+        # Highest rank first, so the record's order matches the board's and `driver` reads the
+        # intent that was closest to winning rather than whichever slot the set happened to yield.
+        for source in sorted(AUTONOMY_SOURCES, key=int, reverse=True):
+            command = self.board.find(source)
+            if command is None:
+                continue
+            self.board.retract(source)
+            withdrawn.append(
+                Refusal(
+                    action=command.action,
+                    source=source.name.lower(),
+                    reason="mode_change",
+                    detail=f"withdrawn when the mode changed from '{previous}' to '{mode}'",
+                )
+            )
+        return tuple(withdrawn)
+
+    def _publish(
+        self, context, command: Command | None, verdict: Verdict | None, resolution: Resolution
+    ) -> None:
         if command is None:
             context.set("motion_command", None)
         else:
@@ -182,10 +236,14 @@ class MotionGatewayModule(Module):
             payload["canonical_action"] = command.action
             payload["seq"] = self._issued
             context.set("motion_command", payload)
-        context.set("motion_verdict", verdict.to_dict() if verdict is not None else None)
+        context.set("motion_verdict", _verdict_payload(verdict, resolution))
 
     def _resolve(
-        self, context, now: float, snapshot: SensorSnapshot
+        self,
+        context,
+        now: float,
+        snapshot: SensorSnapshot,
+        withdrawn: Sequence[Refusal] = (),
     ) -> Resolution:
         """Pick one winner, return it with its verdict, and keep what it beat.
 
@@ -200,14 +258,17 @@ class MotionGatewayModule(Module):
         not a policy).
 
         Every intent that does not become the winner leaves a :class:`Refusal` behind, including
-        the ones the mode gate drops before they are ever ranked. That is the difference between
+        the ones the mode gate drops before they are ever ranked and the autonomy intents the
+        mode change withdrew (`withdrawn`). That is the difference between
         this method's answer and a client's own verdict: the client learns the fate of its own
         request, while the record says who won the tick and why everyone else did not.
         """
         mode = _mode_name(context)
         candidates: list[tuple[tuple[int, int], Command]] = []
         verdicts: dict[str, Verdict] = {}
-        vetoes: list[Refusal] = []
+        # A withdrawal is recorded before the gate runs: it happened first, and it is the reason
+        # the tick may end up with nothing at all to rank.
+        vetoes: list[Refusal] = list(withdrawn)
 
         for command in self.board.latest(now):
             # `stop` passes the mode gate like it passes the interlock: it is how a motion ends.
@@ -325,6 +386,8 @@ class MotionGatewayModule(Module):
 
         Nothing here is invented. A reading that did not answer keeps `None` beside its
         `*_valid` flag, and a confidence no producer measured stays `None` rather than `0.0`.
+        `driver` is derived from what the resolution already holds — the winner and the refusals —
+        never from a context key another module might have left behind from an earlier tick.
         `state` comes from `behavior_state`, which the FSM publishes at the end of its own
         tick. `behavior` runs later in the registry than this module, so a record pairs tick N's
         resolution with the state at the end of tick N-1 — the state that raised those intents.
@@ -345,6 +408,7 @@ class MotionGatewayModule(Module):
             state=state if isinstance(state, str) else None,
             intent=winner.action if winner is not None else None,
             source=winner.source.name.lower() if winner is not None else None,
+            driver=_driver(resolution),
             vetoes=resolution.vetoes,
             inputs=_decision_inputs(snapshot),
             confidence=confidence,
@@ -398,6 +462,57 @@ def _refusal(command: Command, verdict: Verdict) -> Refusal:
         reason=verdict.veto or "refused",
         detail=verdict.detail,
     )
+
+
+def _verdict_payload(verdict: Verdict | None, resolution: Resolution) -> dict[str, object]:
+    """The interlock's answer — or the honest name for why there is none (#270).
+
+    `motion_verdict` used to be `None` both when nobody asked and when everything that asked was
+    refused, so a client could not tell a quiet tick from one the dog could not decide, and a
+    place goal waiting on an answer looked identical to an idle dog. The four `status` values make
+    that difference explicit, and `sources` names the refusals behind `undecided` in rank order:
+
+    - `accepted` / `refused` — an intent won the tick and the interlock had an opinion.
+    - `undecided` — intents existed and none of them won.
+    - `silent` — nothing was published at all, which is not a failure.
+    """
+    if verdict is not None:
+        payload: dict[str, object] = dict(verdict.to_dict())
+        payload["status"] = "accepted" if verdict.accepted else "refused"
+        payload["sources"] = []
+        return payload
+    sources: list[str] = []
+    for refusal in resolution.vetoes:
+        if refusal.source not in sources:
+            sources.append(refusal.source)
+    return {
+        "accepted": False,
+        "action": None,
+        "params": {},
+        "status": "undecided" if sources else "silent",
+        "sources": sources,
+    }
+
+
+def _driver(resolution: Resolution) -> str | None:
+    """Which autonomy input shaped this tick, or `None` when there was none (#270).
+
+    `source` names the winner, so a client can see autonomy won — but not what autonomy *lost*,
+    and "the human overrode navigation" is exactly the decision a record has to explain. So: the
+    winner when autonomy won, otherwise the highest-ranked autonomy source the tick refused,
+    displaced or withdrew. A tick with no autonomy input at all reads `None`, which is the
+    difference between "autonomy was silent" and "autonomy was overruled".
+    """
+    winner = resolution.winner
+    if winner is not None and winner.source in AUTONOMY_SOURCES:
+        return winner.source.name.lower()
+    best: str | None = None
+    best_rank = -1
+    for refusal in resolution.vetoes:
+        rank = _AUTONOMY_RANK.get(refusal.source)
+        if rank is not None and rank > best_rank:
+            best, best_rank = refusal.source, rank
+    return best
 
 
 def _decision_inputs(snapshot: SensorSnapshot) -> dict[str, object]:

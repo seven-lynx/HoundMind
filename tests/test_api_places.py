@@ -507,6 +507,22 @@ def test_teach_writes_the_place_and_files_its_picture(tmp_path, monkeypatch) -> 
     assert stored(tmp_path)[0]["has_view"] is True
 
 
+def test_forgetting_a_place_drops_its_view_too(tmp_path) -> None:
+    """The catalogue and the views file are one fact: a view left behind keeps naming the place (#356)."""
+    views_dir = tmp_path / "views"
+    save_views(views_dir, (_picture("kitchen"), _picture("hall")))
+
+    async def scenario() -> int:
+        plane = plane_for(tmp_path, place_model(), place_model(name="Hall"))
+        async with TestClient(TestServer(create_app(plane))) as client:
+            response = await client.delete(f"{API_PREFIX}/places/kitchen", headers=auth(plane))
+            return response.status
+
+    assert asyncio.run(scenario()) == 200
+    # The other place keeps its picture: forgetting one place is not forgetting the catalogue.
+    assert [view.place_id for view in load_views(views_dir)] == ["hall"]
+
+
 def test_teaching_where_the_dog_stands_is_a_place_at_zero_distance(tmp_path, monkeypatch) -> None:
     """The dog is here, call it the kitchen: no point in the body means the dog's own (M7)."""
     _stub_picture(monkeypatch)

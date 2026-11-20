@@ -236,7 +236,7 @@ The keys a module may rely on. Anything not here is private and may change.
 | `scan_reading` | `ScanReading` ([§5](#5-sensor-data-types)) |
 | `scan_latest`, `scan_quality`, `scan_history` | `dict` |
 | `scan_duration_s` | `float` — measured sweep length |
-| `perception` | `dict` — `obstacle`, `touch`, `sound`, `sound_direction`, `distance`, `occupancy`, `occupancy_valid`, `occupancy_frames` |
+| `perception` | `dict` — the fused snapshot; every key is documented in the table below |
 | `faces` | `dict \| None` — what the detector saw: `timestamp` (the frame's own capture time), `backend`, `detected` (read by `perception`, P4 PL3) |
 | `scan_in_flight` | `bool` |
 | `scan_worker`, `scan_service` | worker and service handles |
@@ -244,6 +244,28 @@ The keys a module may rely on. Anything not here is private and may change.
 | `sensor_service` | service handle — the sensor loop; `orientation`, `fusion` and `safety/supervisor.py` read it |
 | `battery_voltage` | `float` — pack volts, published only while valid; `act/gateway.py`, `behavior/fsm.py` and `/state` prefer it over the reading |
 | `pose_hint` | `dict` — what `perception/fusion.py` infers about the body; the calibration workflow reads it |
+
+**`perception`, key by key** — assembled in one place (`perception/fusion.py::_update_from_reading`),
+so two keys cannot disagree. Every value here is a *measurement*, so a consumer branches on the
+companion flag before it reads the value; a missing reading is not a zero, and it is not a "no".
+
+| Key | Type today | Meaning | Companion flag | What a falsy flag licenses |
+|---|---|---|---|---|
+| `obstacle` | `bool` | `True` when the reading carried a positive range under `settings.perception.obstacle_cm` (20 cm shipped), validated or not; `False` when it carried no range at all | `obstacle_valid` — **published**; `True` only when that range was also flagged valid | *Nothing yet.* `False` beside an invalid flag is a sonar that did not answer: unproven, not permission to keep driving (`navigation/obstacle_avoidance.py:78`) |
+| `distance` | `float \| None` | whatever range the HAL put in the reading; `None` when it had nothing | `distance_valid` — **published** | render "—", never a number — the one client rule [CONTROL_API.md §4](CONTROL_API.md#4-state-snapshot) forbids softening |
+| `touch` | `str` | `"N"` when no pad is pressed, else the pad's name | `touch_valid` — **published** | no interaction is spent on a pad that did not answer |
+| `sound` | `bool` | the reading's `sound_detected` — a clap was heard | `sound_valid` — **published** | no attention cue (`behavior/attention.py:37`), and "quiet" is not claimed either |
+| `sound_direction` | `int \| None` | bearing of the last clap; `None` when the vendor gave none | none — `None` is the flag | the head stays where it is; never default it to `0` (`behavior/attention.py:50`) |
+| `occupancy` | `bool \| None` | somebody in front of the dog, with `min_frames` / `release_frames` hysteresis | `occupancy_valid` — **published** | `null` with `false` means unknown (no detector, no frame, stale frame), never "nobody there" ([FEATURES_GUIDE.md §3](FEATURES_GUIDE.md#3-perception)) |
+| `occupancy_frames` | `int` | consecutive frames behind the current claim | rides with `occupancy_valid` | not a confidence — one frame is not "almost someone" |
+
+Every one of those flags is published by `perception/fusion.py::_update_from_reading` beside its
+value, `occupancy_valid` with them, so nothing in the snapshot is a bare value. What has *not*
+moved is the consumers: `behavior/fsm.py:83-85` and `navigation/obstacle_avoidance.py:78-84` still
+read the value with a default, which is how "the sensor did not answer" became "nothing is there",
+and teaching them the flag is #270's next slice. The snapshot is rewritten every tick from whatever
+`sensor_reading` holds, so a reading the sensor loop stopped refreshing stays in place with the
+flags of its own last tick: its age is still the consumer's to check.
 
 **Navigation, mapping and behaviour**
 
@@ -274,7 +296,7 @@ The keys a module may rely on. Anything not here is private and may change.
 |---|---|
 | `intent_board` | `IntentBoard` — what each source asks for right now |
 | `motion_command` | `dict \| None` — the winning command |
-| `motion_verdict` | `dict \| None` — accepted/vetoed, with reason |
+| `motion_verdict` | `dict` — the tick's outcome: `status` is `accepted`, `refused`, `undecided` or `silent`, with `veto`/`detail` on a refusal and `sources` naming the refusals behind `undecided` |
 | `motion_cancel` | `list` — lower-priority intents this tick displaced |
 | `tilt_latched` | `bool` |
 
@@ -349,7 +371,7 @@ producer key.
 ### `SensorReading` — `hal/sensors.py:48`
 
 ```python
-@dataclass(frozen=True)
+@dataclass
 class SensorReading:
     distance_cm: float | None
     touch: str                     # "N" when nothing is pressed
@@ -362,12 +384,18 @@ class SensorReading:
     touch_valid: bool
     sound_valid: bool
     imu_valid: bool
+    battery_v: float | None = None   # optional feed: `None` is "no reading", never 0 V
+    battery_valid: bool = False
 ```
 
-The four flags are not decoration. `distance_cm=100` with `distance_valid=False` is **not** "clear at
+The flags are not decoration. `distance_cm=100` with `distance_valid=False` is **not** "clear at
 one metre" — it is "no measurement", and downstream logic must branch on the flag before the value.
 `SensorReading.from_snapshot()` adapts the HAL's `SensorSnapshot` to this shape, so a module never
 touches the vendor object.
+
+The same rule reaches the snapshot itself: [`perception`, key by key](#4-context-keys) names each
+key's companion flag, and a falsy one means that key is `distance_valid=False` — the value is
+carried for whoever wants to log it, not believed by whoever would act on it.
 
 **IMU units.** `acc` is in **g** and `gyro` in **deg/s**. `PidogHAL` converts the vendor's raw counts
 at the boundary (`hal/vendor.py::to_physical`: 16384 LSB/g and 16.4 LSB/deg/s, or the sensor's own

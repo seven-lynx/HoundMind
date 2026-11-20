@@ -124,6 +124,8 @@ load, because widening this one is how a dog cooks a servo (#208).
 The fused snapshot is the `perception` context key: `obstacle`, `touch`, `sound`,
 `sound_direction`, `distance`, and — since P4 PL3 — occupancy. Every key in it is a measurement, so
 every key can fail, and the failed read has to stay distinguishable from a real one.
+[`HOUNDMIND_PROGRAMMING_GUIDE.md` §4](HOUNDMIND_PROGRAMMING_GUIDE.md#4-context-keys) documents it
+key by key, with the companion flag beside each value; this section covers the occupancy half only.
 
 **Occupancy** answers one question: is somebody in front of the dog? It is read from the `faces`
 payload a detector publishes (`modules.face_recognition`, `opencv`/Haar backend — presence, no
@@ -495,7 +497,8 @@ no-op and the view is what makes the spot recognisable next time.
 `has_view` in the places file is the catalogue's record that a view was written; `GET /places` also
 publishes `thumb` (the raw 768-byte greyscale thumbnail, base64) read from the views file. Where the two
 disagree both are published as they are — a disagreement a client can see is fixable, one resolved
-silently is not. Forgetting a place does not yet drop its view (#356).
+silently is not. Forgetting a place drops its view in the same act, and a view whose place the catalogue
+does not hold is ignored when `place_recognition` starts.
 
 Nothing here moves the dog: the teach route needs `config` (it writes user data), reads a frame that a
 vision module is already publishing, and answers `503` with the reason when there is no frame or no
@@ -830,6 +833,14 @@ used for the badge.
 **What it does:** Keeps the last decision records in memory for `GET /api/v1/decisions` and the
 `decision` socket event, and can mirror them to JSONL. One record per tick — including the ticks
 where the dog did nothing, because "did nothing" is also a decision.
+
+Each record names the winning intent (`intent`, `source`), **which autonomy input shaped it**
+(`driver` — the winning source when autonomy won, otherwise the highest-ranked autonomy source that
+was refused, displaced or withdrawn, so "the human overrode navigation" stays readable), and `vetoes`,
+every intent that did not win with its reason. A mode change that withdraws an autonomy intent
+appears there as `mode_change` with the source and both modes. The record is `schema_version: 2`
+(`driver` is new in it); the reader still accepts a `1` line. The wire shape is documented in
+`docs/CONTROL_API.md` [§4](CONTROL_API.md#4-state-snapshot).
 
 **Defaults:** the ring holds `logging.decision_log_max_entries` records (200). The JSONL is
 **off** (`logging.decision_log_file_enabled: false`): at 10 Hz it would write about 9 MB an hour,

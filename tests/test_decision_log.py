@@ -14,7 +14,7 @@ from houndmind_ai.act.gateway import MotionGatewayModule
 from houndmind_ai.act.interlock import Interlock
 from houndmind_ai.core.runtime import RuntimeContext
 from houndmind_ai.kernel.commands import CommandBus
-from houndmind_ai.kernel.decisions import DecisionRecord
+from houndmind_ai.kernel.decisions import SCHEMA_VERSION, DecisionRecord
 from houndmind_ai.kernel.intents import IntentBoard
 from houndmind_ai.logging.decision_log import DecisionLogModule
 
@@ -120,7 +120,7 @@ def test_the_file_carries_one_line_per_record(tmp_path: Path):
     assert len(lines) == 2
     first = json.loads(lines[0])
     assert first["type"] == "decision"
-    assert first["schema_version"] == 1
+    assert first["schema_version"] == SCHEMA_VERSION
     assert first["ts"] == 1.0
     assert first["intent"] == "walk"
 

@@ -716,7 +716,9 @@ export const map = {
       reader.onload = () => {
         let parsed = null;
         try {
-          parsed = JSON.parse(String(reader.result));
+          // A file saved by a Windows editor may carry a byte-order mark, and `JSON.parse` refuses
+          // one with a message that blames the JSON rather than the three bytes in front of it (#361).
+          parsed = JSON.parse(String(reader.result).replace(/^\uFEFF/, ""));
         } catch (err) {
           error.textContent = `${file.name} is not JSON`;
           return;

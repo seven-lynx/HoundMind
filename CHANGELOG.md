@@ -42,6 +42,15 @@ Current Release: v2026.11.16
   (25% by default), or a cadence that does not match the manifest. Nothing moves, nothing listens,
   and publishing a clip into the real runtime is a later segment.
 
+- **The decision record says which autonomy input shaped the tick (#270)** — `intent`/`source` name
+  the intent that won, so when a hand overrode the navigator the record kept the winner and lost what
+  it beat. `DecisionRecord` now carries `driver`: the winning source when autonomy won, otherwise the
+  highest-ranked autonomy source the tick refused, displaced or withdrew, and `null` when no autonomy
+  source was on the board at all — which is the difference between "autonomy was silent" and "autonomy
+  was overruled". That moves the record's `SCHEMA_VERSION` to `2`; `from_dict` still reads `1` so a
+  replay of an older log works, `to_dict` writes `2`, `CONTROL_API.md` §4 documents the field and §11
+  says the shipped streams are v2, and the three corpus fixtures carry `schema_version: 2`.
+
 - **The map leaves the console and comes back — export JSON, export PNG, import (M8)** — the home map
   is user data (rooms drawn by hand, walls traced, surfaces painted, places taught with a picture) and
   it lived in exactly one file on one device, so a reflash, a corrupt file or a replacement unit lost
@@ -331,6 +340,11 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- **`docs/ARCHITECTURE.md` lists the tree it describes, and a test keeps it that way** — the `src/tools/`
+  block named ten of eighteen CLIs, so an onboarding reader concluded the map, calibration and bench
+  tooling did not exist; the web row had the same drift until M8 (#359). Both are complete now, and
+  `tests/test_docs_contract.py` fails a page that leaves a shipped tool or web file out, because the
+  block had already fallen behind twice (#68 was the first).
 - **The Android client is named, and it has a home that is not this repository** — `CONTROL_API.md`
   said the "Android app" codes against the file while `ARCHITECTURE.md` said no Android project existed,
   so a reader could not tell whether the app was missing, external or planned (#274). The ruling is
@@ -371,6 +385,18 @@ Current Release: v2026.11.16
   and the replay can say "3 frames in, 7 ticks with no new frame" instead of quoting an inflated
   share; `tools.slam_replay` prints the new counter and its verdict sentence names it.
 
+- **A map file saved by a Windows editor was unreadable** — `load_home_map` read with `encoding="utf-8"`
+  and handed the text to `json.loads`, which refuses a byte-order mark, so a backup re-saved with
+  PowerShell's `Out-File -Encoding utf8` (or any editor that writes one) came back as
+  `not JSON: Unexpected UTF-8 BOM` and the message blamed the JSON rather than the three bytes in front
+  of it (#361). The file loads now (`utf-8-sig`, a superset for files without a mark) and the Map
+  panel's import strips the mark before `JSON.parse`, which refuses it for the same reason.
+- **Forgetting a place left its picture behind** — `DELETE /places/{id}` rewrote only the places file,
+  so `place_recognition` kept matching the removed id and published it as a `place` localisation with a
+  place the user had just deleted (#356). The delete drops the view in the same act, and a view whose
+  place is not in the catalogue is ignored at start, so a hand-edited `views.json` cannot name a place
+  nobody can walk to.
+
 - **The document's `x/y` and the runtime's `x/y` are different axes, and nothing said so** — a document
   point is `[x = left, y = forward]` and a runtime point is `(forward_cm, left_cm)`, both correct, both
   called `x`/`y` (#347). Nothing was wrong while the two never met; the console is about to draw the
@@ -391,6 +417,15 @@ Current Release: v2026.11.16
   Two safety properties now have tests: that retraction, and that the interlock's tilt latch — and its
   `tilt` refusal — survive switching modes, which they must, because the latch is a property of the dog
   and not of a mode.
+- **A tick the dog could not decide looked exactly like a tick nobody asked for** — `motion_verdict`
+  was `None` in both cases, so a place goal waiting on an answer and an idle dog were the same value
+  on the wire, and the device run had no way to check either (#270). It now always carries a `status`:
+  `accepted`, `refused`, `undecided` (intents existed and none of them won, with `sources` naming them
+  in rank order) or `silent` (nothing was published), and `actuators.verdict` offers the same word to
+  `/state`. `vetoed` stays true for `refused` and `undecided` — something asked and was refused — and
+  is false for `silent`. The gateway's half of the mode change is recorded rather than silent too: a
+  withdrawn autonomy intent appears in `vetoes` as `mode_change`, naming the intent and both modes,
+  where the tick used to read as if nothing had ever asked.
 - **`CONTROL_API.md` claimed the dog does not advertise itself** — it has published one mDNS record
   (`houndmind._houndmind._tcp.local`, `api.discovery_enabled`, on by default) since #38, so the contract
   told every client author to hardcode an IP that changes with the DHCP lease. The base-URL paragraph

@@ -40,6 +40,7 @@ __all__ = [
     "load_views",
     "match",
     "match_frame",
+    "remove_views",
     "save_views",
     "score",
     "thumb_b64",
@@ -198,6 +199,16 @@ def upsert_view(views: tuple[PlaceView, ...], view: PlaceView) -> tuple[PlaceVie
     """
     kept = tuple(existing for existing in views if existing.place_id != view.place_id)
     return kept + (view,)
+
+
+def remove_views(views: tuple[PlaceView, ...], place_id: str) -> tuple[PlaceView, ...]:
+    """`views` without any view of `place_id`, for the act that forgets the place (#356).
+
+    The catalogue and the views file are two halves of one fact, and a view left behind keeps
+    recognising a place the user just removed. The caller writes the result with `save_views`, so the
+    two files move together or not at all.
+    """
+    return tuple(view for view in views if view.place_id != place_id)
 
 
 def thumb_b64(view: PlaceView) -> str:

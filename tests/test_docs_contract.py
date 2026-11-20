@@ -23,6 +23,9 @@ INDEX = DOCS / "README.md"
 PIDOG_INDEX = DOCS / "pidog" / "INDEX.md"
 SETTINGS = REPO_ROOT / "config" / "settings.jsonc"
 SCHEMA = REPO_ROOT / "src" / "houndmind_ai" / "kernel" / "config_schema.py"
+ARCHITECTURE = DOCS / "ARCHITECTURE.md"
+TOOLS = REPO_ROOT / "src" / "tools"
+WEB = REPO_ROOT / "src" / "houndmind_ai" / "services" / "web"
 
 STATUSES = {"contract", "design", "reference", "guide", "runbook", "index", "historical"}
 STATUS_LINE = re.compile(r"^Status:\s*\*\*([a-z]+)\*\*", re.MULTILINE)
@@ -158,6 +161,29 @@ def test_no_page_claims_the_installer_issues_the_token() -> None:
             if "install-issued" in line or "installer pre-creates" in line:
                 offenders.append(f"{label(page)}:{number}")
     assert offenders == [], f"the installer does not issue the device token: {offenders}"
+
+
+def test_the_architecture_listing_names_every_shipped_tool_and_web_file() -> None:
+    """§2 is the "where does this live" page, so an unlisted file reads as one that does not exist.
+
+    The block drifted twice — `kernel/` (#68) and then `src/tools/` plus the web app (#359) — because
+    nothing but a reviewer's eye compared it with the tree. This is that eye, in the shape the rest of
+    this file already uses: the page may explain a file, but it may not leave one out.
+    """
+    text = ARCHITECTURE.read_text(encoding="utf-8")
+    tools_block = text[text.index("src/tools/") : text.index("```", text.index("src/tools/"))]
+    # The web listing wraps onto a second line, so the whole `services/` row is the block to search.
+    services_start = text.index("services/   api.py")
+    web_block = text[services_start : text.index("```", services_start)]
+
+    tools = sorted(path.stem for path in TOOLS.glob("*.py") if path.stem != "__init__")
+    missing_tools = [name for name in tools if f"{name}.py" not in tools_block]
+    web = sorted(path.name for path in WEB.iterdir() if path.is_file())
+    missing_web = [name for name in web if name not in web_block]
+
+    assert missing_tools == [], f"src/tools/ entries missing from ARCHITECTURE.md §2: {missing_tools}"
+    assert missing_web == [], f"services/web/ files missing from ARCHITECTURE.md §2: {missing_web}"
+    assert "panels/" in web_block, "the panel split is part of the listing"
 
 
 def test_cited_settings_keys_exist() -> None:
