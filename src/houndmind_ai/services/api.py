@@ -50,10 +50,12 @@ from houndmind_ai.kernel.place import Place, slug
 from houndmind_ai.kernel.place_store import PlaceStore
 from houndmind_ai.kernel.routine_store import RoutineConflict, RoutineStore, StoreReport
 from houndmind_ai.mapping.home_map import (
+    CURRENT_VERSION,
     document_point_to_runtime,
     load_home_map,
     map_path,
     runtime_point_to_document,
+    scale_source_for,
     validate_document,
     write_document,
 )
@@ -897,12 +899,22 @@ async def _map_save(request: web.Request) -> web.Response:
         # The client sent a count, not the log. Keeping the file's window is what stops an edit from
         # quietly deleting evidence the mapper wrote.
         document["samples"] = kept_samples
+    # The version is the writer's claim, not the reader's. `validate_document` accepts any older
+    # document, so a v2 file edited here is written as v3 rather than left labelled with a shape it no
+    # longer has: an older reader refuses a newer file *by name*, and that refusal is the only thing
+    # that stops it dropping a section it does not know (H3).
+    document["version"] = CURRENT_VERSION
     now = time.time()
     document["meta"]["rev"] = current_rev + 1
     created = _number(created_at)
     document["meta"]["created_at"] = created if created is not None else now
     document["meta"]["updated_at"] = now
     document["meta"]["source"] = "user"
+    # Whether this map carries a real dimension is a claim about the whole document, derived here
+    # rather than taken from the console: one writer per fact, the same reason `meta.source` is
+    # stamped on this side (H2). `size_cm` stays per-room — a client that needs the per-room truth
+    # reads the room, not this.
+    document["meta"]["scale_source"] = scale_source_for(document.get("rooms"))
 
     try:
         write_document(path, document)

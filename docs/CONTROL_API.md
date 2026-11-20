@@ -248,11 +248,32 @@ beside `map: null`, and a client that cannot tell it from an empty map draws a r
 Every coordinate in `document` is centimetres from the map origin, `[x = left, y = forward]` — the order
 a person tracing a floor plan reads, and the one the console's canvas draws.
 
+A room carries the two numbers a person typed when they drew it: `rooms[].size_cm` is
+`{width_cm, depth_cm}` in the same document frame, and the key is **absent** on a room nobody
+measured — absent rather than zero, because a zero is a size no one entered and a scale the dog would
+have to invent. `meta.scale_source` is the claim that follows from those rooms: `"user"` when at least
+one of them carries a positive width and depth, `"unmeasured"` otherwise. It is a claim about the
+*document*, so one measured room beside an unmeasured one still reads `"user"`; a client that labels
+a single room reads that room's `size_cm`, which is what the console does. Nothing on the device
+consumes a size yet, deliberately — a dimension the dog has not confirmed is a note on the drawing,
+not a scale a planner or an odometry step may use.
+
 `places` is one of the user sections a client writes back through `PUT /map` (M7). A pin is
 `{id, name, x_cm, y_cm, heading_deg, uncertainty_cm}`, where `id` is the **catalogue** place's id: the
 pin is where the spot is drawn, the place is what the dog can be sent to, and the picture is joined on by
 that id from `GET /places` ([§8](#8-places)). A save keeps the pins it was given, like any other section a
 person drew.
+
+`objects` is furniture standing against a drawn wall (H3):
+`{id, wall_id, start_cm, width_cm, depth_cm, kind, source}`. A rectangle rather than a freehand polygon,
+because that is what a thumb can draw and what a planner can use: `start_cm` is where it begins, measured
+from the wall's `a` end, `width_cm` runs along the wall and `depth_cm` stands out from it, so the same
+object survives a wall redrawn from the other end. `kind` is a closed vocabulary — `cabinet`, `counter`,
+`sofa`, `table`, `shelf`, `other` — because nothing downstream may parse prose. `validate_document`
+refuses a rectangle that starts before its wall or runs past the wall's length, and one whose `wall_id`
+no drawn wall answers: a `problems[]` entry naming the number that did not fit, never a clamp. Nothing on
+the device consumes an object yet, deliberately. The `objects` and `joints` sections are v3: a document
+written before them has no such key, and that absence reads as an empty list rather than a refusal.
 
 **That is not the runtime's order, and both are called `x` and `y` (#347).** The runtime speaks
 `(forward_cm, left_cm)`: the pose (`navigation/odometry.py`), the planner (`mapping/planner.py`) and
@@ -276,7 +297,11 @@ refused document is a `400` with `problems[]` (the shape `POST /places` already 
 `mapping/home_map.py::validate_document` — the same function that loads the file, which is why a
 document this route accepts is one the next start can read. Writes are atomic, and a scan snapshot
 every `home_map_save_interval_s` carries the user's sections and the `rev` forward, so the map's own
-log never erases an edit.
+log never erases an edit. A save also stamps `meta.scale_source` from the rooms it accepted, in the
+same block as `meta.source`, because that claim is derived on the device rather than sent by the
+console — one writer per fact — and the scan saves above carry it forward like `rev`. It also stamps
+`version: 3` whatever version the body carried: the version field is the *writer's* claim, and an older
+reader refuses a newer file **by name** instead of dropping a section it does not know.
 
 Export and import are those two routes, not a third (M8). The console's **Export JSON** saves the
 `document` `GET /map` served — the wire shape above — and **Import…** reads such a file back and sends
@@ -594,6 +619,9 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "pose": { "x": 118.4, "y": -32.0, "yaw_deg": 92.5 },
     "confidence": 0.94, "age_s": 6.2, "reason": "no SLAM backend (stub)"
   },
+  "room": {
+    "id": "kitchen", "name": "Kitchen", "valid": true, "source": "odometry", "reason": null
+  },
   "decision": {
     "schema_version": 2, "ts": 4212.3, "trace_id": "trace123",
     "mode": "patrol", "state": "alert", "intent": "forward", "source": "navigation",
@@ -679,6 +707,19 @@ to place itself on, which is the `reactive` tier), `start_unknown`, `goal_blocke
 planner's own names), `bad_request`, `no_board`, or `timeout` — and carries the sentence a person reads
 in `detail`. `place` is the last place the camera confirmed at an arrival, or `null`: the follower
 never moves the dog on the strength of a view.
+
+`room` is the room the pose falls in (`navigation/room_context.py`), or `null` before that module's
+first tick: `{id, name, valid, source, reason}`. `id` and `name` are `null` whenever `valid` is
+`false` — there is no room to name. `source` says how the claim was earned, and it is required,
+because the same sentence from three different poses is three different claims: `user_pose` (a human
+confirmed the position on the console map), `place` (a camera matched a taught view) or `odometry`
+(heading × counted steps; a SLAM pose folds in here, since it is a measurement too rather than a
+confirmed fix). `valid: false` always carries a `reason`, and the four are different answers:
+`no_pose` (`localization` is `reactive` or published no usable pose), `pose_frame:<frame>` (the pose is
+in SLAM's own coordinates — rtabmap reports metres — so it cannot be tested against a drawing measured
+in centimetres; named rather than converted), `no_rooms` (the home map names no room, which is not the
+same as being outside one) and `outside_every_room` (a good pose that no drawn room contains). Rooms
+may overlap: the first one in document order wins, so the map is not a partition.
 
 `actuators.source` names the producer that won the tick (`system`, `watchdog`, `client`,
 `navigation`, `route`, `place`, `routine`, `behaviour`). `actuators.displaced` counts the intents a

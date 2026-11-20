@@ -48,7 +48,10 @@ const ROOM_COLOURS = [
   "rgba(210, 150, 200, 0.30)",
   "rgba(180, 180, 230, 0.30)",
 ];
-const MODES = ["view", "wall", "opening", "delete", "room", "surface", "pose", "go", "pin"];
+const MODES = ["view", "wall", "opening", "delete", "room", "surface", "object", "pose", "go", "pin"];
+// The furniture kinds `mapping/home_map.py::OBJECT_KINDS` accepts. Closed on purpose: the server
+// refuses a spelling it does not know, so the menu is the only place a new kind may appear (H3).
+const OBJECT_KINDS = ["cabinet", "counter", "sofa", "table", "shelf", "other"];
 
 function pointInPolygon(point, polygon) {
   // Ray casting: a click inside a lasso selects that room, and a boundary hit counts as inside.
@@ -69,6 +72,7 @@ function pointInPolygon(point, polygon) {
 const SNAP_CM = 5;
 const MAGNET_CM = 15;
 const MIN_WALL_CM = 20;
+const MIN_OBJECT_CM = 20;
 const HIT_PX = 12;
 
 const snap = (value) => Math.round(value / SNAP_CM) * SNAP_CM;
@@ -186,6 +190,7 @@ export const map = {
           <button id="mp-mode-delete" class="tiny">Delete</button>
           <button id="mp-mode-room" class="tiny">Room</button>
           <button id="mp-mode-surface" class="tiny">Surface</button>
+          <button id="mp-mode-object" class="tiny">Object</button>
           <button id="mp-mode-pose" class="tiny">Pose</button>
           <button id="mp-mode-go" class="tiny">Go</button>
           <button id="mp-mode-pin" class="tiny">Pin</button>
@@ -194,6 +199,21 @@ export const map = {
           <button id="mp-pose-cancel" class="tiny" disabled>Cancel</button>
           <button id="mp-send" class="tiny" disabled>Send route</button>
           <input id="mp-room-name" class="tiny" placeholder="room name" style="width:7.5rem">
+          <label class="tiny" style="margin:0">room size cm
+            <input id="mp-room-width" type="number" min="0" step="5" placeholder="width"
+              style="width:4.5rem;margin-left:.3rem">
+            <input id="mp-room-depth" type="number" min="0" step="5" placeholder="depth"
+              style="width:4.5rem;margin-left:.25rem">
+          </label>
+          <select id="mp-object-kind" class="tiny">
+            ${OBJECT_KINDS.map((kind) => `<option value="${kind}">${kind}</option>`).join("")}
+          </select>
+          <label class="tiny" style="margin:0">object cm
+            <input id="mp-object-width" type="number" min="20" step="5" value="80" placeholder="along"
+              style="width:4.5rem;margin-left:.3rem">
+            <input id="mp-object-depth" type="number" min="20" step="5" value="60" placeholder="out"
+              style="width:4.5rem;margin-left:.25rem">
+          </label>
           <select id="mp-surface" class="tiny">
             <option value="hardwood">hardwood</option>
             <option value="carpet">carpet</option>
@@ -281,6 +301,7 @@ export const map = {
           rooms: document_.rooms || [],
           surfaces: document_.surfaces || [],
           places: document_.places || [],
+          objects: document_.objects || [],
         })
       );
       if (history.length > 50) history.shift();
@@ -294,6 +315,9 @@ export const map = {
       document_.rooms = previous.rooms;
       document_.surfaces = previous.surfaces;
       document_.places = previous.places || [];
+      // An object is a user section too: a snapshot that skipped it would make Undo *add* the last
+      // piece of furniture back rather than remove it (H3).
+      document_.objects = previous.objects || [];
       // A snapshot restores the arrays, so an item the user had selected is gone: holding the old
       // object would leave the keep-out button acting on a room that is no longer in the document.
       selected = null;
@@ -324,6 +348,11 @@ export const map = {
     }
 
     const roomName = root.querySelector("#mp-room-name");
+    const roomWidth = root.querySelector("#mp-room-width");
+    const roomDepth = root.querySelector("#mp-room-depth");
+    const objectKind = root.querySelector("#mp-object-kind");
+    const objectWidth = root.querySelector("#mp-object-width");
+    const objectDepth = root.querySelector("#mp-object-depth");
     const surfacePick = root.querySelector("#mp-surface");
     const surfaceCm = root.querySelector("#mp-surface-cm");
     const keepOutButton = root.querySelector("#mp-keepout");
@@ -409,6 +438,18 @@ export const map = {
       return null;
     }
 
+    // The object hit test is the drawn rectangle, not its wall: a click on the sofa is a click on the
+    // shape the user sees, so it reuses the corners `drawObjects` paints rather than a second geometry
+    // that could disagree with the picture (#365).
+    function objectUnder(point) {
+      for (const entry of (document_ && document_.objects) || []) {
+        const corners = objectCorners(entry);
+        if (!corners) continue;
+        if (pointInPolygon(point, corners)) return entry;
+      }
+      return null;
+    }
+
     function pinUnder(point) {
       // The same tolerance the wall picker uses, so a click near a pin means the pin whether the
       // user meant to delete it or not: a 6 cm ring is one pixel wide at a fitted zoom.
@@ -440,6 +481,15 @@ export const map = {
       render();
     }
 
+    // The room's real size, when the person who drew it typed one (H2). Both numbers or nothing:
+    // half a rectangle is not a measurement, and the absent key is what makes the room unmeasured.
+    function roomSize() {
+      const width = Number(roomWidth.value);
+      const depth = Number(roomDepth.value);
+      if (!(width > 0) || !(depth > 0)) return null;
+      return { width_cm: width, depth_cm: depth };
+    }
+
     function closeLasso() {
       if (!lasso || lasso.length < 3) return;
       const polygon = lasso;
@@ -459,17 +509,23 @@ export const map = {
       }
       const count = (document_.rooms || []).length;
       const name = (roomName.value || "").trim() || `Room ${count + 1}`;
+      const size = roomSize();
       const room = {
         id: uid("room"),
         name,
         polygon,
         colour: ROOM_COLOURS[count % ROOM_COLOURS.length],
         keep_out: false,
+        // Omitted rather than zeroed: `size_cm` absent is the room nobody measured, and the server
+        // reads that same absence into `meta.scale_source` (H2).
+        ...(size ? { size_cm: size } : {}),
       };
       pushHistory();
       document_.rooms = [...(document_.rooms || []), room];
       selected = { kind: "room", item: room };
       roomName.value = "";
+      roomWidth.value = "";
+      roomDepth.value = "";
       error.textContent = "";
       markDirty(true);
       refreshKeepOut();
@@ -595,6 +651,54 @@ export const map = {
       render();
     }
 
+    // An object is a rectangle standing against a wall: `start_cm` from the wall's `a` end, `width_cm`
+    // along the wall, `depth_cm` out from it, and a kind from a closed list (H3). Nothing on the
+    // device reads one yet — this is the drawing the planner will be given, not a rule it obeys.
+    function placeObject(point) {
+      const width = Math.max(MIN_OBJECT_CM, Math.round(Number(objectWidth.value) || 0));
+      const depth = Math.max(MIN_OBJECT_CM, Math.round(Number(objectDepth.value) || 0));
+      let target = null;
+      let best = (HIT_PX + 4) / view.scale;
+      for (const wall of (document_ && document_.walls) || []) {
+        if (!Array.isArray(wall.a) || !Array.isArray(wall.b)) continue;
+        const distance = distanceToSegment(point, wall.a, wall.b);
+        if (distance < best) {
+          best = distance;
+          target = wall;
+        }
+      }
+      if (!target) {
+        error.textContent = "click a wall to stand an object against it";
+        return;
+      }
+      const length = Math.hypot(target.b[0] - target.a[0], target.b[1] - target.a[1]);
+      if (length < width + 10) {
+        error.textContent = `that wall is ${length.toFixed(0)} cm; a ${width} cm object does not fit`;
+        return;
+      }
+      // A rectangle that overhangs its wall is refused by the server, so the clamp here keeps
+      // `start_cm + width_cm` inside the wall rather than sending an edit that comes back a `400`.
+      const limit = Math.max(0, Math.floor((length - width) / SNAP_CM) * SNAP_CM);
+      const t = projectOnSegment(point, target.a, target.b);
+      const start = Math.min(snap(Math.max(0, t * length - width / 2)), limit);
+      pushHistory();
+      document_.objects = [
+        ...(document_.objects || []),
+        {
+          id: uid("obj"),
+          wall_id: target.id,
+          start_cm: start,
+          width_cm: width,
+          depth_cm: depth,
+          kind: objectKind.value,
+          source: "user",
+        },
+      ];
+      error.textContent = "";
+      markDirty(true);
+      render();
+    }
+
     function deleteAt(point) {
       const pin = pinUnder(point);
       if (pin) {
@@ -602,6 +706,17 @@ export const map = {
         // forgets where it is drawn, and the place stays until it is Forgotten in the Places panel.
         pushHistory();
         document_.places = (document_.places || []).filter((item) => item !== pin);
+        markDirty(true);
+        render();
+        return;
+      }
+      // Furniture is drawn *inside* a room, so it is tested before the room: a click on the counter
+      // would otherwise delete the kitchen it stands in. It goes through `pushHistory` like every other
+      // delete, because the snapshot already carries `objects` and Undo has to take it back (#365).
+      const object = objectUnder(point);
+      if (object) {
+        pushHistory();
+        document_.objects = (document_.objects || []).filter((item) => item !== object);
         markDirty(true);
         render();
         return;
@@ -630,7 +745,15 @@ export const map = {
       if (hit.kind === "opening") {
         document_.openings = (document_.openings || []).filter((item) => item !== hit.item);
       } else {
-        document_.walls = (document_.walls || []).filter((item) => item !== hit.item);
+        // A rectangle is anchored to its wall (`objects[].wall_id`), so it cannot outlive it: an object
+        // left behind is not drawn (objectCorners needs the wall), Delete cannot reach something that is
+        // not drawn, and `mapping/home_map.py` refuses the whole document on the next save. The same
+        // snapshot restores the wall and its furniture together (#370). A doorway cut through the wall
+        // stays: it carries its own points, the server never checks one against a wall, and it is only a
+        // mark on the drawing.
+        const wall = hit.item;
+        document_.walls = (document_.walls || []).filter((item) => item !== wall);
+        document_.objects = (document_.objects || []).filter((item) => item.wall_id !== wall.id);
       }
       markDirty(true);
       render();
@@ -1047,10 +1170,85 @@ export const map = {
         ctx.font = "600 12px ui-sans-serif, system-ui";
         ctx.textAlign = "center";
         ctx.fillText(room.name || "room", sx, sy);
+        // H2: a room nobody measured says so on the drawing rather than leaving the save to imply a
+        // scale the dog has not discovered. The per-room field is the truth here, not
+        // `meta.scale_source`, which is only the document-wide claim.
+        ctx.font = "10px ui-sans-serif, system-ui";
+        const size = room.size_cm;
+        const measured = Boolean(size) && Number(size.width_cm) > 0 && Number(size.depth_cm) > 0;
+        ctx.fillText(
+          measured
+            ? `${size.width_cm} x ${size.depth_cm} cm`
+            : "scale: not measured - run the room to measure it",
+          sx,
+          sy + 12
+        );
         if (room.keep_out) {
-          ctx.font = "10px ui-sans-serif, system-ui";
-          ctx.fillText("keep out", sx, sy + 12);
+          ctx.fillText("keep out", sx, sy + 24);
         }
+      }
+    }
+
+    // The four corners of one object, in the document frame, from the wall it is anchored to. Kept
+    // here rather than on the server because nothing on the device reads objects yet (H3).
+    function objectCorners(entry) {
+      const wall = ((document_ && document_.walls) || []).find((item) => item.id === entry.wall_id);
+      if (!wall || !Array.isArray(wall.a) || !Array.isArray(wall.b)) return null;
+      const length = Math.hypot(wall.b[0] - wall.a[0], wall.b[1] - wall.a[1]);
+      if (!(length > 0)) return null;
+      const width = Math.max(0, Number(entry.width_cm) || 0);
+      const depth = Math.max(0, Number(entry.depth_cm) || 0);
+      const start = Math.min(Math.max(0, Number(entry.start_cm) || 0), Math.max(0, length - width));
+      const from = start / length;
+      const to = Math.min(1, (start + width) / length);
+      const dx = (wall.b[0] - wall.a[0]) / length;
+      const dy = (wall.b[1] - wall.a[1]) / length;
+      // The rectangle stands out from the wall on the side a room is drawn on. With no room to say
+      // which, the wall's own right normal is the one an outline reads as inside.
+      const mid = pointAt(wall.a, wall.b, (from + to) / 2);
+      const rooms = (document_ && document_.rooms) || [];
+      const insideLeft = rooms.some(
+        (room) =>
+          Array.isArray(room.polygon) &&
+          room.polygon.length >= 3 &&
+          pointInPolygon([mid[0] - dy * 5, mid[1] + dx * 5], room.polygon)
+      );
+      const nx = insideLeft ? -dy : dy;
+      const ny = insideLeft ? dx : -dx;
+      const a = pointAt(wall.a, wall.b, from);
+      const b = pointAt(wall.a, wall.b, to);
+      return [
+        a,
+        b,
+        [b[0] + nx * depth, b[1] + ny * depth],
+        [a[0] + nx * depth, a[1] + ny * depth],
+      ];
+    }
+
+    function drawObjects(ctx) {
+      for (const entry of document_.objects || []) {
+        const corners = objectCorners(entry);
+        if (!corners) continue;
+        ctx.beginPath();
+        corners.forEach(([x, y], index) => {
+          const [sx, sy] = screen(x, y);
+          if (index === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        });
+        ctx.closePath();
+        ctx.fillStyle = "rgba(233, 238, 243, 0.14)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(233, 238, 243, 0.55)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        const [cx, cy] = screen(
+          (corners[0][0] + corners[2][0]) / 2,
+          (corners[0][1] + corners[2][1]) / 2
+        );
+        ctx.fillStyle = "#c9d3de";
+        ctx.font = "10px ui-sans-serif, system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(entry.kind || "object", cx, cy);
       }
     }
 
@@ -1377,7 +1575,12 @@ export const map = {
       drawTrail(ctx);
       // Meaning underneath evidence: a room is context for the cells drawn on top of it.
       if (layers.has("surfaces")) drawSurfaces(ctx);
-      if (layers.has("rooms")) drawRooms(ctx);
+      if (layers.has("rooms")) {
+        // Furniture is room context, so it rides the `rooms` layer: a sixth toggle would be a sixth
+        // thing to forget, and a rectangle on top of the floor it stands on reads as part of it (H3).
+        drawRooms(ctx);
+        drawObjects(ctx);
+      }
       if (layers.has("cells")) drawCells(ctx);
       if (layers.has("walls")) {
         drawWalls(ctx);
@@ -1576,6 +1779,10 @@ export const map = {
       }
       if (mode === "delete") {
         deleteAt(point);
+        return;
+      }
+      if (mode === "object") {
+        placeObject(point);
         return;
       }
       if (mode === "room" || mode === "surface") {

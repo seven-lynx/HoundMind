@@ -15,7 +15,9 @@ validator.
 
 The document is versioned and additive. A file written before this module (no `version`, no `grid`)
 still loads — as *samples only*, with a note saying so — because refusing an old file is how a user
-loses the one map they have.
+loses the one map they have. Version 3 adds no field to the scan's own sections: it adds the `objects`
+and `joints` sections a person draws (H3), and a document written before either key existed reads both
+as an empty list.
 """
 
 from __future__ import annotations
@@ -35,25 +37,44 @@ __all__ = [
     "DEFAULT_MAX_CELLS",
     "HomeMap",
     "HomeMapLoad",
+    "OBJECT_KINDS",
     "USER_SECTIONS",
     "build_document",
     "document_point_to_runtime",
     "load_home_map",
     "map_path",
     "runtime_point_to_document",
+    "scale_source_for",
     "validate_document",
     "write_document",
 ]
 
 logger = logging.getLogger(__name__)
 
-CURRENT_VERSION = 2
+CURRENT_VERSION = 3
 DEFAULT_CELL_SIZE_CM = 10.0
 DEFAULT_MAX_CELLS = 20000
 
 # The sections a human owns. The scan writes the cells, the sweep and the samples; these arrive from
 # an editor and outlive every save, so a 30 s snapshot never erases a wall someone drew (M1).
-USER_SECTIONS: tuple[str, ...] = ("walls", "openings", "rooms", "surfaces", "places", "dog")
+USER_SECTIONS: tuple[str, ...] = (
+    "walls",
+    "openings",
+    "rooms",
+    "surfaces",
+    "places",
+    "objects",
+    "joints",
+    "dog",
+)
+
+# A furniture kind is a closed vocabulary (H3): `kind` is what a planner will branch on, so a spelling
+# nothing has agreed on is a refused document rather than a word nobody reads.
+OBJECT_KINDS: tuple[str, ...] = ("cabinet", "counter", "sofa", "table", "shelf", "other")
+
+# The sections whose absence means "empty" rather than "not written". A document from before v3 has no
+# `objects` key at all, and the console reads the same absence as an empty list (H3).
+EMPTY_WHEN_ABSENT: tuple[str, ...] = ("objects", "joints")
 
 
 def _safe_float(value: Any, default: float) -> float:
@@ -112,6 +133,33 @@ def _point2(point: Any) -> tuple[float, float]:
     while len(values) < 2:
         values.append(0.0)
     return _safe_float(values[0], 0.0), _safe_float(values[1], 0.0)
+
+
+def scale_source_for(rooms: Any) -> str:
+    """Whether the document carries a real dimension: `"user"` or `"unmeasured"` (H2).
+
+    A room's size lives beside its polygon as `size_cm: {width_cm, depth_cm}` — the two numbers a
+    person typed when they drew it, not something the dog inferred. Both have to be **positive**,
+    because half a rectangle and a zero are how an unmeasured room would otherwise claim a scale,
+    and H4's discovery run is the only thing allowed to turn a guess into a measurement.
+
+    `validate_document` keeps section entries verbatim, so this is the only place the shape is read.
+    It is a claim about the *document*, though, and a document can hold one measured room beside an
+    unmeasured one: a caller that needs the per-room truth reads `size_cm` itself, which is what the
+    console's label does.
+    """
+    rooms_raw = rooms if isinstance(rooms, Sequence) else ()
+    for room in rooms_raw:
+        if not isinstance(room, Mapping):
+            continue
+        size = room.get("size_cm")
+        if not isinstance(size, Mapping):
+            continue
+        width = _safe_float(size.get("width_cm"), 0.0)
+        depth = _safe_float(size.get("depth_cm"), 0.0)
+        if width > 0 and depth > 0:
+            return "user"
+    return "unmeasured"
 
 
 def map_path(text: Any, default: str = "data/home_map.json") -> Path:
@@ -329,6 +377,13 @@ def build_document(
         "sweep": sweep,
         "samples": _windowed_samples(mapping_state.get("samples"), settings, stamp),
     }
+    # `meta` above is rebuilt from the settings, so the user's own dimension claim is the one key
+    # that has to be carried forward by hand — without it the next 30 s snapshot erases what a
+    # `PUT /map` stamped (H2). An absent claim stays absent: defaulting it here would let the scan
+    # write a measurement nobody took.
+    scale_source = previous_meta.get("scale_source")
+    if isinstance(scale_source, str) and scale_source:
+        document["meta"]["scale_source"] = scale_source
     for name in USER_SECTIONS:
         if isinstance(previous, Mapping) and name in previous:
             document[name] = previous[name]
@@ -375,6 +430,79 @@ def load_home_map(path: Path) -> HomeMapLoad:
     return validate_document(raw)
 
 
+# A rectangle ending half a centimetre past its wall is a float artefact rather than a drawing error:
+# the console snaps to 5 cm, so the boundary only has to absorb the arithmetic.
+_WALL_FIT_TOLERANCE_CM = 0.5
+
+
+def _point(value: Any) -> tuple[float, float] | None:
+    """One document point, `[x, y]` in cm, or None when the pair is not two numbers."""
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    x = _safe_float(value[0], math.nan)
+    y = _safe_float(value[1], math.nan)
+    if math.isnan(x) or math.isnan(y):
+        return None
+    return (x, y)
+
+
+def _wall_lengths(walls: Any) -> dict[str, float | None]:
+    """Every drawn wall's length in cm, keyed by id; None when its endpoints cannot be read."""
+    lengths: dict[str, float | None] = {}
+    if not isinstance(walls, list):
+        return lengths
+    for wall in walls:
+        if not isinstance(wall, Mapping):
+            continue
+        wall_id = wall.get("id")
+        if not isinstance(wall_id, str) or not wall_id:
+            continue
+        a = _point(wall.get("a"))
+        b = _point(wall.get("b"))
+        lengths[wall_id] = math.dist(a, b) if a is not None and b is not None else None
+    return lengths
+
+
+def _object_problems(objects: Sequence[Any], walls: Any) -> list[str]:
+    """An object is a rectangle standing against a wall, so it has to name that wall and fit on it (H3).
+
+    A clamp would draw furniture through the next room and hide the mistake in the drawing, so every
+    refusal here is a `problems[]` entry that names the number that did not work.
+    """
+    lengths = _wall_lengths(walls)
+    problems: list[str] = []
+    for index, entry in enumerate(objects):
+        label = f"objects[{index}]"
+        if not isinstance(entry, Mapping):
+            problems.append(f"{label} is not an object")
+            continue
+        kind = entry.get("kind")
+        if kind not in OBJECT_KINDS:
+            problems.append(f"{label} has kind {kind!r}; use one of {', '.join(OBJECT_KINDS)}")
+        wall_id = entry.get("wall_id")
+        if not isinstance(wall_id, str) or not wall_id:
+            problems.append(f"{label} has no wall_id")
+            continue
+        if wall_id not in lengths:
+            problems.append(f"{label} stands against {wall_id}, which no drawn wall answers")
+            continue
+        length = lengths[wall_id]
+        if length is None:
+            problems.append(f"{label} stands against {wall_id}, whose endpoints are not two points")
+            continue
+        start = _safe_float(entry.get("start_cm"), -1.0)
+        width = _safe_float(entry.get("width_cm"), -1.0)
+        depth = _safe_float(entry.get("depth_cm"), -1.0)
+        if start < 0 or width <= 0 or depth <= 0:
+            problems.append(f"{label} needs start_cm at or above 0 and a positive width_cm and depth_cm")
+            continue
+        if start + width > length + _WALL_FIT_TOLERANCE_CM:
+            problems.append(
+                f"{label} runs {start + width:g} cm along {wall_id}, which is {length:g} cm long"
+            )
+    return problems
+
+
 def validate_document(raw: Any) -> HomeMapLoad:
     """Judge one parsed document: the single validator, for a file and for a request body (M1).
 
@@ -384,7 +512,9 @@ def validate_document(raw: Any) -> HomeMapLoad:
 
     The user's sections are checked for shape only: a section of the wrong type is a problem, not a
     note, because silently dropping a room a human drew is exactly the failure the validity rules
-    exist to prevent. Each segment that writes one (M3-M5) tightens its entries here.
+    exist to prevent. Each segment that writes one (M3-M5) tightens its entries here. `objects` is the
+    first held to geometry (H3): a rectangle that runs past its wall, or names a wall no drawing
+    answers, is a problem naming the wall's length rather than a clamp.
     """
     if not isinstance(raw, Mapping):
         return HomeMapLoad(None, problems=("the file is not a JSON object",), reason="wrong shape")
@@ -445,6 +575,10 @@ def validate_document(raw: Any) -> HomeMapLoad:
     problems: list[str] = []
     for name in USER_SECTIONS:
         if name not in raw:
+            # `objects` and `joints` arrived in v3: a document written before them has no key at all,
+            # and that absence means empty rather than "not written" (H3).
+            if name in EMPTY_WHEN_ABSENT:
+                sections[name] = []
             continue
         value = raw[name]
         if name == "dog":
@@ -457,6 +591,8 @@ def validate_document(raw: Any) -> HomeMapLoad:
             sections[name] = [dict(entry) for entry in value]
         else:
             problems.append(f"{name} must be a list of objects")
+    if "objects" in sections:
+        problems.extend(_object_problems(sections["objects"], sections.get("walls")))
     if problems:
         return HomeMapLoad(None, problems=tuple(problems), reason="wrong section")
 

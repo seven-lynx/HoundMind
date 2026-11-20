@@ -380,18 +380,20 @@ maybe rather than a floor, and the two are drawn differently on purpose. A trunc
 `(truncated)`: an empty corner is "not sent", not "not mapped".
 
 **You can** toggle the five layers (`cells`, `rooms`, `walls`, `surfaces`, `places`), `Fit` the map to the
-canvas, zoom with `+`/`-` or the wheel, and **drag to pan**. The view — scale and centre — is kept in
-`localStorage` under `houndmind.map.view`, so a reload comes back where you left it; `Fit` throws it
-away. It polls every four seconds while visible, and **never while an edit is unsaved**.
+canvas, zoom with `+`/`-` or the wheel, and **drag to pan**. Furniture drawn against a wall is part of the
+`rooms` layer rather than a sixth toggle, because it is context for the floor it stands on (H3). The
+view — scale and centre — is kept in `localStorage` under `houndmind.map.view`, so a reload comes back
+where you left it; `Fit` throws it away. It polls every four seconds while visible, and **never while an
+edit is unsaved**.
 
-**Editing the walls (#309).** Four drawing modes, chosen from the row under the canvas:
+**Editing the walls (#309).** Four drawing modes for the walls, chosen from the row under the canvas:
 
 | Mode | What a press does |
 |---|---|
 | `View` | pans — the default, and the only mode in which dragging moves the picture |
 | `Wall` | drag from one end to the other; the draw snaps to 5 cm and **magnets to an existing endpoint** within 15 cm, so two walls meant to meet do meet. Hold `Shift` to constrain to the axis the drag is longer on. A wall shorter than 20 cm is refused |
 | `Doorway` | click a wall to cut an opening through it, centred where you clicked, `doorway width` cm wide (80 by default). A doorway that would not fit inside its wall is refused, with the wall's length in the message |
-| `Delete` | click a wall or a doorway to remove it |
+| `Delete` | click a pin, a piece of furniture, a room, a surface, a wall or a doorway to remove it; the lookup runs in that order, so furniture wins over the room it stands in. A wall takes the furniture anchored to it with it |
 
 `Undo` restores the previous walls-and-openings snapshot (up to 50 steps), and the chip beside the
 buttons reads `unsaved` until **Save to device** writes the document with `PUT /map`. Saving is
@@ -406,10 +408,34 @@ half-drawn room left behind when the tab closes. A closed room takes the name in
 `Room N` when it is empty, and the next colour from a five-colour cycle; a closed surface takes the
 `Surface` picker's value as both its name and its `step_scale`.
 
+The two boxes beside `room name` take that room's real `width` and `depth` in centimetres. Both or
+neither: half a rectangle is not a measurement, and a room drawn with neither is simply unmeasured —
+the save is accepted, and the drawing labels it
+`scale: not measured - run the room to measure it` under the name. That label reads the room's own
+`size_cm`, never the document-wide `meta.scale_source`, because one measured room does not measure
+the rest of the house.
+
 `keep-out` acts on the room you have **selected** — in `View`, a click that does not pan selects the room
 under the cursor (it gets an amber outline), and the button then reads `keep-out: on` or `off` and
 toggles it. A keep-out room is drawn with a dashed red edge. `Delete` removes a room or a surface you
-click, before it looks for a wall.
+click, before it looks for a wall — but after it looks for furniture, which stands inside the room.
+
+**Objects against a wall (H3).** `Object` stands a piece of furniture against a wall you have drawn. Pick
+a `kind` from the list beside the boxes, type its size in the two `object cm` boxes — the first `along`
+the wall, the second `out` from it — and click the wall where it should sit. The rectangle is centred on
+the click, snapped to 5 cm and kept inside its wall; an object that would overhang the wall is refused
+with the wall's length in the message, the way a doorway is. It is drawn on the side a room is drawn on
+where one contains the wall, and it rides the `rooms` layer. `Undo` puts one back with everything else,
+because the snapshot carries every user section. `Delete` takes one away the same way: the click that
+decides is the rectangle you can see, and the furniture is tested before the room it stands in, so
+mis-clicking a counter back off the map no longer means exporting the document and editing it by hand.
+Deleting a **wall** takes the furniture anchored to it in the same `Undo` step, because the rectangle is
+defined by its wall: left behind, the object would not be drawn, `Delete` could not reach it, and the
+next **Save to device** would refuse the whole document with the whole session's edits. A doorway cut
+through that wall stays where it is — it carries its own points, nothing on the device checks one
+against a wall, and it is only a mark on the drawing.
+Nothing on the device reads an object yet: this is the drawing the dog will be given, not a rule it
+obeys.
 
 **Position and go (M5).** Two more modes, and the only two that involve the dog rather than the house:
 

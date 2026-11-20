@@ -23,6 +23,7 @@ __all__ = [
     "test_every_dark_colour_token_has_a_light_value",
     "test_notifications_are_asked_for_on_a_click_and_checked_before_use",
     "test_the_manifest_points_at_an_icon_that_exists",
+    "test_the_map_panel_can_delete_an_object_it_placed",
     "test_the_map_panel_exports_json_and_png_and_imports_a_document",
     "test_the_stylesheet_honours_the_hidden_attribute",
     "test_the_worker_is_registered_only_in_a_secure_context",
@@ -210,6 +211,59 @@ def test_no_panel_builds_an_origin_of_its_own() -> None:
 
 
 # ------------------------------------------------------------- map export (M8)
+
+
+def test_the_map_panel_can_delete_an_object_it_placed() -> None:
+    """Furniture is user data too: a saved object must be removable from the console (#365).
+
+    There is no browser here, so the guard is textual. It fails when the object branch leaves
+    `deleteAt`, when the hit test stops being the rectangle the panel already draws, or when the branch
+    is placed after the room lookup - where it would be unreachable, because an object stands inside a
+    room.
+    """
+    panel = (WEB / "panels" / "map.js").read_text(encoding="utf-8")
+
+    assert "function objectUnder(" in panel, "the object hit test is gone"
+    hit_test = panel[panel.index("function objectUnder(") : panel.index("function pinUnder(")]
+    assert "objectCorners(" in hit_test, "the click must be tested against the drawn rectangle"
+    assert "pointInPolygon(" in hit_test, (
+        "a rectangle hit test is a polygon test, not a second geometry"
+    )
+
+    delete = panel[panel.index("function deleteAt(") : panel.index("async function save(")]
+    assert "objectUnder(" in delete, "Delete never looks for an object, so furniture cannot be removed"
+    assert delete.index("objectUnder(") < delete.index("roomUnder("), (
+        "furniture stands inside a room: tested after the room, the branch can never be reached"
+    )
+    branch = delete[delete.index("objectUnder(") : delete.index("roomUnder(")]
+    assert "document_.objects" in branch, "the object is found but not filtered out of the document"
+    assert "pushHistory()" in branch, (
+        "an object delete that skips the snapshot makes Undo add the furniture back"
+    )
+
+
+def test_deleting_a_wall_takes_the_furniture_standing_on_it() -> None:
+    """A wall delete must not orphan the objects it anchors (#370).
+
+    `objectCorners` needs the wall to draw the rectangle, so an object left behind by a wall delete is
+    invisible, unreachable by `Delete`, and refused by `mapping/home_map.py` on the next save - which
+    takes every other edit of the session down with it. There is no browser here, so the guard is
+    textual: it fails when the wall branch stops filtering `objects` by `wall_id`, when the cascade
+    lands outside the `pushHistory()` step, or when a doorway delete starts taking furniture with it.
+    """
+    panel = (WEB / "panels" / "map.js").read_text(encoding="utf-8")
+    delete = panel[panel.index("function deleteAt(") : panel.index("async function save(")]
+    hit = delete[delete.index("const hit = nearestSegment(") :]
+
+    opening = hit[hit.index('hit.kind === "opening"') : hit.index("} else {")]
+    assert "document_.objects" not in opening, "a doorway delete must not take furniture with it"
+
+    wall = hit[hit.index("} else {") :]
+    assert "document_.objects" in wall, "the wall is removed but its furniture is left orphaned"
+    assert "wall_id" in wall, "objects are anchored by wall_id: that is the key the cascade needs"
+    assert "pushHistory()" in hit and hit.index("pushHistory()") < hit.index("} else {"), (
+        "the wall and its furniture must land in the one snapshot Undo restores"
+    )
 
 
 def test_the_map_panel_exports_json_and_png_and_imports_a_document() -> None:

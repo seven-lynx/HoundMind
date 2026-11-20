@@ -42,7 +42,13 @@ from houndmind_ai.act.interlock import Interlock, interlock_limits_from_settings
 from houndmind_ai.hal.fake import FakeDogHAL
 from houndmind_ai.hal.iface import DogHAL, SensorSnapshot
 from houndmind_ai.kernel.commands import Command
-from houndmind_ai.navigation.odometry import resolve_step_cm
+from houndmind_ai.navigation.odometry import (
+    APPLY_CONSISTENCY,
+    APPLY_MAX_FRACTION,
+    APPLY_MIN_SAMPLES,
+    apply_step_value,
+    resolve_step_cm,
+)
 
 __all__ = ["Cycle", "RunReport", "main", "run_calibration"]
 
@@ -537,11 +543,6 @@ def _load_settings(path: str | None) -> dict[str, Any]:
         return {}
 
 
-MAX_APPLY_FRACTION = 0.20
-MIN_APPLY_SAMPLES = 5
-APPLY_CONSISTENCY = 0.10
-
-
 def per_cycle_samples(report: RunReport) -> list[float]:
     """The distance each accepted cycle covered, for the cycles that actually moved."""
     return [cycle.delta_cm for cycle in report.cycles if cycle.delta_cm > 0.0]
@@ -551,42 +552,26 @@ def apply_value(
     report: RunReport,
     current_cm: float,
     *,
-    min_samples: int = MIN_APPLY_SAMPLES,
+    min_samples: int = APPLY_MIN_SAMPLES,
     consistency: float = APPLY_CONSISTENCY,
-    max_fraction: float = MAX_APPLY_FRACTION,
+    max_fraction: float = APPLY_MAX_FRACTION,
 ) -> tuple[float | None, str]:
     """The constant this run supports, clamped, or `None` with the reason it does not.
 
-    Three gates, in the order a person would apply them (#300):
-
-    1. **Enough samples.** One cycle is an echo; `min_samples` is what makes it a measurement.
-    2. **They agree.** The smallest and largest accepted cycles must be within `consistency` of each
-       other, because a run that walked 4 cm once and 12 cm once measured nothing repeatable.
-    3. **Clamped.** The answer never moves the constant by more than `max_fraction` in one apply, so a
-       bad run cannot triple every place anchor in the file at once.
-
-    It returns a value; it does not write one. `config/settings.jsonc` is comment-rich user data and
-    this tool's standing rule is that it never edits it - the clamped number is printed for a human to
-    paste, which is also the only way a comment survives.
+    The three gates and the clamp live once, in `navigation/odometry.py::apply_step_value`, shared
+    with the room run (H4) so a value one measurement recommends is a value the other would accept.
+    What this wrapper adds is the thing only a *run report* knows: a vetoed run, or one the operator
+    stopped, has no value to offer however tidy its cycles look.
     """
-    samples = sorted(per_cycle_samples(report))
     if not report.accepted:
         return None, f"the run did not produce a value: {report.verdict}"
-    if len(samples) < min_samples:
-        return None, f"{len(samples)} usable cycle(s), {min_samples} needed for --apply"
-    smallest, largest = samples[0], samples[-1]
-    if largest - smallest > consistency * largest:
-        return None, (
-            f"cycles disagree ({smallest:.2f}-{largest:.2f} cm, more than {consistency:.0%} apart)"
-        )
-    median = samples[len(samples) // 2]
-    if median <= 0.0:
-        return None, "the median cycle covered no ground"
-    low = max(0.1, current_cm * (1.0 - max_fraction))
-    high = current_cm * (1.0 + max_fraction)
-    value = round(min(max(median, low), high), 2)
-    clamped = "" if value == round(median, 2) else f" (clamped from {median:.2f})"
-    return value, f"{len(samples)} cycles, median {median:.2f} cm{clamped}"
+    return apply_step_value(
+        per_cycle_samples(report),
+        current_cm,
+        min_samples=min_samples,
+        consistency=consistency,
+        max_fraction=max_fraction,
+    )
 
 
 def applied_snippet(surface: str, value: float) -> str:

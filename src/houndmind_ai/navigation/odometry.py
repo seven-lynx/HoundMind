@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -41,12 +41,16 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "LINEAR_ACTIONS",
+    "APPLY_CONSISTENCY",
+    "APPLY_MAX_FRACTION",
+    "APPLY_MIN_SAMPLES",
     "AUDIT_MAX_CM",
     "AUDIT_MIN_CHANGE_CM",
     "AUDIT_TIMEOUT_S",
     "DEFAULT_STEP_CM",
     "OdometryModule",
     "StepScale",
+    "apply_step_value",
     "resolve_step_cm",
 ]
 
@@ -101,6 +105,59 @@ def resolve_step_cm(settings: Mapping[str, Any]) -> StepScale:
         if measured > 0:
             return StepScale(cm=measured, source=f"measured:{surface}", surface=surface)
     return StepScale(cm=assumed, source="assumed", surface=surface)
+
+#: The `--apply` gates, shared by every measurement of the stride. A value one run recommends is a
+#: value the other would accept, because a second copy of this policy is how `step_calibrate` starts
+#: suggesting numbers a room run would refuse (#285, H4).
+APPLY_MIN_SAMPLES = 5
+APPLY_CONSISTENCY = 0.10
+APPLY_MAX_FRACTION = 0.20
+
+
+def apply_step_value(
+    samples: Sequence[float],
+    current_cm: float,
+    *,
+    min_samples: int = APPLY_MIN_SAMPLES,
+    consistency: float = APPLY_CONSISTENCY,
+    max_fraction: float = APPLY_MAX_FRACTION,
+    unit: str = "cycle",
+) -> tuple[float | None, str]:
+    """The stride a run's samples support, clamped, or `None` with the reason they do not.
+
+    Three gates, in the order a person would apply them (#300):
+
+    1. **Enough samples.** One cycle is an echo; `min_samples` is what makes it a measurement.
+    2. **They agree.** The smallest and largest accepted samples must be within `consistency` of
+       each other, because a run that walked 4 cm once and 12 cm once measured nothing repeatable.
+    3. **Clamped.** The answer never moves the constant by more than `max_fraction` in one apply, so
+       a bad run cannot triple every place anchor in the file at once.
+
+    It returns a value; it does not write one. `config/settings.jsonc` is comment-rich user data and
+    no tool here edits it - the clamped number is printed for a human to paste, which is also the
+    only way a comment survives.
+
+    `unit` only names the samples in the message - a gait measurement counts cycles, a room run
+    counts walls - and the three gates are the same three gates either way.
+    """
+    ordered = sorted(float(value) for value in samples)
+    if len(ordered) < min_samples:
+        return None, f"{len(ordered)} usable {unit}(s), {min_samples} needed for --apply"
+    smallest, largest = ordered[0], ordered[-1]
+    if largest - smallest > consistency * largest:
+        return None, (
+            f"{unit}s disagree ({smallest:.2f}-{largest:.2f} cm, more than {consistency:.0%} apart)"
+        )
+    median = ordered[len(ordered) // 2]
+    if median <= 0.0:
+        return None, f"the median {unit} covered no ground"
+    low = max(0.1, current_cm * (1.0 - max_fraction))
+    high = current_cm * (1.0 + max_fraction)
+    value = round(min(max(median, low), high), 2)
+    clamped = "" if value == round(median, 2) else f" (clamped from {median:.2f})"
+    return value, f"{len(ordered)} {unit}s, median {median:.2f} cm{clamped}"
+
+
 
 
 

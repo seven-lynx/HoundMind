@@ -343,6 +343,27 @@ def test_the_session_block_reports_how_the_last_run_ended() -> None:
     }
 
 
+def test_the_room_block_is_null_until_a_room_is_named() -> None:
+    """`null` means the room module has not answered, not that the dog is outside every room."""
+    assert build_state(RuntimeContext(), now=0.0)["room"] is None
+
+
+def test_the_room_block_is_the_published_room() -> None:
+    context = RuntimeContext()
+    context.set(
+        "current_room",
+        {"id": "kitchen", "name": "Kitchen", "valid": False, "source": "place", "reason": "no_rooms"},
+    )
+
+    assert build_state(context, now=0.0)["room"] == {
+        "id": "kitchen",
+        "name": "Kitchen",
+        "valid": False,
+        "source": "place",
+        "reason": "no_rooms",
+    }
+
+
 def test_a_malformed_session_block_is_normalised_not_trusted() -> None:
     context = RuntimeContext()
     context.set(

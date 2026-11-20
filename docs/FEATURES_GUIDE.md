@@ -223,6 +223,45 @@ honestly offer and names the reason when that is not the best one available. One
   One frame alone changes nothing; a frame that matched weakly publishes `place_match` with
   `valid: false` and the score that lost, because "no idea, best 0.31" is a state worth showing.
 
+### The room the dog is in
+
+`navigation/room_context.py` turns the pose into the question a person actually asks of it: which room.
+It reads the pose `localization` published that tick, swaps the runtime point `(forward_cm, left_cm)` into
+the frame the rooms are drawn in — `mapping/home_map.py::runtime_point_to_document`, the one place that
+swap is written (#347) — and publishes `current_room`, which `/state` carries as `room`:
+
+```json
+{ "id": "kitchen", "name": "Kitchen", "valid": true, "source": "odometry", "reason": null }
+```
+
+`source` is not decoration: "you are in the Kitchen" from a position a human confirmed, from a room a
+camera recognised and from heading × counted steps are three different claims, and a consumer that will
+act on the room has to know which one it was given.
+
+| `source` | The pose it came from | Localization tier |
+|---|---|---|
+| `user_pose` | the point a human confirmed on the console map | `user` |
+| `place` | a place `place_recognition` matched from the camera | `place` |
+| `odometry` | heading × counted steps — a `slam` pose is folded in here, because it is a measurement too rather than a confirmed fix | `dead_reckoning`, `slam` |
+
+`valid: false` always carries a `reason`, and they are four different answers rather than one shrug:
+
+| `reason` | What it means |
+|---|---|
+| `no_pose` | `localization` is `reactive` or published no usable pose; a pose missing a coordinate is not a pose at the origin |
+| `pose_frame:slam` | the pose is in SLAM's own coordinates (rtabmap reports metres), not centimetres from the odometry origin, so it cannot be tested against a drawing measured in centimetres. Named rather than converted: a unit guess is a confident wrong room |
+| `no_rooms` | the home map names no room — an empty map is not "outside every room" |
+| `outside_every_room` | a good pose that no drawn room contains |
+
+- **Rooms may overlap, and the map is not a partition.** The first room in document order wins, the same
+  rule the keep-out check follows, so a doorway alcove drawn inside a hall answers with the room drawn
+  first rather than an error.
+- **`keep_out` does not filter this.** A room the dog must stay out of is still the room it is standing
+  in; `room` says where it is, and the keep-out refusal stays a separate rule about walking.
+- **Nothing here moves the dog.** It reads the pose and the drawing, and publishes a name.
+
+**Disable:** `modules.room_context.enabled = false` (then `/state.room` stays `null`).
+
 ### Measuring the stride
 
 `step_cm` shipped as 25 cm for a dog about 25 cm long, and the vendor reference itself lists how far
@@ -299,7 +338,10 @@ that the next start loads back.
 ### What is saved, and what is read back
 
 The map is a versioned JSON document (`mapping/home_map.py`). Since v2 it carries the **grid**, the
-last sweep and a window of samples — the grid is the map, the samples are the log around it.
+last sweep and a window of samples — the grid is the map, the samples are the log around it. Since **v3**
+the sections a person draws also include `objects` (furniture as a rectangle against a wall) and `joints`
+(the join between two rooms, which the room-joining work fills); a document written before either key
+reads both as an empty list rather than being refused.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -315,12 +357,71 @@ here is why", never an empty room. Writes are atomic (temp file, then replace), 
 the last snapshot rather than the whole map.
 
 The sections a **person** owns ride in the same document — `walls`, `openings`, `rooms`, `surfaces`,
-`places` and `dog` (`mapping/home_map.py::USER_SECTIONS`). The console writes them through `PUT /map`,
-and every scan save carries them forward, so a 30-second snapshot never erases a wall someone drew or a
-pin someone taught. `places` is the pin layer (M7): `{id, name, x_cm, y_cm, heading_deg,
+`places`, `objects`, `joints` and `dog` (`mapping/home_map.py::USER_SECTIONS`). The console writes them
+through `PUT /map`, and every scan save carries them forward, so a 30-second snapshot never erases a wall
+someone drew or a pin someone taught. `places` is the pin layer (M7): `{id, name, x_cm, y_cm, heading_deg,
 uncertainty_cm}` in the document frame, with `id` naming the catalogue entry the spot was taught as —
 the place is what the dog can be sent to, the pin is where it is drawn, and the picture comes from
 `GET /places` by that id.
+
+An `objects` entry is furniture standing against a drawn wall (H3):
+`{id, wall_id, start_cm, width_cm, depth_cm, kind, source}` — a rectangle rather than a freehand polygon,
+so a planner can use it. `start_cm` is measured from the wall's `a` end, `width_cm` runs along the wall
+and `depth_cm` out from it. `kind` is a closed vocabulary (`cabinet`, `counter`, `sofa`, `table`,
+`shelf`, `other`), and the validator refuses a rectangle that runs past its wall or names a wall no
+drawing answers, putting the number that did not fit in `problems[]`. Nothing on the device consumes an
+object yet, deliberately.
+
+A room also carries the two numbers a person typed when they drew it, as `rooms[].size_cm`
+(`{width_cm, depth_cm}`, document frame). The key is **absent** on a room nobody measured rather
+than zero, and `meta.scale_source` states whether the document as a whole has a real dimension —
+`"user"` when at least one room does, `"unmeasured"` otherwise. One measured room does not measure
+the rest, so a per-room question reads the room. Nothing on the device consumes a size yet,
+deliberately: a dimension the dog has not confirmed is a note on the drawing, not a scale the
+planner may use. The console labels the unmeasured case instead of refusing the save —
+`scale: not measured - run the room to measure it`.
+
+### The stride, measured inside a room (H4)
+
+`settings.odometry.step_cm` is a **guess** — 25 cm for a body about 25 cm long (#285) — and every
+place anchor and every centimetre of the map inherits it. `tools/step_calibrate.py` measures the real
+number by walking into a wall; `mapping/room_scale.py` measures it by walking inside a room someone
+drew, where the walls are already there, with no tape measure and no dimension the user has to
+supply. It is a **library**, not a module: nothing ticks it, nothing is registered, and no runtime key
+is published by it yet.
+
+Two modes, and the room decides which one:
+
+- **Confirm** — the room carries `size_cm`, so the drawing is in real centimetres and the distance
+  from the pose to the wall it ranges is a *drawn* number. The mode compares that with the ranged
+  distance, and the factor between the two is how short or long the assumed stride is.
+- **Discover** — no dimension exists, so the drawing's numbers are not centimetres and nothing reads
+  them as such. The dog differences its own ranges along one wall instead: the range it lost per
+  dead-reckoned centimetre travelled *is* the ratio between the true stride and the assumed one. The
+  drawing is still used — it says which wall was ranged and how much of the outline was covered — but
+  never how long anything is.
+
+The sufficiency table is the contract, and every row is published in `scale_progress` so a console
+can show how far along a run is:
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `SCALE_MIN_RANGES` | `12` | Accepted ranges before a value is named. One echo is noise, and the planner already treats two hits in a cell as "a thing". |
+| `SCALE_MIN_SPREAD_CM` | `150` | How far apart the ranged positions must be; closer than this cannot separate a 10 % error from echo noise. |
+| `SCALE_MIN_EDGES_RANGED` | `2` | Walls that fitted a ratio. One wall gives a ratio, not a scale — any single range fits any stride. |
+| `SCALE_MIN_PERIMETER_COVERAGE` | `0.8` | Share of the drawn perimeter observed. A wall nobody ranged is unproven. |
+| `SCALE_AGREEMENT_PCT` | `5` | How closely the per-wall ratios must agree, in per cent of their median. |
+| `SCALE_RUN_CAP_S` | `600` | The run extends itself until the thresholds are met, then stops. |
+| `SCALE_RUN_CAP_CM` | `2000` | ...and it cannot walk the house looking for evidence. |
+
+A run that hits a cap **refuses by naming the criterion it missed** — `north edge never ranged;
+7/12 ranges; run cap reached: 600 s` — and `step_cm_source` stays `assumed`, because a guessed scale
+is never applied. Applying a value is a separate step a person takes, and the gate is one gate:
+`navigation/odometry.py::apply_step_value` asks for at least five samples, refuses a set that spreads
+more than 10 %, and never moves the constant by more than 20 % in one apply — the policy
+`tools/step_calibrate.py --apply` has always used, now shared rather than copied. Nothing writes
+`config/settings.jsonc`: the clamped number is printed for a human to paste. The run on the dog, the
+`scale_progress` on the wire and the console that draws it are the next segments.
 
 ### Export, import, and a plan on the fridge
 
@@ -343,11 +444,12 @@ grid this process is already building wins, because merging would double every h
 
 ### Routing across the map
 
-`mapping/planner.py::plan_route(cells, start_cm, goal_cm, settings)` turns the grid into a route: a
-list of `{x_cm, y_cm, clearance_cm}` waypoints, or a refusal that names itself — `start_unknown`
-(the pose is off the map or inside an obstacle), `goal_blocked` (the goal is), `no_path` (a free
-route does not exist). It is a pure function: no context, no HAL, no mapper instance, so a synthetic
-grid is the whole test.
+`mapping/planner.py::plan_route(cells, start_cm, goal_cm, settings, *, region=None, sealed_openings=None)`
+turns the grid into a route: a list of `{x_cm, y_cm, clearance_cm}` waypoints, or a refusal that names
+itself — `start_unknown` (the pose is off the map or inside an obstacle), `goal_blocked` (the goal is),
+`no_path` (a free route does not exist), `goal_outside_region` (the goal is outside the room a walk is
+held in) and `route_leaves_region` (the only way there leaves that room). It is a pure function: no
+context, no HAL, no mapper instance, so a synthetic grid is the whole test.
 
 Two things about it are worth knowing before trusting a route:
 
@@ -375,6 +477,22 @@ reads (`mapping/rooms.py`): a goal inside one refuses as `goal_in_keep_out`, and
 refuses as `route_in_keep_out`. The straight run between two waypoints is sampled at 5 cm, because a route
 is corners and a corner-only check calls a walk through a room clear. A dog already standing inside a
 keep-out room is **not** refused: the room is marked to keep it out, not to imprison it.
+
+**Keep-in asks the same predicate the opposite question (H5).** `region` is a room polygon in the
+planner's `(forward_cm, left_cm)` — a drawn room is converted through
+`home_map.document_point_to_runtime`, because the frame swap lives in one place (#347) — and a route
+planned with one never steps outside it. `sealed_openings` are `(a, b)` point pairs in that frame: **the
+door stays open, the plan simply does not use it**, which is how a first run keeps to one doorway while
+the next room is still being drawn. Both are *plan* constraints: nothing in `act/gateway.py`, the
+interlock or the tilt latch knows a region exists, because a region is user data and a drawing that is
+wrong must not become a safety device. The hold is directional too — a walk that **starts** outside the
+region is planned unconstrained, so a dog outside can always plan its way back in.
+
+What actually holds an autonomous run is `mapping/rooms.py::step_inside_region(pose, heading_deg,
+step_cm, region, margin_cm)`: the pose after one stride, `REGION_MARGIN_CM` (15 cm) clear of the drawn
+wall, in the document frame — `plan_route` confines *routes*, and a patrol never asks for one. A step that
+moves toward the region is never refused, and a region that is not a polygon gates nothing: the run
+refuses to start instead (H6).
 
 ### Walking a route
 

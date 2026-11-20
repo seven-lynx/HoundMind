@@ -10,6 +10,83 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A walk is held inside its room, and a gate that lets it back in (H5)** — the planner only knew what
+  was blocked, so a route could leave the room it was drawn for and a doorway the user had not finished
+  with was as walkable as any other. `mapping/planner.py::plan_route` now takes an optional `region` (a
+  room polygon in its own `(forward_cm, left_cm)`) and `sealed_openings` (`(a, b)` pairs in the same
+  frame): **the door stays open, the plan simply does not use it**. Two refusals name themselves,
+  `goal_outside_region` and `route_leaves_region`, and they ask the same predicate keep-out does
+  (`mapping/rooms.py::point_in_polygon`) — keep-out and keep-in are one question asked twice. Neither
+  is an interlock: `act/gateway.py`, the interlock and the tilt latch never learn that geometry exists,
+  because a region is user data and a drawing that is wrong must not become a safety device. The hold is
+  directional — a walk that *starts* outside the region is planned unconstrained, so a dog outside can
+  always plan its way back in. What holds an autonomous run is
+  `mapping/rooms.py::step_inside_region(pose, heading_deg, step_cm, region, margin_cm)`: the pose after
+  one stride, `REGION_MARGIN_CM` (15 cm) clear of the drawn wall, in the document frame, and a step toward
+  the region is never refused. Both are library functions — no route, config key, module or panel changed,
+  and the run itself is H6.
+- **The stride is measured inside a room the dog was shown (H4)** — `step_cm` shipped as 25 cm for a
+  body about 25 cm long (#285), and every place anchor and every centimetre of the map inherits it.
+  `mapping/room_scale.py` measures the real number inside a drawn room, where the walls are already
+  the reference: the dog ranges a wall, walks, ranges it again, and the distance the echo lost is the
+  distance it gained — `tools/step_calibrate.py`'s method minus the walk-into-a-wall. Two modes, and
+  the room decides which: **confirm**, when `size_cm` makes the drawing real centimetres, fits range
+  against the *drawn* distance; **discover**, when no dimension exists, differences the dog's own
+  ranges along a wall, because a drawing without a dimension is not centimetres and nothing may read
+  it as one. Seven constants are the contract (`SCALE_MIN_RANGES` 12, `SCALE_MIN_SPREAD_CM` 150,
+  `SCALE_MIN_EDGES_RANGED` 2, `SCALE_MIN_PERIMETER_COVERAGE` 0.8, `SCALE_AGREEMENT_PCT` 5,
+  `SCALE_RUN_CAP_S` 600, `SCALE_RUN_CAP_CM` 2000), each published in `scale_progress` with how far
+  the run has got, and a run that falls short **refuses by naming the criterion it missed** —
+  `north edge never ranged; 7/12 ranges` — with no value to apply. It is a library, not a module:
+  nothing ticks it, nothing is registered, and no runtime key is published yet (the run is H6, the
+  console H8). `step_cm_source` stays `assumed` until a person runs `--apply`. The clamp that
+  `--apply` enforces moved out of `tools/step_calibrate.py` into
+  `navigation/odometry.py::apply_step_value`, so the gait tool and a room run share one policy
+  instead of two copies of it; the tool's output and messages are unchanged.
+- **Furniture against a wall, and a map version that says so (H3)** — a home modelled room by room had
+  walls, openings, rooms and surfaces but nowhere to put the kitchen counter, so the map could not say
+  what stood where. `objects` is a new user section: `{id, wall_id, start_cm, width_cm, depth_cm, kind,
+  source}`, a rectangle anchored to a drawn wall rather than a freehand polygon — drawable with a thumb,
+  and the shape a planner needs. `start_cm` is measured from the wall's `a` end, `width_cm` runs along the
+  wall and `depth_cm` out from it; `kind` is a closed vocabulary (`cabinet`, `counter`, `sofa`, `table`,
+  `shelf`, `other`) because nothing downstream may parse prose. `mapping/home_map.py::validate_document`
+  refuses a rectangle that starts before its wall or runs past the wall's length, and one whose `wall_id`
+  no drawn wall answers, as a `problems[]` entry naming the number that did not fit — never a silent
+  clamp. `USER_SECTIONS` gains `objects` and `joints`, so a scan save cannot erase either, and
+  `CURRENT_VERSION` moves to 3: a document written before them has no such key and reads both as an empty
+  list, while `PUT /map` stamps the version it writes rather than the one it read, because an older
+  reader refuses a newer file by name instead of dropping a section it does not know. `tools.map_inspect`
+  prints the count and the walls they sit on, and the Map panel gains an `Object` mode with a kind picker
+  and two sizes, drawing the rectangle on the side a room is drawn on and snapshotting it in `Undo`.
+  Nothing on the device consumes an object yet, deliberately.
+- **A room remembers its real size, and a room without one still saves (H2)** — the Map panel asked
+  for a name and a polygon, so a drawn room had no dimension and nothing could say how big the kitchen
+  was. A room now carries `size_cm: {width_cm, depth_cm}` when the person drawing it typed the two
+  numbers, and the key is **absent** rather than zeroed when they did not: an unmeasured room saves
+  normally, and the drawing labels it `scale: not measured - run the room to measure it` under its
+  name instead of the console refusing the edit. `PUT /map` derives `meta.scale_source` — `"user"`
+  when at least one accepted room carries a positive width and depth, `"unmeasured"` otherwise — in
+  the same block that stamps `meta.source`, and `build_document` carries that claim forward so a
+  30-second scan snapshot cannot rebuild it away with the rest of `meta`.
+  `mapping/home_map.py::scale_source_for` is the one place the shape is read, and `validate_document`
+  keeps room entries verbatim as it already did, so a file written before this change loads with both
+  fields absent. Nothing on the device consumes a size yet, deliberately: a dimension the dog has not
+  confirmed is a note on the drawing, not a scale the planner or an odometry step may use.
+
+- **The dog can name the room it is in (H1)** — `rooms` were drawn in the console and read only by the
+  keep-out refusal, so nothing could answer "which room am I in" even with a good pose. `mapping/rooms.py`
+  gains `room_at` (any room, not only keep-out; first match wins, document frame, the same ray cast) and
+  `edge_distances` (nearest and farthest wall in cm, for the scale work), with one segment-distance
+  helper behind both the boundary test and the measurement rather than a second geometry path.
+  `navigation/room_context.py` publishes `current_room` — `{id, name, valid, source, reason}` — from the
+  pose `localization` published that tick, swapped into the document frame once (#347), and `/state`
+  carries it as `room`. `source` says how the claim was earned: `user_pose` (a human confirmed the
+  position), `place` (a camera matched a taught view) or `odometry` (heading × counted steps, with a
+  SLAM pose folded in — it is a measurement too, and its frame makes it unusable against a drawing in
+  centimetres). The four refusals are distinct and named: `no_pose`, `pose_frame:slam`, `no_rooms` and
+  `outside_every_room`, so an empty map never answers confidently. `CONTROL_API.md` [§4](docs/CONTROL_API.md#4-state-snapshot)
+  documents the block and `modules.room_context` ships enabled: it moves nothing.
+
 - **A clip replayed inside the real loop, with the numbers a SLAM verdict needs (SLAM ladder S2)** —
   `tools.slam_replay --host pi|pi5|pc` publishes a recorded clip into the runtime with `slam_pi4`
   switched on and every motion-capable module off, so the measurement includes the loop instead of a
@@ -360,6 +437,25 @@ Current Release: v2026.11.16
   stack needs.
 
 ### Fixed
+
+- **Deleting a wall orphaned the furniture standing on it, and the map could never be saved again** —
+  `Delete` (`web/panels/map.js::deleteAt`) filtered the clicked wall out of `document_.walls` and never
+  looked at `document_.objects`, whose entries carry the `wall_id` they are anchored to (#370). With the
+  wall gone `objectCorners` could not draw the rectangle, so the object was not on the canvas and
+  `Delete` could not reach it, while `mapping/home_map.py` reported `stands against <wall_id>, which no
+  drawn wall answers` on the next **Save to device** and `PUT /map` refused the whole document - every
+  other edit of the session with it. The wall branch now drops the objects anchored to that wall inside
+  the `pushHistory()` step it already opens, so `Undo` puts the wall and its furniture back together. A
+  doorway cut through the deleted wall is left alone: it carries its own points and nothing on the
+  device checks one against a wall.
+- **A piece of furniture could not be taken off the map once it was saved** — `Object` mode could stand a
+  rectangle against a wall, and `Delete` (`web/panels/map.js::deleteAt`) looked for a pin, a room, a
+  surface, a wall and a doorway but never for an object, so a counter clicked onto the wrong wall was
+  permanent after **Save to device** emptied the Undo history; the only way back was **Export JSON**, a
+  text editor and **Import...** (#365). `objectUnder` tests the point against the rectangle
+  `objectCorners` already draws, and `deleteAt` asks it before the room, because furniture stands inside
+  one — a click on the counter would otherwise delete the kitchen. The delete goes through `pushHistory`
+  like every other one, so the Undo snapshot that already carries `objects` takes it back.
 
 - **Place recognition scored one frame and then went quiet for a producer that sets no stamp** —
   `navigation/place_recognition.py` read `vision_frame_ts` through `_safe_float(..., 0.0)` and returned

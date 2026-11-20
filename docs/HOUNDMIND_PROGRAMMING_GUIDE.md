@@ -290,6 +290,18 @@ flags of its own last tick: its age is still the consumer's to check.
 | `behavior_habituation` | `dict` — `{stimulus, count}`, the per-stimulus counter `behavior/fsm.py` keeps |
 | `orientation_calibration_ok` | `bool` — a calibration run produced the z-axis bias (`orientation_bias_z`); `False` when it had no samples. Served as `nav.heading_calibrated` |
 
+`mapping/room_scale.py::RoomScale` is the H4 half of the mapping story: fed one sample per sonar tick
+— the pose, the heading, the range and its validity — it returns `scale_progress`, with the
+sufficiency table's seven criteria and how far the run has got against each, plus a verdict. It is a
+**library**: nothing ticks it and it publishes no key, so a run's `scale_progress` is the room run's
+to publish (H6) and the console's to draw (H8). The distinction it exists for is *discover* versus
+*confirm*: a room that carries `size_cm` is drawn in centimetres, so its walls can confirm a stride,
+while a room without one cannot and the measurement comes from the ranged **differences** along a
+wall the dog walked beside — the method `tools/step_calibrate.py` uses, minus the walk-into-a-wall.
+Neither mode writes anything: `step_cm_source` stays `assumed` until an `--apply` passes
+`navigation/odometry.py::apply_step_value`'s gates (five samples, within 10 % of each other, clamped
+to ±20 % per apply).
+
 **Motion** — the only keys `hal_motors` reads
 
 | Key | Type |
@@ -352,6 +364,7 @@ the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py
 | `pose_trail` | `list` — the walk so far, `[{x_cm, y_cm, yaw_deg, tier, ts}, ...]` in the **odometry** frame: one point per 5 cm of movement, capped at `TRAIL_MAX_POINTS`, emptied when a correction re-anchors the origin (M6). A SLAM-framed pose is never appended: a trail with two frames on it is a walk through rooms the dog was never in |
 | `pose_reset` | `dict \| None` — `{x_cm, y_cm, source, frame_ts}` written by `PUT /api/v1/map/pose`; `navigation/odometry.py` consumes it **once** and re-anchors the pose there. A bare `odometry_reset` still means "the origin now" (M5) |
 | `route_request`, `route` | `dict` — the goal a client asked for (`{"goal_cm": {...}}`, written by `POST /api/v1/map/go`) and the plan `navigation/route_follower.py` made of it: waypoints, `index`, `total`, `state`, or the named refusal (M5, M6) |
+| `current_room` | `dict` — the room the pose falls in (`navigation/room_context.py`): `id`, `name`, `valid`, `source` (`user_pose`/`place`/`odometry`, or `null` with no pose) and `reason` (`no_pose`, `pose_frame:slam`, `no_rooms`, `outside_every_room`). `id`/`name` are `null` whenever `valid` is `false`; the point is swapped into the **document** frame before any polygon test |
 | `event_log_report` | `dict` — the event writer's own state (`logging/event_logger.py`) |
 
 **Internal bookkeeping — not a contract**
@@ -637,6 +650,11 @@ exist and the module publishes nothing.
   the hook and the `path_planning` key were retired because a route needs a position estimate this
   stack does not have (#121). The example below is the whole feature surface. Goal-directed walking
   is `navigation/place_navigator.py` (`docs/CONTROL_API.md` [§8](CONTROL_API.md#8-places)).
+- `mapping/room_scale.py::RoomScale` is the same shape of helper for the stride: a room the user drew
+  supplies the reference, so a walk inside it measures `step_cm` with no tape measure and no
+  dimension the user has to type (#285, H4). Fed samples, it returns `scale_progress`; it ticks
+  nothing and publishes nothing. Its sufficiency table is in
+  [FEATURES_GUIDE.md §6](FEATURES_GUIDE.md#6-mapping).
 
 ```python
 from houndmind_ai.mapping.path_planner import astar

@@ -36,6 +36,7 @@ from houndmind_ai.navigation.odometry import OdometryModule
 from houndmind_ai.navigation.orientation import OrientationModule
 from houndmind_ai.navigation.place_navigator import PlaceNavigatorModule
 from houndmind_ai.navigation.place_recognition import PlaceRecognitionModule
+from houndmind_ai.navigation.room_context import RoomContextModule
 from houndmind_ai.navigation.route_follower import RouteFollowerModule
 from houndmind_ai.navigation.scanning import ScanningModule
 from houndmind_ai.optional.assistant import AssistantModule
@@ -102,6 +103,11 @@ def build_registry(config, hal: DogHAL | None = None) -> ModuleRegistry:
     registry.register(OdometryModule("odometry", **cfg("odometry")), [Capability.NAVIGATION])
     registry.register(
         LocalizationModule("localization", **cfg("localization")), [Capability.NAVIGATION]
+    )
+    # The room the dog can name (H1): it reads the pose `localization` published above, so the tier it
+    # reports is this tick's and not the previous one. It publishes a name, never motion.
+    registry.register(
+        RoomContextModule("room_context", **cfg("room_context")), [Capability.NAVIGATION]
     )
     registry.register(CalibrationModule("calibration", **cfg("calibration")), [Capability.CALIBRATION])
     registry.register(MappingModule("mapping", **cfg("mapping")), [Capability.MAPPING])

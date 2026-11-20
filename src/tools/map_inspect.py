@@ -120,6 +120,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"cells:    {home_map.cell_count}")
     print(f"samples:  {len(home_map.samples)}")
     print(f"sweep:    {len(home_map.sweep)} angle(s)")
+    objects = [entry for entry in (home_map.sections.get("objects") or []) if isinstance(entry, dict)]
+    walls = {entry["wall_id"] for entry in objects if isinstance(entry.get("wall_id"), str)}
+    print(f"objects:  {len(objects)}" + (f" on {len(walls)} wall(s)" if walls else ""))
     print(
         "wall:     "
         + (f"{wall:.0f} cm (capped at {args.wall_cm:g})" if wall is not None else "none known in range")
