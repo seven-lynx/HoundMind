@@ -87,10 +87,10 @@ src/houndmind_ai/
   services/   api.py  auth.py  camera.py  module.py  sessions.py  settings.py  state.py
               stream.py  tls.py  web/  (index.html, app.js, lib.js, style.css, sw.js,
                           manifest.webmanifest, icon.svg, panels/)
-src/tools/    calibrate_servos.py  camera_check.py  collect_support_bundle.py
-              download_opencv_models.py  hardware_checkup.py  installer_verify.py
-              list_audio_devices.py  replay_decisions.py  smoke_test.py
-              validate_rtabmap_adapter.py
+src/tools/    calibrate_servos.py  camera_check.py  camera_record.py
+              collect_support_bundle.py  download_opencv_models.py  hardware_checkup.py
+              installer_verify.py  list_audio_devices.py  replay_decisions.py
+              slam_replay.py  smoke_test.py  validate_rtabmap_adapter.py
 ```
 
 `board/` answers one question — which Raspberry Pi this is — and holds no policy of its own. There is

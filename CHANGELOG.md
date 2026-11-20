@@ -10,6 +10,38 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A clip replayed inside the real loop, with the numbers a SLAM verdict needs (SLAM ladder S2)** —
+  `tools.slam_replay --host pi|pi5|pc` publishes a recorded clip into the runtime with `slam_pi4`
+  switched on and every motion-capable module off, so the measurement includes the loop instead of a
+  bare benchmark. A frame goes on the context when its own recorded timestamp comes round and the
+  loop keeps ticking in between; `--speed` compresses a 60 s clip without speeding the loop, at most
+  one frame is published per tick (a frame replaced inside its own tick was never visible to the
+  consumer), and `hal_sensors` stays off because the IMU has to come from the clip rather than from
+  the dog it was recorded on. OpenCV is used when it is present to hand the backend an array; a host
+  without it delivers the JPEG bytes and the report says so, because a backend that cannot read them
+  processes nothing. Each run writes one JSON report beside the clip — sustained fps, CPU per core,
+  temperature before and after, the loop and `slam_pi4` tick percentiles, the ticks that overran the
+  budget, the frames buffered/processed/dropped/failed, the platform that actually ran under the
+  host label, and a verdict sentence — and `slam_pi4` now publishes `slam_stats` (new context key)
+  so processed-versus-lost is a counter rather than a guess. The Pi 4 number itself is still owed:
+  this lands the instrument, not the measurement.
+
+- **A camera clip every host can replay, and a check that says whether it is one (SLAM ladder S1)** —
+  the SLAM verdict this repo owes (#304) has to compare a Pi 4 with a PC on the *same* footage, and
+  nothing could record footage. `tools/camera_record.py` starts the runtime with every motion-capable
+  module switched off, **borrows** the frame `services/camera.py` already holds (the camera routes now
+  demand a ticket, so a client would need the device token and a ticket to read bytes the process
+  already has in memory) and writes `clip.jsonl` + `manifest.json` through
+  `optional/slam_clip.py`: one line per new frame — timestamp, wall clock, the JPEG exactly as
+  published, the IMU with its own validity flag, and pitch/roll when something published them — plus
+  the resolution, cadence, `|acc|`, gyro bias, host and commit under test, so a number cannot be
+  quoted against the wrong tree. `tools/slam_replay.py --verify` reads that clip with no camera, no
+  SLAM library and no OpenCV — the dimensions come from each frame's own JPEG header — and names
+  what is wrong: a count the manifest does not agree with, a line that is not JPEG, frames that
+  disagree on resolution, timestamps that go backwards or repeat, jitter past `--tolerance-pct`
+  (25% by default), or a cadence that does not match the manifest. Nothing moves, nothing listens,
+  and publishing a clip into the real runtime is a later segment.
+
 - **The map leaves the console and comes back — export JSON, export PNG, import (M8)** — the home map
   is user data (rooms drawn by hand, walls traced, surfaces painted, places taught with a picture) and
   it lived in exactly one file on one device, so a reflash, a corrupt file or a replacement unit lost
@@ -314,6 +346,18 @@ Current Release: v2026.11.16
   stack needs.
 
 ### Fixed
+
+- **A published frame was buffered again on every due tick, so the SLAM counters overcounted** —
+  `optional/slam_pi4.py` read `vision_frame` on every tick it was due and appended whatever it found,
+  so the loop re-reading one still image spent `max_process_per_tick` on copies of it and `frames_in`
+  reported more frames than the clip held (#366). The guard was worse than it looked: `imu` is built
+  as a dict every tick, so the append happened even with no camera publishing at all, and the age trim
+  never caught a copy because its timestamp was fresh. The buffer now dedupes on `vision_frame_ts` —
+  the key every publisher in the tree moves only when the array moves, with object identity as the
+  fallback for a producer that sets none — and `slam_stats` gains `frames_skipped`, the due ticks that
+  found the same frame again or found none. `frames_in` is therefore one entry per published frame,
+  and the replay can say "3 frames in, 7 ticks with no new frame" instead of quoting an inflated
+  share; `tools.slam_replay` prints the new counter and its verdict sentence names it.
 
 - **The document's `x/y` and the runtime's `x/y` are different axes, and nothing said so** — a document
   point is `[x = left, y = forward]` and a runtime point is `(forward_cm, left_cm)`, both correct, both
