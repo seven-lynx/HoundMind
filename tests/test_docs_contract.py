@@ -26,6 +26,7 @@ SCHEMA = REPO_ROOT / "src" / "houndmind_ai" / "kernel" / "config_schema.py"
 ARCHITECTURE = DOCS / "ARCHITECTURE.md"
 TOOLS = REPO_ROOT / "src" / "tools"
 WEB = REPO_ROOT / "src" / "houndmind_ai" / "services" / "web"
+PACKAGES = REPO_ROOT / "src" / "houndmind_ai"
 
 STATUSES = {"contract", "design", "reference", "guide", "runbook", "index", "historical"}
 STATUS_LINE = re.compile(r"^Status:\s*\*\*([a-z]+)\*\*", re.MULTILINE)
@@ -163,19 +164,59 @@ def test_no_page_claims_the_installer_issues_the_token() -> None:
     assert offenders == [], f"the installer does not issue the device token: {offenders}"
 
 
-def test_the_architecture_listing_names_every_shipped_tool_and_web_file() -> None:
+PACKAGE_ROW = re.compile(r"^ {2}([a-z_][a-z0-9_]*)/\s+(.*)$")
+
+
+def _package_rows(layout: str) -> dict[str, list[str]]:
+    """The package rows of the tree, unwrapped: a long row continues on lines indented under it."""
+    rows: dict[str, list[str]] = {}
+    current = ""
+    for line in layout.splitlines():
+        match = PACKAGE_ROW.match(line)
+        if match:
+            current = match.group(1)
+            rows[current] = match.group(2).split()
+        elif current and line.startswith(" " * 14):
+            rows[current].extend(line.split())
+    return rows
+
+
+def _modules_the_listing_omits(layout: str) -> dict[str, list[str]]:
+    """Every module a package ships, checked against the row that is meant to name it.
+
+    A package with no row at all is a finding too: the page reads as an inventory, so an absent row
+    says the package does not exist.
+    """
+    rows = _package_rows(layout)
+    omitted: dict[str, list[str]] = {}
+    for package in sorted(PACKAGES.iterdir()):
+        if not (package / "__init__.py").is_file():
+            continue
+        shipped = sorted(path.name for path in package.glob("*.py") if path.name != "__init__.py")
+        missing = [name for name in shipped if name not in rows.get(package.name, [])]
+        if missing or package.name not in rows:
+            omitted[package.name] = missing
+    return omitted
+
+
+def test_the_architecture_listing_names_every_shipped_file() -> None:
     """§2 is the "where does this live" page, so an unlisted file reads as one that does not exist.
 
-    The block drifted twice — `kernel/` (#68) and then `src/tools/` plus the web app (#359) — because
+    The block drifted three times — `kernel/` (#68), `src/tools/` plus the web app (#359), and the package rows (#364) — because
     nothing but a reviewer's eye compared it with the tree. This is that eye, in the shape the rest of
     this file already uses: the page may explain a file, but it may not leave one out.
     """
     text = ARCHITECTURE.read_text(encoding="utf-8")
+    layout = text[text.index("src/houndmind_ai/") : text.index("src/tools/")]
     tools_block = text[text.index("src/tools/") : text.index("```", text.index("src/tools/"))]
     # The web listing wraps onto a second line, so the whole `services/` row is the block to search.
     services_start = text.index("services/   api.py")
     web_block = text[services_start : text.index("```", services_start)]
 
+    missing_packages = _modules_the_listing_omits(layout)
+    assert missing_packages == {}, (
+        f"package rows missing from the ARCHITECTURE listing: {missing_packages}"
+    )
     tools = sorted(path.stem for path in TOOLS.glob("*.py") if path.stem != "__init__")
     missing_tools = [name for name in tools if f"{name}.py" not in tools_block]
     web = sorted(path.name for path in WEB.iterdir() if path.is_file())
