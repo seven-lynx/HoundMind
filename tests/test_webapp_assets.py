@@ -242,6 +242,30 @@ def test_the_map_panel_can_delete_an_object_it_placed() -> None:
     )
 
 
+def test_deleting_a_wall_takes_the_furniture_standing_on_it() -> None:
+    """A wall delete must not orphan the objects it anchors (#370).
+
+    `objectCorners` needs the wall to draw the rectangle, so an object left behind by a wall delete is
+    invisible, unreachable by `Delete`, and refused by `mapping/home_map.py` on the next save - which
+    takes every other edit of the session down with it. There is no browser here, so the guard is
+    textual: it fails when the wall branch stops filtering `objects` by `wall_id`, when the cascade
+    lands outside the `pushHistory()` step, or when a doorway delete starts taking furniture with it.
+    """
+    panel = (WEB / "panels" / "map.js").read_text(encoding="utf-8")
+    delete = panel[panel.index("function deleteAt(") : panel.index("async function save(")]
+    hit = delete[delete.index("const hit = nearestSegment(") :]
+
+    opening = hit[hit.index('hit.kind === "opening"') : hit.index("} else {")]
+    assert "document_.objects" not in opening, "a doorway delete must not take furniture with it"
+
+    wall = hit[hit.index("} else {") :]
+    assert "document_.objects" in wall, "the wall is removed but its furniture is left orphaned"
+    assert "wall_id" in wall, "objects are anchored by wall_id: that is the key the cascade needs"
+    assert "pushHistory()" in hit and hit.index("pushHistory()") < hit.index("} else {"), (
+        "the wall and its furniture must land in the one snapshot Undo restores"
+    )
+
+
 def test_the_map_panel_exports_json_and_png_and_imports_a_document() -> None:
     """The map is user data: it has to leave the tab, and come back through the one write path.
 

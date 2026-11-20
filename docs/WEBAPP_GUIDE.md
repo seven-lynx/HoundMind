@@ -393,7 +393,7 @@ edit is unsaved**.
 | `View` | pans — the default, and the only mode in which dragging moves the picture |
 | `Wall` | drag from one end to the other; the draw snaps to 5 cm and **magnets to an existing endpoint** within 15 cm, so two walls meant to meet do meet. Hold `Shift` to constrain to the axis the drag is longer on. A wall shorter than 20 cm is refused |
 | `Doorway` | click a wall to cut an opening through it, centred where you clicked, `doorway width` cm wide (80 by default). A doorway that would not fit inside its wall is refused, with the wall's length in the message |
-| `Delete` | click a pin, a piece of furniture, a room, a surface, a wall or a doorway to remove it; the lookup runs in that order, so furniture wins over the room it stands in |
+| `Delete` | click a pin, a piece of furniture, a room, a surface, a wall or a doorway to remove it; the lookup runs in that order, so furniture wins over the room it stands in. A wall takes the furniture anchored to it with it |
 
 `Undo` restores the previous walls-and-openings snapshot (up to 50 steps), and the chip beside the
 buttons reads `unsaved` until **Save to device** writes the document with `PUT /map`. Saving is
@@ -429,6 +429,11 @@ where one contains the wall, and it rides the `rooms` layer. `Undo` puts one bac
 because the snapshot carries every user section. `Delete` takes one away the same way: the click that
 decides is the rectangle you can see, and the furniture is tested before the room it stands in, so
 mis-clicking a counter back off the map no longer means exporting the document and editing it by hand.
+Deleting a **wall** takes the furniture anchored to it in the same `Undo` step, because the rectangle is
+defined by its wall: left behind, the object would not be drawn, `Delete` could not reach it, and the
+next **Save to device** would refuse the whole document with the whole session's edits. A doorway cut
+through that wall stays where it is — it carries its own points, nothing on the device checks one
+against a wall, and it is only a mark on the drawing.
 Nothing on the device reads an object yet: this is the drawing the dog will be given, not a rule it
 obeys.
 

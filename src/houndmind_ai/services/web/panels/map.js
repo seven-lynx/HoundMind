@@ -745,7 +745,15 @@ export const map = {
       if (hit.kind === "opening") {
         document_.openings = (document_.openings || []).filter((item) => item !== hit.item);
       } else {
-        document_.walls = (document_.walls || []).filter((item) => item !== hit.item);
+        // A rectangle is anchored to its wall (`objects[].wall_id`), so it cannot outlive it: an object
+        // left behind is not drawn (objectCorners needs the wall), Delete cannot reach something that is
+        // not drawn, and `mapping/home_map.py` refuses the whole document on the next save. The same
+        // snapshot restores the wall and its furniture together (#370). A doorway cut through the wall
+        // stays: it carries its own points, the server never checks one against a wall, and it is only a
+        // mark on the drawing.
+        const wall = hit.item;
+        document_.walls = (document_.walls || []).filter((item) => item !== wall);
+        document_.objects = (document_.objects || []).filter((item) => item.wall_id !== wall.id);
       }
       markDirty(true);
       render();
