@@ -218,6 +218,9 @@ class SlamPi4Module(Module):
             ts = time.time()
 
         if frame is not None or imu is not None:
+            # A frame the producer has not replaced yet is buffered again on every due tick, and the
+            # age trim below never catches the copy: it spends `max_process_per_tick` on a still
+            # image and inflates `frames_in` (#366).
             self._buffer.append((ts, frame, imu))
             self._frames_in += 1
 
