@@ -118,3 +118,138 @@ def test_usable_bindings_are_reported_as_the_rtabmap_backend(monkeypatch) -> Non
     assert m._adapter is not None
     assert m._adapter._rtab.params == {"RGB/Enabled": "true"}
 
+
+def test_the_module_counts_what_it_did_with_the_frames(monkeypatch) -> None:
+    """A replay quotes processed-versus-lost, so the module has to count both (plan S)."""
+    import sys
+    import types
+
+    fake = types.ModuleType("rtabmap")
+
+    class Rtabmap:
+        def __init__(self) -> None:
+            self.frames = 0
+
+        def process(self, frame, imu=None, timestamp=None) -> None:
+            self.frames += 1
+
+        def get_pose(self):
+            return None
+
+    fake.Rtabmap = Rtabmap
+    monkeypatch.setitem(sys.modules, "rtabmap", fake)
+
+    ctx = RuntimeContext()
+    ctx.set(
+        "settings",
+        {"slam_pi4": {"enabled": True, "backend": "rtabmap", "interval_s": 0.0}},
+    )
+    ctx.set("vision_frame", b"frame")
+    ctx.set("sensor_reading", {"gyro": [0.0, 0.0, 0.0], "acc": [0.0, 0.0, 9.81], "timestamp": time.time()})
+
+    m = SlamPi4Module("slam", enabled=True)
+    m.start(ctx)
+    m.tick(ctx)
+
+    stats = ctx.get("slam_stats")
+    assert stats == {
+        "frames_in": 1,
+        "frames_skipped": 0,
+        "frames_processed": 1,
+        "frames_dropped": 0,
+        "frames_failed": 0,
+        "buffered": 0,
+    }
+
+
+def test_the_stub_counts_frames_it_never_processed() -> None:
+    ctx = RuntimeContext()
+    ctx.set("settings", {"slam_pi4": {"enabled": True, "backend": "stub", "interval_s": 0.0}})
+    ctx.set("vision_frame", b"frame")
+    ctx.set("sensor_reading", {"gyro": [0.0, 0.0, 0.0], "acc": None, "timestamp": time.time()})
+
+    m = SlamPi4Module("slam", enabled=True)
+    m.start(ctx)
+    m.tick(ctx)
+
+    stats = ctx.get("slam_stats")
+    # Dead reckoning does not consume frames; saying so is the honest report.
+    assert stats["frames_in"] == 1
+    assert stats["frames_processed"] == 0
+    assert stats["buffered"] == 1
+
+
+def test_a_frame_the_producer_has_not_replaced_is_buffered_once() -> None:
+    """The loop re-reads `vision_frame` until the producer replaces it; a copy is not new work (#366)."""
+    ctx = RuntimeContext()
+    ctx.set("settings", {"slam_pi4": {"enabled": True, "backend": "stub", "interval_s": 0.0}})
+    ctx.set("vision_frame", b"frame-1")
+    ctx.set("vision_frame_ts", 100.0)
+    ctx.set("sensor_reading", {"gyro": [0.0, 0.0, 0.0], "acc": None, "timestamp": time.time()})
+
+    m = SlamPi4Module("slam", enabled=True)
+    m.start(ctx)
+    for _ in range(6):
+        m.tick(ctx)
+
+    stats = ctx.get("slam_stats")
+    assert stats["frames_in"] == 1
+    assert stats["frames_skipped"] == 5
+    assert stats["buffered"] == 1
+
+
+def test_a_new_frame_and_stamp_is_buffered_as_new_work() -> None:
+    ctx = RuntimeContext()
+    ctx.set("settings", {"slam_pi4": {"enabled": True, "backend": "stub", "interval_s": 0.0}})
+    ctx.set("sensor_reading", {"gyro": [0.0, 0.0, 0.0], "acc": None, "timestamp": time.time()})
+
+    m = SlamPi4Module("slam", enabled=True)
+    m.start(ctx)
+    ctx.set("vision_frame", b"frame-1")
+    ctx.set("vision_frame_ts", 1.0)
+    m.tick(ctx)
+    ctx.set("vision_frame", b"frame-2")
+    ctx.set("vision_frame_ts", 2.0)
+    m.tick(ctx)
+
+    stats = ctx.get("slam_stats")
+    assert stats["frames_in"] == 2
+    assert stats["frames_skipped"] == 0
+    assert stats["buffered"] == 2
+
+
+def test_a_producer_without_a_stamp_is_deduped_by_identity() -> None:
+    """A publisher that sets no `vision_frame_ts` still must not hand the backend the same array twice."""
+    ctx = RuntimeContext()
+    ctx.set("settings", {"slam_pi4": {"enabled": True, "backend": "stub", "interval_s": 0.0}})
+    ctx.set("sensor_reading", {"gyro": [0.0, 0.0, 0.0], "acc": None, "timestamp": time.time()})
+
+    m = SlamPi4Module("slam", enabled=True)
+    m.start(ctx)
+    ctx.set("vision_frame", b"frame-1")
+    m.tick(ctx)
+    m.tick(ctx)
+
+    stats = ctx.get("slam_stats")
+    assert stats["frames_in"] == 1
+    assert stats["frames_skipped"] == 1
+
+
+def test_a_tick_with_no_published_frame_buffers_nothing() -> None:
+    """`imu` is built as a dict every tick, so the old `or imu is not None` guard appended a `None`
+    frame even with no camera at all (#366)."""
+    ctx = RuntimeContext()
+    ctx.set("settings", {"slam_pi4": {"enabled": True, "backend": "stub", "interval_s": 0.0}})
+
+    m = SlamPi4Module("slam", enabled=True)
+    m.start(ctx)
+    for _ in range(3):
+        m.tick(ctx)
+
+    stats = ctx.get("slam_stats")
+    assert stats["frames_in"] == 0
+    assert stats["frames_skipped"] == 3
+    assert stats["buffered"] == 0
+    assert not m._buffer
+
+

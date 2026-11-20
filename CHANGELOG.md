@@ -10,6 +10,38 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A clip replayed inside the real loop, with the numbers a SLAM verdict needs (SLAM ladder S2)** —
+  `tools.slam_replay --host pi|pi5|pc` publishes a recorded clip into the runtime with `slam_pi4`
+  switched on and every motion-capable module off, so the measurement includes the loop instead of a
+  bare benchmark. A frame goes on the context when its own recorded timestamp comes round and the
+  loop keeps ticking in between; `--speed` compresses a 60 s clip without speeding the loop, at most
+  one frame is published per tick (a frame replaced inside its own tick was never visible to the
+  consumer), and `hal_sensors` stays off because the IMU has to come from the clip rather than from
+  the dog it was recorded on. OpenCV is used when it is present to hand the backend an array; a host
+  without it delivers the JPEG bytes and the report says so, because a backend that cannot read them
+  processes nothing. Each run writes one JSON report beside the clip — sustained fps, CPU per core,
+  temperature before and after, the loop and `slam_pi4` tick percentiles, the ticks that overran the
+  budget, the frames buffered/processed/dropped/failed, the platform that actually ran under the
+  host label, and a verdict sentence — and `slam_pi4` now publishes `slam_stats` (new context key)
+  so processed-versus-lost is a counter rather than a guess. The Pi 4 number itself is still owed:
+  this lands the instrument, not the measurement.
+
+- **A camera clip every host can replay, and a check that says whether it is one (SLAM ladder S1)** —
+  the SLAM verdict this repo owes (#304) has to compare a Pi 4 with a PC on the *same* footage, and
+  nothing could record footage. `tools/camera_record.py` starts the runtime with every motion-capable
+  module switched off, **borrows** the frame `services/camera.py` already holds (the camera routes now
+  demand a ticket, so a client would need the device token and a ticket to read bytes the process
+  already has in memory) and writes `clip.jsonl` + `manifest.json` through
+  `optional/slam_clip.py`: one line per new frame — timestamp, wall clock, the JPEG exactly as
+  published, the IMU with its own validity flag, and pitch/roll when something published them — plus
+  the resolution, cadence, `|acc|`, gyro bias, host and commit under test, so a number cannot be
+  quoted against the wrong tree. `tools/slam_replay.py --verify` reads that clip with no camera, no
+  SLAM library and no OpenCV — the dimensions come from each frame's own JPEG header — and names
+  what is wrong: a count the manifest does not agree with, a line that is not JPEG, frames that
+  disagree on resolution, timestamps that go backwards or repeat, jitter past `--tolerance-pct`
+  (25% by default), or a cadence that does not match the manifest. Nothing moves, nothing listens,
+  and publishing a clip into the real runtime is a later segment.
+
 - **The decision record says which autonomy input shaped the tick (#270)** — `intent`/`source` name
   the intent that won, so when a hand overrode the navigator the record kept the winner and lost what
   it beat. `DecisionRecord` now carries `driver`: the winning source when autonomy won, otherwise the
@@ -329,6 +361,30 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **Place recognition scored one frame and then went quiet for a producer that sets no stamp** —
+  `navigation/place_recognition.py` read `vision_frame_ts` through `_safe_float(..., 0.0)` and returned
+  early whenever the value matched the last one it scored, so a publisher that sets `vision_frame`
+  alone got exactly one match for the life of the process: the first frame passed the guard, the
+  module recorded `0.0`, and every later frame read `0.0` too and returned before the matcher ran.
+  `place_match` kept being published, so a client showed a working module that had stopped looking,
+  and the `place` tier — the one that corrects the pose from the camera — never re-anchored. The
+  guard now keeps the raw stamp and falls back to object identity when there is none, the case
+  `optional/slam_pi4.py` settled in #366, and the frames are never compared with `==` because
+  `vision_frame` is a numpy array on the Pi. `place_match` and `place_fix` still carry a numeric
+  identity for `localization` to age: the producer's own stamp, or the tick's monotonic read when the
+  producer publishes none (#367).
+- **A published frame was buffered again on every due tick, so the SLAM counters overcounted** —
+  `optional/slam_pi4.py` read `vision_frame` on every tick it was due and appended whatever it found,
+  so the loop re-reading one still image spent `max_process_per_tick` on copies of it and `frames_in`
+  reported more frames than the clip held (#366). The guard was worse than it looked: `imu` is built
+  as a dict every tick, so the append happened even with no camera publishing at all, and the age trim
+  never caught a copy because its timestamp was fresh. The buffer now dedupes on `vision_frame_ts` —
+  the key every publisher in the tree moves only when the array moves, with object identity as the
+  fallback for a producer that sets none — and `slam_stats` gains `frames_skipped`, the due ticks that
+  found the same frame again or found none. `frames_in` is therefore one entry per published frame,
+  and the replay can say "3 frames in, 7 ticks with no new frame" instead of quoting an inflated
+  share; `tools.slam_replay` prints the new counter and its verdict sentence names it.
+
 - **A map file saved by a Windows editor was unreadable** — `load_home_map` read with `encoding="utf-8"`
   and handed the text to `json.loads`, which refuses a byte-order mark, so a backup re-saved with
   PowerShell's `Out-File -Encoding utf8` (or any editor that writes one) came back as
@@ -340,6 +396,7 @@ Current Release: v2026.11.16
   place the user had just deleted (#356). The delete drops the view in the same act, and a view whose
   place is not in the catalogue is ignored at start, so a hand-edited `views.json` cannot name a place
   nobody can walk to.
+
 - **The document's `x/y` and the runtime's `x/y` are different axes, and nothing said so** — a document
   point is `[x = left, y = forward]` and a runtime point is `(forward_cm, left_cm)`, both correct, both
   called `x`/`y` (#347). Nothing was wrong while the two never met; the console is about to draw the
