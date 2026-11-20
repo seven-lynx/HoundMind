@@ -1111,6 +1111,32 @@ amplifier, `espeak`/`espeak-ng` is what the eSpeak engine and `pyttsx3` shell ou
 PulseAudio sink on the HAT) every engine constructs, says nothing, and logs the failure once. Prove
 the routing before blaming the engine: `python -m tools.audio_check --verify` (#246, #249, #254, #289).
 
+**The flags that shipped, and what they answer.** `tools.audio_check` runs **one action per call**, so
+the order is the diagnosis: `--list` prints what ALSA exposes for capture and playback (`arecord -l`
+then `aplay -l`, exit `1` if neither tool exists); `--verify` plays a tone, records it and prints the
+room level, the level during playback, the delta and a verdict; `--tone HZ`, `--play FILE` and
+`--say TEXT` play a single thing (`--say` renders through `espeak`/`espeak-ng`); `--analyse FILE`
+reports a wav's loudest bands. Route it with `--device NAME` — `default` follows `asound.conf` to the
+HAT, or name the card directly, e.g. `plughw:4,0` — and capture with `--mic NAME`, default
+`plughw:3,0`, the USB microphone (the V4 HAT has no onboard one). `--seconds` sets the clip length and
+`--min-delta` moves the `EMITTED` threshold from its 10 dB default.
+
+Two details decide whether a run means anything. **The amplifier pin.** Any run that plays switches the
+speaker-enable pin on first — on the GPIO `--pin` names, **default 20, so a Robot HAT V5 needs
+`--pin 12`** — and `--no-amp` is what leaves it alone; `--amp on|off` drives that pin by itself and
+reports which tool (`pinctrl` or `raspi-gpio`) did it. And **the microphone gain**: an unopened capture
+control reads as silence on a speaker that works, so run `amixer -c 3 sset 'Mic' 16` (+23.8 dB) before
+believing a low reading. `--json` reduces `--verify` to `{"verdict": "EMITTED"}` or
+`{"verdict": "SILENT"}`; `UNCLEAR` exits `1` and prints `SILENT` there, so the exit code alone cannot
+separate "a little" from "nothing".
+
+**No audio path on a dog has produced `EMITTED`.** #254 records the chain verified layer by layer and
+still silent on `default`, `plughw:4,0` and `robothat`, with `--analyse` finding mains hum and no tone
+during a full-scale playback; #240 is the missing microphone verdict, and it folds into #254. So this
+page documents the protocol and **claims no working speaker** — a `SILENT` result on a fresh install is
+that open defect, not a new one, and `docs/TROUBLESHOOTING.md` [§6](TROUBLESHOOTING.md#6-camera-audio-vision)
+is the order to check the amplifier and speaker in.
+
 **The assistant: a language model, cloud or LAN (off by default).** `modules.assistant` plus
 `settings.assistant` put a model behind the `voice_question_handler` seam that `voice` already
 documents: an utterance the phrase map does not own is passed to the model, and the reply is spoken by
@@ -1328,6 +1354,25 @@ back to the gyro stub - it does **not** disable itself, and `/state` reports
 **What *does* work:** `settings.slam_pi4.backend = "stub"` integrates the gyro into `slam_pose`. That
 is dead reckoning — it is not visual SLAM and it does not build a map, so do not plan a navigation
 feature on it.
+
+**The clip pair, and the flags that shipped.** A camera clip is the one dataset a SLAM claim can be
+measured on, so it is recorded once and replayed everywhere. `python -m tools.camera_record --seconds 60
+--out data/clips/<name>` writes `clip.jsonl` plus `manifest.json` (resolution, cadence, IMU magnitude and
+gyro bias, host, commit) with every motion-capable module switched off — it needs the camera, never the
+legs; `--frames N` stops on a count instead of a clock, `--tick-hz` overrides the sampling cadence, and
+`--json` prints the manifest alone. Then `python -m tools.slam_replay <clip> --verify` checks the clip on
+its own — no camera, no SLAM library, no OpenCV, dimensions read from each frame's JPEG header — and
+`python -m tools.slam_replay <clip> --host pi|pi5|pc` publishes it into the **real** loop with
+`slam_pi4` on, writing one JSON report beside the clip with sustained fps, CPU per core, temperature
+before and after, the module's tick percentiles and its buffered/skipped/processed/dropped/failed frame
+counts. The two halves are exclusive (neither or both exits `2`); `--backend` overrides the config's
+backend for one run, `--tolerance-pct` (default `25`) is the cadence check `--verify` applies, and
+`--speed`, `--max-frames`, `--drain-s`, `--tick-hz`, `--out` and `--json` shape the replay and its
+report.
+
+**No on-dog verdict exists.** `slam_pi4` and `tools.validate_rtabmap_adapter` have never run on the
+board — that is #327 — so the commands above are documented from the shipped parsers and this page
+claims no number for any of them.
 
 **Enable (stub only):**
 - `modules.slam_pi4.enabled = true`
