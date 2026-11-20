@@ -142,12 +142,21 @@ class SlamPi4Module(Module):
 
         # What the backend did with what it was given (plan S). A replay that quotes a pose needs
         # to say whether the track saw every frame or lost most of them, and nothing else in the
-        # tree counted: `frames_in` is what reached the buffer (the loop re-reads one published
-        # frame until the producer replaces it, so this can exceed the clip's own frame count).
+        # tree counted: `frames_in` is what reached the buffer, one entry per *published* frame. A
+        # due tick that found the frame unchanged adds nothing and counts as `frames_skipped`, so
+        # the two together account for every tick the module was due (#366).
         self._frames_in = 0
+        self._frames_skipped = 0
         self._frames_processed = 0
         self._frames_dropped = 0
         self._frames_failed = 0
+
+        # The frame the buffer already holds and the producer's stamp for it. `vision_frame_ts`
+        # only moves when the array does (`optional/vision.py`, `optional/vision_pi4.py`), so the
+        # stamp is the contract key for "is this new"; the object identity is the fallback for a
+        # producer that publishes no stamp.
+        self._buffered_frame: Any | None = None
+        self._buffered_frame_ts: Any = None
 
         # Track last map export time
         self._last_map_export_ts = 0.0
@@ -201,6 +210,7 @@ class SlamPi4Module(Module):
 
         # Read incoming frame and sensor reading and push to buffer
         frame = context.get("vision_frame")
+        frame_ts = context.get("vision_frame_ts")
         sensor = context.get("sensor_reading") or {}
         imu = None
         if isinstance(sensor, dict):
@@ -217,10 +227,18 @@ class SlamPi4Module(Module):
         else:
             ts = time.time()
 
-        if frame is not None or imu is not None:
-            # A frame the producer has not replaced yet is buffered again on every due tick, and the
-            # age trim below never catches the copy: it spends `max_process_per_tick` on a still
-            # image and inflates `frames_in` (#366).
+        if frame is None:
+            # Nothing was published, so there is no work for the backend: the buffer holds frames,
+            # not a record that a tick happened. The old guard read `frame is not None or imu is
+            # not None`, and `imu` is built as a dict on every tick, so it was always true (#366).
+            self._frames_skipped += 1
+        elif self._unchanged(frame, frame_ts):
+            # The producer has not replaced the frame yet. Buffering it again spends
+            # `max_process_per_tick` on a still image and inflates `frames_in` (#366).
+            self._frames_skipped += 1
+        else:
+            self._buffered_frame = frame
+            self._buffered_frame_ts = frame_ts
             self._buffer.append((ts, frame, imu))
             self._frames_in += 1
 
@@ -324,13 +342,15 @@ class SlamPi4Module(Module):
 
         context.set("slam_pose", self._pose)
         context.set("slam_status", {"status": "running", "backend": ("rtabmap" if self._adapter else "stub")})
-        # The counters a replay quotes (plan S): what arrived, what the backend took, what aged
-        # out of the buffer, and what it refused. Cumulative for the run, so a reader never has to
-        # diff two snapshots to know how much of a clip was actually seen.
+        # The counters a replay quotes (plan S): what arrived, what a due tick found already in the
+        # buffer, what the backend took, what aged out of it, and what it refused. Cumulative for
+        # the run, so a reader never has to diff two snapshots to know how much of a clip was
+        # actually seen.
         context.set(
             "slam_stats",
             {
                 "frames_in": self._frames_in,
+                "frames_skipped": self._frames_skipped,
                 "frames_processed": self._frames_processed,
                 "frames_dropped": self._frames_dropped,
                 "frames_failed": self._frames_failed,
@@ -339,6 +359,19 @@ class SlamPi4Module(Module):
         )
         self._emit_nav_hint(context, settings)
         self._last_ts = now
+
+    def _unchanged(self, frame: Any, frame_ts: Any) -> bool:
+        """Is this the frame the buffer already holds?
+
+        The producer's stamp is the contract key: every publisher in the tree moves
+        `vision_frame_ts` only when the array moves (`optional/vision.py`, `optional/vision_pi4.py`,
+        and the recorder and the replay do the same). Identity is the fallback for a publisher that
+        sets no stamp. The arrays are never compared with `==` — `vision_frame` is a numpy array on
+        the Pi, and that returns an array rather than a bool.
+        """
+        if frame_ts is not None:
+            return bool(frame_ts == self._buffered_frame_ts)
+        return frame is self._buffered_frame
 
     def _update_stub(self, context, settings: dict, imu: dict | None = None) -> None:
         yaw = self._pose.get("yaw", 0.0)

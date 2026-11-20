@@ -347,6 +347,18 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A published frame was buffered again on every due tick, so the SLAM counters overcounted** —
+  `optional/slam_pi4.py` read `vision_frame` on every tick it was due and appended whatever it found,
+  so the loop re-reading one still image spent `max_process_per_tick` on copies of it and `frames_in`
+  reported more frames than the clip held (#366). The guard was worse than it looked: `imu` is built
+  as a dict every tick, so the append happened even with no camera publishing at all, and the age trim
+  never caught a copy because its timestamp was fresh. The buffer now dedupes on `vision_frame_ts` —
+  the key every publisher in the tree moves only when the array moves, with object identity as the
+  fallback for a producer that sets none — and `slam_stats` gains `frames_skipped`, the due ticks that
+  found the same frame again or found none. `frames_in` is therefore one entry per published frame,
+  and the replay can say "3 frames in, 7 ticks with no new frame" instead of quoting an inflated
+  share; `tools.slam_replay` prints the new counter and its verdict sentence names it.
+
 - **The document's `x/y` and the runtime's `x/y` are different axes, and nothing said so** — a document
   point is `[x = left, y = forward]` and a runtime point is `(forward_cm, left_cm)`, both correct, both
   called `x`/`y` (#347). Nothing was wrong while the two never met; the console is about to draw the

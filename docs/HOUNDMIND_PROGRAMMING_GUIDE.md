@@ -323,7 +323,7 @@ the dog is resting reports `veto: "mode"` instead of moving (`kernel/commands.py
 | `vision_frame_interval_override_s` | `float \| None` — the health monitor asking vision to slow down |
 | `face_recognition_status`, `semantic_status`, `slam_status` | `dict` — `{status, backend}` from each optional module, published by the module itself |
 | `slam_pose` | `dict \| None` — the pose SLAM published last |
-| `slam_stats` | `dict` — `frames_in`, `frames_processed`, `frames_dropped`, `frames_failed`, `buffered`: what the backend did with the frames it was given, cumulative for the run (`optional/slam_pi4.py`). A replay quotes processed-versus-lost from here instead of guessing, and `frames_in` can exceed the clip's count because the loop re-reads one published frame until the producer replaces it |
+| `slam_stats` | `dict` — `frames_in`, `frames_skipped`, `frames_processed`, `frames_dropped`, `frames_failed`, `buffered`: what the backend did with the frames it was given, cumulative for the run (`optional/slam_pi4.py`). A replay quotes processed-versus-lost from here instead of guessing. `frames_in` counts published frames — one entry per frame the producer replaced, deduped on `vision_frame_ts` (identity when a producer sets no stamp) — and `frames_skipped` counts the due ticks that found the same frame again or found none, so the two together account for every tick |
 | `odometry` | `dict` — `steps`, `distance_cm`, `travelled_cm`, `x_cm`, `y_cm`, `yaw_deg`, `pose_valid`, `reason`, `step_cm`, `step_cm_source`, `surface`; centimetres along the heading, no encoders, and the source says whether the constant was measured |
 | `localization` | `dict` — the chosen pose and why it is the best available: `tier` (`slam`/`place`/`user`/`dead_reckoning`/`reactive`), `frame`, `pose`, `confidence`, `age_s`, `reason` |
 | `localization_event` | `dict` — one record per change of tier, `{from, to, reason}` |
@@ -765,7 +765,7 @@ the context when its own recorded timestamp comes round (`--speed` compresses th
 speeding the loop), every motion-capable module stays off, and `hal_sensors` stays off too because the
 IMU has to come from the clip. Each run writes one JSON report beside the clip — sustained fps, CPU
 per core, temperature before and after, `slam_pi4`'s tick percentiles, the ticks that overran the
-budget, and the frames the module buffered, processed, dropped or failed (`slam_stats`) — plus a
+budget, and the frames the module buffered, skipped, processed, dropped or failed (`slam_stats`) — plus a
 verdict sentence. A host without OpenCV gets the JPEG bytes rather than a decoded array, and the
 report says so: a backend that cannot read them processes nothing, which is a finding, not a crash:
 

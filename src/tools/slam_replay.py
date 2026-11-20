@@ -556,6 +556,8 @@ def _verdict(report: dict[str, Any]) -> str:
         parts.append(f"{stats['frames_dropped']} aged out of the buffer")
     if stats.get("frames_failed"):
         parts.append(f"{stats['frames_failed']} were refused by the adapter")
+    if stats.get("frames_skipped"):
+        parts.append(f"{stats['frames_skipped']} due tick(s) had no new frame")
     change = report["temperature_c"].get("change_c")
     if change is not None:
         parts.append(f"the SoC moved {change:+.1f} C")
@@ -770,8 +772,8 @@ def _print_replay(report: dict[str, Any]) -> None:
 
     print(
         f"[replay] frames: {frames['delivered']} delivered, {count('frames_in')} buffered, "
-        f"{count('frames_processed')} processed, {count('frames_dropped')} dropped, "
-        f"{count('frames_failed')} failed"
+        f"{count('frames_processed')} processed, {count('frames_skipped')} skipped (no new frame), "
+        f"{count('frames_dropped')} dropped, {count('frames_failed')} failed"
     )
     cpu = report["cpu"]
     per_core = cpu["per_core_pct"]
