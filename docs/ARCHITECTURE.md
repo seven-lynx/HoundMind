@@ -68,8 +68,8 @@ The real tree, not the planned one:
 ```
 src/houndmind_ai/
   main.py  __main__.py
-  board/      detect.py
-  core/       config.py  runtime.py  module.py  logging_setup.py
+  board/      detect.py  rules.py
+  core/       config.py  instance.py  runtime.py  module.py  logging_setup.py
   kernel/     state.py  commands.py  intents.py  registry.py  scheduler.py  supervisor.py
               config_schema.py  actions.py  decisions.py  place.py  place_store.py
               routine.py  routine_store.py
@@ -77,16 +77,19 @@ src/houndmind_ai/
   act/        gateway.py  interlock.py
   safety/     supervisor.py  watchdog.py  balance.py  health_monitor.py  sensor_health.py
   navigation/ scanning.py  obstacle_avoidance.py  orientation.py  place_navigator.py
-  mapping/    mapper.py  path_planner.py
+              localization.py  odometry.py  place_recognition.py  room_context.py
+              route_follower.py
+  mapping/    mapper.py  path_planner.py  home_map.py  planner.py  rooms.py  room_scale.py
   behavior/   fsm.py  library.py  registry.py  attention.py  habituation.py  routine_runner.py
-  perception/ fusion.py
+  perception/ fusion.py  place_views.py
   calibration/ workflow.py
   logging/    event_logger.py  decision_log.py  led_manager.py
   optional/   vision.py  vision_pi4.py  vision_preprocessing.py  vision_inference_scheduler.py
-              face_recognition.py  semantic_labeler.py  slam_pi4.py  voice.py  energy_emotion.py
-  services/   api.py  auth.py  camera.py  module.py  sessions.py  settings.py  state.py
-              stream.py  tls.py  web/  (index.html, app.js, lib.js, style.css, sw.js,
-                          manifest.webmanifest, icon.svg, panels/)
+              face_recognition.py  semantic_labeler.py  slam_pi4.py  slam_clip.py  voice.py
+              assistant.py  energy_emotion.py
+  services/   api.py  auth.py  camera.py  config_writer.py  discovery.py  module.py
+              sessions.py  settings.py  state.py  stream.py  tls.py  web/  (index.html,
+              app.js, lib.js, style.css, sw.js, manifest.webmanifest, icon.svg, panels/)
 src/tools/    audio_check.py  bench_tick.py  calibrate_servos.py  camera_check.py
               camera_record.py  collect_support_bundle.py  download_opencv_models.py
               hardware_checkup.py  imu_calibrate.py  installer_verify.py
