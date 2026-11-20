@@ -3,8 +3,8 @@
 Three rules shape it.
 
 1. **The matcher never runs on the tick's critical path.** At most one frame per `interval_s`, and a
-   frame already scored is skipped by its own timestamp, so a 5 Hz tick and a 30 Hz camera do not
-   become thirty matches a second.
+   frame already scored is skipped by its own timestamp — or by object identity, for a producer that
+   sets no stamp — so a 5 Hz tick and a 30 Hz camera do not become thirty matches a second.
 2. **A refusal is published too.** `place_match` carries `valid: false` with the score that lost, so
    "no idea, best 0.31" is a state a client can show instead of silence that looks like a dead module.
 3. **One frame never moves the pose.** Two consecutive frames naming the same place set
@@ -64,7 +64,11 @@ class PlaceRecognitionModule(Module):
         super().__init__(name, enabled=enabled, required=required)
         self._views: tuple[PlaceView, ...] = ()
         self._views_dir = DEFAULT_VIEWS_DIR
-        self._last_frame_ts: float | None = None
+        # The frame already scored and the producer's stamp for it. `vision_frame_ts` only moves
+        # when the array does, so the stamp is the contract key for "is this new"; object identity
+        # is the fallback for a publisher that sets no stamp (#367).
+        self._last_frame: Any = None
+        self._last_frame_ts: Any = None
         self._last_scored_at = 0.0
         self._pending: str | None = None
         self._agreements = 0
@@ -110,14 +114,20 @@ class PlaceRecognitionModule(Module):
         frame = context.get("vision_frame")
         if frame is None:
             return
-        frame_ts = _safe_float(context.get("vision_frame_ts"), 0.0)
-        if frame_ts == self._last_frame_ts:
+        frame_ts = context.get("vision_frame_ts")
+        if self._unchanged(frame, frame_ts):
             return
         now = self._clock()
         if now - self._last_scored_at < interval_s:
             return
+        self._last_frame = frame
         self._last_frame_ts = frame_ts
         self._last_scored_at = now
+        # What `place_match` and `place_fix` publish as this frame's identity: the producer's stamp
+        # when it sets one, this tick's monotonic read when it does not. `localization._read_place`
+        # compares it to decide freshness, so it has to move with the frame either way — a sentinel
+        # would make every unstamped fix look like the same fix (#367).
+        frame_id = frame_ts if frame_ts is not None else now
 
         try:
             result = match_frame(frame, self._views, min_score)
@@ -129,23 +139,37 @@ class PlaceRecognitionModule(Module):
                     "place_id": None,
                     "score": 0.0,
                     "reason": f"frame could not be read: {exc}",
-                    "frame_ts": frame_ts,
+                    "frame_ts": frame_id,
                 },
             )
             self._forget()
             return
 
-        context.set("place_match", {**result.to_dict(), "frame_ts": frame_ts})
+        context.set("place_match", {**result.to_dict(), "frame_ts": frame_id})
         self._confirm(
             context,
             result.place_id if result.valid else None,
             result.score,
-            frame_ts,
+            frame_id,
             confirm,
         )
 
+    def _unchanged(self, frame: Any, frame_ts: Any) -> bool:
+        """Is this the frame that was already scored?
+
+        The producer's stamp is the contract key: every publisher in the tree moves
+        `vision_frame_ts` only when the array moves (`optional/vision.py`, `optional/vision_pi4.py`,
+        and the recorder and the replay do the same). Identity is the fallback for a publisher that
+        sets no stamp — the old guard coerced a missing stamp to `0.0`, so the first frame was scored
+        and every later one looked like it (#367). The frames are never compared with `==`:
+        `vision_frame` is a numpy array on the Pi, and that returns an array rather than a bool.
+        """
+        if frame_ts is not None:
+            return bool(frame_ts == self._last_frame_ts)
+        return frame is self._last_frame
+
     def _confirm(
-        self, context, place_id: str | None, score: float, frame_ts: float, confirm: int
+        self, context, place_id: str | None, score: float, frame_id: Any, confirm: int
     ) -> None:
         """Turn agreement between frames into a pose fix, and nothing less into nothing."""
         if place_id is None:
@@ -164,9 +188,10 @@ class PlaceRecognitionModule(Module):
                 "ts": time.time(),
                 "place_id": place_id,
                 "confidence": round(score, 3),
-                # Monotonic, from the frame that earned it: an identity for `localization` to notice
-                # without comparing two clock domains.
-                "frame_ts": frame_ts,
+                # The frame that earned it, as an identity for `localization` to notice: the
+                # producer's own stamp, or this tick's monotonic read when it publishes none. Never
+                # subtracted from a clock, so the two domains never meet.
+                "frame_ts": frame_id,
             },
         )
         self._anchored_place = place_id

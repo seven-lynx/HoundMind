@@ -28,8 +28,10 @@ __all__ = [
     "test_a_different_place_restarts_the_count",
     "test_a_frame_that_cannot_be_read_is_reported",
     "test_a_match_is_published_with_its_score",
+    "test_a_new_unstamped_frame_is_still_scored",
     "test_a_refusal_is_published_too",
     "test_a_visit_is_anchored_once",
+    "test_an_unstamped_frame_is_not_scored_twice",
     "test_one_frame_does_not_move_the_pose",
     "test_start_publishes_the_candidate_places",
     "test_the_same_frame_is_not_scored_twice",
@@ -206,6 +208,47 @@ def test_the_same_frame_is_not_scored_twice(tmp_path, monkeypatch) -> None:
     module.tick(ctx)
 
     assert len(calls) == 1, "a frame already scored must not be scored again"
+
+
+def test_an_unstamped_frame_is_not_scored_twice(tmp_path, monkeypatch) -> None:
+    """A publisher that sets only `vision_frame` must still not buy one match per tick (#367)."""
+    calls = _stub_matcher(monkeypatch, MatchResult(valid=False, place_id=None, score=0.1))
+    ctx = _context(tmp_path)
+    module = _module(monkeypatch)
+    module.start(ctx)
+
+    ctx.set("vision_frame", b"frame")
+    module.tick(ctx)
+    module.tick(ctx)
+
+    assert len(calls) == 1, "object identity is the fallback for a producer with no stamp"
+
+
+def test_a_new_unstamped_frame_is_still_scored(tmp_path, monkeypatch) -> None:
+    """Without a stamp the guard falls back to identity, not to a sentinel (#367).
+
+    The old guard coerced a missing `vision_frame_ts` to `0.0`, so the first frame scored and every
+    later one looked identical: one match for the life of the process, while `place_match` kept being
+    published as if the module were still looking.
+    """
+    calls = _stub_matcher(monkeypatch, MatchResult(valid=False, place_id=None, score=0.1))
+    ctx = _context(tmp_path)
+    module = _module(monkeypatch)
+    module.start(ctx)
+    ticks = iter([1.0, 2.0, 3.0])
+    module._clock = lambda: next(ticks)
+
+    stamps = []
+    for index in range(3):
+        ctx.set("vision_frame", f"frame-{index}".encode())
+        module.tick(ctx)
+        stamps.append(ctx.get("place_match")["frame_ts"])
+
+    assert len(calls) == 3
+    assert all(stamp is not None for stamp in stamps), (
+        "an unstamped frame needs an identity, or localization can never call the fix fresh"
+    )
+    assert len(set(stamps)) == 3, "each frame's identity has to move with the frame"
 
 
 def test_a_visit_is_anchored_once(tmp_path, monkeypatch) -> None:
