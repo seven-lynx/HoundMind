@@ -50,6 +50,13 @@ Fill in
 `.github/PULL_REQUEST_TEMPLATE.md`, and state the motion impact — `none`, `dry-run only`, or
 `commands servos`.
 
+A pull request based on a branch other than `main` — a stacked pull request — does not close the
+issues it names: GitHub closes an issue only on a merge into the default branch. List the issues it
+leaves open in the description, and close them by hand when the squash lands, quoting the squash
+commit hash. The same squash publishes new history instead of fast-forwarding, so the branch is not
+an ancestor of its base and `git branch --merged` does not list it — the squash commit is the record,
+not the branch.
+
 The test suite runs with no hardware attached. Reach for `hal/fake.py::FakeDogHAL` rather than a
 device, and put anything that needs a real Pi in `src/tools/`.
 
