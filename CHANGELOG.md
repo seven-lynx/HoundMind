@@ -438,6 +438,18 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A control plane that hangs is now restarted, not just one that exits** — `ControlPlaneModule.tick`
+  only read `thread.is_alive()`, so an aiohttp loop that stopped making progress kept every signal
+  green: the thread was alive, the runtime still stamped `last_tick_ts` for `api`, the watchdog is
+  configured out of it (`ignore_modules: ["api"]`), and `systemctl status` said running — the
+  operator's symptom was a console that stopped answering with nothing to see (#338). The plane's own
+  loop now stamps a monotonic clock from a task of its own (`_stamp_forever`, every 250 ms), and
+  `tick` treats a stamp older than 10 s as a lost plane: `api_alive` goes false, the reason lands in
+  `module_statuses` (`/modules` reports `failed` with that `detail` instead of `ok`), and the restart
+  request goes through `restart_modules` with the same 5 s cooldown and three-loss budget a dead
+  thread spends — so the two failures cannot double-fire, and a plane that keeps hanging is disabled
+  with the count instead of looped. The window is 40 stamps wide, so a slow client or a GC pause is
+  not a restart.
 - **A dropped browser parks the dog instead of only dropping its command** — link loss
   (`services/api.py::_on_link_loss`) submitted one `stop` command, and under `idle` the behaviour
   publishes a fresh intent about 100 ms later, so the deadman for clients was undone on the next

@@ -774,8 +774,10 @@ up on. `holding: true` never means the dog was posed — recovery is stop-and-re
 "exempt on purpose" is distinguishable from "healthy". The shipped `settings.watchdog.ignore_modules`
 exempts `api`, because restarting the control plane re-binds the port and drops every WebSocket
 client mid-request. That exemption no longer hides a plane whose thread has exited: the module checks
-its own thread each tick, publishes `api_alive`, and asks the runtime to restart it (#330). A plane
-that hangs while its thread stays alive is still not restarted by anything (#338).
+its own thread each tick, publishes `api_alive`, and asks the runtime to restart it (#330). A hang is
+covered too (#338): the plane's own loop stamps a monotonic clock every 250 ms, a stamp older than
+10 s is a lost plane, and both failures spend the same restart budget — so a plane that keeps stopping
+is disabled with the count, and `/modules` reports it as `failed` with that reason as its `detail`.
 
 **Validity flags are mandatory and clients must honour them.** `distance_cm: 42.5` with
 `distance_valid: false` means "no measurement" — render "—", never "42 cm". This is the one rule in
