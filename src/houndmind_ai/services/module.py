@@ -12,6 +12,7 @@ optional-to-this-install package is enough to stop the whole process before it r
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import threading
 import time
@@ -33,6 +34,15 @@ _STOP_TIMEOUT_S = 5.0
 # anything was still listening, `/modules` said started, and systemd saw a live process. The thread
 # is the only witness, so this module asks the runtime for a restart itself - through the same
 # `restart_modules` key the watchdog writes, because the runtime owns `start()`.
+#
+# A hang keeps its thread (#338), so the thread is no witness at all: the aiohttp loop can stop
+# scheduling work while `is_alive()` stays true and every other signal stays green. The plane's loop
+# therefore stamps `_stamp` from a task of its own (`_stamp_forever`), and `tick()` calls a stamp
+# older than `_HANG_WINDOW_S` a hang. The window is generous on purpose - 40 missed stamps at 250 ms
+# each - so a slow client or a GC pause is not a restart, while a wedged loop is still noticed
+# inside one watch interval.
+_STAMP_INTERVAL_S = 0.25
+_HANG_WINDOW_S = 10.0
 _RESTART_COOLDOWN_S = 5.0
 _HEALTHY_AFTER_S = 30.0
 _MAX_SELF_RESTARTS = 3
@@ -65,6 +75,10 @@ class ControlPlaneModule(Module):
         self._dead_since: float | None = None
         self._alive_since: float | None = None
         self._restarts = 0
+        # Written by the plane's own loop (`_stamp_forever`) and read here: a hang is the one
+        # failure the thread cannot witness (#338).
+        self._stamp: float | None = None
+        self._unstamped_since: float | None = None
 
     # ---- lifecycle ---------------------------------------------------------
 
@@ -87,6 +101,9 @@ class ControlPlaneModule(Module):
         self._error = None
         self._dead_since = None
         self._alive_since = None
+        # A stamp left behind by the last thread would read as a hang on the first tick.
+        self._stamp = None
+        self._unstamped_since = None
         self._thread = threading.Thread(
             target=self._run,
             args=(context, settings, bus),
@@ -101,40 +118,61 @@ class ControlPlaneModule(Module):
             self.disable(self._error)
 
     def tick(self, context) -> None:
-        """Notice a plane that died after it started, and ask the runtime to bring it back (#330).
+        """Notice a plane that died or hung after it started (#330, #338).
 
-        Nothing downstream can notice: the runtime stamps `last_tick_ts` for every module it ticks,
-        so the supervisor saw a healthy `api` whether or not the thread was alive, `/modules` said
-        started, and systemd saw a live process. The thread is the only witness, so the check lives
-        here and the recovery goes through `restart_modules` - the same context key the watchdog
-        writes - because the runtime owns `start()` and a module must not reach around it.
+        Nothing downstream can notice either failure: the runtime stamps `last_tick_ts` for every
+        module it ticks, so the supervisor saw a healthy `api` whether or not the thread was alive,
+        `/modules` said started, and systemd saw a live process. The thread is the only witness to a
+        death; `_stamp`, refreshed by the plane's own loop, is the only witness to a hang, because a
+        wedged loop keeps its thread. Both go through one policy - one restart request through
+        `restart_modules`, the key the watchdog writes - because the runtime owns `start()` and a
+        module must not reach around it.
 
-        A plane that keeps dying is disabled with the count in the reason rather than restarted
-        forever: a silent restart loop is the failure this issue was about.
+        A plane that keeps dying or hanging is disabled with the count in the reason rather than
+        restarted forever: a silent restart loop is the failure this issue was about.
         """
         thread = self._thread
         now = time.monotonic()
         if thread is not None and thread.is_alive():
-            context.set("api_alive", True)
-            if self._alive_since is None:
-                self._alive_since = now
-            elif now - self._alive_since >= _HEALTHY_AFTER_S:
-                # Up long enough to be trusted again, so the restart budget resets.
-                self._restarts = 0
-            return
+            stamp = self._stamp
+            if stamp is None:
+                # Serving with no stamp yet. `start()` waits for the socket, not for the first
+                # stamp, so this is a warm-up window - unless it never ends, which is the same
+                # hang one step earlier.
+                if self._unstamped_since is None:
+                    self._unstamped_since = now
+                waited = now - self._unstamped_since
+                if waited <= _HANG_WINDOW_S:
+                    context.set("api_alive", True)
+                    return
+                reason = f"the control plane loop has not stamped since start ({waited:.0f} s)"
+            elif now - stamp <= _HANG_WINDOW_S:
+                context.set("api_alive", True)
+                self._unstamped_since = None
+                if self._alive_since is None:
+                    self._alive_since = now
+                elif now - self._alive_since >= _HEALTHY_AFTER_S:
+                    # Up long enough to be trusted again, so the restart budget resets.
+                    self._restarts = 0
+                return
+            else:
+                self._unstamped_since = None
+                # Alive but not scheduling: only the stamp can say it, and it has stopped.
+                reason = f"the control plane loop has not stamped for {now - stamp:.0f} s"
+        else:
+            reason = self._error or "the control plane thread exited without an error"
 
         context.set("api_alive", False)
-        reason = self._error or "the control plane thread exited without an error"
         self.status.last_error = reason
         if self._dead_since is None:
             # First sighting: say it once, then fall through to the first restart attempt.
             self._dead_since = now
             self._alive_since = None
-            logger.error("Control plane thread is gone: %s", reason)
+            logger.error("Control plane lost: %s", reason)
         elif now - self._dead_since < _RESTART_COOLDOWN_S:
             return
         if self._restarts >= _MAX_SELF_RESTARTS:
-            self.disable(f"the control plane died {self._restarts} times: {reason}")
+            self.disable(f"the control plane was lost {self._restarts} times: {reason}")
             return
         self._restarts += 1
         self._dead_since = now
@@ -146,7 +184,7 @@ class ControlPlaneModule(Module):
             names.append(self.name)
         context.set("restart_modules", names)
         logger.warning(
-            "Control plane dead (%s); asked the runtime to restart it (%d/%d)",
+            "Control plane lost (%s); asked the runtime to restart it (%d/%d)",
             reason,
             self._restarts,
             _MAX_SELF_RESTARTS,
@@ -214,6 +252,7 @@ class ControlPlaneModule(Module):
             await runner.cleanup()
             return
         self._stop_event = asyncio.Event()
+        heartbeat = asyncio.create_task(self._stamp_forever())
         discovery = self._start_advertising(settings, plane)
         self._ready.set()
         logger.info(
@@ -226,12 +265,27 @@ class ControlPlaneModule(Module):
         try:
             await self._stop_event.wait()
         finally:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat
             # Withdrawn before the port goes: a record that outlives its socket points a client at
             # nothing, which is worse than no record at all.
             if discovery is not None:
                 discovery.stop()
             await runner.cleanup()
             logger.info("Control plane stopped")
+
+    async def _stamp_forever(self) -> None:
+        """Say the plane's loop is still scheduling work, once every `_STAMP_INTERVAL_S` (#338).
+
+        A death shows up in `thread.is_alive()`; a hang does not, because a wedged loop keeps its
+        thread. This task is the only clock the loop owns, so a value that stops moving is the
+        evidence `tick()` acts on. `tick()` reads the attribute from another thread and a float
+        assignment is atomic, so there is no lock here on purpose.
+        """
+        while True:
+            self._stamp = time.monotonic()
+            await asyncio.sleep(_STAMP_INTERVAL_S)
 
     @staticmethod
     def _start_advertising(settings: ApiSettings, plane) -> MdnsAdvertiser | None:

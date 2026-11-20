@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import socket
 import threading
+import time
 import urllib.request
 
 from houndmind_ai.kernel.commands import CommandBus
+from houndmind_ai.services import module as services_module
 from houndmind_ai.services.module import ControlPlaneModule
 from houndmind_ai.services.settings import ApiSettings
 
@@ -163,8 +165,90 @@ def test_a_plane_that_keeps_dying_is_disabled_rather_than_looped(tmp_path) -> No
             module.tick(context)
 
         assert module.status.enabled is False
-        assert "died" in (module.status.disabled_reason or "")
+        assert "was lost" in (module.status.disabled_reason or "")
         assert (module.status.disabled_reason or "").endswith("boom")
+    finally:
+        module.stop(context)
+
+
+def test_a_hang_is_noticed_while_the_thread_is_still_alive(tmp_path) -> None:
+    """#338: a wedged loop keeps its thread, so only the stamp can say it stopped.
+
+    The thread is alive before and after the tick - that is the whole point of the issue - so the
+    check has to be the plane's own clock, and the recovery has to be the same restart request a
+    death produces, not a second policy.
+    """
+
+    context = context_for(tmp_path, free_port())
+    module = ControlPlaneModule("api", bus=CommandBus())
+    module.start(context)
+    try:
+        assert module._thread is not None and module._thread.is_alive()
+        # The loop stopped scheduling `_HANG_WINDOW_S + 5 s` ago; the heartbeat task that would
+        # have refreshed it never ran again.
+        module._stamp = time.monotonic() - (services_module._HANG_WINDOW_S + 5.0)
+
+        module.tick(context)
+
+        assert context.get("api_alive") is False
+        assert "api" in (context.get("restart_modules") or [])
+        assert "not stamped for" in (module.status.last_error or "")
+        assert module.status.enabled is True, "one hang is restarted, not fatal"
+        assert module._thread.is_alive(), "#338: the thread never died"
+
+        # One loss, not one per tick: the cooldown holds the second request back.
+        context.set("restart_modules", [])
+        module.tick(context)
+        assert not context.get("restart_modules")
+    finally:
+        module.stop(context)
+
+
+def test_a_plane_that_keeps_hanging_is_disabled_with_the_count(tmp_path) -> None:
+    """A hang loop is the same restart loop as a death loop, so it spends the same budget (#338)."""
+
+    context = context_for(tmp_path, free_port())
+    module = ControlPlaneModule("api", bus=CommandBus())
+    module.start(context)
+    try:
+        for _ in range(10):
+            if not module.status.enabled:
+                break
+            module._stamp = time.monotonic() - (services_module._HANG_WINDOW_S + 5.0)
+            module._dead_since = None  # pretend the cooldown between attempts has elapsed
+            module.tick(context)
+
+        assert module.status.enabled is False
+        reason = module.status.disabled_reason or ""
+        assert "was lost" in reason
+        assert "not stamped" in reason
+    finally:
+        module.stop(context)
+
+
+def test_a_healthy_plane_stamps_and_never_asks_for_a_restart(tmp_path) -> None:
+    """The other half of #338: a working plane must never look hung."""
+
+    context = context_for(tmp_path, free_port())
+    module = ControlPlaneModule("api", bus=CommandBus())
+    module.start(context)
+    try:
+        deadline = time.monotonic() + 5.0
+        while module._stamp is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        first = module._stamp
+        assert first is not None, "the plane's own loop must stamp once it serves"
+
+        while module._stamp == first and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert module._stamp != first, "the stamp moves while the loop is healthy"
+
+        module.tick(context)
+        module.tick(context)
+
+        assert context.get("api_alive") is True
+        assert not context.get("restart_modules")
+        assert module.status.last_error is None
     finally:
         module.stop(context)
 
