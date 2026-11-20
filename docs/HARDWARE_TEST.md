@@ -36,7 +36,7 @@ proved, and a failure skipped once is a failure that comes back as a mystery lat
 | 2. Sensors | each of the five sensors answers over its bus | that the readings are accurate |
 | 3. Loop | the runtime starts its modules and produces a scan and a map | that anything moves |
 | 4. Control plane | the API is reachable, the token works, the live snapshot is truthful | anything about gait |
-| 5. Peripherals | a fitted camera / audio / SLAM stack is visible to the OS | that a feature built on it behaves |
+| 5. Peripherals | a fitted camera / audio / SLAM stack is visible to the OS, and a clip the camera recorded can be replayed | that a feature built on it behaves, or that the speaker makes a sound |
 | 6. Motion | the servos hold a gait under load, in the clear | endurance, calibration, or thermal headroom |
 
 A green run through step 5 is a "the electronics and the loop are healthy" result. It is not a
@@ -136,7 +136,7 @@ source .venv/bin/activate
 | 2 | Sensors | `python -m tools.hardware_checkup --skip-motion` | no | ~5 s | five readings, no `None`, `valid:` all `True`, exit 0 |
 | 3 | Loop | `python -m tools.smoke_test` | no | ~5 s | `[smoke] PASS` |
 | 4 | Control plane | `python -m houndmind_ai`, then `GET /state` | no | ~2 min | `*_valid: true` |
-| 5 | Peripherals | `tools.camera_check`, `tools.list_audio_devices`, `tools.audio_check --verify` | no | ~1 min | index found, frame saved, `verdict: EMITTED` |
+| 5 | Peripherals | `tools.camera_check`, `tools.list_audio_devices`, `tools.audio_check --verify` | no | ~1 min | index found, frame saved, an audio `verdict:` recorded — `SILENT` is #254, not a failed step |
 | 6 | Motion | [§9](#9-step-6--motion-and-only-motion) — **only with clearance and a yes** | **yes** | ~1 min | a gait you watched |
 
 ## 4. Step 1 — Install sanity
@@ -326,18 +326,37 @@ Skip any line here whose hardware you do not have. A missing camera is not a fai
 python -m tools.camera_check --list-devices --max-index 5
 python -m tools.camera_check --index 0 --save frame.jpg
 python -m tools.list_audio_devices
-python -m tools.validate_rtabmap_adapter      # Pi 4/5 SLAM only
+python -m tools.audio_check --list                          # what ALSA exposes for playback and capture
+python -m tools.audio_check --verify                        # closed loop: play, record, measure
+python -m tools.audio_check --verify --device plughw:4,0    # straight to the DAC
+python -m tools.validate_rtabmap_adapter                    # Pi 4/5 SLAM only
+python -m tools.camera_record --seconds 5 --frames 20 --out /tmp/clip   # a clip `slam_replay` can read
+python -m tools.slam_replay /tmp/clip --verify                          # offline; no camera, no SLAM library
 ```
+
+`camera_record` builds the runtime and takes the run lock, so stop the process from step 4 first
+(`Ctrl+C`, or `sudo systemctl stop houndmind`) — with it running, the tool exits `3` and names the
+holder. `slam_replay --verify` reads a file and needs nothing stopped; `slam_replay --host` takes the
+same lock.
 
 | Command | Pass | If it is not |
 |---|---|---|
 | `--list-devices` | `Available indexes: [0]` (or `[0, 2]` for two cameras) | empty list — the camera is not enumerated; check the ribbon and the port before changing `vision.camera_index` |
 | `--index N --save` | `Saved frame to frame.jpg`, and the file is a picture | `Failed to capture frame` — try the next index from the list; a black frame means the lens is covered or the sensor is not streaming |
 | `list_audio_devices` | a device list, or `arecord -l` output | `Unable to list devices` and exit 1 — no audio stack; `voice` needs `pyaudio` and `i2samp.sh` |
+| `audio_check --list` | the same cards from ALSA's own side — `arecord -l`, then `aplay -l` | `not found` — `alsa-utils` is missing: `sudo apt install alsa-utils` |
+| `audio_check --verify` | a printed `delta` and **a verdict of any kind recorded**. The tool proves whether sound left the speaker, not that it sounds good | `SILENT` with the microphone gain open (`amixer -c 3 sset 'Mic' 16`) is #254, the known HAT speaker defect — record it rather than debugging it here. `UNCLEAR` is the gain or the distance, not the chain |
 | `validate_rtabmap_adapter` | its own report | needs the `full` extra and the rtabmap install in `scripts/install_rtabmap_pi4.md` |
+| `camera_record` + `slam_replay --verify` | a `[clip]` summary with a frame count, then the replay's verdict and no refusal | `no frames were published` — enable a vision module (`vision_pi4` on a Pi 4) and record again; a verify failure names its reason (frame count, a line that is not a JPEG, irregular cadence) |
 
 The camera index and port come from config (`vision.camera_index`), so record the index this step
 found rather than hardcoding `/dev/video0` anywhere.
+
+Two flags decide whether an audio run means anything. `--verify` switches the speaker-enable pin on
+before it plays, and `--pin` defaults to **20** — a Robot HAT **V5** needs `--pin 12`, or the run
+measures a pin nothing is listening on. `--no-amp` is what leaves the pin alone. Write down the verdict
+with the rest of the run: `SILENT` here is a recorded result, and the `--host` half of `slam_replay`
+(the loop cost, not just the clip) belongs to #327, not to this step.
 
 ## 9. Step 6 — Motion, and only motion
 

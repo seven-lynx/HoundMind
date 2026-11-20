@@ -29,6 +29,8 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 18. [`map_inspect`](#18-map_inspect)
 19. [`step_calibrate`](#19-step_calibrate)
 20. [`place_match`](#20-place_match)
+21. [`camera_record`](#21-camera_record)
+22. [`slam_replay`](#22-slam_replay)
 
 ---
 
@@ -54,6 +56,8 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | What is actually inside `data/home_map.json`? | `map_inspect` |
 | How far does one `forward` really carry the dog? | `step_calibrate --confirm-clearance` |
 | Does the dog recognise a place from a camera frame? | `place_match <views-dir> <frames-dir>` |
+| What does the camera actually see, frame by frame? | `camera_record` |
+| Can that clip be replayed as recorded? | `slam_replay <clip> --verify` |
 
 ## 2. Motion risk
 
@@ -64,6 +68,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `smoke_test` | **yes, only with `--include-motion`** |
 | `step_calibrate` | **yes, unless `--fake`** — it walks toward a wall by design. `--confirm-clearance` is mandatory, `--stop-at` defaults to 45 cm, and every step passes the runtime's interlock |
 | `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `bench_tick`, `map_inspect`, `place_match` | no |
+| `camera_record`, `slam_replay` | no — both switch every motion-capable module off. `camera_record` needs the camera, never the legs; `slam_replay --host` runs a clip through the loop, not through the servos |
 | `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
 
@@ -429,12 +434,23 @@ python -m tools.audio_check --analyse recording.wav       # what is in a recordi
 
 | Flag | Meaning |
 |---|---|
+| `--list` | what ALSA exposes for capture and playback (`arecord -l`, `aplay -l`); exit 1 when neither tool is installed |
 | `--verify` | play a tone, record it, compare the room level before and during |
 | `--device NAME` | playback: `default` (through `asound.conf`), `robothat`, `plughw:4,0` |
-| `--mic NAME` | capture device, default `plughw:3,0` |
+| `--mic NAME` | capture device, default `plughw:3,0` — the USB microphone; the V4 HAT has no onboard one |
 | `--tone HZ` | play a tone only |
-| `--amp on\|off` | drive the speaker-enable pin (GPIO20 on V4, GPIO12 on V5) |
+| `--say TEXT` | render the text with `espeak`/`espeak-ng` and play the wav |
+| `--play FILE` | play an existing wav |
 | `--analyse FILE` | the loudest frequencies in a wav, loudest first (needs numpy) |
+| `--amp on\|off` | drive the speaker-enable pin and exit — give it on its own; a run that plays switches the pin on regardless |
+| `--pin PIN` | the enable GPIO. Default `20`, so a Robot HAT **V5** needs `--pin 12` |
+| `--no-amp` | leave the enable pin alone. Every run that plays switches it on first without this |
+| `--seconds S` | tone or clip length, default `2.0` |
+| `--min-delta DB` | how much louder the room must get for `EMITTED`, default `10` |
+| `--json` | machine-readable output. With `--verify` it is one object, `{"verdict": "EMITTED"}` or `{"verdict": "SILENT"}` — `UNCLEAR` also exits 1 and prints `SILENT` there |
+
+One action per run: `--list`, then `--amp` alone, then `--analyse`, then the first of `--tone` / `--say` /
+`--play` / `--verify`. None of them given prints the help and exits `2`.
 
 `--verify` prints the room level, the level during playback, the delta and a verdict: `EMITTED` at
 +10 dB or more, `SILENT` at +3 dB or less, `UNCLEAR` between. Exit codes: `0` emitted, `1` silent,
@@ -447,6 +463,14 @@ as silence on a speaker that works, which is the opposite of a useful answer.
 A `SILENT` verdict from a validated microphone means the ALSA chain is not the fault: see
 `docs/TROUBLESHOOTING.md` [§6](TROUBLESHOOTING.md#6-camera-audio-vision) for the order to check the
 amplifier and the speaker in.
+
+**On the bench dog this has never reached `EMITTED`.** #254 records the whole chain verified layer by
+layer — overlay, card 4, `pcm.!default → robothat`, mixer at 255/255, the amplifier pin reading output
+high, the I2S clock started, `hw_ptr` advancing during playback — and `--verify` still returning
+`SILENT` on `default`, `plughw:4,0` and `robothat`, with `--analyse` finding 56 Hz mains hum and no
+1 kHz component in a recording made during a full-scale tone. So a `SILENT` result here is that defect,
+not evidence against a fresh install, and no page may claim the HAT speaker works until #254 is closed.
+The microphone half is #240.
 
 ## 16. `schema_export`
 
@@ -533,6 +557,9 @@ python -m tools.step_calibrate --confirm-clearance --measure head-zero
 | `--speed` | Servo speed; the interlock may lower it, and the lowered value is what runs |
 | `--min-volts` | Refuse to walk below this pack voltage (default 7.9 V). Above the interlock's 6.4 V veto on purpose: a gait on a pack this sagging reboots the Pi (#292) |
 | `--record-trace` | Write the per-cycle trace (distance, acc, gyro) as JSON — the input L3.4 would need |
+| `--pause` | settle time after each step, in seconds |
+| `--fake-step-cm` | the stride the simulated wall answers with, for `--fake` |
+| `--config` | settings file other than `config/settings.jsonc` |
 | `--apply` | Compute the value the run supports: at least five cycles, no two more than 10 % apart, clamped to ±20 % of the constant in force. Prints the `surface_step_cm` line; never edits the config (#300) |
 | `--json` | Print the report and snippet as one JSON document instead of the table |
 
@@ -618,4 +645,78 @@ tier ([`FEATURES_GUIDE.md` §Localization tiers](FEATURES_GUIDE.md#localization-
 
 The fixtures in `tests/fixtures/places/` are **synthetic**, drawn by the test rather than committed:
 a photograph of somebody's kitchen is personal data and says nothing about the code.
+
+## 21. `camera_record`
+
+Records a camera clip a SLAM claim can be measured on, once, and replayed anywhere. It starts the
+runtime with every motion-capable module switched off, borrows the frame `services/camera.py` already
+holds rather than opening the camera a second time, and never binds the control plane. It writes
+`clip.jsonl` plus `manifest.json` — resolution, cadence, IMU magnitude and gyro bias, the host and the
+commit under test (`houndmind_ai/optional/slam_clip.py`). **It needs the camera, not the legs.**
+
+```bash
+python -m tools.camera_record --seconds 60 --out data/clips/room-01
+python -m tools.camera_record --seconds 5 --frames 20 --out /tmp/clip   # a short check
+```
+
+| Flag | Meaning |
+|---|---|
+| `--out DIR` | clip directory (default `data/clips`) |
+| `--seconds S` | recording length, default `60`; must be positive unless `--frames` is given, else exit `2` |
+| `--frames N` | stop after N frames, whichever comes first (below `1` exits `2`) |
+| `--tick-hz N` | override `loop.tick_hz` — the sampling cadence of the clip |
+| `--config PATH` | settings file other than `config/settings.jsonc` |
+| `--json` | print the manifest as JSON only instead of the human summary |
+
+The summary ends with the command that reads the clip back, so the next step is never guesswork. It also
+prints which modules this run `disabled` and which this config does not declare. Exit `0` recorded, `1` no
+frames were published — enable a vision module (`vision_pi4` on a Pi 4) and record again — `2` a usage
+error, and `3` when the servo bus is already held, because a run against the real dog takes the run lock
+(`systemctl stop houndmind` first).
+
+## 22. `slam_replay`
+
+Replays a clip from [`camera_record`](#21-camera_record) in one of two halves, and the flags are the two
+halves. `--verify` needs **no camera, no SLAM library and no OpenCV** — the dimensions come from each
+frame's own JPEG header — and refuses a clip by name when the frame count is not the one the manifest
+promises, a line is not a JPEG, or the cadence is too irregular to pace (`--tolerance-pct`, default
+`25`). `--host pi|pi5|pc` publishes the clip into the **real** runtime with `slam_pi4` switched on, so
+the number includes the loop rather than a bare benchmark: each frame goes on the context when its own
+recorded timestamp comes round, every motion-capable module stays off, and `hal_sensors` stays off too
+because the IMU has to come from the clip. Each run writes one JSON report beside the clip — sustained
+fps, CPU per core, temperature before and after, `slam_pi4`'s tick percentiles, the overruns, and the
+frames the module buffered, skipped, processed, dropped or failed — plus a verdict sentence.
+
+```bash
+python -m tools.slam_replay data/clips/room-01 --verify                  # offline, no dog, no SLAM library
+python -m tools.slam_replay data/clips/room-01 --host pi --backend rtabmap
+python -m tools.slam_replay data/clips/room-01 --host pc --json          # one row of a comparison table
+```
+
+| Flag | Meaning |
+|---|---|
+| `clip` | the clip directory `camera_record` wrote (positional, required) |
+| `--verify` | check the clip alone: count, JPEG framing, cadence. No dog |
+| `--host {pi,pi5,pc}` | replay it through the real loop, labelling the report with this host. It is a label, not a detection |
+| `--backend NAME` | `slam_pi4` backend for this run; default is the config's |
+| `--speed F` | replay speed, default `1.0`; `2` plays a 60 s clip in 30 s without speeding the loop |
+| `--max-frames N` | replay only the first N frames |
+| `--drain-s F` | keep ticking this long after the last frame so a buffered one is processed, default `1.0` |
+| `--tick-hz N` | override `loop.tick_hz` for this run |
+| `--config PATH` | settings file other than `config/settings.jsonc` |
+| `--out PATH` | report path; default beside the clip |
+| `--tolerance-pct F` | jitter and cadence tolerance for `--verify`, default `25` |
+| `--json` | print the report as JSON only |
+
+Give exactly one half: neither, or both, exits `2`. Exit `0` verified or replayed, `1` a clip that will
+not verify (the reason is named) or a replay that delivered no frame, `2` a usage error, and `3` when the
+servo bus is already held — the message says who holds it and to `systemctl stop houndmind` first, because
+a run against the real dog opens the camera through the vision modules. `--verify` writes no file; the
+`--host` report is written beside the clip even when it exits `1`. A host without OpenCV gets the JPEG
+bytes rather than a decoded array and the report says so — a backend that cannot read them processes
+nothing, which is a finding, not a crash.
+
+**No on-dog verdict exists for either half** — #327 is the run that would produce one — so the flags are
+documented and this page claims no number.
+
 
