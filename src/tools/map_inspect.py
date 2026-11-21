@@ -20,7 +20,12 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from houndmind_ai.mapping.home_map import HomeMap, load_home_map
+from houndmind_ai.mapping.home_map import (
+    HomeMap,
+    RoomFrame,
+    load_home_map,
+    resolve_room_frames,
+)
 from houndmind_ai.mapping.mapper import nearest_wall
 
 # `src/tools/<name>.py` -> the repository root, so a relative path means what the runtime means.
@@ -88,6 +93,20 @@ def render(home_map: HomeMap, width: int = 72) -> str:
     return "\n".join(lines)
 
 
+def _frame_text(room_id: str, frame: RoomFrame) -> str:
+    """One room's place in the home frame, and the joins that put it there (H7).
+
+    The root room is the frame itself; every other room names the room it hangs off and the whole chain
+    of joint ids from the root, so a disagreement between a join and the drawing it was made from can
+    be traced one join at a time instead of guessed at from two coordinates.
+    """
+    origin = frame.transform.translate_cm
+    where = f"({origin[0]:g}, {origin[1]:g}) cm, {frame.transform.rotation_deg:g} deg"
+    if frame.parent is None:
+        return f"{room_id} = the home frame, {where}"
+    return f"{room_id} = {frame.parent} through {' then '.join(frame.chain)} at {where}"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("path", nargs="?", default=DEFAULT_PATH, help=f"map file (default {DEFAULT_PATH})")
@@ -123,6 +142,15 @@ def main(argv: list[str] | None = None) -> int:
     objects = [entry for entry in (home_map.sections.get("objects") or []) if isinstance(entry, dict)]
     walls = {entry["wall_id"] for entry in objects if isinstance(entry.get("wall_id"), str)}
     print(f"objects:  {len(objects)}" + (f" on {len(walls)} wall(s)" if walls else ""))
+    joints = [entry for entry in (home_map.sections.get("joints") or []) if isinstance(entry, dict)]
+    frames = resolve_room_frames(
+        joints,
+        walls=home_map.sections.get("walls"),
+        openings=home_map.sections.get("openings"),
+    )
+    print(f"joints:   {len(joints)} joint(s); {len(frames.frames)} room(s) placed")
+    for room_id, frame in frames.frames.items():
+        print(f"frame:    {_frame_text(room_id, frame)}")
     print(
         "wall:     "
         + (f"{wall:.0f} cm (capped at {args.wall_cm:g})" if wall is not None else "none known in range")

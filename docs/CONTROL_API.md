@@ -281,6 +281,18 @@ no drawn wall answers: a `problems[]` entry naming the number that did not fit, 
 the device consumes an object yet, deliberately. The `objects` and `joints` sections are v3: a document
 written before them has no such key, and that absence reads as an empty list rather than a refusal.
 
+`joints` is two rooms joined through a doorway they share (H7):
+`{id, a_room, a_opening, b_room, b_opening, transform}`. The two openings name drawn `openings` entries,
+one cut into a wall of each room's drawing, and `transform` is `{translate_cm: [x, y], rotation_deg}` in
+the document frame, placing `b_room` in `a_room`'s frame: `rotation_deg` may be left out, and a turn that
+cannot be read is a refusal rather than a zero. The chain of joins resolves every room it reaches to one
+home frame, rooted at the room no join places (`mapping/home_map.py::resolve_room_frames`; the transform
+is document arithmetic, so a client that plots a joined room plots it with the same canvas, and
+`RoomFrames.to_runtime` is the one place the swap happens). A join naming a doorway or a room no drawing
+answers, or joining a room to itself, is a `problems[]` entry that names it. Two drawings that disagree
+about the wall their doorway was cut into by more than 5 % are a `notes[]` entry carrying both lengths,
+and neither is rewritten — the map is the user's. Nothing on the device consumes a join yet.
+
 **That is not the runtime's order, and both are called `x` and `y` (#347).** The runtime speaks
 `(forward_cm, left_cm)`: the pose (`navigation/odometry.py`), the planner (`mapping/planner.py`) and
 the grid cells (`mapping/mapper.py::cell_centre_cm`) all use it. Nothing was wrong while the two never

@@ -343,7 +343,7 @@ that the next start loads back.
 The map is a versioned JSON document (`mapping/home_map.py`). Since v2 it carries the **grid**, the
 last sweep and a window of samples — the grid is the map, the samples are the log around it. Since **v3**
 the sections a person draws also include `objects` (furniture as a rectangle against a wall) and `joints`
-(the join between two rooms, which the room-joining work fills); a document written before either key
+(two rooms joined through a doorway they share, below); a document written before either key
 reads both as an empty list rather than being refused.
 
 | Key | Default | Meaning |
@@ -374,6 +374,20 @@ and `depth_cm` out from it. `kind` is a closed vocabulary (`cabinet`, `counter`,
 `shelf`, `other`), and the validator refuses a rectangle that runs past its wall or names a wall no
 drawing answers, putting the number that did not fit in `problems[]`. Nothing on the device consumes an
 object yet, deliberately.
+
+A `joints` entry is two rooms joined through a doorway they share (H7):
+`{id, a_room, a_opening, b_room, b_opening, transform}`. The two openings name drawn `openings` entries,
+one cut into a wall of each room's drawing, and `transform` places `b_room` in `a_room`'s frame as
+`{translate_cm: [x, y], rotation_deg}`, in the document frame — `rotation_deg` may be left out for a
+translation-only join, and an unreadable one is refused rather than read as zero. The chain of joins
+resolves every room it reaches to **one home frame**, and the root is the room no join places: its
+drawing *is* the home frame, which is all a join can honestly assume when the two rooms were drawn apart
+(`mapping/home_map.py::resolve_room_frames`; `tools.map_inspect` prints the chain room by room). A join
+that names a doorway or a room no drawing answers, or joins a room to itself, is refused in `problems[]`
+by that name. When the two drawings disagree about the length of the wall their doorway is cut into by
+more than 5 %, the join is **reported** in `notes[]` with both lengths and neither drawing is rewritten —
+the map is the user's, the same reason the scale audit reports rather than rescales. Nothing on the
+device consumes a join yet.
 
 A room also carries the two numbers a person typed when they drew it, as `rooms[].size_cm`
 (`{width_cm, depth_cm}`, document frame). The key is **absent** on a room nobody measured rather

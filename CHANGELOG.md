@@ -417,6 +417,17 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- **Two rooms join into one home frame, and a disagreement between them is a report (H7)** — `joints`
+  had a place in the document since H3 and nothing read it. `mapping/home_map.py::resolve_room_frames`
+  walks the chain: a joint's `transform` places `b_room` in `a_room`'s frame, the room no join places is
+  the root, and every room the joins reach resolves to one home frame — `RoomFrames.to_runtime` is the
+  single place an axis is swapped (#347), because the transform itself is document arithmetic. Two
+  drawings that disagree about the wall their doorway is cut into by more than
+  `JOINT_DISAGREEMENT_TOLERANCE` (5 %) are a `notes` entry carrying both lengths, and neither drawing is
+  rewritten; a join naming a doorway or a room no drawing answers is a `problems[]` entry that names it,
+  and two joins placing the same room keep the first and say so. `tools/map_inspect.py` prints the join
+  count and the chain room by room, and `docs/FEATURES_GUIDE.md` §6 gives the entry shape. No module,
+  route, config key or motion path changed, and nothing on the device consumes a join yet.
 - **The shipped battery floor is now 7.6 V, because a gait took the bench dog's rail down at 7.85 V** —
   the interlock's compiled floor is 6.4 V, and `config/settings.jsonc` shipped exactly that, so the
   veto sat more than a volt below a pack that could not carry eight servos: two walking attempts at

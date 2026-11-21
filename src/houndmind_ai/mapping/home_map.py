@@ -37,12 +37,17 @@ __all__ = [
     "DEFAULT_MAX_CELLS",
     "HomeMap",
     "HomeMapLoad",
+    "JOINT_DISAGREEMENT_TOLERANCE",
     "OBJECT_KINDS",
+    "RoomFrame",
+    "RoomFrames",
+    "RoomTransform",
     "USER_SECTIONS",
     "build_document",
     "document_point_to_runtime",
     "load_home_map",
     "map_path",
+    "resolve_room_frames",
     "runtime_point_to_document",
     "scale_source_for",
     "validate_document",
@@ -75,6 +80,12 @@ OBJECT_KINDS: tuple[str, ...] = ("cabinet", "counter", "sofa", "table", "shelf",
 # The sections whose absence means "empty" rather than "not written". A document from before v3 has no
 # `objects` key at all, and the console reads the same absence as an empty list (H3).
 EMPTY_WHEN_ABSENT: tuple[str, ...] = ("objects", "joints")
+
+#: How far two drawings of one shared wall may differ before a join reports it (H7). A join is a
+#: proposal the user confirmed, not an edit: five percent is the difference a pencil and a length of
+#: string make, and past it the two rooms disagree about a centimetre count somebody typed. It is a
+#: `notes` entry at any size, because the drawings are the user's and a join never rewrites one.
+JOINT_DISAGREEMENT_TOLERANCE = 0.05
 
 
 def _safe_float(value: Any, default: float) -> float:
@@ -133,6 +144,240 @@ def _point2(point: Any) -> tuple[float, float]:
     while len(values) < 2:
         values.append(0.0)
     return _safe_float(values[0], 0.0), _safe_float(values[1], 0.0)
+
+
+@dataclass(frozen=True)
+class RoomTransform:
+    """One room's drawing placed in another frame: where its origin sits, and which way it is turned.
+
+    `translate_cm` is a **document** point (`x` runs left, `y` runs forward) from the parent's origin to
+    this room's origin, and `rotation_deg` turns the room about its own origin, positive from +x toward
+    +y — a room drawn facing left comes to face forward. Both numbers are document terms, so nothing
+    here swaps an axis: a caller holding a runtime pair converts once, through
+    `runtime_point_to_document`, and `RoomFrames.to_runtime` is the only place that happens (#347).
+    """
+
+    translate_cm: tuple[float, float] = (0.0, 0.0)
+    rotation_deg: float = 0.0
+
+    def apply(self, point: Any) -> tuple[float, float]:
+        """Where a point of this room's own drawing lands in the parent frame."""
+        x, y = _point2(point)
+        if self.rotation_deg:
+            theta = math.radians(self.rotation_deg)
+            cos, sin = math.cos(theta), math.sin(theta)
+            x, y = x * cos - y * sin, x * sin + y * cos
+        dx, dy = self.translate_cm
+        return x + dx, y + dy
+
+    def then(self, child: RoomTransform) -> RoomTransform:
+        """`self` followed by `child`: what a chain of two joins composes to."""
+        return RoomTransform(
+            translate_cm=self.apply(child.translate_cm),
+            rotation_deg=self.rotation_deg + child.rotation_deg,
+        )
+
+
+@dataclass(frozen=True)
+class RoomFrame:
+    """One room's placement in the home frame, and the joins that got it there.
+
+    `chain` is the joint ids walked from the root, in order, so a caller can name the join that put a
+    room where it is — `map_inspect` prints it, and H8's console draws it. A root room has no parent
+    and an empty chain: its own drawing *is* the home frame.
+    """
+
+    room_id: str
+    transform: RoomTransform
+    parent: str | None = None
+    chain: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RoomFrames:
+    """Every room the joins reach, all of them placed in one home frame (H7).
+
+    The root is the room no join places. That is the only honest origin to pick, because the whole
+    point of a join is that neither drawing knew about the other: whichever room was drawn first is the
+    one whose centimetres the rest inherit. A room no join mentions is not here at all — there is
+    nothing to place it against, and inventing a frame for a drawing the user already owns would be a
+    second opinion about it.
+    """
+
+    frames: Mapping[str, RoomFrame] = field(default_factory=dict)
+    notes: tuple[str, ...] = ()
+
+    def frame_for(self, room_id: Any) -> RoomFrame | None:
+        return self.frames.get(room_id) if isinstance(room_id, str) else None
+
+    def chain_for(self, room_id: Any) -> tuple[str, ...]:
+        """The joint ids between the home frame and `room_id`, or nothing when it is not placed."""
+        frame = self.frame_for(room_id)
+        return frame.chain if frame is not None else ()
+
+    def to_runtime(self, room_id: Any, point: Any) -> tuple[float, float] | None:
+        """A point of `room_id`'s drawing, as `(forward_cm, left_cm)` in the home frame.
+
+        The swap happens once, in `document_point_to_runtime` and `runtime_point_to_document`; the
+        transform itself is document arithmetic. That is #347's fix kept whole — a second hand-written
+        swap inside the join code is exactly how the mirrored dog came back.
+        """
+        frame = self.frame_for(room_id)
+        if frame is None:
+            return None
+        return document_point_to_runtime(frame.transform.apply(runtime_point_to_document(point)))
+
+
+@dataclass(frozen=True)
+class _Joint:
+    """One joint as the chain can walk it: two named rooms, two named openings, one placement."""
+
+    name: str
+    a_room: str
+    b_room: str
+    a_opening: str
+    b_opening: str
+    transform: RoomTransform
+
+
+def _section_entries(section: Any) -> list[Mapping[str, Any]]:
+    """The object entries of a user section, or nothing. A section nobody wrote is not an error."""
+    if isinstance(section, (str, bytes)) or not isinstance(section, Sequence):
+        return []
+    return [entry for entry in section if isinstance(entry, Mapping)]
+
+
+def _joint_entries(joints: Any) -> list[_Joint]:
+    """The joints that can be walked, labelled the way `_joint_problems` labels them.
+
+    An entry that is not an object, does not name two rooms, names a room as itself, or carries no
+    readable transform is `_joint_problems`' business: it is refused by name when the document is
+    judged, and simply not walked here, so a chain is never built out of a join the document cannot
+    mean.
+    """
+    if isinstance(joints, (str, bytes)) or not isinstance(joints, Sequence):
+        return []
+    parsed: list[_Joint] = []
+    for index, entry in enumerate(joints):
+        if not isinstance(entry, Mapping):
+            continue
+        a_room = entry.get("a_room")
+        b_room = entry.get("b_room")
+        transform = _transform_from(entry.get("transform"))
+        if not isinstance(a_room, str) or not a_room or not isinstance(b_room, str) or not b_room:
+            continue
+        if a_room == b_room or transform is None:
+            continue
+        joint_id = entry.get("id")
+        a_opening = entry.get("a_opening")
+        b_opening = entry.get("b_opening")
+        parsed.append(
+            _Joint(
+                name=joint_id if isinstance(joint_id, str) and joint_id else f"joints[{index}]",
+                a_room=a_room,
+                b_room=b_room,
+                a_opening=a_opening if isinstance(a_opening, str) else "",
+                b_opening=b_opening if isinstance(b_opening, str) else "",
+                transform=transform,
+            )
+        )
+    return parsed
+
+
+def resolve_room_frames(joints: Any, *, walls: Any = None, openings: Any = None) -> RoomFrames:
+    """Place every room a set of joints reaches into one home frame (H7).
+
+    A joint is `{id, a_room, a_opening, b_room, b_opening, transform}`, and its `transform` places
+    `b_room`'s drawing in `a_room`'s frame — so `a_room` is the parent. The root of a chain is the room
+    that appears as `a_room` and never as `b_room`; walking outward from it composes the transforms,
+    which is how a room drawn on its own ends up in the same centimetres as the one next door.
+
+    Two joins that place the same room, and a set of joins that closes a loop with no room to start
+    from, are **reported**: the first join stands and no drawing is moved. `notes` also carries a join
+    whose two drawings disagree about the length of the wall the doorway is cut into by more than
+    `JOINT_DISAGREEMENT_TOLERANCE` — a report, never a rewrite, for the same reason the scale audit
+    refuses: the map is the user's.
+
+    `walls` and `openings` are the document sections, read only to measure that wall; leaving them out
+    simply means no join is measured. Nothing here raises on a document nobody validated.
+    """
+    parsed = _joint_entries(joints)
+    notes: list[str] = []
+    placements: dict[str, tuple[str, str, RoomTransform]] = {}
+    rooms: list[str] = []
+    for joint in parsed:
+        for room in (joint.a_room, joint.b_room):
+            if room not in rooms:
+                rooms.append(room)
+        if joint.b_room in placements:
+            notes.append(
+                f"{joint.name} also places {joint.b_room}; {placements[joint.b_room][1]} was walked "
+                "instead, and both joins are kept as drawn"
+            )
+            continue
+        placements[joint.b_room] = (joint.a_room, joint.name, joint.transform)
+
+    frames: dict[str, RoomFrame] = {
+        room: RoomFrame(room, RoomTransform()) for room in rooms if room not in placements
+    }
+    pending = list(frames)
+    while pending:
+        room = pending.pop(0)
+        base = frames[room]
+        for child, (parent, name, transform) in placements.items():
+            if parent != room or child in frames:
+                continue
+            frames[child] = RoomFrame(
+                child, base.transform.then(transform), room, base.chain + (name,)
+            )
+            pending.append(child)
+
+    stranded = [room for room in rooms if room not in frames]
+    if stranded:
+        notes.append(
+            "the joins for "
+            + ", ".join(stranded)
+            + " close a loop with no room to start from; every room in it keeps its own drawing"
+        )
+        for room in stranded:
+            frames[room] = RoomFrame(room, RoomTransform())
+
+    notes.extend(_joint_notes(parsed, walls, openings))
+    return RoomFrames(frames=frames, notes=tuple(notes))
+
+
+def _joint_notes(joints: Sequence[_Joint], walls: Any, openings: Any) -> list[str]:
+    """Where two drawings of one doorway disagree about the wall it was cut into (H7).
+
+    Both lengths are the user's, so this reports the pair and moves neither: a join that quietly
+    rescaled a room would make the map disagree with the room the dog is standing in. A doorway whose
+    wall cannot be found in one of the drawings is not measured at all rather than measured wrongly.
+    """
+    segments = _wall_segments(walls)
+    by_id = {
+        entry["id"]: entry
+        for entry in _section_entries(openings)
+        if isinstance(entry.get("id"), str) and entry.get("id")
+    }
+    notes: list[str] = []
+    for joint in joints:
+        here = _opening_wall(by_id.get(joint.a_opening), segments)
+        there = _opening_wall(by_id.get(joint.b_opening), segments)
+        if here is None or there is None:
+            continue
+        a_wall, a_length = here
+        b_wall, b_length = there
+        if a_length <= 0 or b_length <= 0:
+            continue
+        apart = abs(a_length - b_length) / max(a_length, b_length)
+        if apart <= JOINT_DISAGREEMENT_TOLERANCE:
+            continue
+        notes.append(
+            f"{joint.name} joins two drawings that disagree about the shared wall: {a_length:g} cm "
+            f"in {joint.a_room} ({a_wall}) against {b_length:g} cm in {joint.b_room} ({b_wall}), "
+            f"{apart:.0%} apart — both were kept as drawn"
+        )
+    return notes
 
 
 def scale_source_for(rooms: Any) -> str:
@@ -446,21 +691,99 @@ def _point(value: Any) -> tuple[float, float] | None:
     return (x, y)
 
 
-def _wall_lengths(walls: Any) -> dict[str, float | None]:
-    """Every drawn wall's length in cm, keyed by id; None when its endpoints cannot be read."""
-    lengths: dict[str, float | None] = {}
-    if not isinstance(walls, list):
-        return lengths
-    for wall in walls:
-        if not isinstance(wall, Mapping):
-            continue
+def _wall_segments(walls: Any) -> dict[str, tuple[tuple[float, float], tuple[float, float]] | None]:
+    """Every drawn wall's endpoints, keyed by id; None when its endpoints cannot be read.
+
+    One parser for the walls section: the length an object has to fit inside and the wall a join is
+    measured against are the same two points, and two parsers would eventually disagree about which
+    entries are walls.
+    """
+    segments: dict[str, tuple[tuple[float, float], tuple[float, float]] | None] = {}
+    for wall in _section_entries(walls):
         wall_id = wall.get("id")
         if not isinstance(wall_id, str) or not wall_id:
             continue
         a = _point(wall.get("a"))
         b = _point(wall.get("b"))
-        lengths[wall_id] = math.dist(a, b) if a is not None and b is not None else None
-    return lengths
+        segments[wall_id] = (a, b) if a is not None and b is not None else None
+    return segments
+
+
+def _wall_lengths(walls: Any) -> dict[str, float | None]:
+    """Every drawn wall's length in cm, keyed by id; None when its endpoints cannot be read."""
+    return {
+        wall_id: math.dist(segment[0], segment[1]) if segment is not None else None
+        for wall_id, segment in _wall_segments(walls).items()
+    }
+
+
+def _distance_to_segment_cm(
+    point: tuple[float, float], a: tuple[float, float], b: tuple[float, float]
+) -> float:
+    """How far a point lies from the segment `a`-`b`, projected and clamped to its ends.
+
+    `mapping/rooms.py::_distance_to_segment` does the same projection for the keep-out predicate, but
+    it is private there and a join is not a keep-out question, so this is a short copy rather than a
+    second meaning given to that module's geometry.
+    """
+    (px, py), (ax, ay), (bx, by) = point, a, b
+    dx, dy = bx - ax, by - ay
+    length_sq = dx * dx + dy * dy
+    if length_sq <= 0.0:
+        return math.hypot(px - ax, py - ay)
+    t = ((px - ax) * dx + (py - ay) * dy) / length_sq
+    t = max(0.0, min(1.0, t))
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def _opening_wall(
+    opening: Any, segments: Mapping[str, tuple[tuple[float, float], tuple[float, float]] | None]
+) -> tuple[str, float] | None:
+    """The drawn wall a doorway was cut into, and its length, or None when no wall answers.
+
+    The console cuts an opening *inside* one wall (`map.js::cutOpening`), so both of its ends sit on a
+    single drawn segment: that segment is the shared wall a join is measured against. A doorway whose
+    wall cannot be found is not measured, because a join that picked the nearest wall would report a
+    disagreement between two rooms that share no wall at all.
+    """
+    if not isinstance(opening, Mapping):
+        return None
+    a = _point(opening.get("a"))
+    b = _point(opening.get("b"))
+    if a is None or b is None:
+        return None
+    for wall_id, segment in segments.items():
+        if segment is None:
+            continue
+        start, end = segment
+        if (
+            _distance_to_segment_cm(a, start, end) <= _WALL_FIT_TOLERANCE_CM
+            and _distance_to_segment_cm(b, start, end) <= _WALL_FIT_TOLERANCE_CM
+        ):
+            return wall_id, math.dist(start, end)
+    return None
+
+
+def _transform_from(raw: Any) -> RoomTransform | None:
+    """A joint's `transform`, or None when it does not say where the second room sits.
+
+    `translate_cm` is required: a join with no offset is a join nobody drew. A missing `rotation_deg`
+    is a translation-only join and reads as zero, which is what two rooms drawn side by side mean — but
+    a turn that is present and unreadable is None rather than zero, because guessing it would move a
+    room nobody asked to move.
+    """
+    if not isinstance(raw, Mapping):
+        return None
+    translate = raw.get("translate_cm")
+    if not isinstance(translate, Sequence) or isinstance(translate, (str, bytes)) or len(translate) != 2:
+        return None
+    dx = _safe_float(translate[0], math.nan)
+    dy = _safe_float(translate[1], math.nan)
+    degrees = _safe_float(raw.get("rotation_deg", 0.0), math.nan)
+    if math.isnan(dx) or math.isnan(dy) or math.isnan(degrees):
+        return None
+    return RoomTransform((dx, dy), degrees)
+
 
 
 def _object_problems(objects: Sequence[Any], walls: Any) -> list[str]:
@@ -503,6 +826,60 @@ def _object_problems(objects: Sequence[Any], walls: Any) -> list[str]:
     return problems
 
 
+def _reference_problem(label: str, field_name: str, value: Any, known: Any, what: str) -> str | None:
+    """The problem with one reference a joint makes, or None when it resolves."""
+    if not isinstance(value, str) or not value:
+        return f"{label} has no {field_name}"
+    if value not in known:
+        return f"{label} names {field_name} {value!r}, which no {what} answers"
+    return None
+
+
+def _joint_problems(joints: Sequence[Any], openings: Any, rooms: Any) -> list[str]:
+    """A join is two drawn doorways and the placement of one room in the other (H7).
+
+    Every refusal names the field and the id that did not work: a doorway no drawing answers, a room no
+    polygon answers, a room joined to itself, a transform that does not say where the second room sits.
+    Nothing here compares lengths. Two rooms that disagree about the shared wall are a `notes` entry in
+    `resolve_room_frames`, because the drawings are the user's, and a join that refused them would
+    refuse the only map they have — the same reason the scale audit reports rather than rescales.
+    """
+    opening_ids = {
+        entry.get("id") for entry in _section_entries(openings) if isinstance(entry.get("id"), str)
+    }
+    room_ids = {
+        entry.get("id") for entry in _section_entries(rooms) if isinstance(entry.get("id"), str)
+    }
+    problems: list[str] = []
+    for index, entry in enumerate(joints):
+        label = f"joints[{index}]"
+        if not isinstance(entry, Mapping):
+            problems.append(f"{label} is not an object")
+            continue
+        for field_name in ("a_room", "b_room"):
+            problem = _reference_problem(
+                label, field_name, entry.get(field_name), room_ids, "drawn room"
+            )
+            if problem is not None:
+                problems.append(problem)
+        for field_name in ("a_opening", "b_opening"):
+            problem = _reference_problem(
+                label, field_name, entry.get(field_name), opening_ids, "drawn opening"
+            )
+            if problem is not None:
+                problems.append(problem)
+        a_room = entry.get("a_room")
+        b_room = entry.get("b_room")
+        if isinstance(a_room, str) and a_room and a_room == b_room:
+            problems.append(f"{label} joins {a_room} to itself")
+        if _transform_from(entry.get("transform")) is None:
+            problems.append(
+                f"{label} has no readable transform; a join needs translate_cm as two numbers "
+                "and, if the room is turned, a numeric rotation_deg"
+            )
+    return problems
+
+
 def validate_document(raw: Any) -> HomeMapLoad:
     """Judge one parsed document: the single validator, for a file and for a request body (M1).
 
@@ -514,7 +891,9 @@ def validate_document(raw: Any) -> HomeMapLoad:
     note, because silently dropping a room a human drew is exactly the failure the validity rules
     exist to prevent. Each segment that writes one (M3-M5) tightens its entries here. `objects` is the
     first held to geometry (H3): a rectangle that runs past its wall, or names a wall no drawing
-    answers, is a problem naming the wall's length rather than a clamp.
+    answers, is a problem naming the wall's length rather than a clamp. `joints` follows (H7): a join
+    whose room or doorway no drawing answers is a problem naming it, while two drawings that disagree
+    about the shared wall are a note — the pair of lengths is reported and neither is moved.
     """
     if not isinstance(raw, Mapping):
         return HomeMapLoad(None, problems=("the file is not a JSON object",), reason="wrong shape")
@@ -593,8 +972,22 @@ def validate_document(raw: Any) -> HomeMapLoad:
             problems.append(f"{name} must be a list of objects")
     if "objects" in sections:
         problems.extend(_object_problems(sections["objects"], sections.get("walls")))
+    if "joints" in sections:
+        problems.extend(
+            _joint_problems(sections["joints"], sections.get("openings"), sections.get("rooms"))
+        )
     if problems:
         return HomeMapLoad(None, problems=tuple(problems), reason="wrong section")
+
+    # The joins are measured only on a document that loads — a refusal above already says why it did
+    # not, and a disagreement between two drawings is a note, never a second reason to refuse one (H7).
+    notes.extend(
+        resolve_room_frames(
+            sections.get("joints") or [],
+            walls=sections.get("walls"),
+            openings=sections.get("openings"),
+        ).notes
+    )
 
     return HomeMapLoad(
         HomeMap(
