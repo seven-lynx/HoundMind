@@ -275,7 +275,10 @@ warning thresholds where the board's own behaviour differs. The safety envelope
 `min_battery_v`) is deliberately **not** user config, so a config edit cannot widen it — with one
 deliberate exception: `settings.movement.min_battery_v` may be **raised** above the compiled
 `MIN_BATTERY_FLOOR_V` (6.4 V), because raising it only narrows the envelope. The schema's
-`minimum` is that floor, so a lower value is a load error rather than a clamp (#208).
+`minimum` is that floor, so a lower value is a load error rather than a clamp (#208). The shipped
+file already sits above it at 7.6 V, because a gait took the bench dog's rail down at 7.78 V with the
+pack idle (#292): the constant is the widest the envelope may ever be, not the value this build
+recommends.
 
 ---
 

@@ -775,9 +775,12 @@ up on. `holding: true` never means the dog was posed — recovery is stop-and-re
 exempts `api`, because restarting the control plane re-binds the port and drops every WebSocket
 client mid-request. That exemption no longer hides a plane whose thread has exited: the module checks
 its own thread each tick, publishes `api_alive`, and asks the runtime to restart it (#330). A hang is
-covered too (#338): the plane's own loop stamps a monotonic clock every 250 ms, a stamp older than
-10 s is a lost plane, and both failures spend the same restart budget — so a plane that keeps stopping
-is disabled with the count, and `/modules` reports it as `failed` with that reason as its `detail`.
+covered too (#338): the plane's own loop stamps a monotonic clock every 250 ms, and a stamp older
+than 10 s is a hang. A hang is not restarted (#384) — the wedged thread still holds the listening
+socket, so a re-bind could only fail, and the module disables itself with the reason and the remedy
+(`${reason}; restart the service (systemctl restart houndmind)`). A death still spends the restart
+budget, so a plane that keeps dying is disabled with the count. Either way `/modules` reports it as
+`failed` with that reason as its `detail`.
 
 **Validity flags are mandatory and clients must honour them.** `distance_cm: 42.5` with
 `distance_valid: false` means "no measurement" — render "—", never "42 cm". This is the one rule in

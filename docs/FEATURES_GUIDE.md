@@ -110,9 +110,12 @@ been handed over, and one older than `movement.followup_ttl_s` (ships `1.0`) is 
 executed late: a retreat describes the step that just happened, so a stale one is a wrong step.
 
 Every command also passes the interlock's battery veto: nothing that moves runs below
-`movement.min_battery_v`, which ships at the compiled floor of `6.4` V (about 3.2 V per cell on the
-stock 2S pack) and may be **raised** to protect a tired pack — a value under the floor is refused at
-load, because widening this one is how a dog cooks a servo (#208).
+`movement.min_battery_v`, which ships at `7.6` V and may be **raised** to protect a tired pack — a
+value under the compiled floor of `6.4` V (about 3.2 V per cell on the stock 2S pack) is refused at
+load, because widening this one is how a dog cooks a servo (#208). The shipped `7.6` V is not a guess:
+the bench dog rebooted twice under the eight-leg gait with the pack idle at 7.78 V and 7.85 V and
+`get_throttled` latched at `0x50000` (#292), so the default stops a doomed walk instead of leaving it
+to whoever is watching.
 
 **Disable:** `modules.hal_motors.enabled = false`
 
@@ -897,11 +900,13 @@ runtime stamps `last_tick_ts` for every module it ticks, so a plane whose thread
 healthy. The module now checks its own thread on each tick
 (`services/module.py::ControlPlaneModule.tick`), publishes `api_alive`, and asks the runtime for a
 restart through `restart_modules` — the same key the watchdog writes — with a 5 s cooldown, disabling
-itself with the count after three losses rather than looping. A first loss is recovered; a plane that
+itself with the count after three deaths rather than looping. A first death is recovered; a plane that
 keeps dying is named. A hang keeps its thread, so the thread proves nothing there (#338): the plane's
-own loop stamps a monotonic clock every 250 ms (`_stamp_forever`), a stamp older than 10 s is a hang,
-and it goes through the same request and the same budget — `/modules` then says `failed` with
-"the control plane loop has not stamped for N s" while `systemctl status` is still green. `/state`
+own loop stamps a monotonic clock every 250 ms (`_stamp_forever`), and a stamp older than 10 s is a
+hang. A hang is not restarted (#384): the wedged thread still holds the listening socket, so `stop()`
+would spend its join timeout and `start()` would fail to bind — the module disables itself on the
+first hang with the reason and the one remedy that works, `/modules` says `failed` with
+`… restart the service (systemctl restart houndmind)`, and `systemctl status` is still green. `/state`
 still reports the exemption in `supervisor.exempt` with its reason, so "exempt" never reads as
 "healthy".
 
@@ -1087,6 +1092,11 @@ crash the runtime.
 **How it works:**
 - Provide `voice_text` or `voice_command` in runtime context.
 - The module maps phrases to actions using `settings.voice_assistant.command_map`.
+- `stop` must stay pointed at the `stop` action: the gateway and the interlock accept it before any
+  check, so a dog that has fallen over or whose pack is flat can still be told to stop, while the
+  posture `lie` spends the tilt latch, the battery floor and the deadman. `halt` is an alias of the
+  same phrase. Leaving the escape-hatch word on a vetoable action is the defect #386 fixed, so the
+  shipped map is pinned by `tests/test_voice_command_map.py` rather than trusted.
 
 **Speech output.** The TTS table is honoured, not decorative: `settings.voice_assistant.tts.enabled`
 (ships `false`) is the switch - while it is off the module maps commands and answers questions

@@ -171,19 +171,21 @@ def test_a_plane_that_keeps_dying_is_disabled_rather_than_looped(tmp_path) -> No
         module.stop(context)
 
 
-def test_a_hang_is_noticed_while_the_thread_is_still_alive(tmp_path) -> None:
-    """#338: a wedged loop keeps its thread, so only the stamp can say it stopped.
+def test_a_hang_disables_the_module_with_the_remedy(tmp_path) -> None:
+    """#338 + #384: a wedged loop keeps its thread *and* its socket, so a restart cannot work.
 
-    The thread is alive before and after the tick - that is the whole point of the issue - so the
-    check has to be the plane's own clock, and the recovery has to be the same restart request a
-    death produces, not a second policy.
+    The thread is alive before and after the tick - that is the whole reason the stamp exists - but
+    the port it holds cannot be freed from outside it, so asking the runtime to restart would spend
+    `stop()`'s join timeout and end in `cannot bind`. The module says what will actually fix it.
     """
 
     context = context_for(tmp_path, free_port())
     module = ControlPlaneModule("api", bus=CommandBus())
     module.start(context)
     try:
-        assert module._thread is not None and module._thread.is_alive()
+        module.tick(context)
+        assert context.get("api_alive") is True
+
         # The loop stopped scheduling `_HANG_WINDOW_S + 5 s` ago; the heartbeat task that would
         # have refreshed it never ran again.
         module._stamp = time.monotonic() - (services_module._HANG_WINDOW_S + 5.0)
@@ -191,37 +193,34 @@ def test_a_hang_is_noticed_while_the_thread_is_still_alive(tmp_path) -> None:
         module.tick(context)
 
         assert context.get("api_alive") is False
-        assert "api" in (context.get("restart_modules") or [])
-        assert "not stamped for" in (module.status.last_error or "")
-        assert module.status.enabled is True, "one hang is restarted, not fatal"
-        assert module._thread.is_alive(), "#338: the thread never died"
-
-        # One loss, not one per tick: the cooldown holds the second request back.
-        context.set("restart_modules", [])
-        module.tick(context)
-        assert not context.get("restart_modules")
+        assert not context.get("restart_modules"), "a hang must not ask for a restart it cannot do"
+        assert module.status.enabled is False
+        reason = module.status.disabled_reason or ""
+        assert "not stamped for" in reason
+        assert "systemctl restart houndmind" in reason
+        assert module._thread is not None and module._thread.is_alive(), (
+            "#338: the thread never died"
+        )
+        assert module._restarts == 0, "no restart budget is spent on a hang"
     finally:
         module.stop(context)
 
 
-def test_a_plane_that_keeps_hanging_is_disabled_with_the_count(tmp_path) -> None:
-    """A hang loop is the same restart loop as a death loop, so it spends the same budget (#338)."""
+def test_a_plane_that_never_stamps_is_a_hang_at_startup(tmp_path) -> None:
+    """The same failure one step earlier: a plane that serves but never runs its loop (#384)."""
 
     context = context_for(tmp_path, free_port())
     module = ControlPlaneModule("api", bus=CommandBus())
     module.start(context)
     try:
-        for _ in range(10):
-            if not module.status.enabled:
-                break
-            module._stamp = time.monotonic() - (services_module._HANG_WINDOW_S + 5.0)
-            module._dead_since = None  # pretend the cooldown between attempts has elapsed
-            module.tick(context)
+        module._stamp = None
+        module._unstamped_since = time.monotonic() - (services_module._HANG_WINDOW_S + 1.0)
+
+        module.tick(context)
 
         assert module.status.enabled is False
-        reason = module.status.disabled_reason or ""
-        assert "was lost" in reason
-        assert "not stamped" in reason
+        assert "not stamped since start" in (module.status.disabled_reason or "")
+        assert not context.get("restart_modules")
     finally:
         module.stop(context)
 

@@ -41,6 +41,12 @@ _STOP_TIMEOUT_S = 5.0
 # older than `_HANG_WINDOW_S` a hang. The window is generous on purpose - 40 missed stamps at 250 ms
 # each - so a slow client or a GC pause is not a restart, while a wedged loop is still noticed
 # inside one watch interval.
+#
+# A hang is not restarted (#384). A Python thread wedged inside its own loop cannot be killed from
+# here, so `stop()` would spend its whole join timeout, the listener socket would stay bound, and
+# `start()` would re-bind a port the old thread still holds - a restart whose only possible end is
+# `cannot bind`, naming the wrong cause. So `tick()` disables the module on a hang with the remedy
+# the operator actually has, and only a *death* spends the restart budget.
 _STAMP_INTERVAL_S = 0.25
 _HANG_WINDOW_S = 10.0
 _RESTART_COOLDOWN_S = 5.0
@@ -118,18 +124,21 @@ class ControlPlaneModule(Module):
             self.disable(self._error)
 
     def tick(self, context) -> None:
-        """Notice a plane that died or hung after it started (#330, #338).
+        """Notice a plane that died or hung after it started (#330, #338, #384).
 
         Nothing downstream can notice either failure: the runtime stamps `last_tick_ts` for every
         module it ticks, so the supervisor saw a healthy `api` whether or not the thread was alive,
         `/modules` said started, and systemd saw a live process. The thread is the only witness to a
         death; `_stamp`, refreshed by the plane's own loop, is the only witness to a hang, because a
-        wedged loop keeps its thread. Both go through one policy - one restart request through
-        `restart_modules`, the key the watchdog writes - because the runtime owns `start()` and a
-        module must not reach around it.
+        wedged loop keeps its thread.
 
-        A plane that keeps dying or hanging is disabled with the count in the reason rather than
-        restarted forever: a silent restart loop is the failure this issue was about.
+        The two failures are not the same failure, so they do not share a recovery. A death is
+        restarted through `restart_modules` - the key the watchdog writes, because the runtime owns
+        `start()` and a module must not reach around it - and a plane that keeps dying is disabled
+        with the count rather than looped forever. A hang cannot be restarted at all: the thread
+        holding the socket will not run another byte of Python, so the re-bind can only fail. The
+        module disables itself on the first hang, with the one remedy that works, instead of
+        spending a restart budget on an attempt that cannot succeed.
         """
         thread = self._thread
         now = time.monotonic()
@@ -159,9 +168,16 @@ class ControlPlaneModule(Module):
                 self._unstamped_since = None
                 # Alive but not scheduling: only the stamp can say it, and it has stopped.
                 reason = f"the control plane loop has not stamped for {now - stamp:.0f} s"
-        else:
-            reason = self._error or "the control plane thread exited without an error"
+            # A hang, not a death, and a hang is terminal for this thread (#384). Nothing called
+            # from here can make a wedged loop run the callback that would release the socket, so
+            # the restart would spend `stop()`'s join timeout and then fail to bind. Say what the
+            # operator can actually do instead of attempting it.
+            context.set("api_alive", False)
+            self.disable(f"{reason}; restart the service (systemctl restart houndmind)")
+            logger.error("Control plane hung: %s", reason)
+            return
 
+        reason = self._error or "the control plane thread exited without an error"
         context.set("api_alive", False)
         self.status.last_error = reason
         if self._dead_since is None:

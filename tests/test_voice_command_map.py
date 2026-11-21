@@ -216,3 +216,58 @@ def test_a_flat_pack_refuses_the_phrase_loudly_rather_than_silently() -> None:
     assert verdict is not None
     assert verdict["status"] == "refused"
     assert verdict["veto"] == "low_voltage"
+
+
+# ------------------------------------------------------------ the escape hatch (#386)
+
+
+def test_a_shipped_phrase_reaches_stop() -> None:
+    """#386: the word an operator shouts must resolve to the one action nothing vetoes.
+
+    The shipped map pointed `stop` at `lie`, a posture, so the escape hatch spent the tilt latch,
+    the battery floor and the deadman - the dog that most needs stopping was the one refused.
+    """
+    stopping = sorted(spoken for spoken, action in UTTERANCES if action == "stop")
+
+    assert "stop" in stopping, f"no shipped phrase resolves to `stop`: {UTTERANCES}"
+    assert "halt" in stopping, "the alias must follow the phrase it names"
+
+
+def test_the_stop_phrase_survives_a_flat_pack() -> None:
+    """Same pack, same tick list as the refusal above: `lie` is vetoed, `stop` is not."""
+    gateway, context = harness(battery_v=5.0)
+    voice = VoiceModule("voice")
+    voice.start(context)
+
+    context.set("voice_text", "stop")
+    voice.tick(context)
+    context.get("intent_board").publish(context.get("behavior_override"), Source.BEHAVIOUR)
+    gateway.tick(context)
+
+    verdict = context.get("motion_verdict")
+    command = context.get("motion_command")
+    assert verdict is not None and verdict["accepted"] is True, verdict
+    assert command is not None and command["canonical_action"] == "stop"
+
+
+def test_the_stop_phrase_survives_the_tilt_latch() -> None:
+    """A dog on its side can still be told to stop - that is the whole reason `stop` is exempt."""
+    gateway, context = harness()
+    voice = VoiceModule("voice")
+    voice.start(context)
+
+    # Latch the tilt through the path that latches it: a tilted snapshot judging a moving action.
+    context.set("tilt_warning", {"pitch": 89.0, "roll": 89.0})
+    context.get("intent_board").publish("lie", Source.BEHAVIOUR)
+    gateway.tick(context)
+    assert context.get("motion_verdict")["veto"] == "tilt"
+    assert context.get("motion_command") is None
+
+    context.set("voice_text", "stop")
+    voice.tick(context)
+    context.get("intent_board").publish(context.get("behavior_override"), Source.BEHAVIOUR)
+    gateway.tick(context)
+
+    verdict = context.get("motion_verdict")
+    assert verdict is not None and verdict["accepted"] is True, verdict
+    assert context.get("motion_command") is not None, "the escape hatch published no motion"
