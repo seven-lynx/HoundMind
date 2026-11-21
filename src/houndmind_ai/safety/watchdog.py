@@ -53,6 +53,7 @@ class WatchdogModule(Module):
         self._last_report: SupervisorReport | None = None
         self._holding = False
         self._hold_reason: str | None = None
+        self._gave_up: set[str] = set()
 
     def start(self, context) -> None:
         settings = (context.get("settings") or {}).get("watchdog", {})
@@ -63,6 +64,7 @@ class WatchdogModule(Module):
                 max_delay_s=_safe_float(settings.get("restart_max_delay_s"), 60.0),
                 max_restarts=int(_safe_float(settings.get("max_restarts"), 3)),
                 healthy_after_s=_safe_float(settings.get("healthy_after_s"), 30.0),
+                startup_grace_s=_safe_float(settings.get("startup_grace_s"), 60.0),
             ),
             clock=time.time,
         )
@@ -190,8 +192,19 @@ class WatchdogModule(Module):
             # is how two things end up believing they own the bus.
             context.set("restart_modules", list(report.restart))
             logger.warning("Watchdog restart requested: %s", ", ".join(report.restart))
+        # A give-up is an event, not a state. The report names every failed module on every tick,
+        # so logging each one each tick is how a support bundle came to hold nineteen "gave up"
+        # lines for modules that were ticking again before anyone read them (#394). Log the
+        # verdict once, log the recovery once, and let `watchdog_status` carry the state.
+        failed_now = set(report.failed)
         for name in report.failed:
-            logger.error("Watchdog gave up on %s: %s", name, report.reasons.get(name, "unknown"))
+            if name not in self._gave_up:
+                logger.error(
+                    "Watchdog gave up on %s: %s", name, report.reasons.get(name, "unknown")
+                )
+        for name in sorted(self._gave_up - failed_now):
+            logger.info("Watchdog sees %s ticking again", name)
+        self._gave_up = failed_now
 
     def _exempt(self, ignored: set[str], statuses: dict) -> dict[str, str]:
         """The modules this watchdog will not restart, and why - one map, published every tick.

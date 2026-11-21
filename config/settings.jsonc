@@ -1205,7 +1205,10 @@
       // Restart attempts before the module is reported failed and left alone.
       "max_restarts": 3,
       // A restarted module must stay healthy this long before it earns a fresh budget.
-      "healthy_after_s": 30.0
+      "healthy_after_s": 30.0,
+      // After start, this long is boot and not failure: the loop is starting the HAL and loading
+      // modules, so a module that has not ticked yet is left alone rather than restarted (#394).
+      "startup_grace_s": 60.0
     },
     // =====================================================================
     // BALANCE (IMU-based posture compensation)

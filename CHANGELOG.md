@@ -468,6 +468,16 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A reboot no longer restarts nineteen healthy modules, or calls them dead** — the first 90 s
+  after a `systemd` start restarted every module three times and then logged one ERROR per module,
+  `Watchdog gave up on hal: stale heartbeat; gave up after 3 restart(s)` (#394). Both halves were
+  false: the loop was starting the HAL and loading modules, and `/api/v1/modules` reported
+  `failed: 0` half a minute later. `kernel/supervisor.py` now keeps a startup window
+  (`watchdog.startup_grace_s`, 60 s) in which no module is restarted, no restart budget is spent
+  and nothing is given up on — a module that has not ticked yet is warming up, not hung. The
+  give-up line also became an event instead of a state: `safety/watchdog.py` logs it once when the
+  verdict is made and one INFO when the module is seen ticking again, where before every tick
+  re-logged it while `watchdog_status` already carried the state.
 - **An LED write is no longer a tick spent waiting for the servo bus** — `led_manager` overran its
   0.100 s budget on a Pi 4 at idle, nine times in 80 s and 41 times in four minutes, at 0.10–0.35 s
   per tick with behaviour and scanning off (#393). The strip write itself was never the cost: the

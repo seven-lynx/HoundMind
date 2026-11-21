@@ -38,6 +38,8 @@ def status(**overrides):
 
 def build(**policy):
     clock = Clock()
+    # These tests are about steady-state supervision; the boot window has its own tests below.
+    policy.setdefault("startup_grace_s", 0.0)
     supervisor = Supervisor(RestartPolicy(**policy), clock=clock)
     return supervisor, clock
 
@@ -175,3 +177,49 @@ def test_reset_forgets_history() -> None:
     supervisor.reset()
     assert supervisor.watched == ()
     assert supervisor.decide(statuses, timeout_s=4.0).restart == ["scanning"]
+
+
+# ------------------------------------------------------------------ boot is not a fault
+
+
+def test_a_boot_restarts_nothing_and_gives_up_on_nothing() -> None:
+    """#394: a reboot restarted nineteen healthy modules three times, then called them dead.
+
+    The loop is starting the HAL and loading modules, so nothing has ticked yet. A module that
+    has not ticked is warming up, not hung, and the window must not spend a restart budget it
+    would then have to explain as a give-up.
+    """
+    supervisor, clock = build(startup_grace_s=60.0)
+    statuses = {
+        "hal": status(last_heartbeat_ts=None),
+        "led_manager": status(last_heartbeat_ts=None),
+        "scanning": status(last_heartbeat_ts=clock.now - 30.0),
+    }
+
+    for _ in range(5):
+        clock.advance(10.0)
+        report = supervisor.decide(statuses, timeout_s=4.0)
+        assert report.restart == []
+        assert report.failed == []
+        assert report.reasons["hal"] == "warming up"
+
+    assert supervisor.record("hal") == {
+        "restarts": 0,
+        "failed": False,
+        "last_error": None,
+        "next_attempt_at": 0.0,
+    }
+
+
+def test_the_grace_window_closes_and_a_real_hang_is_restarted() -> None:
+    """The window suppresses boot noise, not supervision: a hang after it still earns a restart."""
+    supervisor, clock = build(startup_grace_s=60.0)
+    statuses = {"scanning": status(last_heartbeat_ts=clock.now)}
+
+    clock.advance(30.0)
+    assert supervisor.decide(statuses, timeout_s=4.0).restart == []
+
+    clock.advance(31.0)
+    report = supervisor.decide(statuses, timeout_s=4.0)
+    assert report.restart == ["scanning"]
+    assert report.reasons["scanning"] == "stale heartbeat"

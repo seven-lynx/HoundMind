@@ -19,6 +19,11 @@ Two rules matter more than the rest:
 - **A module that keeps failing is eventually left failed.** Backoff caps the retries, and the
   runtime stops being asked. A supervisor that retries forever hides the fault it is meant to
   report.
+
+And one window: **the first `startup_grace_s` after the supervisor starts is not a fault.** Boot
+starves the loop, so a module that has simply not ticked yet would otherwise be restarted — and
+restarting `hal` and `hal_motors` to fix a slow boot is not recovery. Nothing is restarted while
+the window is open, so a boot cannot spend the budget it would then report as a give-up (#394).
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ class RestartPolicy:
     max_delay_s: float = 60.0
     max_restarts: int = 3
     healthy_after_s: float = 30.0
+    startup_grace_s: float = 60.0
 
     def delay_for(self, attempt: int) -> float:
         """Exponential backoff, capped. `attempt` is 1-based."""
@@ -94,6 +100,7 @@ class Supervisor:
         self.policy = policy or RestartPolicy()
         self._clock = clock or time.monotonic
         self._records: dict[str, _Record] = {}
+        self._started_at = self._clock()
 
     # ---- decisions ---------------------------------------------------------
 
@@ -126,6 +133,16 @@ class Supervisor:
             # old watchdog reported every disabled module as stale, forever.
             if not raw.get("enabled", True) or not raw.get("started", False):
                 record.healthy_since = None
+                continue
+
+            # Boot is not a fault. The first minute after start is spent starting the HAL,
+            # loading modules and settling the loop, and a module that has not ticked yet is
+            # not a module that stopped: on a reboot the old policy restarted nineteen healthy
+            # modules three times and then logged nineteen false give-ups (#394). Nothing is
+            # restarted, counted or given up on while the grace window is open, so the window
+            # also cannot spend a restart budget it would then have to explain.
+            if (stamp - self._started_at) < self.policy.startup_grace_s:
+                report.reasons[str(name)] = "warming up"
                 continue
 
             reason = self._reason(raw, record, timeout_s, stamp)
