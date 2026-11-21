@@ -1089,6 +1089,11 @@ crash the runtime.
 **How it works:**
 - Provide `voice_text` or `voice_command` in runtime context.
 - The module maps phrases to actions using `settings.voice_assistant.command_map`.
+- `stop` must stay pointed at the `stop` action: the gateway and the interlock accept it before any
+  check, so a dog that has fallen over or whose pack is flat can still be told to stop, while the
+  posture `lie` spends the tilt latch, the battery floor and the deadman. `halt` is an alias of the
+  same phrase. Leaving the escape-hatch word on a vetoable action is the defect #386 fixed, so the
+  shipped map is pinned by `tests/test_voice_command_map.py` rather than trusted.
 
 **Speech output.** The TTS table is honoured, not decorative: `settings.voice_assistant.tts.enabled`
 (ships `false`) is the switch - while it is off the module maps commands and answers questions

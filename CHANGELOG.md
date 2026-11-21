@@ -417,6 +417,14 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- **The stop word now reaches `stop`, so the escape hatch cannot be vetoed** — `config/settings.jsonc`
+  mapped `"stop": "lie"`, and `lie` is a `posture`: it spends the tilt latch, the battery floor and the
+  deadman, and the interlock refuses it at 5.0 V or after an 89° tilt. `stop` is the one action the
+  gateway and the interlock accept before any check, which is what makes it the word an operator
+  shouts at a dog that has fallen over — the exact dog that could not be told to stop (#386). The
+  phrase now maps to `stop`, `halt` follows it, and `down`/`sleep` keep `lie`. Re-pointing it would
+  fail `tests/test_voice_command_map.py`, which requires a shipped phrase to resolve to `stop` and
+  proves that phrase is still accepted with a flat pack and with the tilt latch set.
 - **`docs/ARCHITECTURE.md` lists the tree it describes, and a test keeps it that way** — the `src/tools/`
   block named ten of eighteen CLIs, so an onboarding reader concluded the map, calibration and bench
   tooling did not exist; the web row had the same drift until M8 (#359). Both are complete now, and

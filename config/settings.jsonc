@@ -519,7 +519,10 @@
         "wag tail": "wag tail",
         "shake": "shake head",
         "shake head": "shake head",
-        "stop": "lie"
+        // The escape hatch. `stop` is the one action no layer vetoes - not the tilt latch, not the
+        // battery floor, not the mode - so the word an operator shouts must reach it instead of a
+        // posture that a dog lying on its side cannot be granted (#386).
+        "stop": "stop"
       },
       // Aliases map to other keys in command_map.
       "aliases": {
