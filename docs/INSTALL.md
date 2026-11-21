@@ -442,6 +442,15 @@ On Windows PowerShell:
 python -m houndmind_ai
 ```
 
+### Check a start before taking it
+
+`python -m houndmind_ai --dry-run` loads and validates the config, builds the module registry and
+logs each module's verdict - `enabled`, or `disabled by config` - then exits 0 without starting a
+module or running a tick. Nothing moves and no bus is opened, so it is safe with the dog on the
+bench: a settings file this build refuses is named here rather than at the HAL, and
+`python -m houndmind_ai --dry-run --config <path>` checks a candidate file before you point a run at
+it (#405).
+
 ### Finding the device by name
 
 The control plane advertises itself over mDNS (Avahi's protocol, already on Raspberry Pi OS

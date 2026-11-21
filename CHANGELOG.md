@@ -10,6 +10,14 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **`--dry-run`, so a start can be proved motionless** — there was no way to show that a start
+  touches nothing: the only two states were "the dog runs" and "the process fails", and the
+  programming guide said so in as many words (#405). `python -m houndmind_ai --dry-run` loads and
+  validates the config, builds the module registry, logs each module's verdict (`enabled`, or
+  `disabled by config`) and exits 0 without starting a module, running a tick or opening a bus. On
+  the shipped config it reports 37 modules built and then nothing at all; `tests/test_dry_run.py`
+  drives the same path against `FakeDogHAL` and asserts the fake recorded no call, and a config the
+  validator refuses still exits 2 with the key named.
 - **A walk is held inside its room, and a gate that lets it back in (H5)** — the planner only knew what
   was blocked, so a route could leave the room it was drawn for and a doorway the user had not finished
   with was as walkable as any other. `mapping/planner.py::plan_route` now takes an optional `region` (a

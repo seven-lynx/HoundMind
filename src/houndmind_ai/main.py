@@ -177,6 +177,26 @@ def build_modules(config, hal: DogHAL | None = None) -> list:
     return build_registry(config, hal=hal).modules()
 
 
+def dry_run(config, hal: DogHAL | None = None) -> list[dict[str, object]]:
+    """Build the registry and report what each module would do, starting nothing (#405).
+
+    There was no way to prove a start is motionless: the only two states were "the dog runs" and
+    "the process fails". Loading and validating the config is the whole check here - the modules are
+    constructed, so a config that names a module the registry cannot build fails before anything
+    starts, while no `start`, no tick and no intent happens. `hal` is the seam: pass
+    `FakeDogHAL()` and `hal.calls == []` afterwards is the proof.
+    """
+    registry = build_registry(config, hal=hal)
+    return [
+        {
+            "name": module.name,
+            "enabled": bool(module.status.enabled),
+            "required": bool(module.status.required),
+        }
+        for module in registry.modules()
+    ]
+
+
 def publish_identity(context, config) -> BoardInfo:
     """Publish the board (a fact) and the profile (a decision) for `/meta` and the logs.
 
@@ -198,6 +218,11 @@ def main() -> None:
         default=None,
         help="Path to settings.jsonc",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="load and validate the config, list the modules, and exit without ticking",
+    )
     args = parser.parse_args()
 
     try:
@@ -209,6 +234,23 @@ def main() -> None:
         raise SystemExit(2) from None
 
     context_filter = setup_logging((config.settings or {}).get("logging", {}))
+
+    if args.dry_run:
+        # A dry run ends here: the config is validated and the registry is built, and no module is
+        # started, so no servo, camera or bus is touched (#405).
+        verdicts = dry_run(config)
+        for row in verdicts:
+            logger.info(
+                "%-18s %s",
+                row["name"],
+                "enabled" if row["enabled"] else "disabled by config",
+            )
+        logger.info(
+            "Dry run: %d modules built, nothing started, no tick",
+            len(verdicts),
+        )
+        return
+
     runtime = HoundMindRuntime(config, build_modules(config))
 
     # One process may own the servo bus (#213): a second one blocks inside `Pidog()` with no output
