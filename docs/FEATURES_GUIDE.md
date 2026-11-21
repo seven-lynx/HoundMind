@@ -902,7 +902,10 @@ a stale reading publishes a `stop` command through the same interlock as everyth
 never poses the dog, and only modules that are enabled *and* started are candidates. Restarts
 back off exponentially (`restart_cooldown_s` × `restart_backoff_factor`, capped by
 `restart_max_delay_s`) and stop after `max_restarts`; a module that stays up for `healthy_after_s`
-earns a fresh budget.
+earns a fresh budget. The first `startup_grace_s` (60 s) is a startup window and not supervision:
+boot spends the loop starting the HAL and loading modules, so nothing is restarted, counted or
+given up on — a module that has not ticked yet is warming up. The give-up is logged once when the
+verdict is made, and once more when the module is seen ticking again, instead of every tick.
 
 The scan staleness window is the larger of `scan_timeout_s` and 1.5× the measured scan duration,
 because a sweep takes seconds and a fixed sub-second window called a healthy scan stale. It is one

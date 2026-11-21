@@ -425,6 +425,7 @@ _WATCHDOG = Section(
         "restart_max_delay_s": _NON_NEGATIVE,
         "max_restarts": IntSpec(minimum=0),
         "healthy_after_s": _NON_NEGATIVE,
+        "startup_grace_s": _NON_NEGATIVE,
     }
 )
 

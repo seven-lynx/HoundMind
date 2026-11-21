@@ -27,7 +27,7 @@ says what the process did, the event log says what the dog's state was every hal
 decision log says why the tick chose what it chose.
 
 The runtime log is written at `settings.logging.log_level` — **`INFO` as shipped**
-(`config/settings.jsonc:1239`). `DEBUG` writes about 14 KB/s on the dog, which rotates the 10 MB
+(`config/settings.jsonc:1242`). `DEBUG` writes about 14 KB/s on the dog, which rotates the 10 MB
 file in roughly three minutes (#391); raise it for a bench session and put it back before the dog
 is left running.
 

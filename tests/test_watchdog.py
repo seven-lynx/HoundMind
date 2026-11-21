@@ -8,6 +8,7 @@ modules are off, is silent.
 
 from __future__ import annotations
 
+import logging
 import time
 
 import pytest
@@ -33,6 +34,7 @@ SETTINGS = {
         "restart_max_delay_s": 60.0,
         "max_restarts": 3,
         "healthy_after_s": 30.0,
+        "startup_grace_s": 0.0,
     }
 }
 
@@ -60,9 +62,11 @@ def scan(ts: float | None = None) -> ScanReading:
 def build(settings: dict | None = None, now: float | None = None):
     context = RuntimeContext()
     board = IntentBoard()
+    # Settings first: `start()` reads the watchdog section to build the restart policy, so a
+    # harness that set them afterwards was exercising the defaults, not the table it declares.
+    context.set("settings", settings or SETTINGS)
     module = WatchdogModule("watchdog")
     module.start(context)
-    context.set("settings", settings or SETTINGS)
     context.set("intent_board", board)
     context.set("module_statuses", {})
     return module, context, board
@@ -290,3 +294,54 @@ def test_a_disabled_watchdog_does_nothing() -> None:
     module.tick(context)
 
     assert board.find(Source.WATCHDOG) is None
+
+
+def test_a_boot_is_not_a_mass_restart() -> None:
+    """#394: a reboot asked for nineteen restarts three times, then logged nineteen give-ups."""
+    settings = {"watchdog": {**SETTINGS["watchdog"], "startup_grace_s": 60.0}}
+    module, context, board = build(settings)
+    context.set("sensor_reading", reading())
+    context.set("scan_reading", scan())
+    context.set(
+        "module_statuses",
+        {
+            "hal": status(last_heartbeat_ts=None),
+            "led_manager": status(last_heartbeat_ts=None),
+            "scanning": status(last_heartbeat_ts=time.time() - 30.0),
+        },
+    )
+
+    module.tick(context)
+
+    assert context.get("restart_modules") is None
+    reported = context.get("watchdog_status")
+    assert reported["restart"] == []
+    assert reported["failed"] == []
+    assert reported["reasons"]["hal"] == "warming up"
+
+
+def test_a_give_up_is_logged_once_and_the_recovery_once(caplog) -> None:
+    """A give-up is an event: re-logging it each tick is how one reboot produced nineteen errors."""
+    settings = {"watchdog": {**SETTINGS["watchdog"], "max_restarts": 0}}
+    module, context, board = build(settings)
+    context.set("sensor_reading", reading())
+    context.set("scan_reading", scan())
+    context.set("module_statuses", {"scanning": status(last_heartbeat_ts=time.time() - 60.0)})
+
+    with caplog.at_level(logging.INFO, logger="houndmind_ai.safety.watchdog"):
+        for _ in range(3):
+            module.tick(context)
+
+    gave_up = [
+        record.getMessage() for record in caplog.records if "gave up" in record.getMessage()
+    ]
+    assert len(gave_up) == 1
+    assert "scanning" in gave_up[0]
+
+    caplog.clear()
+    context.set("module_statuses", {"scanning": status()})
+    with caplog.at_level(logging.INFO, logger="houndmind_ai.safety.watchdog"):
+        module.tick(context)
+
+    assert any("ticking again" in record.getMessage() for record in caplog.records)
+    assert not any("gave up" in record.getMessage() for record in caplog.records)
