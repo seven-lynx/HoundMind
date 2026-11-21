@@ -468,6 +468,19 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **The shipped log level was `DEBUG`, so the 10 MB log rotated in three minutes** — on the device
+  that is about 14 KB/s, and it buried the lines a support bundle exists to keep (#391).
+  `settings.logging.log_level` now ships `INFO`; `core/logging_setup.py:126` already fell back to
+  `INFO` when the key was absent, so the file was the only place that disagreed. Raise it to `DEBUG`
+  for a bench session.
+- **A retired or misspelled module key is refused at load** — `modules.<name>` accepted any name, so
+  `modules.telemetry_dashboard` loaded and was ignored while `docs/FEATURES_GUIDE.md` and
+  `docs/ARCHITECTURE.md` promised a load-time error, and `modules.watchdg` would have disabled a
+  guard without a word (#392). `kernel/config_schema.py::KNOWN_MODULES` pins the names
+  `main.build_registry` registers: a typo is refused with the near name, a retired one with what
+  replaced it (`telemetry_dashboard` → `api`, `wifi_localization` → nothing), and the check covers
+  `profiles.<name>.modules` too. The generated JSON Schema carries the same list
+  (`propertyNames.enum`), so an editor refuses what the loader refuses.
 - **The shipped config walked the dog on start** — `behavior.autonomy_enabled` shipped `true`, and
   `autonomy_modes` offers `explore`, whose action is `explore_action` (`forward`). An install that
   ended with `systemctl enable --now` therefore recorded 237 granted `forward`, `trot`, `turn_left`

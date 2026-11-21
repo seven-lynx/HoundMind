@@ -317,10 +317,14 @@ recommends.
 
 - JSON5 with comments, validated by a typed model at load (`kernel/config_schema.py`).
 - **Unknown key = load-time error** with a did-you-mean suggestion, and the process exits before any
-  hardware is touched (`main.py:123-129`). This is what stops `settings.voice` (instead of
+  hardware is touched (`core/config.py:183-185`). This is what stops `settings.voice` (instead of
   `voice_assistant`) from silently doing nothing.
 - Under `modules.<name>` only `enabled` and `required` are read; tuning lives under
   `settings.<name>`, and a tuning key placed under `modules` is reported rather than ignored.
+- **The module name itself is checked too** (`kernel/config_schema.py::KNOWN_MODULES`): a typo such
+  as `modules.watchdg` is refused with the near name, and a retired block
+  (`modules.telemetry_dashboard`, `modules.wifi_localization`) is refused with what replaced it,
+  instead of loading and quietly doing nothing (#392).
 - Secrets are **never** in this file: the API token is written on first start to
   `~/.houndmind/api_token` (0600) by `services/auth.py::TokenStore`, and the config references the
   path.

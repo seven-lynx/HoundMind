@@ -15,6 +15,8 @@ from houndmind_ai.kernel.config_schema import (
     ConfigError,
     FloatSpec,
     IntSpec,
+    json_schema,
+    KNOWN_MODULES,
     ListOf,
     MapOf,
     Problem,
@@ -152,6 +154,52 @@ def test_a_module_key_beyond_enabled_is_rejected() -> None:
 def test_module_enabled_and_required_are_accepted() -> None:
     tree = {"modules": {"safety": {"enabled": False, "required": False}}}
     assert validate_config_tree(tree) == []
+
+
+def test_a_retired_module_name_is_refused_with_its_replacement() -> None:
+    """#392: `modules.telemetry_dashboard` loaded and was ignored while the docs promised a
+    failure. A retired name is answered with what replaced it, not with a fuzzy guess."""
+    problems = validate_config_tree({"modules": {"telemetry_dashboard": {"enabled": False}}})
+    assert paths(problems) == ["config.modules.telemetry_dashboard"]
+    assert "retired" in problems[0].message
+    assert "api" in problems[0].message
+
+
+def test_a_module_name_typo_is_refused_with_a_suggestion() -> None:
+    """`modules.watchdg` would disable a guard without a word; the near name is the fix."""
+    problems = validate_config_tree({"modules": {"watchdg": {"enabled": True}}})
+    assert paths(problems) == ["config.modules.watchdg"]
+    assert problems[0].hint == "watchdog"
+
+
+def test_a_profile_override_cannot_name_a_module_that_does_not_exist() -> None:
+    tree = {"profiles": {"pi5": {"modules": {"wifi_localization": {"enabled": True}}}}}
+    problems = validate_config_tree(tree)
+    assert paths(problems) == ["config.profiles.pi5.modules.wifi_localization"]
+    assert "retired" in problems[0].message
+
+
+def test_the_known_module_names_are_the_registry_the_runtime_builds() -> None:
+    """The schema refuses any name `main.build_registry` does not register, so the static list
+    and the registry have to be the same list. This is what keeps the copy honest."""
+    from houndmind_ai.main import build_modules
+
+    assert set(KNOWN_MODULES) == {module.name for module in build_modules(load_config())}
+
+
+def test_the_module_name_list_reaches_the_generated_schema() -> None:
+    """An editor reads the same list the loader enforces, or it accepts what the dog refuses."""
+    modules = json_schema()["properties"]["modules"]
+
+    assert modules["propertyNames"] == {"enum": sorted(KNOWN_MODULES)}
+    assert modules["additionalProperties"] == {
+        "type": "object",
+        "properties": {
+            "enabled": {"type": "boolean"},
+            "required": {"type": "boolean"},
+        },
+        "additionalProperties": False,
+    }
 
 
 def test_profile_overrides_are_validated() -> None:

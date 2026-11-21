@@ -31,6 +31,7 @@ __all__ = [
     "FloatSpec",
     "IntSpec",
     "json_schema",
+    "KNOWN_MODULES",
     "ListOf",
     "MapOf",
     "Problem",
@@ -188,9 +189,12 @@ class ListOf(Spec):
 
 @dataclass(frozen=True)
 class MapOf(Spec):
-    """A table whose keys are user-chosen: module names, profile names, section names."""
+    """A table whose keys the file chooses: profile names, and `modules` when `known` pins them."""
 
     value: Spec = field(default_factory=AnyValue)
+    # When set, the keys are not user-chosen after all: `modules` takes only names this build
+    # registers, so a retired name or a typo cannot load and be silently ignored (#392).
+    known: frozenset[str] | None = None
 
     def validate(self, value: Any, path: str) -> tuple[Any, list[Problem]]:
         if not isinstance(value, dict):
@@ -201,10 +205,88 @@ class MapOf(Spec):
             if not isinstance(key, str):
                 problems.append(Problem(path, f"keys must be strings, got {key!r}"))
                 continue
+            if self.known is not None and key not in self.known:
+                problems.append(_module_name_problem(f"{path}.{key}", key))
+                continue
             normalised, found = self.value.validate(entry, f"{path}.{key}")
             out[key] = normalised
             problems.extend(found)
         return out, problems
+
+
+# The module names `main.build_registry` registers. Validation runs before the registry is
+# built, so this list is static - and `tests/test_config_schema.py` fails when the two drift
+# apart, which is the only thing that keeps a copied list honest.
+KNOWN_MODULES: frozenset[str] = frozenset(
+    {
+        "api",
+        "assistant",
+        "attention",
+        "balance",
+        "behavior",
+        "calibration",
+        "decision_log",
+        "energy_emotion",
+        "event_log",
+        "face_recognition",
+        "habituation",
+        "hal",
+        "hal_motors",
+        "hal_sensors",
+        "health",
+        "led_manager",
+        "localization",
+        "mapping",
+        "motion_gateway",
+        "navigation",
+        "odometry",
+        "orientation",
+        "perception",
+        "place_navigator",
+        "place_recognition",
+        "room_context",
+        "route_follower",
+        "routine_runner",
+        "safety",
+        "scanning",
+        "semantic_labeler",
+        "sensor_health",
+        "slam_pi4",
+        "vision",
+        "vision_pi4",
+        "voice",
+        "watchdog",
+    }
+)
+
+# Names that used to be modules, and what replaced them (`None`: nothing did). A retired name
+# is not a typo, so it is answered with its replacement rather than a fuzzy guess.
+_RETIRED_MODULES: dict[str, str | None] = {
+    "telemetry_dashboard": "api",  # the control plane's web app took over the dashboard
+    "wifi_localization": None,
+}
+
+
+def _module_name_problem(path: str, name: str) -> Problem:
+    """Why `modules.<name>` was refused, and the name it was probably meant to be.
+
+    A typo matters more than it looks: `modules.watchdg` would disable a guard without a word,
+    which is exactly the mistake the strict sections exist to catch.
+    """
+    if name in _RETIRED_MODULES:
+        replacement = _RETIRED_MODULES[name]
+        message = (
+            f"module was retired; '{replacement}' replaces it"
+            if replacement
+            else "module was retired; nothing replaces it, so delete the entry"
+        )
+        return Problem(path, message)
+    suggestion = get_close_matches(name, sorted(KNOWN_MODULES), n=1)
+    return Problem(
+        path,
+        "unknown module name; no module of that name is registered",
+        suggestion[0] if suggestion else None,
+    )
 
 
 @dataclass(frozen=True)
@@ -1209,7 +1291,7 @@ _PROFILES = MapOf(
     Section(
         fields={
             "loop": _LOOP,
-            "modules": MapOf(_MODULE_ENTRY),
+            "modules": MapOf(_MODULE_ENTRY, known=KNOWN_MODULES),
             "settings": _SETTINGS,
         }
     )
@@ -1220,7 +1302,7 @@ _TOP = Section(
         "profile": StrSpec(),
         "profiles": _PROFILES,
         "loop": _LOOP,
-        "modules": MapOf(_MODULE_ENTRY),
+        "modules": MapOf(_MODULE_ENTRY, known=KNOWN_MODULES),
         "settings": _SETTINGS,
     }
 )
@@ -1239,7 +1321,11 @@ def _describe(spec: Spec) -> dict[str, Any]:
             "additionalProperties": bool(spec.allow_extra),
         }
     if isinstance(spec, MapOf):
-        return {"type": "object", "additionalProperties": _describe(spec.value)}
+        node: dict[str, Any] = {"type": "object", "additionalProperties": _describe(spec.value)}
+        if spec.known is not None:
+            # The loader refuses any other name, so the document has to list the ones it takes.
+            node["propertyNames"] = {"enum": sorted(spec.known)}
+        return node
     if isinstance(spec, ListOf):
         list_node: dict[str, Any] = {"type": "array", "items": _describe(spec.item)}
         if spec.length is not None:

@@ -1444,13 +1444,16 @@ What replaces each part of it:
 | `trace_id` filter on `/snapshot` | `trace_id` is a field of `GET /api/v1/state`, and the support bundle carries the same snapshots |
 
 A config that still contains `modules.telemetry_dashboard` or `settings.telemetry_dashboard` now
-fails to load with a did-you-mean: delete the block, and the web app replaces both.
+fails to load: the module key is refused with `api` named as its replacement (#392), and the
+settings section is refused as unknown. Delete the block, and the web app replaces both.
 
 ## 25) WiFi Localization — removed
 `modules.wifi_localization` and `optional/wifi_localization.py` are gone. The module scanned for
 access points by shelling out to `netsh wlan show networks`, a Windows command: on Raspberry Pi
 OS every scan returned `{"error": ...}`, so the feature it documented could never have worked on
 the only hardware it targeted. It also had no test and was never registered in the module list.
+A config that still carries `modules.wifi_localization` fails to load: the name is refused with
+"module was retired; nothing replaces it" (#392).
 
 Indoor positioning, when it comes back, belongs in `mapping/` as a source feeding the pose
 estimate — not as a module that only ever worked on a developer's laptop.

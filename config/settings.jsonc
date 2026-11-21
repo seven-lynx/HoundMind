@@ -1235,8 +1235,8 @@
       // Status log output to terminal can be disabled.
       "status_log_enabled": true,
       "status_log_interval_s": 10,
-      // Default to verbose logging for better support bundles.
-      "log_level": "DEBUG",
+      // INFO, not DEBUG: on the dog DEBUG rotated the 10 MB log in about three minutes (#391).
+      "log_level": "INFO",
       "log_file_max_mb": 10,
       "log_file_backups": 5,
       // Event logger (ring buffer + JSONL).
