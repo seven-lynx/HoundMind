@@ -9,16 +9,16 @@ lines HoundMind writes. Start at **Paths** if you only need to find a file.
 
 ## Paths
 
-- Primary log directory: `logs/` (`settings.logging.log_dir`, `config/settings.jsonc:1044`)
+- Primary log directory: `logs/` (`settings.logging.log_dir`, `config/settings.jsonc:1235`)
 - Runtime log: `logs/houndmind.log` — the `logging` module, every level
-  (`settings.logging.log_file_name`, `:1045`). Written only while
-  `settings.logging.enable_file` is true (`:1042`, which is the shipped default).
+  (`settings.logging.log_file_name`, `:1236`). Written only while
+  `settings.logging.enable_file` is true (`:1233`, which is the shipped default).
 - Event JSONL: `logs/houndmind_events.jsonl` — the `event_log` module, one snapshot per interval,
   capped at `event_log_max_mb` (5) and then renamed to `.1`
-  (`settings.logging.event_log_path`, `:1059-1062`)
+  (`settings.logging.event_log_path`, `:1250-1253`)
 - Decision JSONL: `logs/houndmind_decisions.jsonl` — the `decision_log` module, one record per tick
-  with intent, source, vetoes and inputs (`settings.logging.decision_log_path`, `:1071`).
-  **This file does not exist by default:** `decision_log_file_enabled` ships `false` (`:1070`)
+  with intent, source, vetoes and inputs (`settings.logging.decision_log_path`, `:1262`).
+  **This file does not exist by default:** `decision_log_file_enabled` ships `false` (`:1261`)
   because it is around 9 MB/hour at 10 Hz. The in-memory ring behind `/api/v1/decisions` runs
   regardless, so `/decisions` is never empty just because this file is absent.
 
@@ -83,7 +83,7 @@ form when the package is not installed.
 ## Troubleshooting tips
 
 - If logs are missing, check `settings.logging.log_dir` and `settings.logging.enable_file` in
-  `config/settings.jsonc`. File logging is on by default (`:1042`), so absence means either a
+  `config/settings.jsonc`. File logging is on by default (`:1233`), so absence means either a
   different working directory or someone turned it off.
 - Confirm file permissions and disk space on-device.
 - A log that stops mid-run usually means the process died: `GET /api/v1/health` stops answering and
