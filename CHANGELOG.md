@@ -468,6 +468,18 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **An LED write is no longer a tick spent waiting for the servo bus** — `led_manager` overran its
+  0.100 s budget on a Pi 4 at idle, nine times in 80 s and 41 times in four minutes, at 0.10–0.35 s
+  per tick with behaviour and scanning off (#393). The strip write itself was never the cost: the
+  vendor's `set_mode` only stores what its own thread renders. It was queued behind the HAL's servo
+  lock, which `SensorService` holds for a whole sensor sequence on its polling thread
+  (`hal/sensors.py:151` → `hal/vendor.py:247`). `hal/vendor.py::PidogHAL.action` now dispatches
+  `rgb` outside that lock, exactly as it already did for audio, so the module's tick returns in
+  microseconds. `logging/led_manager.py` also stops re-sending an instruction the strip is already
+  showing — the cooldown only deduped inside its window, and a 10 Hz loop crosses it constantly —
+  so an unchanged request is one write rather than one per tick. Colours for the same input are
+  unchanged, and a restart re-asserts the strip instead of assuming it.
+
 - **The shipped log level was `DEBUG`, so the 10 MB log rotated in three minutes** — on the device
   that is about 14 KB/s, and it buried the lines a support bundle exists to keep (#391).
   `settings.logging.log_level` now ships `INFO`; `core/logging_setup.py:126` already fell back to

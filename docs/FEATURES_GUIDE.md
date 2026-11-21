@@ -1037,6 +1037,17 @@ request that owned the strip expires and nothing else is live, the strip returns
 `settings.led.bps` maps a source name to a rate (`{"safety": 4}`). Absent from both, the key is not
 sent and the HAL's own default applies — the rate every effect ran at before this existed.
 
+**Cost.** An LED update is cheap on the loop, and a `tick` that changes nothing costs nothing. The
+adapter runs `rgb` outside the HAL's servo lock (`hal/vendor.py`): the vendor's `set_mode` only
+stores what its own strip thread renders, so the lock protected nothing there — it made the write
+wait for whatever else held it. `SensorService` polls `read()` on its own thread and that sequence
+owns the bus for ~0.1–0.3 s, which is exactly what a Pi 4 measured as `led_manager` tick time, 41
+overruns in four minutes at idle
+([#393](https://github.com/seven-lynx/HoundMind/issues/393)). The manager also skips a write whose
+resolved `{style, color, brightness, bps}` is already what it last sent: the strip is stateful, so a
+request that never changes costs one write, not one per tick. `settings.led.cooldown_s` still
+dedupes within its own window, and a restart forgets what was sent so the colour is re-asserted.
+
 **Disable:** `modules.led_manager.enabled = false`
 
 ---
