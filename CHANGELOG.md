@@ -444,12 +444,20 @@ Current Release: v2026.11.16
   configured out of it (`ignore_modules: ["api"]`), and `systemctl status` said running — the
   operator's symptom was a console that stopped answering with nothing to see (#338). The plane's own
   loop now stamps a monotonic clock from a task of its own (`_stamp_forever`, every 250 ms), and
-  `tick` treats a stamp older than 10 s as a lost plane: `api_alive` goes false, the reason lands in
-  `module_statuses` (`/modules` reports `failed` with that `detail` instead of `ok`), and the restart
-  request goes through `restart_modules` with the same 5 s cooldown and three-loss budget a dead
-  thread spends — so the two failures cannot double-fire, and a plane that keeps hanging is disabled
-  with the count instead of looped. The window is 40 stamps wide, so a slow client or a GC pause is
-  not a restart.
+  `tick` treats a stamp older than 10 s as a lost plane: `api_alive` goes false and the reason lands in
+  `module_statuses` (`/modules` reports `failed` with that `detail` instead of `ok`). The window is 40
+  stamps wide, so a slow client or a GC pause is not a restart. What happens *next* is #384's
+  question, and the answer is not always a restart.
+- **A hung control plane is disabled with the remedy instead of restarted into a bind error** — the
+  restart #338's detection asked for could not work for the one case it was written for. A Python
+  thread wedged inside its own loop never runs the `stop_event.set()` callback, so `stop()` spent its
+  whole 5 s join timeout with the listener socket still bound, and `start()` re-bound a port the old
+  thread held: the restart ended in `cannot bind … [Errno 10048]`, disabled the module, and named a
+  cause that was not the cause (#384). `ControlPlaneModule.tick` now keeps the restart path for a
+  thread that *died* — a dead thread holds no socket, so a re-bind is exactly right — and disables
+  the module on the first hang with the reason and the one remedy an operator has: `the control plane
+  loop has not stamped for N s; restart the service (systemctl restart houndmind)`. A hang spends no
+  restart budget, and a wedged plane no longer costs the decision loop 5 s inside `stop()`.
 - **A dropped browser parks the dog instead of only dropping its command** — link loss
   (`services/api.py::_on_link_loss`) submitted one `stop` command, and under `idle` the behaviour
   publishes a fresh intent about 100 ms later, so the deadman for clients was undone on the next

@@ -897,11 +897,13 @@ runtime stamps `last_tick_ts` for every module it ticks, so a plane whose thread
 healthy. The module now checks its own thread on each tick
 (`services/module.py::ControlPlaneModule.tick`), publishes `api_alive`, and asks the runtime for a
 restart through `restart_modules` — the same key the watchdog writes — with a 5 s cooldown, disabling
-itself with the count after three losses rather than looping. A first loss is recovered; a plane that
+itself with the count after three deaths rather than looping. A first death is recovered; a plane that
 keeps dying is named. A hang keeps its thread, so the thread proves nothing there (#338): the plane's
-own loop stamps a monotonic clock every 250 ms (`_stamp_forever`), a stamp older than 10 s is a hang,
-and it goes through the same request and the same budget — `/modules` then says `failed` with
-"the control plane loop has not stamped for N s" while `systemctl status` is still green. `/state`
+own loop stamps a monotonic clock every 250 ms (`_stamp_forever`), and a stamp older than 10 s is a
+hang. A hang is not restarted (#384): the wedged thread still holds the listening socket, so `stop()`
+would spend its join timeout and `start()` would fail to bind — the module disables itself on the
+first hang with the reason and the one remedy that works, `/modules` says `failed` with
+`… restart the service (systemctl restart houndmind)`, and `systemctl status` is still green. `/state`
 still reports the exemption in `supervisor.exempt` with its reason, so "exempt" never reads as
 "healthy".
 
