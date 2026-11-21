@@ -6,6 +6,7 @@ A sweep is nine head moves and 27 distance samples — ~2.6 s at the shipped set
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 
@@ -150,3 +151,71 @@ def test_the_service_records_a_bounded_history() -> None:
     assert len(service.history()) == 3
     assert service.latest().data == {0: 4.0}
     assert [entry.data for entry in service.history()] == [{0: 2.0}, {0: 3.0}, {0: 4.0}]
+
+
+# ------------------------------------------------------------------ validity (#400) and head (#398)
+
+
+class FailingRecentreHAL(FakeDogHAL):
+    """A dog whose head will not come back to straight ahead after the second move to zero."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.zero_calls = 0
+
+    def action(self, name, params):  # type: ignore[override]
+        if name == "head" and int(params.get("yaw", 0)) == 0:
+            self.zero_calls += 1
+            if self.zero_calls > 1:
+                raise RuntimeError("servo bus silent")
+        super().action(name, params)
+
+
+def test_a_failed_distance_read_is_zero_and_flagged_invalid() -> None:
+    """#400: "no echo" and "a wall at zero centimetres" must not be the same JSON."""
+    hal = FakeDogHAL()
+    hal.set_distance(None)
+    service = ScanningService(hal, settings()["navigation"])
+
+    reading = service.scan_three_way()
+
+    assert reading.data == {"forward": 0.0, "right": 0.0, "left": 0.0}
+    assert reading.valid == {"forward": False, "right": False, "left": False}
+    payload = reading.to_dict()
+    assert payload["valid"] == {"forward": False, "right": False, "left": False}
+    assert payload["head_centered"] is True
+
+
+def test_a_measured_zero_is_valid() -> None:
+    """A real zero-centimetre echo is a wall, not a failure - the flag has to tell them apart."""
+    hal = FakeDogHAL()
+    hal.set_distance(0.0)
+    service = ScanningService(hal, settings()["navigation"])
+
+    reading = service.scan_three_way()
+
+    assert reading.data == {"forward": 0.0, "right": 0.0, "left": 0.0}
+    assert reading.valid == {"forward": True, "right": True, "left": True}
+
+
+def test_a_failed_recentre_is_on_the_reading_and_logged_once(caplog) -> None:
+    """#398: the reading is real, the head did not come back, and that must be visible."""
+    hal = FailingRecentreHAL()
+    hal.set_distance(120.0)
+    service = ScanningService(hal, settings()["navigation"])
+
+    with caplog.at_level(logging.WARNING, logger="houndmind_ai.navigation.scanning"):
+        reading = service.scan_three_way()
+
+    assert reading.head_centered is False
+    assert reading.to_dict()["head_centered"] is False
+    assert reading.data["forward"] == 120.0, "the bearings it did take are still real"
+    assert len([r for r in caplog.records if "head re-centre" in r.getMessage()]) == 1
+
+    # The head stays broken: one transition, so no second warning.
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="houndmind_ai.navigation.scanning"):
+        assert service._center_head(70) is False
+        assert service._center_head(70) is False
+
+    assert [r for r in caplog.records if "head re-centre" in r.getMessage()] == []

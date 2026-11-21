@@ -131,6 +131,9 @@ class MotorModule(Module):
         # reported. Both counters rise only while something is genuinely holding the dog back.
         self.rate_limited = 0
         self.deferred = 0
+        # The last failed head action, so a dead head logs once per transition rather than once
+        # per tick (#398).
+        self._head_fault: str | None = None
 
     def start(self, context) -> None:
         if not self.status.enabled:
@@ -549,8 +552,10 @@ class MotorModule(Module):
             # `wait=False`: this is cosmetic head-following. Blocking the tick on it is how a
             # behaviour module ends up setting the loop's cadence (P3-2).
             self.hal.action("head", {"yaw": yaw, "pitch": 0, "speed": speed, "wait": False})
-        except Exception:  # noqa: BLE001
-            return
+        except Exception as exc:  # noqa: BLE001 - a vendor action may raise anything
+            self._note_head_fault("head follow", exc)
+        else:
+            self._head_fault = None
 
     def _apply_head_center(self, context) -> None:
         if self.hal is None:
@@ -560,8 +565,24 @@ class MotorModule(Module):
             return
         try:
             self.hal.action("head", {"yaw": 0, "pitch": 0, "speed": speed, "wait": False})
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - a vendor action may raise anything
+            self._note_head_fault("head re-centre", exc)
+        else:
+            self._head_fault = None
+
+    def _note_head_fault(self, kind: str, exc: BaseException) -> None:
+        """Report a failed head action instead of returning as if it had worked (#398).
+
+        Once per transition: a head that is dead for a whole run is one warning, not one per
+        tick, and `status.last_error` carries it into `/api/v1/modules` and the support bundle.
+        An action that succeeds clears the note, so a later failure is news again.
+        """
+        message = f"{kind}: {type(exc).__name__}: {exc}"
+        if self._head_fault == message:
             return
+        self._head_fault = message
+        self.status.last_error = message
+        logger.warning("Head action failed (%s): %s", kind, exc)
 
     def _schedule_head_follow(self, context, direction: str) -> None:
         enabled, degrees, _, hold_s, _, _, _, _ = self._head_follow_config(context)

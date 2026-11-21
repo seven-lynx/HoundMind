@@ -250,7 +250,7 @@ def test_a_sweep_is_summarised_with_its_bearing_count() -> None:
 
     scan = build_state(context, now=4212.0)["scan"]
 
-    assert scan == {"mode": "sweep", "timestamp": 4211.9, "samples": 3}
+    assert scan == {"mode": "sweep", "timestamp": 4211.9, "samples": 3, "valid_samples": None}
     assert "angles" not in scan, "the bearings are a separate read, not part of the 10 Hz frame"
 
 
@@ -263,7 +263,25 @@ def test_a_three_way_scan_counts_only_the_bearings_that_read() -> None:
 
     scan = build_state(context, now=6.0)["scan"]
 
-    assert scan == {"mode": "three_way", "timestamp": 5.0, "samples": 2}
+    assert scan == {"mode": "three_way", "timestamp": 5.0, "samples": 2, "valid_samples": None}
+
+
+def test_a_scan_reports_how_many_bearings_were_actually_measured() -> None:
+    """#400: the count of valid bearings is a number, and `null` when nothing says (#400)."""
+    context = RuntimeContext()
+    context.set(
+        "scan_latest",
+        {
+            "mode": "sweep",
+            "timestamp": 7.0,
+            "angles": {"0": 0.0, "90": 55.0},
+            "valid": {"0": False, "90": True},
+        },
+    )
+
+    scan = build_state(context, now=8.0)["scan"]
+
+    assert scan == {"mode": "sweep", "timestamp": 7.0, "samples": 2, "valid_samples": 1}
 
 
 def test_a_reading_with_no_mode_or_timestamp_is_not_reported() -> None:
