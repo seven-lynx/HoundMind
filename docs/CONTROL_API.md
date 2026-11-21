@@ -187,7 +187,10 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/mode` | `state:read` | current mode |
 | `POST` | `/api/v1/mode` | `move` | switch `idle` \| `patrol` \| `manual` \| `rest`; a real change retracts every autonomy intent (`AUTONOMY_SOURCES`) the old mode had published, and leaves a client request or a watchdog hold standing (#270) |
 | `GET` | `/api/v1/config` | `config` | effective config, secrets redacted |
-| `PATCH` | `/api/v1/config` | `config` | four live keys only, listed below |
+| `PATCH` | `/api/v1/config` | `config` | four live keys only, listed below; persists first, then applies, and leaves the previous file as `settings.jsonc.bak` (#406) |
+| `POST` | `/api/v1/config/validate` | `config` | the same body as the PATCH, answered and not applied: `{ok, would_apply, invalid, rejected, persisted: false}`; `200` even when the answer is "refused" (#406) |
+| `GET` | `/api/v1/sessions` | `admin` | who is connected: one entry per token fingerprint with name, scopes, seconds connected, command count and `connected`; `limit` is `max_clients` (#404) |
+| `DELETE` | `/api/v1/sessions/{key}` | `admin` | detach one client by closing its socket — `{key, closed}`, `404` for a key that is not connected (#404) |
 | `GET` | `/api/v1/calibration` | `config` | servo offsets, read-only |
 | `POST` | `/api/v1/calibration/run` | `config` | run one read-only calibration request ([§10](#10-calibration)) |
 | `GET` | `/api/v1/history?limit=50` | `state:read` | recent commands with verdicts, and live sessions |

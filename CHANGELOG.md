@@ -10,6 +10,19 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A config change can be checked before it is applied, and the previous file is kept** — `PATCH
+  /api/v1/config` validated correctly and then wrote, so "would this value be accepted?" could only
+  be answered by trying it, and the rewrite left no copy of what was there (#406). `POST
+  /api/v1/config/validate` takes the same body, runs the same loop and stops before
+  `persist_config`, answering `{ok, would_apply, invalid, rejected, persisted: false}` — one helper
+  now feeds both routes, so the two answers cannot drift. A successful write keeps the file it
+  replaced as `settings.jsonc.bak` beside it (same mode, atomic rename, one generation), written
+  only after the new file lands.
+- **Who is connected is a route, not a support bundle** — `GET /api/v1/sessions` answers the
+  registry that was already in memory: one entry per token fingerprint with name, scopes, seconds
+  connected and command count, plus `limit`; `DELETE /api/v1/sessions/{key}` detaches a client by
+  closing its socket, which the hub does for real so the registry follows through its own cleanup
+  rather than a second write path (#404). `docs/CONTROL_API.md` §2 carries all four rows.
 - **`--dry-run`, so a start can be proved motionless** — there was no way to show that a start
   touches nothing: the only two states were "the dog runs" and "the process fails", and the
   programming guide said so in as many words (#405). `python -m houndmind_ai --dry-run` loads and

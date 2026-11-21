@@ -30,7 +30,20 @@ WEB_ROOT = Path(__file__).resolve().parents[1] / "src" / "houndmind_ai" / "servi
 
 # `"GET /path": "why the app does not call it"`. A row here is a decision with a segment named in
 # it, not a place to park a route nobody got round to. It is empty: M3 gave `PUT /map` its editor.
-_UI_EXCLUDED: dict[str, str] = {}
+_UI_EXCLUDED: dict[str, str] = {
+    "POST /config/validate": (
+        "for a script or a settings panel's own preview: the web app's config panel saves through "
+        "PATCH, which runs the same validation, so it has nothing to ask (#406)"
+    ),
+    "GET /sessions": (
+        "who is connected is an admin/support question; the app has no session panel and the "
+        "support bundle already carries the same list (#404)"
+    ),
+    "DELETE /sessions/{key}": (
+        "detaching a client is an admin action from a second terminal, deliberately not a button "
+        "in the app that the client being detached is using (#404)"
+    ),
+}
 
 # A route segment that takes a parameter is called with a template substitution in the panels,
 # e.g. `/routines/${encodeURIComponent(id)}/run`. Anything without a quote, a backtick, a slash or

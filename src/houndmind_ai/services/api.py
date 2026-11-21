@@ -2085,25 +2085,15 @@ def _header_token(request: web.Request) -> str | None:
     return None
 
 
-async def _config_get(request: web.Request) -> web.Response:
-    plane = _plane(request)
-    return web.json_response(
-        {
-            "config": redact_config(plane.context.get("settings") or {}),
-            "live_keys": list(LIVE_CONFIG_KEYS),
-        }
-    )
+def _check_config_update(
+    settings: dict[str, object], body: dict[str, object]
+) -> tuple[list[tuple[str, str, dict[str, object], object]], list[str], list[dict[str, object]]]:
+    """Split one config edit into what would land, what is not live, and what the schema refuses.
 
-
-async def _config_patch(request: web.Request) -> web.Response:
-    plane = _plane(request)
-    body = await _json_body(request)
-    settings = plane.context.get("settings")
-    if not isinstance(settings, dict):
-        raise AuthError("unavailable", "no settings are loaded", status=503)
-
-    # Validate everything before writing anything: a PATCH is one edit, and half of it landing is how
-    # a client ends up unsure what the dog is running.
+    One loop for both callers: `PATCH /api/v1/config` applies what this returns, and
+    `POST /api/v1/config/validate` only answers with it, so "would this be accepted" cannot drift
+    from "was it accepted" (#406).
+    """
     pending: list[tuple[str, str, dict[str, object], object]] = []
     rejected: list[str] = []
     invalid: list[dict[str, object]] = []
@@ -2135,6 +2125,29 @@ async def _config_patch(request: web.Request) -> web.Response:
             )
             continue
         pending.append((dotted, section, updated, value))
+    return pending, rejected, invalid
+
+
+async def _config_get(request: web.Request) -> web.Response:
+    plane = _plane(request)
+    return web.json_response(
+        {
+            "config": redact_config(plane.context.get("settings") or {}),
+            "live_keys": list(LIVE_CONFIG_KEYS),
+        }
+    )
+
+
+async def _config_patch(request: web.Request) -> web.Response:
+    plane = _plane(request)
+    body = await _json_body(request)
+    settings = plane.context.get("settings")
+    if not isinstance(settings, dict):
+        raise AuthError("unavailable", "no settings are loaded", status=503)
+
+    # Validate everything before writing anything: a PATCH is one edit, and half of it landing is how
+    # a client ends up unsure what the dog is running.
+    pending, rejected, invalid = _check_config_update(settings, body)
 
     if invalid:
         return web.json_response(
@@ -2190,6 +2203,66 @@ async def _config_patch(request: web.Request) -> web.Response:
     return web.json_response(
         {"applied": applied, "live_keys": list(LIVE_CONFIG_KEYS), "persisted": persisted}
     )
+
+
+async def _config_validate(request: web.Request) -> web.Response:
+    """Answer whether a config edit would be accepted, and write nothing (#406).
+
+    The same body as `PATCH /api/v1/config`, run through the same loop and stopped before
+    `persist_config`. `200` either way once settings are loaded: "these values would be refused" is
+    the answer a client asked for, not a failure of the question. `would_apply` names what the PATCH
+    would change, and `persisted` is always `false`.
+    """
+    plane = _plane(request)
+    body = await _json_body(request)
+    settings = plane.context.get("settings")
+    if not isinstance(settings, dict):
+        raise AuthError("unavailable", "no settings are loaded", status=503)
+
+    pending, rejected, invalid = _check_config_update(settings, body)
+    return web.json_response(
+        {
+            "ok": not rejected and not invalid,
+            "would_apply": {dotted: value for dotted, _section, _updated, value in pending},
+            "invalid": invalid,
+            "rejected": rejected,
+            "live_keys": list(LIVE_CONFIG_KEYS),
+            "persisted": False,
+        }
+    )
+
+
+async def _sessions(request: web.Request) -> web.Response:
+    """Who is connected (#404).
+
+    The registry already held this - key, name, scopes, seconds connected, commands - and the only
+    way to read it was a support bundle. The key is a token fingerprint, never the token.
+    """
+    plane = _plane(request)
+    return web.json_response(
+        {"sessions": plane.sessions.active(), "limit": plane.sessions.max_clients}
+    )
+
+
+async def _session_delete(request: web.Request) -> web.Response:
+    """Detach one connected client, by closing its socket (#404).
+
+    A registry-only eviction would be a lie: the session would read `connected: false` while its
+    socket kept receiving state. The hub closes the socket, the socket's own cleanup detaches the
+    session, and the answer says how many connections were closed.
+    """
+    plane = _plane(request)
+    key = str(request.match_info.get("key") or "").strip()
+    if not key:
+        return web.json_response(
+            {"error": "bad_request", "detail": "a session key is required"}, status=400
+        )
+    closed = await plane.hub.close_session(key)
+    if not closed:
+        return web.json_response(
+            {"error": "not_found", "detail": "no connected session with that key"}, status=404
+        )
+    return web.json_response({"key": key, "closed": closed})
 
 
 async def _calibration(request: web.Request) -> web.Response:
@@ -2728,6 +2801,9 @@ ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
     ("POST", "/mode", "move", _mode_post),
     ("GET", "/config", "config", _config_get),
     ("PATCH", "/config", "config", _config_patch),
+    ("POST", "/config/validate", "config", _config_validate),
+    ("GET", "/sessions", "admin", _sessions),
+    ("DELETE", "/sessions/{key}", "admin", _session_delete),
     ("GET", "/calibration", "config", _calibration),
     ("POST", "/calibration/run", "config", _calibration_run),
     ("GET", "/history", "state:read", _history),

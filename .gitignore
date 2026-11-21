@@ -50,3 +50,7 @@ requirements-filtered.txt
 .coverage
 .coverage.*
 htmlcov/
+
+# The one-generation config backup `services/config_writer.py` keeps beside the file it rewrote
+# (#406). It is the operator's previous tuning, not a tracked file.
+config/*.bak
