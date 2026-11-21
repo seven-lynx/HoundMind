@@ -417,6 +417,17 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- **The shipped battery floor is now 7.6 V, because a gait took the bench dog's rail down at 7.85 V** —
+  the interlock's compiled floor is 6.4 V, and `config/settings.jsonc` shipped exactly that, so the
+  veto sat more than a volt below a pack that could not carry eight servos: two walking attempts at
+  7.78 V and 7.85 V idle both ended in a reboot (`uptime` back to 0 min, `get_throttled` latched at
+  `0x50000`), while a head-only run completed twice on the same pack (#292). A shipped default is a
+  promise about the hardware it names, and this one was a promise about an empty pack.
+  `movement.min_battery_v` now ships `7.6`, the measured collapse carried in the comment beside it, and
+  `act/interlock.py::MIN_BATTERY_FLOOR_V` stays 6.4 as the widest envelope a config may ever set —
+  the two numbers are deliberately different now, and both comments say so. A measurement of the real
+  stride per floor surface is still owed and stays open on the pack (#285); the sag test that would
+  catch a pack which reads 8.1 V resting and 7.4 V under load is filed rather than guessed at.
 - **The stop word now reaches `stop`, so the escape hatch cannot be vetoed** — `config/settings.jsonc`
   mapped `"stop": "lie"`, and `lie` is a `posture`: it spends the tilt latch, the battery floor and the
   deadman, and the interlock refuses it at 5.0 V or after an 89° tilt. `stop` is the one action the

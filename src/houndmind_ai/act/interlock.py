@@ -46,11 +46,13 @@ __all__ = [
     "interlock_limits_from_settings",
 ]
 
-# The compiled floor for the battery veto. A 2S pack spans 6.0-8.4 V, so 6.4 V is about 3.2 V per
-# cell - essentially empty - and on the bench dog the rail collapsed long before the veto could fire:
-# `sensors.battery_v` read 7.70 V after a full charge and the kernel logged undervoltage at 7.58 V
-# under servo load (#208). `settings.movement.min_battery_v` may only **raise** this floor, so a
-# config edit can narrow the envelope but never widen it.
+# The compiled floor for the battery veto: the lowest value a config may set, not the value this
+# build ships. A 2S pack spans 6.0-8.4 V, so 6.4 V is about 3.2 V per cell - essentially empty - and
+# on the bench dog the rail collapsed long before the veto could fire: `sensors.battery_v` read
+# 7.70 V after a full charge and the kernel logged undervoltage at 7.58 V under servo load (#208).
+# `settings.movement.min_battery_v` may only **raise** this floor, so a config edit can narrow the
+# envelope but never widen it; the shipped file sits above it at 7.6 V, because a gait took the rail
+# down at 7.85 V twice (#292). Do not lower this constant to make a tired pack walk.
 MIN_BATTERY_FLOOR_V = 6.4
 
 

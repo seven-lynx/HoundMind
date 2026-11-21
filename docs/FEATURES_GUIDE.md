@@ -110,9 +110,12 @@ been handed over, and one older than `movement.followup_ttl_s` (ships `1.0`) is 
 executed late: a retreat describes the step that just happened, so a stale one is a wrong step.
 
 Every command also passes the interlock's battery veto: nothing that moves runs below
-`movement.min_battery_v`, which ships at the compiled floor of `6.4` V (about 3.2 V per cell on the
-stock 2S pack) and may be **raised** to protect a tired pack — a value under the floor is refused at
-load, because widening this one is how a dog cooks a servo (#208).
+`movement.min_battery_v`, which ships at `7.6` V and may be **raised** to protect a tired pack — a
+value under the compiled floor of `6.4` V (about 3.2 V per cell on the stock 2S pack) is refused at
+load, because widening this one is how a dog cooks a servo (#208). The shipped `7.6` V is not a guess:
+the bench dog rebooted twice under the eight-leg gait with the pack idle at 7.78 V and 7.85 V and
+`get_throttled` latched at `0x50000` (#292), so the default stops a doomed walk instead of leaving it
+to whoever is watching.
 
 **Disable:** `modules.hal_motors.enabled = false`
 
