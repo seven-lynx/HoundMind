@@ -49,9 +49,10 @@ Two things that surprise people, both measured on a bench dog:
 
 - **The service resumes; a command in flight does not.** After a reboot the modules come back, and a
   gait cannot survive it: `motion_command` and the intent board are context-only and every intent
-  expires, so a routine mid-run is lost rather than replayed. **Autonomy does come back** — the runtime
-  starts in `mode idle`, where `behavior` and the navigator may drive, so a dog with those modules
-  enabled can start moving on its own. Park it with `mode rest` if it must stay put.
+  expires, so a routine mid-run is lost rather than replayed. **A walk does not come back** —
+  `behavior.autonomy_enabled` ships `false`, so behaviour offers idle postures instead of a gait, and
+  autonomy is an opt-in (#390). What does move is the head, through the `scanning` sweep. Park it with
+  `mode rest` if it must stay put.
 - **A second process cannot open the dog.** The runtime holds `~/.houndmind/run.lock`; a tool started
   while it runs exits **3** with `the servo bus is owned by pid N (runtime)` instead of hanging. That
   is the answer to "why did `hardware_checkup` print nothing?", not a dead tool.
@@ -503,10 +504,10 @@ The installer itself only runs `enable`, so an install never opens the servo bus
 
 **The service resumes; a command in flight does not.** A gait cannot survive a restart, because
 `motion_command` and the intent board are context-only and every intent expires, and a routine that was
-mid-run is lost rather than replayed. What does come back is autonomy: the runtime starts in `mode
-idle`, where `behavior` and the navigator may drive, so a dog with those modules enabled can start
-moving on its own after a boot — set `mode rest` if it must stay put. The next start says how the
-previous one ended — `~/.houndmind/session.json`, #214.
+mid-run is lost rather than replayed. A walk does not come back either: the runtime starts in `mode
+idle`, but `behavior.autonomy_enabled` ships `false`, so an install that opted into nothing walks
+nowhere on its own (#390) — the head sweep of `scanning` is what still moves. Set `mode rest` if it
+must stay put. The next start says how the previous one ended — `~/.houndmind/session.json`, #214.
 
 A unit that fails three times in a minute stops instead of looping, so a broken `settings.jsonc`
 gives a message rather than a restart storm: `journalctl -u houndmind -n 50`.
