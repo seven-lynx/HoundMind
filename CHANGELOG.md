@@ -10,6 +10,16 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **Three pages that were missing: calibration, testing, and the module map** — calibration lived in
+  a section of `docs/TOOLS.md` and a step of `docs/HARDWARE_TEST.md` and had no page of its own;
+  nothing stated what CI cannot prove; and the context-key contract was discoverable only by
+  grepping (#409, #410, #411). `docs/CALIBRATION.md` now holds the four measurements (servo trim, a
+  joint nudge, IMU offsets, stride), what each writes, and the rule that none of them is ever
+  automated — the two originals point at it. `docs/TESTING.md` is how to run the suite, what a test
+  may touch, and a table of the four claims CI cannot make (hardware, motionlessness, wall-clock,
+  device services) with where each is proved instead. `docs/MODULES.md` maps all 37 registered
+  modules to their stream, shipped state, file, and the context keys they read and write;
+  `tests/test_module_map.py` fails if a registered module has no row, so the page cannot drift.
 - **A routines directory can be validated without the dog** — a broken routine was found by watching
   the dog do the wrong thing: the loader quarantines the file and the runtime boots anyway, which is
   right at boot and a poor way to find a typo (#408). `python -m tools.validate_routines` runs
