@@ -53,7 +53,11 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          pytest -q
+          # One `-q` in total. `pyproject.toml` used to add its own through `addopts`, and the
+          # pair suppressed the pass/fail summary line a CI log is read for (#399).
+          # Coverage is measured, not gated: the number lands in the PR body and the build stays
+          # green until a threshold is named (#397).
+          pytest -q --cov=houndmind_ai --cov-report=term
 
   mypy:
     name: Type checks (mypy)
