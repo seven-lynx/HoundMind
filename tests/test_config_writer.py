@@ -162,3 +162,29 @@ def test_the_shipped_settings_file_round_trips(tmp_path: Path) -> None:
     assert after == before
     # And it is still a JSONC file, not a JSON dump: no key moved onto one line.
     assert rewritten.count("\n") == original.count("\n")
+
+
+def test_the_previous_file_is_kept_as_one_generation_of_backup(tmp_path: Path) -> None:
+    """#406: the file is the only record of the dog's tuning, so one generation survives a write."""
+    path = write(tmp_path)
+    before = path.read_text(encoding="utf-8")
+
+    write_settings_values(path, {"led.brightness": 0.4})
+
+    backup = path.with_name(path.name + ".bak")
+    assert backup.exists(), "a rewrite must leave the file it replaced"
+    assert backup.read_text(encoding="utf-8") == before
+    assert json5.loads(path.read_text(encoding="utf-8"))["settings"]["led"]["brightness"] == 0.4
+
+
+def test_a_refused_write_does_not_touch_the_backup(tmp_path: Path) -> None:
+    """A write that never lands must not replace the good copy with the same bad one."""
+    path = write(tmp_path)
+    write_settings_values(path, {"led.brightness": 0.4})
+    good = path.with_name(path.name + ".bak").read_text(encoding="utf-8")
+
+    with pytest.raises(ConfigWriteError):
+        write_settings_values(path, {"led.not_a_key": 1})
+
+    assert path.with_name(path.name + ".bak").read_text(encoding="utf-8") == good
+

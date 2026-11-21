@@ -18,6 +18,7 @@ Losing somebody's edit because "the runtime was running" is not a rule anyone ag
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -265,5 +266,11 @@ def write_settings_values(
 
     mode = path.stat().st_mode
     _atomic_write(path, rewritten.encode("utf-8"), mode)
+    # One generation back, beside the file: the settings file is the only record of the dog's
+    # tuning, and a change nobody meant to send used to have to be remembered by hand (#406). The
+    # backup is written after the new file lands, so a failed write never replaces the good copy
+    # with the same bad one.
+    with contextlib.suppress(OSError):
+        _atomic_write(path.with_name(path.name + ".bak"), raw, mode)
     logger.info("Persisted %s into %s", ", ".join(updates), path.name)
     return stamp_of(path) or (0, 0, "")

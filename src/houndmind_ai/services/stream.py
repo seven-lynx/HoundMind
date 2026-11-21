@@ -31,7 +31,7 @@ from aiohttp import web
 
 from houndmind_ai.core.logging_setup import log_file_path
 from houndmind_ai.services.auth import Authorizer
-from houndmind_ai.services.sessions import SessionRegistry
+from houndmind_ai.services.sessions import SessionRegistry, fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +137,23 @@ class EventHub:
         self._subs.clear()
 
     # ---- publishing --------------------------------------------------------
+
+    async def close_session(self, key: str) -> int:
+        """Close every socket a session holds, and say how many (#404).
+
+        `DELETE /api/v1/sessions/{key}` has to be a real eviction: a registry-only removal would
+        report `connected: false` while the socket kept its state stream. The socket's own cleanup
+        detaches the session, so the registry follows without a second write path.
+        """
+        closed = 0
+        for sub in list(self._subs):
+            if sub.token is None or fingerprint(sub.token) != key:
+                continue
+            self._subs.discard(sub)
+            with contextlib.suppress(Exception):
+                await sub.ws.close(code=4001, message=b"detached by an admin")
+            closed += 1
+        return closed
 
     async def _pump_states(self) -> None:
         interval = 1.0 / self.state_hz
