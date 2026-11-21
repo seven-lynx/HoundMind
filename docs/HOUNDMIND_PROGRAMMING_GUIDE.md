@@ -784,6 +784,20 @@ python -m tools.camera_check --list-devices
 python -m tools.collect_support_bundle /tmp/support.zip
 ```
 
+Offline validators — no dog, no motion, and no runtime:
+
+```bash
+python -m tools.validate_routines           # the configured routines directory
+python -m tools.validate_routines --dir ./my-routines --config bench-settings.jsonc
+```
+
+`validate_routines` runs `RoutineStore` - the runtime's own loader, with the runtime's own repertoire -
+over a directory and prints one line per file. Exit `0` means every file loaded, `1` means at least
+one was refused (the line carries the file, the problem path and the reason), `2` means the directory
+is missing or the config would not load. Use it after hand-writing a routine: the runtime would
+quarantine the file and boot anyway, which is the right behaviour and a poor way to find a typo
+(#408).
+
 Replaying a recorded session — no dog, no motion. With `logging.decision_log_file_enabled: true` the
 runtime writes `logs/houndmind_decisions.jsonl`; this tool serves that history through the real
 control plane, so a client can be built against a dog that is not on the desk:
