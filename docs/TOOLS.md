@@ -283,6 +283,9 @@ Reads the servo trim the dog has loaded, shows the twelve joints, and — with a
 a new one. This is the step every install needs before the dog stands straight, and it did not exist
 in HoundMind; it used to be the vendor's interactive curses script (#142).
 
+The four calibration commands and the order to run them are on one page now:
+[`CALIBRATION.md`](CALIBRATION.md). This section stays the flag reference for this one.
+
 ```bash
 python -m tools.calibrate_servos                                  # read-only
 python -m tools.calibrate_servos --set lf_shoulder=6 --set tail=-3  # dry run: prints, saves nothing

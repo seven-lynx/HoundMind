@@ -3,7 +3,8 @@
 Status: **guide** — the bench procedure from "it installed" to "the dog works". Every command here
 runs on the dog, in order, and each step says what a pass looks like before you run it.
 Pairs with: `docs/INSTALL.md` (install first — this guide assumes it is done), `docs/LOGGING.md`
-(when a step fails), `docs/CONTROL_API.md` [§4](CONTROL_API.md#4-state-snapshot) (the snapshot read in step 4)
+(when a step fails), `docs/CONTROL_API.md` [§4](CONTROL_API.md#4-state-snapshot) (the snapshot read in step 4),
+`docs/CALIBRATION.md` (the four calibration measurements, and the order to run them)
 
 Six steps. Steps 1–5 are read-only and cannot move the dog. **Step 6 is the only one that can**,
 and it requires an explicit go-ahead (see [§9](#9-step-6--motion-and-only-motion)).
