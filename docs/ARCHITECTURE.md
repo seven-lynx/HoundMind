@@ -147,10 +147,41 @@ add ~3.4 points of CPU — but only one of them streams, because the contract al
 token and evicts the rest with `error: superseded` ([§4](#4-commands-and-events), and
 `services/stream.py`).
 
-Two numbers this table does **not** have: concurrent WS clients (needs one paired token each) and
-MJPEG viewers (needs frames, so needs the camera). Re-measure before changing the shape — lazy import,
-a separate process or an opt-in server were all considered and none of them is justified by these
-figures.
+One number this table does **not** have: concurrent WS clients, which needs one paired token each.
+Re-measure before changing the shape — lazy import, a separate process or an opt-in server were all
+considered and none of them is justified by these figures.
+
+### 3.1.1 What MJPEG costs (measured, #283)
+
+`services/camera.py` encodes each frame once and fans it out, so a second viewer costs the HTTP stack
+and not the camera. Measured on the same board and interpreter as
+[§3.1](#31-what-the-control-plane-costs-measured-19) — Pi 4B (8 GB), Bookworm
+64-bit, Python 3.11.2 — with `vision_pi4` producing 1944×2592 frames at
+`vision_pi4.frame_interval_s: 0.1` and `CameraService.max_fps` at its default of 15:
+
+| Measurement | Value |
+|---|---|
+| `GET /camera/snapshot`, ticket minted per request and inside the timing | 5, 15, 15, 6, 14 ms for a 50.1 KiB JPEG |
+| `GET /camera/stream`, one viewer for 10 s | 68 frames — **6.8 fps, 330 KiB/s** |
+| `GET /camera/stream`, two viewers for 10 s | 62 frames — 6.1 fps, 307 KiB/s |
+| Runtime CPU over the ~30 s run | 13.4 s, ~45 % of one core |
+| RSS | 206.0 → 206.6 MiB, flat |
+| `vcgencmd` during the run | `temp=50.6'C`, `throttled=0x50000`, `arm=1.80 GHz` |
+
+So the producer delivers 6.8 fps against a 10 fps request, each frame costs ~4.6 ms of CPU to encode
+at full resolution, and a snapshot answers in a few milliseconds on the device. The frame cap is per
+client (`services/camera.py:44`), and the second viewer did not double the CPU.
+
+Two caveats, because the numbers are scene- and load-dependent:
+
+- The run was a **dark scene** (`mean=3.4`), which is why the JPEG is 50.1 KiB. A lit scene produces
+  larger frames and a lower fps — read 6.8 fps as the optimistic end, not the expected value.
+- `throttled=0x50000` is soft-temp plus has-throttled, latched during the session and cleared by the
+  next reboot. Read `get_throttled` **before** a reboot or it is no evidence (#316).
+
+Still unmeasured: **end-to-end latency**, the clock-or-hand-in-front-of-the-lens figure. The snapshot
+request time and the per-frame encode cost above bound it from below; they are not the number a viewer
+experiences, and nothing here should be read as measuring it (#413).
 
 ### 3.2 Tick budget (measured, #267)
 
