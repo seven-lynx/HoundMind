@@ -95,7 +95,7 @@ src/tools/    audio_check.py  bench_tick.py  calibrate_servos.py  camera_check.p
               hardware_checkup.py  imu_calibrate.py  installer_verify.py
               list_audio_devices.py  map_inspect.py  place_match.py  replay_decisions.py
               schema_export.py  servo_level.py  slam_replay.py  smoke_test.py
-              step_calibrate.py  validate_rtabmap_adapter.py
+              step_calibrate.py  validate_routines.py  validate_rtabmap_adapter.py
 ```
 
 `board/` answers one question — which Raspberry Pi this is — and holds no policy of its own. There is

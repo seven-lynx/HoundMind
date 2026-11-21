@@ -10,6 +10,14 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A routines directory can be validated without the dog** — a broken routine was found by watching
+  the dog do the wrong thing: the loader quarantines the file and the runtime boots anyway, which is
+  right at boot and a poor way to find a typo (#408). `python -m tools.validate_routines` runs
+  `kernel/routine_store.py::RoutineStore` — the loader itself, with the repertoire the config implies
+  — over a directory and prints one line per file. Exit `0` every file loaded, `1` at least one
+  refused (file, problem path and reason on the line), `2` a missing directory or an unloadable
+  config. `tests/test_validate_routines.py` pins all four, and the programming guide's tools list
+  names it.
 - **A config change can be checked before it is applied, and the previous file is kept** — `PATCH
   /api/v1/config` validated correctly and then wrote, so "would this value be accepted?" could only
   be answered by trying it, and the rewrite left no copy of what was there (#406). `POST
