@@ -215,6 +215,9 @@ If HoundMind breaks, you can still run the official PiDog scripts from the SunFo
 | Perception                     | Enabled     |                                       |
 | Scanning                       | Enabled     |                                       |
 | Navigation & Obstacle Avoidance| Enabled     |                                       |
+| Orientation                    | Enabled     | `modules.orientation` — IMU heading integration; see `docs/FEATURES_GUIDE.md` §5 |
+| Odometry                       | Enabled     | `modules.odometry` — heading × counted steps → relative pose; see `docs/FEATURES_GUIDE.md` §5 |
+| Localization                   | Enabled     | `modules.localization` — picks the trusted pose tier and why it degraded; see `docs/FEATURES_GUIDE.md` §5 |
 | Room context                   | Enabled     | `modules.room_context` — names the room the pose falls in (`/state.room`), with `valid`/`source`/`reason` |
 | Mapping                        | Enabled     |                                       |
 | Behavior                       | Enabled     |                                       |
