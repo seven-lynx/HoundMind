@@ -48,6 +48,14 @@ class VisionPi4Module(Module):
         if not self.status.enabled:
             return
         settings = (context.get("settings") or {}).get("vision_pi4", {})
+        # Two switches gated one module: `modules.vision_pi4.enabled` started it and
+        # `settings.vision_pi4.enabled` returned silently from every tick, so the module reported
+        # `ok` while publishing nothing and the camera route answered 503 (#396). One switch
+        # decides - the module switch - and a config that turns the section flag off is told why
+        # instead of looking healthy.
+        if not settings.get("enabled", True):
+            self.disable("settings.vision_pi4.enabled is false")
+            return
         backend = settings.get("backend", "picamera2")
 
         # `cv2` is needed by the OpenCV backend and, for *every* backend, by the JPEG encode
@@ -154,6 +162,9 @@ class VisionPi4Module(Module):
 
         settings = (context.get("settings") or {}).get("vision_pi4", {})
         if not settings.get("enabled", True):
+            # The flag moved under a running module: say so, rather than ticking into a no-op
+            # that still reads `ok` in `/api/v1/modules` (#396).
+            self.disable("settings.vision_pi4.enabled is false")
             return
 
         override_interval = context.get("vision_frame_interval_override_s")

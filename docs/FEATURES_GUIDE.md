@@ -1302,6 +1302,11 @@ python -c "import picamera2"    # must succeed before the next step
 - `modules.vision_pi4.enabled = true` (in the `pi4` profile, or your own settings file)
 - `settings.vision_pi4.backend = "picamera2"` (or `"opencv"` fallback)
 
+**One switch:** the module switch is the switch. `settings.vision_pi4` is tuning; the section's own
+`enabled` key is not a second gate, and a config that sets it to `false` reports the module `disabled`
+with `settings.vision_pi4.enabled is false` as the reason in `/api/v1/modules` — it does not report
+`ok` while publishing nothing (#396).
+
 **Camera stream:** there is no dedicated stream port. With this module enabled, the control plane
 serves the frames it publishes:
 

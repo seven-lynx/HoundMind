@@ -468,6 +468,15 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **The camera tools and `vision_pi4` report what is true** — two switches gated one module:
+  `modules.vision_pi4.enabled` started it and `settings.vision_pi4.enabled` returned silently from
+  every tick, so a module the operator had enabled read `ok` in `/api/v1/modules` while publishing
+  no frames, and the camera route answered 503 about a module that was enabled (#396). The section
+  flag now disables the module with `settings.vision_pi4.enabled is false` as the reason — at start,
+  and again if it is turned off under a running module. `tools.camera_check` used to try only
+  OpenCV, which on Bookworm cannot open the V4L2 node libcamera serves, so a healthy Pi 4 reported
+  a broken camera (#395); it now tries `picamera2` first — the backend the runtime uses — falls back
+  to OpenCV, and names both when neither produces a frame.
 - **A scan says which bearings it actually measured** — a failed distance read reached
   `/api/v1/state` and `/api/v1/scan` as `0 cm` with nothing to distinguish it from a wall at zero
   (#400). `navigation/scanning.py::ScanReading` now carries `valid` beside `data` — one flag per

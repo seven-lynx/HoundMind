@@ -175,10 +175,15 @@ python -m tools.camera_check --index 0 --save frame.jpg
 
 | Flag | Meaning |
 |---|---|
-| `--list-devices` | probe indices and report which ones open |
-| `--max-index <n>` | highest index to probe (default `5`) |
-| `--index <n>` | index to capture from (default `0`) |
+| `--list-devices` | probe the cameras a still can come from, and report their indices |
+| `--max-index <n>` | highest OpenCV index to probe when picamera2 reports none (default `5`) |
+| `--index <n>` | OpenCV index to capture from when picamera2 is not used (default `0`) |
 | `--save <path>` | write one frame to this file |
+
+It tries `picamera2` first, because that is the backend the runtime uses on Bookworm, where the
+sensor is served by libcamera/unicam and the V4L2 node OpenCV opens does not produce frames (#395).
+OpenCV is the fallback, and a failure names both backends it tried rather than reading like a lens
+problem.
 
 The usual cause of "no frames" is a camera that is not enabled in `raspi-config`, or a backend
 mismatch — `settings.vision_pi4.backend` ships `picamera2` with `opencv` as the fallback.
