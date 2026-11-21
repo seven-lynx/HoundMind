@@ -417,6 +417,15 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- **CI prints its own summary, and coverage is measured without gating the build** — every run was
+  doubly quiet: `pyproject.toml` set `addopts = "-q"` and the documented command was `pytest -q`, so
+  the pass/fail line a CI log exists to show never appeared (#399). The `addopts` default is gone, so
+  `pytest -q` is one quiet run with its summary. `pytest-cov` was declared in the `dev` extra and
+  never invoked, so the suite's coverage was unknown: the test step now runs
+  `--cov=houndmind_ai --cov-report=term` and reports **82 %** (13,885 statements, 2,516 missed,
+  Python 3.14.5 on the workstation; CI runs 3.11). There is deliberately **no** `--cov-fail-under`: a
+  gate waits for a threshold somebody chose (#397), and pinning one here would tighten a required
+  check on a number measured on the wrong interpreter.
 - **Two rooms join into one home frame, and a disagreement between them is a report (H7)** — `joints`
   had a place in the document since H3 and nothing read it. `mapping/home_map.py::resolve_room_frames`
   walks the chain: a joint's `transform` places `b_room` in `a_room`'s frame, the room no join places is

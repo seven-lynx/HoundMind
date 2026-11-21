@@ -85,7 +85,8 @@ ignore = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 pythonpath = ["src"]
-addopts = "-q"
+# No `addopts = "-q"`: it made every documented `pytest -q` a *double* quiet run, which suppresses
+# the pass/fail summary line the log is read for (#399).
 
 [tool.mypy]
 python_version = "3.11"

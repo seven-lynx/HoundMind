@@ -44,3 +44,9 @@ models/
 
 # Generated/pinned mirror files
 requirements-filtered.txt
+
+# Coverage output. `pytest --cov` writes `.coverage` at the repo root by default, and a `git add
+# -A` after a coverage run must not be able to commit it.
+.coverage
+.coverage.*
+htmlcov/
