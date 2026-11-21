@@ -50,9 +50,10 @@ source .venv/bin/activate
 python -m houndmind_ai                # or: .venv/bin/python -m houndmind_ai
 ```
 
-`python -m houndmind_ai` accepts one flag: `--config <path>` to point at a settings file other than
-`config/settings.jsonc`. There is no `--dry-run`: a run either has hardware or fails at the HAL, and a
-config error exits with status 2 before any hardware is touched.
+`python -m houndmind_ai` accepts two flags: `--config <path>` to point at a settings file other than
+`config/settings.jsonc`, and `--dry-run`, which loads and validates the config, builds the module
+registry, logs each module's verdict and exits 0 **without starting a module, running a tick or
+touching the HAL** (#405). A config error exits with status 2 before any hardware is touched.
 
 To prove the package imports without a dog attached:
 
