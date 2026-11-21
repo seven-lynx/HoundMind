@@ -26,6 +26,11 @@ All three files are separate on purpose; which one you want depends on the quest
 says what the process did, the event log says what the dog's state was every half second, and the
 decision log says why the tick chose what it chose.
 
+The runtime log is written at `settings.logging.log_level` — **`INFO` as shipped**
+(`config/settings.jsonc:1239`). `DEBUG` writes about 14 KB/s on the dog, which rotates the 10 MB
+file in roughly three minutes (#391); raise it for a bench session and put it back before the dog
+is left running.
+
 ## Record fields
 
 A line in `logs/houndmind.log` is one JSON object. Four fields come from the runtime context
