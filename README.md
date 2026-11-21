@@ -20,6 +20,8 @@ bash scripts/install_houndmind.sh
 
 This installs the SunFounder PiDog dependencies **and** HoundMind in the same environment. It reads the board from the device tree, refuses a Pi 3 or older, and picks the matching profile. For manual steps, see [docs/INSTALL.md](docs/INSTALL.md).
 
+Then start the runtime (see [Start HoundMind](#start-houndmind)) and open `http://<hostname>.local:8420/` from a browser on the same network — `<hostname>` is the name you gave the Pi (`raspberrypi.local` on a stock card), not a fixed `houndmind.local`; [docs/WEBAPP_GUIDE.md](docs/WEBAPP_GUIDE.md) covers the app.
+
 ## Before You Start (Pi OS Checklist)
 - Flash Raspberry Pi OS and complete first boot setup.
 - Preferred OS: **Raspberry Pi OS Bookworm (64-bit)**, which ships Python 3.11. HoundMind supports Python 3.11–3.13; 3.10 is end of life and is refused by `pip install`.
