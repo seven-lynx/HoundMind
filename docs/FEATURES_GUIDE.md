@@ -737,10 +737,16 @@ filled by one **recency-weighted draw** — not by `random.choice`, and no longe
   whether it does. Both are separate from `action_cooldown_s`, which holds *every* behaviour change
   including a reaction to a touch — raising that one to slow idle down would slow the dog's reflexes
   with it.
-- **Autonomy.** `behavior.autonomy_modes` and `autonomy_weights` pick the *mode* every
-  `autonomy_interval_s`, and `personality` multiplies those weights (`curiosity` → `explore`,
-  `sociability` → `interact`, `activity` → `patrol`/`play`). Modes are registered as
-  `<mode>_behavior`; the translation happens in one place, `BehaviorRegistry.pick_mode`.
+- **Autonomy.** **Off by default.** `behavior.autonomy_enabled` ships `false`, so a fresh install
+  picks no mode on its own — which is why it changed: `explore` draws `explore_action` (`forward`), a
+  gait-class action, and the shipped config used to walk the dog on start
+  ([#390](https://github.com/seven-lynx/HoundMind/issues/390)). Opt in by setting
+  `behavior.autonomy_enabled: true`; a config written before the key existed is treated the same way,
+  because the FSM's fallback for an absent key is `false` too. Once enabled,
+  `behavior.autonomy_modes` and `autonomy_weights` pick the *mode* every `autonomy_interval_s`, and
+  `personality` multiplies those weights (`curiosity` → `explore`, `sociability` → `interact`,
+  `activity` → `patrol`/`play`). Modes are registered as `<mode>_behavior`; the translation happens in
+  one place, `BehaviorRegistry.pick_mode`.
 - **Energy.** When an `energy_level` reading exists (from `settings.energy`, which ships off), a
   reading below `behavior.energy_bias_start` (ships `0.5`)
   lets the `rest` actions join the `idle` pool and outrank it, saturating at

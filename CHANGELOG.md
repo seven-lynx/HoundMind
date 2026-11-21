@@ -468,6 +468,15 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **The shipped config walked the dog on start** — `behavior.autonomy_enabled` shipped `true`, and
+  `autonomy_modes` offers `explore`, whose action is `explore_action` (`forward`). An install that
+  ended with `systemctl enable --now` therefore recorded 237 granted `forward`, `trot`, `turn_left`
+  and `turn_right` in seven minutes — every one a behaviour intent the gateway preferred over
+  navigation's `stand` — and the owner's report was a dog that moved by itself (#390). Autonomy is now
+  opt-in at both of its gates: the shipped value is `false`, and `behavior/fsm.py`'s fallback for an
+  **absent** key is `false` as well, so a config written before the key existed cannot re-enable it by
+  omission. A start still sits, lies and stretches; it does not walk until someone writes
+  `"autonomy_enabled": true`.
 - **A control plane that hangs is now restarted, not just one that exits** — `ControlPlaneModule.tick`
   only read `thread.is_alive()`, so an aiohttp loop that stopped making progress kept every signal
   green: the thread was alive, the runtime still stamped `last_tick_ts` for `api`, the watchdog is

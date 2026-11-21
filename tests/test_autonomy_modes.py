@@ -26,6 +26,9 @@ def _module(monkeypatch, **behavior_settings):
     ctx = RuntimeContext()
     ctx.set("intent_board", IntentBoard())
     settings = {
+        # The mode bridge is the subject here, so the gate is opened explicitly: autonomy ships
+        # off (#390), and a test that leaned on the old absent-key default would pin the defect.
+        "autonomy_enabled": True,
         "random_idle_chance": 0.0,
         "catalog": {
             "idle": ["sit"],

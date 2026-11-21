@@ -36,6 +36,8 @@ def _module(monkeypatch, **behavior_settings):
     board = IntentBoard()
     ctx.set("intent_board", board)
     settings = {
+        # The rest state and the override path are driven by autonomy here, and it ships off (#390).
+        "autonomy_enabled": True,
         "autonomy_modes": ["idle"],
         "random_idle_chance": 0.0,
         "catalog": {"idle": ["sit"], "alert": ["bark"], "rest": ["lie"], "play": ["stretch"]},

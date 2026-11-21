@@ -334,7 +334,9 @@ class BehaviorModule(Module):
                 self.library.pick_alert_action() if self.library else sound_action
             )
         else:
-            if settings.get("autonomy_enabled", True):
+            # Opt-in, and the fallback matches the shipped `false`: a config that predates the key
+            # must not walk on start either (#390). Autonomous motion is a decision, never a default.
+            if settings.get("autonomy_enabled", False):
                 mode = self._select_autonomy_mode(settings, context)
                 if mode == "patrol":
                     desired_state = BehaviorState.PATROL

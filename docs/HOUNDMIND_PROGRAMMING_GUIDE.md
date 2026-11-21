@@ -75,13 +75,17 @@ Edit `config/settings.jsonc`. The keys that change behaviour most per keystroke:
 
 ### Autonomy tuning
 
-HoundMind can patrol, play and rest without input. The knobs all live under `settings.behavior`:
+HoundMind can patrol, play and rest without input. **It ships off**, because a start must not walk the
+dog: `explore` draws `explore_action` (`forward`), so `behavior.autonomy_enabled` is `false` and the FSM
+treats an absent key the same way — a config written before the key existed does not opt in by
+omission. The knobs all live under `settings.behavior`:
 
 - `autonomy_enabled`, `autonomy_interval_s`, `autonomy_modes`, `autonomy_weights`
 - `autonomy_rest_energy_max`, `autonomy_play_energy_min`
 
 ```jsonc
 "behavior": {
+  // The opt-in: nothing below happens while this is false.
   "autonomy_enabled": true,
   "autonomy_interval_s": 8.0,
   "autonomy_modes": ["idle", "patrol", "play", "rest"],
@@ -90,6 +94,9 @@ HoundMind can patrol, play and rest without input. The knobs all live under `set
   "autonomy_play_energy_min": 0.75
 }
 ```
+
+A mode in `autonomy_modes` is only reachable if its bucket has an action, and `patrol`/`explore` walk
+the dog — list them only when the dog has room.
 
 ### Validating and stopping
 

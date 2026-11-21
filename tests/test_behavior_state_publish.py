@@ -11,7 +11,8 @@ def _module(monkeypatch, **behavior_settings):
     mod = BehaviorModule("behavior", enabled=True)
     ctx = RuntimeContext()
     ctx.set("intent_board", IntentBoard())
-    settings = {"autonomy_modes": ["idle"]}
+    # Autonomy ships off (#390); the rest-mode transition below is what this file is about.
+    settings = {"autonomy_enabled": True, "autonomy_modes": ["idle"]}
     settings.update(behavior_settings)
     ctx.set("settings", {"behavior": settings})
     fsm_mod = importlib.import_module("houndmind_ai.behavior.fsm")

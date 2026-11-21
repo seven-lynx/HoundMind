@@ -989,8 +989,9 @@
       "transition_confirm_ticks": 2,
       // States that bypass transition guard (always immediate).
       "transition_immediate_states": ["avoiding", "alert"],
-      // Autonomous mode selection.
-      "autonomy_enabled": true,
+      // Autonomous mode selection. Off by default: `explore` draws `explore_action` (`forward`),
+      // so an install that enabled this walked the dog on start (#390). Opt in by setting `true`.
+      "autonomy_enabled": false,
       "autonomy_interval_s": 8.0,
       "autonomy_modes": ["idle", "patrol", "explore", "interact", "play", "rest"],
       "autonomy_weights": {
