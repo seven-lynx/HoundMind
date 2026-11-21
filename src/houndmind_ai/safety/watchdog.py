@@ -28,20 +28,12 @@ import logging
 import time
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.hal.iface import as_float
 from houndmind_ai.kernel.commands import MOTION_ACTIONS, Source
 from houndmind_ai.kernel.supervisor import RestartPolicy, Supervisor, SupervisorReport
 from houndmind_ai.navigation.scanning import scan_freshness_window_s
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_float(val, default: float) -> float:
-    try:
-        if val is None:
-            return default
-        return float(val)
-    except (TypeError, ValueError):
-        return default
 
 
 class WatchdogModule(Module):
@@ -59,12 +51,12 @@ class WatchdogModule(Module):
         settings = (context.get("settings") or {}).get("watchdog", {})
         self.supervisor = Supervisor(
             RestartPolicy(
-                base_delay_s=_safe_float(settings.get("restart_cooldown_s"), 1.0),
-                factor=_safe_float(settings.get("restart_backoff_factor"), 2.0),
-                max_delay_s=_safe_float(settings.get("restart_max_delay_s"), 60.0),
-                max_restarts=int(_safe_float(settings.get("max_restarts"), 3)),
-                healthy_after_s=_safe_float(settings.get("healthy_after_s"), 30.0),
-                startup_grace_s=_safe_float(settings.get("startup_grace_s"), 60.0),
+                base_delay_s=as_float(settings.get("restart_cooldown_s"), 1.0),
+                factor=as_float(settings.get("restart_backoff_factor"), 2.0),
+                max_delay_s=as_float(settings.get("restart_max_delay_s"), 60.0),
+                max_restarts=int(as_float(settings.get("max_restarts"), 3)),
+                healthy_after_s=as_float(settings.get("healthy_after_s"), 30.0),
+                startup_grace_s=as_float(settings.get("startup_grace_s"), 60.0),
             ),
             clock=time.time,
         )
@@ -91,18 +83,18 @@ class WatchdogModule(Module):
 
     @staticmethod
     def _sensor_stale(context, settings, now: float) -> bool:
-        timeout = _safe_float(settings.get("sensor_timeout_s"), 2.0)
+        timeout = as_float(settings.get("sensor_timeout_s"), 2.0)
         reading = context.get("sensor_reading")
         if reading is None:
             return True
-        return (now - _safe_float(getattr(reading, "timestamp", 0.0), 0.0)) > timeout
+        return (now - as_float(getattr(reading, "timestamp", 0.0), 0.0)) > timeout
 
     @staticmethod
     def _scan_stale(context, window_s: float, now: float) -> bool:
         reading = context.get("scan_reading")
         if reading is None:
             return True
-        return (now - _safe_float(getattr(reading, "timestamp", 0.0), 0.0)) > window_s
+        return (now - as_float(getattr(reading, "timestamp", 0.0), 0.0)) > window_s
 
     def _hold_motion(self, context, sensor_stale: bool, scan_stale: bool, now: float) -> None:
         """Publish a `stop` while the dog is asked to move on data we cannot trust.
@@ -173,7 +165,7 @@ class WatchdogModule(Module):
         monitored = {name: status for name, status in statuses.items() if name not in ignore}
         report = self.supervisor.decide(
             monitored,
-            timeout_s=_safe_float(settings.get("module_timeout_s"), 4.0),
+            timeout_s=as_float(settings.get("module_timeout_s"), 4.0),
             now=now,
             monitor=settings.get("monitor_modules") or None,
         )

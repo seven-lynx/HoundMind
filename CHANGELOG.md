@@ -516,6 +516,14 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **`health_monitor` reads its settings through the shared coercion, and no module test went unwatched**
+  — `safety/health_monitor.py` was the one module no test named (#401), and it called `float()` bare
+  on twelve config values, so a non-numeric setting raised inside `tick` and the runtime logged a
+  module error every tick (#402). It now uses `hal/iface.as_float`, and `tests/test_health_monitor.py`
+  drives it through `start`/`tick`/`stop` with the four system readers patched: the cadence, the
+  degraded reasons, the high-water marks and both interval throttles. `safety/watchdog.py`'s local
+  `_safe_float` is gone for the same reason — it let a NaN through to `int()` in `start()`, which
+  took the module down; the audit of the remaining copies is on #402 and no hoist was made.
 - **The camera tools and `vision_pi4` report what is true** — two switches gated one module:
   `modules.vision_pi4.enabled` started it and `settings.vision_pi4.enabled` returned silently from
   every tick, so a module the operator had enabled read `ok` in `/api/v1/modules` while publishing

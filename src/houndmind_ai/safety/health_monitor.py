@@ -5,6 +5,7 @@ import os
 import time
 
 from houndmind_ai.core.module import Module
+from houndmind_ai.hal.iface import as_float
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class HealthMonitorModule(Module):
         navigation = settings.get("navigation", {})
         logging_settings = settings.get("logging", {})
 
-        interval_s = float(perf.get("health_monitor_interval_s", 5.0))
+        interval_s = as_float(perf.get("health_monitor_interval_s", 5.0), 5.0)
         now = time.time()
         if now - self._last_sample_ts < interval_s:
             return
@@ -98,10 +99,10 @@ class HealthMonitorModule(Module):
         mem_pct = _read_mem_used_pct()
         cores = max(1, os.cpu_count() or 1)
 
-        load_warn_mult = float(perf.get("health_load_per_core_warn_multiplier", 1.5))
-        temp_warn = float(perf.get("health_temp_warn_c", 70.0))
-        gpu_temp_warn = float(perf.get("health_gpu_temp_warn_c", 75.0))
-        mem_warn = float(perf.get("health_mem_used_warn_pct", 85.0))
+        load_warn_mult = as_float(perf.get("health_load_per_core_warn_multiplier", 1.5), 1.5)
+        temp_warn = as_float(perf.get("health_temp_warn_c", 70.0), 70.0)
+        gpu_temp_warn = as_float(perf.get("health_gpu_temp_warn_c", 75.0), 75.0)
+        mem_warn = as_float(perf.get("health_mem_used_warn_pct", 85.0), 85.0)
 
         degraded = False
         degraded_reasons = []
@@ -150,8 +151,8 @@ class HealthMonitorModule(Module):
         context.set("health_high_water", self._high_water)
 
         status_enabled = bool(logging_settings.get("status_log_enabled", True))
-        status_interval = float(logging_settings.get("status_log_interval_s", 10.0))
-        last_status = float(context.get("health_status_last_log_ts") or 0.0)
+        status_interval = as_float(logging_settings.get("status_log_interval_s", 10.0), 10.0)
+        last_status = as_float(context.get("health_status_last_log_ts"), 0.0)
         if status_enabled and now - last_status >= status_interval:
             context.set("health_status_last_log_ts", now)
             logger.info(
@@ -164,9 +165,9 @@ class HealthMonitorModule(Module):
 
         actions = perf.get("health_actions", ["throttle_scans"])
         if degraded and "throttle_scans" in actions:
-            base_interval = float(navigation.get("scan_interval_s", 0.5))
-            mult = float(perf.get("health_scan_interval_multiplier", 2.0))
-            abs_delta = float(perf.get("health_scan_interval_abs_delta", 1.0))
+            base_interval = as_float(navigation.get("scan_interval_s", 0.5), 0.5)
+            mult = as_float(perf.get("health_scan_interval_multiplier", 2.0), 2.0)
+            abs_delta = as_float(perf.get("health_scan_interval_abs_delta", 1.0), 1.0)
             override = min(base_interval * mult, base_interval + abs_delta)
             context.set("scan_interval_override_s", override)
             logger.warning(
@@ -177,9 +178,9 @@ class HealthMonitorModule(Module):
 
         if degraded and "throttle_vision" in actions:
             vision_settings = settings.get("vision_pi4", {})
-            base_interval = float(vision_settings.get("frame_interval_s", 0.2))
-            mult = float(perf.get("health_vision_frame_interval_multiplier", 2.0))
-            abs_delta = float(perf.get("health_vision_frame_interval_abs_delta", 0.2))
+            base_interval = as_float(vision_settings.get("frame_interval_s", 0.2), 0.2)
+            mult = as_float(perf.get("health_vision_frame_interval_multiplier", 2.0), 2.0)
+            abs_delta = as_float(perf.get("health_vision_frame_interval_abs_delta", 0.2), 0.2)
             override = min(base_interval * mult, base_interval + abs_delta)
             context.set("vision_frame_interval_override_s", override)
             logger.warning(
