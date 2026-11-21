@@ -545,14 +545,22 @@ class PidogHAL:
         if key == "speak":
             self.speak(str(params.get("text", "")), as_int(params.get("volume"), 70))
             return
+        # The strip is not the servo bus either. `set_mode` only stores the effect the vendor's own
+        # strip thread renders — attribute writes and `is_changed`, no I/O — so the lock bought
+        # nothing for it and cost the caller whatever else held it: `SensorService` polls `read()`
+        # off the loop (`hal/sensors.py:151`, `hal/vendor.py:247`) and that sequence owns `_bus` for
+        # ~0.1-0.3 s, which made an LED write look like 0.10-0.35 s of tick time (#393). Calling
+        # `set_mode` while the vendor renders is its documented usage: `pidog.py` shows frames on
+        # that thread regardless of who sets the next mode.
+        if key == "rgb":
+            self._rgb(params)
+            return
         # The bus is not re-entrant and it is not free: `do_action(wait=True)` can hold it for the
         # length of a step. Every caller that is not the decision loop already runs on its own
         # worker, so waiting here costs that worker a turn, never the tick.
         with self._bus:
             if key == "head":
                 self._head(params)
-            elif key == "rgb":
-                self._rgb(params)
             elif key == "rpy":
                 self._rpy(params)
             elif key == "stop":

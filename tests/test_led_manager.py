@@ -7,6 +7,7 @@ cross one is both slower and flakier than one that owns the clock — the same r
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import pytest
@@ -350,4 +351,68 @@ def test_a_non_numeric_brightness_does_not_fail_the_module() -> None:
     module.tick(ctx)
 
     assert rgb_calls(ctx)[0]["brightness"] == 0.7
+
+
+def test_an_unchanged_request_is_not_written_again() -> None:
+    """The strip is stateful: one instruction, one write, however far the cooldown has run (#393).
+
+    `cooldown_s` only dedupes inside its own window, and a 10 Hz loop crosses it constantly — so a
+    request that never changed used to reach the strip on the first tick past every window.
+    """
+    clock = Clock()
+    module, ctx = build(led_settings(), clock=clock)
+    ctx.set("led_request:safety", {"mode": "emergency"})
+
+    module.tick(ctx)
+    clock.advance(60.0)
+    module.tick(ctx)
+
+    assert len(rgb_calls(ctx)) == 1
+
+
+def test_the_same_mode_in_a_new_colour_is_written() -> None:
+    """Dedupe is on what the strip shows, not on the mode's name: a new colour must reach it."""
+    clock = Clock()
+    module, ctx = build(led_settings(), clock=clock)
+    ctx.set("led_request:safety", {"mode": "emergency"})
+    module.tick(ctx)
+
+    ctx.set("led_request:safety", {"mode": "emergency", "color": "amber"})
+    module.tick(ctx)
+
+    assert [call["color"] for call in rgb_calls(ctx)] == ["red", "amber"]
+
+
+def test_a_restart_re_asserts_the_strip() -> None:
+    """The memory belongs to the module, not to the strip: after a restart the colour is sent again."""
+    clock = Clock()
+    module, ctx = build(led_settings(), clock=clock)
+    ctx.set("led_request:safety", {"mode": "emergency"})
+    module.tick(ctx)
+
+    module.start(ctx)
+    clock.advance(60.0)
+    module.tick(ctx)
+
+    assert len(rgb_calls(ctx)) == 2
+
+
+def test_an_idle_tick_stays_well_inside_the_budget() -> None:
+    """What #393 measured: with nothing new to say, a tick must not spend the loop's budget.
+
+    100 ticks against the 100 ms per-module budget is a deliberate wall-clock assertion with a very
+    loose bound (1 ms a tick); it reports a regression without measuring the CI box's speed.
+    """
+    clock = Clock()
+    module, ctx = build(led_settings(), clock=clock)
+    ctx.set("led_request:safety", {"mode": "emergency"})
+    module.tick(ctx)  # the one write
+    started = time.perf_counter()
+
+    for _ in range(100):
+        module.tick(ctx)
+
+    elapsed = time.perf_counter() - started
+    assert elapsed < 0.1, f"100 idle ticks took {elapsed:.3f}s against a 0.1s total"
+    assert len(rgb_calls(ctx)) == 1
 

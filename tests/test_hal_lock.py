@@ -192,3 +192,73 @@ def test_a_scan_owns_the_head() -> None:
     module._apply_head_follow("left", context)
 
     assert not [name for name, _ in hal.calls if name == "head"]
+
+
+class RecordingStrip:
+    """What `_rgb` needs of the vendor strip, recording when it was asked to show something."""
+
+    def __init__(self, dog: "HoldingDog") -> None:
+        self.dog = dog
+        self.modes: list[tuple[str, str]] = []
+        self.bus_held_at_write: int | None = None
+
+    def set_mode(
+        self, style: str, color: str, bps: float = 1.0, brightness: float = 1.0
+    ) -> None:
+        self.bus_held_at_write = self.dog.bus_held
+        self.modes.append((style, color))
+
+
+class HoldingDog(StubDog):
+    """A dog whose distance read holds the bus until the test lets it go.
+
+    That is the shape of the device: `SensorService` polls `read()` on its own thread, and the whole
+    sequence — distance, touch, sound, IMU, battery — owns `_bus` for as long as the transducer
+    takes to answer (`hal/vendor.py:247`).
+    """
+
+    def __init__(self) -> None:
+        super().__init__(hold_s=0.0)
+        self.reading = threading.Event()
+        self.release = threading.Event()
+        self.bus_held = 0
+        self.rgb_strip = RecordingStrip(self)
+
+    def read_distance(self) -> float:
+        self.bus_held += 1
+        self.reading.set()
+        self.release.wait(5.0)
+        self.bus_held -= 1
+        return 100.0
+
+
+def test_an_led_write_does_not_wait_for_the_servo_bus() -> None:
+    """An LED write is not a servo move: it must not queue behind a sensor sequence (#393).
+
+    `set_mode` only stores the effect the vendor's own strip thread renders, so the lock protected
+    nothing — it cost the writer whatever a `read()` was doing. On the loop that was measured as
+    0.10-0.35 s of `led_manager` tick time, a third of a 10 Hz tick spent waiting.
+    """
+    dog = HoldingDog()
+    hal = PidogHAL(settings={}, dog=dog)
+
+    reader = threading.Thread(target=hal.read, daemon=True)
+    reader.start()
+    assert dog.reading.wait(2.0), "the sensor read never took the bus"
+
+    writer = threading.Thread(
+        target=lambda: hal.action("rgb", {"style": "breath", "color": "blue", "brightness": 0.7}),
+        daemon=True,
+    )
+    writer.start()
+    deadline = time.monotonic() + 2.0
+    while not dog.rgb_strip.modes and time.monotonic() < deadline:
+        time.sleep(0.005)
+
+    dog.release.set()
+    reader.join(5.0)
+
+    assert dog.rgb_strip.modes == [("breath", "blue")]
+    assert dog.rgb_strip.bus_held_at_write == 1, (
+        "the strip must be written while the sensor read still owns the bus"
+    )

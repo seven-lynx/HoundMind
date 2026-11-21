@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from houndmind_ai.core.module import Module
@@ -78,7 +78,18 @@ class LedManagerModule(Module):
         # The source whose request owns the strip right now, or None. This is what tells the
         # difference between "nothing is asking" and "what was asking has just expired".
         self._active: str | None = None
+        # What the strip was last told: `(style, color, brightness, bps)`. The strip is stateful, so
+        # an instruction it is already showing does not need sending again — at 10 Hz a request that
+        # never changes used to be re-written every tick, and each write waited for the HAL's bus
+        # (#393). A call that failed is not recorded here, so the next tick retries it.
+        self._last_sent: tuple[str, str, float, float | None] | None = None
 
+    def start(self, context) -> None:
+        """Forget what the strip was showing: a restarted module re-asserts, it does not assume."""
+        self._active = None
+        self._last_state = (None, None)
+        self._last_sent = None
+        super().start(context)
 
     def tick(self, context) -> None:
         settings = (context.get("settings") or {}).get("led", {})
@@ -89,12 +100,14 @@ class LedManagerModule(Module):
         if hal is None:
             return
 
-        priority = settings.get("priority", list(DEFAULT_PRIORITY))
-        if not isinstance(priority, list):
-            priority = list(DEFAULT_PRIORITY)
+        # The module-level tuple is the fallback, never a per-tick copy of it: this list is walked
+        # on every tick of a 10 Hz loop.
+        priority = settings.get("priority")
+        if not isinstance(priority, (list, tuple)):
+            priority = DEFAULT_PRIORITY
 
-        request = self._select_request(context, priority)
-        if request is None:
+        selected = self._select_request(context, priority)
+        if selected is None:
             if self._active is None:
                 return
             # What owned the strip expired and nothing else wants it: go back to idle once, rather
@@ -105,11 +118,13 @@ class LedManagerModule(Module):
             self._last_ts = self._clock()
             return
 
+        source, request = selected
         mode = str(request.get("mode", "patrol"))
-        source = str(request.get("source", ""))
         now = self._clock()
-        if (source, mode) == self._last_state and now - self._last_ts < float(
-            settings.get("cooldown_s", 0.5)
+        # `_safe_float`, not `float`: a live config write could store a non-number here, and a raise
+        # would fail this module on every tick (#123).
+        if (source, mode) == self._last_state and now - self._last_ts < _safe_float(
+            settings.get("cooldown_s", 0.5), 0.5
         ):
             return
 
@@ -118,13 +133,16 @@ class LedManagerModule(Module):
         self._last_state = (source, mode)
         self._last_ts = now
 
-    def _select_request(self, context, priority: list[str]) -> dict | None:
-        """The highest-priority live request, clearing any expired one on the way past.
+    def _select_request(
+        self, context, priority: Sequence[str]
+    ) -> tuple[str, Mapping[str, Any]] | None:
+        """The highest-priority live request and the source that published it, or `None`.
 
         Clearing is what makes an expiry a fallback rather than a demotion: the source stops
         occupying its slot, so it can publish again without whoever set it having to write `None`.
         The identity check keeps a concurrent refresh intact — another producer may have written
-        between the read and the clear (H-02).
+        between the read and the clear (H-02). The pair is returned rather than a merged dict so a
+        live request costs no copy on a tick that sends nothing (#393).
         """
         now = self._clock()
         for source in priority:
@@ -137,7 +155,7 @@ class LedManagerModule(Module):
                 if context.get(key) is request:
                     context.set(key, None)
                 continue
-            return {**request, "source": source}
+            return source, request
         return None
 
     def _apply_led(self, context, source: str, mode: str, request: Mapping[str, Any]) -> None:
@@ -189,19 +207,34 @@ class LedManagerModule(Module):
         # (`safety/sensor_health.py:64`) and this manager dropped before P3 L1.
         color = request.get("color", color)
 
+        # `_safe_float` rather than `float`: a live config write could store a non-number in a
+        # numeric key, and a raise here would fail this module on every tick (#123).
+        brightness = _safe_float(settings.get("brightness", 0.7), 0.7)
         params: dict[str, Any] = {
             "style": str(mode_name),
             "color": str(color),
-            # `_safe_float` rather than `float`: a live config write could store a non-number in a
-            # numeric key, and a raise here would fail this module on every tick (#123).
-            "brightness": _safe_float(settings.get("brightness", 0.7), 0.7),
+            "brightness": brightness,
         }
         bps = _request_bps(request, settings, source)
         if bps is not None:
             params["bps"] = bps
 
+        # The strip is stateful: an instruction it is already showing is not worth a call. The
+        # cooldown above only dedupes inside its own window, so a request that never changes used
+        # to be re-sent on the first tick past it, forever (#393).
+        signature: tuple[str, str, float, float | None] = (
+            params["style"],
+            params["color"],
+            brightness,
+            bps,
+        )
+        if signature == self._last_sent:
+            return
+
         try:
             hal.action("rgb", params)
         except Exception as exc:  # noqa: BLE001
             logger.debug("LED update failed: %s", exc)
+            return
+        self._last_sent = signature
 
