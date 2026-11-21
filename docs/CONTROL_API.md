@@ -155,7 +155,7 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/health` | none | liveness only: `{"status":"ok"}` — no detail, no leak |
 | `GET` | `/api/v1/whoami` | any valid token | the caller's `device` name, `scopes` and `kind` — the same shape as the `welcome` frame, so a client can say what its token cannot do before a request fails (#168) |
 | `GET` | `/api/v1/state` | `state:read` | full state snapshot (see [§4](#4-state-snapshot)) |
-| `GET` | `/api/v1/scan` | `state:read` | the last head sweep verbatim — `mode` plus `forward`/`right`/`left`, or `mode` plus `angles` `{yaw: cm}`; `{"scan": null}` before the first one (#169) |
+| `GET` | `/api/v1/scan` | `state:read` | the last head sweep verbatim — `mode` plus `forward`/`right`/`left`, or `mode` plus `angles` `{yaw: cm}`; `valid` carries one flag per bearing, so `0` with `valid: false` is "no echo" rather than "a wall at zero" (#400), and `head_centered: false` says the post-sweep re-centre failed (#398); `{"scan": null}` before the first one (#169) |
 | `GET` | `/api/v1/map` | `state:read` | the occupancy grid as `[ix, iy, hits]` cells with `cell_size_cm`, `count` and `truncated`, plus `document` (the versioned home map), `pose` (the live pose in the document's frame), `trail` (the walk so far) and `health` (loaded, stride, conflicts) — see below; `{"map": null}` when no cell has been filled (#175) |
 | `PUT` | `/api/v1/map` | `config` | replace the home-map document: body `{"document": {...}}`, judged by the same validator that loads the file; `meta.rev` must match or the answer is `409` with the current one (M1) |
 | `PUT` | `/api/v1/map/pose` | `move` | the dog's position on the map as a human just corrected it: body `{"x_cm", "y_cm", "heading_deg"?}` in the **document** frame; re-anchors odometry and writes `dog` into the file, bumping `meta.rev` (M5) |
@@ -699,7 +699,9 @@ or a new veto. `started_at` is on the same monotonic clock as `ts`, so `ts - sta
 the run has been going - a duration, not a wall-clock moment to display.
 
 `scan` is the **summary** of the last head sweep: `mode` (`sweep` or `three_way`), the reading's
-`timestamp` (epoch seconds, from the scanner) and how many bearings it holds. It is `null` until the
+`timestamp` (epoch seconds, from the scanner), how many bearings it holds, and `valid_samples` —
+how many of those were actually measured. `valid_samples` is `null` when the reading carries no
+validity map, which is not the same as "all of them were good" (#400). It is `null` until the
 scanner has finished its first sweep, and stays `null` while `modules.scanning` is off. The bearings
 themselves are **not** here: a sweep is one reading per angle — up to 181 — and this snapshot is sent
 at `api.state_hz` to every client, so the samples live behind `GET /api/v1/scan` and a client fetches

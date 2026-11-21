@@ -468,6 +468,22 @@ Current Release: v2026.11.16
 
 ### Fixed
 
+- **A scan says which bearings it actually measured** — a failed distance read reached
+  `/api/v1/state` and `/api/v1/scan` as `0 cm` with nothing to distinguish it from a wall at zero
+  (#400). `navigation/scanning.py::ScanReading` now carries `valid` beside `data` — one flag per
+  bearing, `false` for "no echo" while the value stays `0.0` so the v1 payload is unchanged — and
+  `services/state.py::_scan` adds `valid_samples` (how many of them were measured, `null` when the
+  reading carries no map). The bearing-level map is on `GET /api/v1/scan`, for the same reason the
+  samples are: a sweep can hold 181 of them and the snapshot is sent at `api.state_hz`.
+  `docs/CONTROL_API.md` §2 and §4 name both fields.
+- **A head action that failed is no longer reported as a success** — `hal/motors.py`'s head-follow
+  and head-centre turned any exception into `return`, and the scan's re-centre ended in
+  `except Exception: pass`, so a head that was dead for a whole run left `status.last_error` empty,
+  `/api/v1/modules` reporting `ok`, and nothing in the log (#398). Both motors paths now log one
+  warning per transition and set `status.last_error`; the scan path logs the same way and publishes
+  `head_centered: false` on the reading, which the scanning module also copies onto its status. The
+  recovery is logged too, so a support bundle says when the head stopped answering and when it came
+  back.
 - **A reboot no longer restarts nineteen healthy modules, or calls them dead** — the first 90 s
   after a `systemd` start restarted every module three times and then logged one ERROR per module,
   `Watchdog gave up on hal: stale heartbeat; gave up after 3 restart(s)` (#394). Both halves were

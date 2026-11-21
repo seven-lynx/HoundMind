@@ -829,7 +829,12 @@ def test_the_scan_route_answers_null_before_the_first_sweep(tmp_path) -> None:
         assert before.status == 200 and before_body == {"scan": None}
         assert after.status == 200
         assert after_body["scan"] == reading, "the route returns the reading verbatim"
-        assert state["scan"] == {"mode": "sweep", "timestamp": 4211.9, "samples": 3}
+        assert state["scan"] == {
+            "mode": "sweep",
+            "timestamp": 4211.9,
+            "samples": 3,
+            "valid_samples": None,
+        }
 
     asyncio.run(scenario())
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from houndmind_ai.core.module import Module
@@ -59,16 +59,27 @@ class ScanReading:
     mode: str
     data: dict[int, float] | dict[str, float]
     timestamp: float
+    # Which bearings were actually measured. A failed sample still carries `0.0` in `data`, because
+    # that is the payload clients already read and v1 stays intact, but `valid[bearing]` is False —
+    # so "no echo" and "a wall at zero centimetres" are no longer the same JSON (#400). Empty when a
+    # reading was built without the service, which is honest: nothing says a bearing was measured.
+    valid: dict[int, bool] | dict[str, bool] = field(default_factory=dict)
+    # False when the post-sweep re-centre failed. The readings are real, the head did not come back,
+    # and a client that aims by head position has to see it (#398).
+    head_centered: bool = True
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
             "mode": self.mode,
             "timestamp": self.timestamp,
+            "head_centered": self.head_centered,
         }
         if self.mode == "sweep":
             payload["angles"] = {str(k): float(v) for k, v in self.data.items()}
         else:
             payload.update({str(k): float(v) for k, v in self.data.items()})
+        if self.valid:
+            payload["valid"] = {str(k): bool(v) for k, v in self.valid.items()}
         return payload
 
 
@@ -88,6 +99,9 @@ class ScanningService:
         self._settings = settings
         self._latest: ScanReading | None = None
         self._history: list[ScanReading] = []
+        # The last fault per kind, so a broken head or a quiet echo logs once per transition
+        # rather than once per sample (#398).
+        self._faults: dict[str, str | None] = {}
         # How long the last scan actually took. The watchdog derives its staleness window from
         # this, because a sweep takes seconds and a fixed sub-second timeout called a healthy
         # scan stale forever (P3-4).
@@ -122,26 +136,31 @@ class ScanningService:
         speed = _safe_int(self._settings.get("head_scan_speed", 70), 70)
 
         result: dict[str, float] = {}
+        valid: dict[str, bool] = {}
+        centered = True
         try:
             self._head_move(0, speed)
             time.sleep(settle_s)
-            result["forward"] = self._read_distance(samples, between_reads_s)
+            result["forward"], valid["forward"] = self._read_distance(samples, between_reads_s)
 
             self._head_move(-_safe_int(right_deg, 0), speed)
             time.sleep(settle_s)
-            result["right"] = self._read_distance(samples, between_reads_s)
+            result["right"], valid["right"] = self._read_distance(samples, between_reads_s)
 
             self._head_move(_safe_int(left_deg, 0), speed)
             time.sleep(settle_s)
-            result["left"] = self._read_distance(samples, between_reads_s)
+            result["left"], valid["left"] = self._read_distance(samples, between_reads_s)
         finally:
-            try:
-                self._head_move(0, speed)
-            except Exception:  # noqa: BLE001
-                pass
+            centered = self._center_head(speed)
 
         self.last_duration_s = time.time() - started
-        return ScanReading(mode="three_way", data=result, timestamp=time.time())
+        return ScanReading(
+            mode="three_way",
+            data=result,
+            timestamp=time.time(),
+            valid=valid,
+            head_centered=centered,
+        )
 
     def sweep_scan(self, angles: list[int]) -> ScanReading:
         started = time.time()
@@ -152,20 +171,25 @@ class ScanningService:
         )
         speed = _safe_int(self._settings.get("head_scan_speed", 70), 70)
         result: dict[int, float] = {}
+        valid: dict[int, bool] = {}
+        centered = True
         try:
             for yaw in angles:
                 y = _safe_int(yaw, 0)
                 self._head_move(y, speed)
                 time.sleep(settle_s)
-                result[y] = self._read_distance(samples, between_reads_s)
+                result[y], valid[y] = self._read_distance(samples, between_reads_s)
         finally:
-            try:
-                self._head_move(0, speed)
-            except Exception:  # noqa: BLE001
-                pass
+            centered = self._center_head(speed)
 
         self.last_duration_s = time.time() - started
-        return ScanReading(mode="sweep", data=result, timestamp=time.time())
+        return ScanReading(
+            mode="sweep",
+            data=result,
+            timestamp=time.time(),
+            valid=valid,
+            head_centered=centered,
+        )
 
     def build_angles(self) -> list[int]:
         yaw_max = _safe_int(self._settings.get("scan_yaw_max_deg", 60), 60)
@@ -181,14 +205,52 @@ class ScanningService:
         self._hal.action("head", {"yaw": int(yaw), "pitch": 0, "speed": speed, "wait": True})
         time.sleep(0.05)
 
-    def _read_distance(self, samples: int, between_reads_s: float) -> float:
+    def _read_distance(self, samples: int, between_reads_s: float) -> tuple[float, bool]:
+        """One bearing and whether it was measured (#400).
+
+        `0.0` is still what a failed sample contributes to `data`, because that is the payload
+        every client already parses; the second element is the fact the payload was missing, so
+        "no echo" stops reading as "a wall at zero centimetres".
+        """
         if self._hal is None:
-            return 0.0
+            self._note_fault("distance", "no HAL")
+            return 0.0, False
         try:
             value = self._hal.sample_distance(max(1, samples), between_reads_s)
-        except Exception:  # noqa: BLE001 - an unreadable distance is 0, as before
-            value = None
-        return 0.0 if value is None else float(value)
+        except Exception as exc:  # noqa: BLE001 - a vendor read may raise anything; the flag is the report
+            self._note_fault("distance", f"{type(exc).__name__}: {exc}")
+            return 0.0, False
+        if value is None:
+            self._note_fault("distance", "no echo")
+            return 0.0, False
+        self._note_fault("distance", None)
+        return float(value), True
+
+    def _center_head(self, speed: int) -> bool:
+        """Bring the head back to straight ahead, and say whether it made it (#398)."""
+        try:
+            self._head_move(0, speed)
+        except Exception as exc:  # noqa: BLE001 - the reading is still returned, and says so
+            self._note_fault("head re-centre", f"{type(exc).__name__}: {exc}")
+            return False
+        self._note_fault("head re-centre", None)
+        return True
+
+    def _note_fault(self, kind: str, message: str | None) -> None:
+        """Log a fault once per transition, never once per sample.
+
+        A head or an echo that stays broken for a whole run is one warning, not one per tick, and
+        the recovery is logged too, so the pair says when it started and when it stopped. A
+        cleared fault is `None` (#398).
+        """
+        if self._faults.get(kind) == message:
+            return
+        if message is None:
+            if kind in self._faults:
+                logger.info("Scan %s recovered", kind)
+        else:
+            logger.warning("Scan %s failed: %s", kind, message)
+        self._faults[kind] = message
 
 
 class ScanningModule(Module):
@@ -305,6 +367,10 @@ class ScanningModule(Module):
     def _publish_reading(self, reading: ScanReading) -> None:
         if self._context is None:
             return
+        if not reading.head_centered:
+            # The reading is real, the head did not come back: say so on the module as well as on
+            # the reading, so `/api/v1/modules` cannot call a stuck head healthy (#398).
+            self.status.last_error = "head re-centre failed"
         self._context.set("scan_reading", reading)
         self._context.set("scan_latest", reading.to_dict())
         if self.service is not None:

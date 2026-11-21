@@ -294,12 +294,30 @@ def _scan(context) -> dict[str, object] | None:
     if not isinstance(mode, str) or not mode or timestamp is None:
         return None
     angles = latest.get("angles")
+    # How many bearings were actually measured, beside how many the reading holds (#400). Per
+    # bearing validity is on `GET /api/v1/scan` for the same reason the samples are: a sweep can
+    # hold 181 of them and this snapshot is sent at `api.state_hz`. `None` when the reading carries
+    # no validity map at all — absent evidence is not a claim that every bearing was good.
+    valid = latest.get("valid")
+    valid_samples = (
+        sum(1 for flag in valid.values() if flag) if isinstance(valid, dict) else None
+    )
     if isinstance(angles, dict):
-        return {"mode": mode, "timestamp": timestamp, "samples": len(angles)}
+        return {
+            "mode": mode,
+            "timestamp": timestamp,
+            "samples": len(angles),
+            "valid_samples": valid_samples,
+        }
     # `three_way` has no angles: it is forward, right and left, and a bearing that failed to read is
     # absent rather than zero.
     bearings = [key for key in ("forward", "right", "left") if _number(latest.get(key)) is not None]
-    return {"mode": mode, "timestamp": timestamp, "samples": len(bearings)}
+    return {
+        "mode": mode,
+        "timestamp": timestamp,
+        "samples": len(bearings),
+        "valid_samples": valid_samples,
+    }
 
 
 def _localization(context) -> dict[str, object]:
