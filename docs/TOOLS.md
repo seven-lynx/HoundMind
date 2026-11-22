@@ -31,6 +31,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 20. [`place_match`](#20-place_match)
 21. [`camera_record`](#21-camera_record)
 22. [`slam_replay`](#22-slam_replay)
+23. [`validate_phrases`](#23-validate_phrases)
 
 ---
 
@@ -58,6 +59,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Does the dog recognise a place from a camera frame? | `place_match <views-dir> <frames-dir>` |
 | What does the camera actually see, frame by frame? | `camera_record` |
 | Can that clip be replayed as recorded? | `slam_replay <clip> --verify` |
+| Does every spoken phrase reach an action? | `validate_phrases` |
 
 ## 2. Motion risk
 
@@ -67,7 +69,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
 | `step_calibrate` | **yes, unless `--fake`** — it walks toward a wall by design. `--confirm-clearance` is mandatory, `--stop-at` defaults to 45 cm, and every step passes the runtime's interlock |
-| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `bench_tick`, `map_inspect`, `place_match` | no |
+| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `validate_phrases`, `bench_tick`, `map_inspect`, `place_match` | no |
 | `camera_record`, `slam_replay` | no — both switch every motion-capable module off. `camera_record` needs the camera, never the legs; `slam_replay --host` runs a clip through the loop, not through the servos |
 | `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
@@ -726,5 +728,39 @@ nothing, which is a finding, not a crash.
 
 **No on-dog verdict exists for either half** — #327 is the run that would produce one — so the flags are
 documented and this page claims no number.
+
+## 23. `validate_phrases`
+
+Checks that every phrase in `settings.voice_assistant.command_map` and its `aliases` reaches an action
+the dog can execute. No dog, no microphone, no runtime: it loads the config the runtime loads, builds
+the same repertoire (`kernel/actions.py::repertoire_from_settings`), and judges each value the way
+`optional/voice.py::_resolve_action` uses it.
+
+```bash
+python -m tools.validate_phrases
+python -m tools.validate_phrases --config bench-settings.jsonc
+python -m tools.validate_phrases --json
+```
+
+| Flag | Meaning |
+|---|---|
+| `--config PATH` | settings file other than `config/settings.jsonc` |
+| `--json` | one JSON object (`ok`, `errors`, `warnings`, `findings`) instead of lines |
+
+Three errors and one warning:
+
+- **`dead_target`** — a value that is not an action. It is canonicalised first (`turn left` is
+  `turn_left`, `kernel/commands.py:169`) and looked up in the repertoire, so a name with no class is
+  the finding whatever it looks like, and a near miss gets a suggestion.
+- **`dead_target` on an alias** — the runtime resolves **one hop**: an alias whose value is not a
+  `command_map` key is used raw as the action name. `go -> forwrd` is a dead action, not a fallback.
+- **`alias_cycle`** — `go -> shuffle -> go`. Not a hang, because the runtime never follows the second
+  hop; a dead name, so it is reported as one and the path is printed.
+- **`shadowed_key`** (warning) — a key sitting inside a longer key that maps elsewhere, which the
+  substring fallback (`optional/voice.py:168-170`) can award to the wrong phrase. Nested keys that
+  spell the same action stay silent: `wag` and `wag tail` are two spellings of one thing.
+
+Exit `0` every phrase resolves (warnings still exit `0`), `1` at least one cannot reach an action, `2`
+the config would not load. The map is read, never written — this tool cannot rename a phrase on the dog.
 
 
