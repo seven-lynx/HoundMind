@@ -789,6 +789,7 @@ Offline validators — no dog, no motion, and no runtime:
 ```bash
 python -m tools.validate_routines           # the configured routines directory
 python -m tools.validate_routines --dir ./my-routines --config bench-settings.jsonc
+python -m tools.validate_phrases            # every spoken phrase reaches an action
 ```
 
 `validate_routines` runs `RoutineStore` - the runtime's own loader, with the runtime's own repertoire -
@@ -797,6 +798,13 @@ one was refused (the line carries the file, the problem path and the reason), `2
 is missing or the config would not load. Use it after hand-writing a routine: the runtime would
 quarantine the file and boot anyway, which is the right behaviour and a poor way to find a typo
 (#408).
+
+`validate_phrases` reads `settings.voice_assistant.command_map` and `aliases` and judges each value
+the way `optional/voice.py` uses it: an alias resolves one hop, and a value that is not a
+`command_map` key is used raw as an action name. A dead target, a dead alias and an alias cycle are
+errors (exit `1`); a nested key that maps elsewhere is a warning and still exits `0`, so the shipped
+config is clean. Use it after editing the phrase map: a phrase that reaches a name the interlock
+refuses is silent on the dog, and this is the message instead (#258, #321).
 
 Replaying a recorded session — no dog, no motion. With `logging.decision_log_file_enabled: true` the
 runtime writes `logs/houndmind_decisions.jsonl`; this tool serves that history through the real

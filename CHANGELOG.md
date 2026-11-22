@@ -28,6 +28,14 @@ Current Release: v2026.11.16
   refused (file, problem path and reason on the line), `2` a missing directory or an unloadable
   config. `tests/test_validate_routines.py` pins all four, and the programming guide's tools list
   names it.
+- **The voice phrase map can be checked without saying anything** — a phrase whose target nothing can
+  execute was silent by construction: `optional/voice.py` sets `behavior_override`, the interlock
+  refuses the name as unclassified, and the only way to find it was to say the word and watch the dog
+  not move (#258, #321). `python -m tools.validate_phrases` reads the config the runtime reads, builds
+  the same repertoire, and judges each value by the runtime's own rule — one alias hop, raw
+  pass-through, `turn left` canonicalised to `turn_left` — reporting a dead target, a dead alias and an
+  alias cycle as errors and a shadowed key as a warning that leaves the exit code alone. `--json` lists
+  them; the shipped config exits `0`.
 - **A config change can be checked before it is applied, and the previous file is kept** — `PATCH
   /api/v1/config` validated correctly and then wrote, so "would this value be accepted?" could only
   be answered by trying it, and the rewrite left no copy of what was there (#406). `POST
