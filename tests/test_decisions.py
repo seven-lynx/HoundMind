@@ -97,6 +97,9 @@ def test_the_wire_shape_is_the_documented_one() -> None:
         "intent",
         "source",
         "driver",
+        "autonomy_mode",
+        "autonomy_weight",
+        "status",
         "vetoes",
         "inputs",
         "confidence",
@@ -128,6 +131,63 @@ def test_the_reader_still_reads_a_v1_line() -> None:
     assert read.driver is None
     # Reading upgrades on the way out: one shape is written, even when two are read.
     assert read.to_dict()["schema_version"] == SCHEMA_VERSION
+
+
+def test_the_reader_still_reads_a_v2_line() -> None:
+    """v2 added `driver`; a v3 build must not claim that line recorded a status."""
+    v2_line = {
+        "schema_version": 2,
+        "ts": 901.0,
+        "trace_id": "trace-v2",
+        "mode": "patrol",
+        "state": "alert",
+        "intent": "forward",
+        "source": "navigation",
+        "driver": "navigation",
+        "vetoes": [],
+        "inputs": {},
+        "confidence": 0.5,
+    }
+
+    read = DecisionRecord.from_dict(v2_line)
+
+    assert read.driver == "navigation"
+    assert read.status is None
+    assert read.autonomy_mode is None
+    assert read.autonomy_weight is None
+    assert read.to_dict()["schema_version"] == SCHEMA_VERSION
+
+
+def test_the_status_and_the_autonomy_pair_round_trip() -> None:
+    payload = record(
+        5.0,
+        status="undecided",
+        driver="behaviour",
+        autonomy_mode="patrol",
+        autonomy_weight=2.5,
+    ).to_dict()
+
+    read = DecisionRecord.from_dict(payload)
+
+    assert read.status == "undecided"
+    assert read.autonomy_mode == "patrol"
+    assert read.autonomy_weight == 2.5
+
+
+def test_a_status_this_build_does_not_know_is_refused_by_name() -> None:
+    payload = record(6.0, status="accepted").to_dict()
+    payload["status"] = "maybe"
+
+    with pytest.raises(ValueError, match="unknown decision status"):
+        DecisionRecord.from_dict(payload)
+
+
+def test_an_absent_weight_stays_absent() -> None:
+    """A weight the FSM never computed is `None`, never `0.0` and never a string."""
+    for missing in (None, "", "heavy", True, float("nan")):
+        line = record(7.0, status="accepted").to_dict()
+        line["autonomy_weight"] = missing
+        assert DecisionRecord.from_dict(line).autonomy_weight is None
 
 
 def test_the_reader_refuses_a_shape_it_does_not_know() -> None:

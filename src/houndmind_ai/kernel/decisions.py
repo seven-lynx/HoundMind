@@ -7,7 +7,7 @@ its state private, and the gateway keeps every refused verdict local while it ra
 with the intents that lost the same tick.
 
 This module is the missing half: a fixed-shape record of one tick's decision, plus the bounded
-ring that keeps the last few seconds of them. Four rules ride on it.
+ring that keeps the last few seconds of them. Seven rules ride on it.
 
 1. **One record per tick, whatever happened.** "The dog did nothing" is a decision — an
    unexplained pet is indistinguishable from a broken one.
@@ -28,8 +28,15 @@ ring that keeps the last few seconds of them. Four rules ride on it.
 6. **The wire shape is read back by the module that writes it.** `to_dict` is what the route, the
    socket and the JSONL emit; `from_dict` is the reader `SCHEMA_VERSION` exists for. A log from a
    build that writes a different shape is refused by name, never half-understood, because a replay
-   tool that guesses is a replay of a dog that never existed. `SCHEMA_VERSION` 2 adds `driver` and
-   reads v1 lines unchanged, so the replay tool keeps working over logs an older build wrote.
+   tool that guesses is a replay of a dog that never existed. `SCHEMA_VERSION` 2 adds `driver`;
+   version 3 adds `status` and the autonomy pair; each reads the versions below it unchanged, so
+   the replay tool keeps working over logs an older build wrote.
+7. **The autonomy behind the tick is named, and the tick's outcome has one word.** `autonomy_mode`
+   and `autonomy_weight` carry what the behaviour FSM chose and the weight it drew with (it
+   publishes `autonomy_choice`); they are filled only when `driver` says autonomy shaped the tick,
+   because the key outlives the tick that wrote it and a hand-driven tick must not inherit a mode.
+   `status` is the tick's outcome — `accepted`, `refused`, `undecided` or `silent` — the same word
+   `motion_verdict` carries, so a client and a record cannot describe one tick differently (#270).
 
 The record's per-tick identity is `ts`, from the producer's monotonic clock. `trace_id` identifies
 the *run* — it is generated once per process (`core/runtime.py`) — so it joins a record to the log
@@ -50,6 +57,7 @@ from typing import Any
 from houndmind_ai.hal.iface import as_int
 
 __all__ = [
+    "DECISION_STATUSES",
     "DEFAULT_MAX_ENTRIES",
     "SCHEMA_VERSION",
     "SUPPORTED_SCHEMA_VERSIONS",
@@ -59,12 +67,17 @@ __all__ = [
     "confidence_or_none",
 ]
 
+# The tick's outcome, in the vocabulary `motion_verdict.status` uses (#270): an intent won and the
+# interlock agreed, an intent won and it did not, intents existed and none won, or nothing asked.
+DECISION_STATUSES: tuple[str, ...] = ("accepted", "refused", "undecided", "silent")
+
 # The JSONL and the wire both carry this, so a replay tool can refuse a shape it does not know.
 # Independent of `logging/event_logger.py::SCHEMA_VERSION` (the event envelope's own version): one
-# moving must not renumber the other. v2 adds `driver` (#270); `SUPPORTED_SCHEMA_VERSIONS` is what
-# `from_dict` accepts, so the replay tool still reads the v1 logs older builds left behind.
-SCHEMA_VERSION = 2
-SUPPORTED_SCHEMA_VERSIONS: tuple[int, ...] = (1, 2)
+# moving must not renumber the other. v2 adds `driver` (#270), v3 adds `status` and the autonomy
+# pair; `SUPPORTED_SCHEMA_VERSIONS` is what `from_dict` accepts, so the replay tool still reads the
+# v1 and v2 logs older builds left behind.
+SCHEMA_VERSION = 3
+SUPPORTED_SCHEMA_VERSIONS: tuple[int, ...] = (1, 2, 3)
 
 # About twenty seconds at the 10 Hz loop the Pi 4 profile runs. Long enough to explain the last
 # few decisions to a user, short enough that a client cannot mistake it for history.
@@ -116,6 +129,13 @@ class DecisionRecord:
     #: the highest-ranked autonomy source that was refused, displaced or withdrawn. `None` when no
     #: autonomy source was on the board at all — distinct from a hand that won against one.
     driver: str | None = None
+    #: What autonomy was doing when it shaped the tick: the mode the FSM chose and the weight it
+    #: drew with. `None` on a hand-driven tick, and on a v1/v2 line that never recorded them.
+    autonomy_mode: str | None = None
+    autonomy_weight: float | None = None
+    #: The tick's outcome, one of `DECISION_STATUSES`. `None` only for a line written before v3,
+    #: where absence is exactly what that build meant — never a status this module invented.
+    status: str | None = None
     vetoes: tuple[Refusal, ...] = ()
     inputs: Mapping[str, object] = field(default_factory=dict)
     confidence: float | None = None
@@ -138,6 +158,9 @@ class DecisionRecord:
             "intent": self.intent,
             "source": self.source,
             "driver": self.driver,
+            "autonomy_mode": self.autonomy_mode,
+            "autonomy_weight": self.autonomy_weight,
+            "status": self.status,
             "vetoes": [refusal.to_dict() for refusal in self.vetoes],
             "inputs": dict(self.inputs),
             "confidence": self.confidence,
@@ -152,7 +175,8 @@ class DecisionRecord:
         silently loses its `vetoes` would show a client a dog that refused nothing for no reason.
         A missing optional field stays `None`; a missing `ts` or `mode` is an error, since neither
         can be defaulted without claiming something that was never recorded. A v1 line is read
-        unchanged: it has no `driver`, and absence is exactly what v1 meant.
+        unchanged: it has no `driver`, and a v1 or v2 line has no `status` and no autonomy pair —
+        absence is exactly what those versions meant.
         """
         if not isinstance(data, Mapping):
             raise ValueError(f"a decision record must be a mapping, not {type(data).__name__}")
@@ -193,6 +217,9 @@ class DecisionRecord:
             intent=_opt_str(data.get("intent")),
             source=_opt_str(data.get("source")),
             driver=_opt_str(data.get("driver")),
+            autonomy_mode=_opt_str(data.get("autonomy_mode")),
+            autonomy_weight=_opt_float(data.get("autonomy_weight")),
+            status=_status_or_none(data.get("status")),
             vetoes=tuple(_refusal_from_dict(item) for item in raw_vetoes),
             inputs=raw_inputs,
             confidence=confidence_or_none(data.get("confidence")),
@@ -208,6 +235,21 @@ def _opt_float(value: Any) -> float | None:
 def _opt_str(value: Any) -> str | None:
     """A non-empty string, or None. `""` is a missing value, not an empty name."""
     return value if isinstance(value, str) and value else None
+
+
+def _status_or_none(value: Any) -> str | None:
+    """A status this build knows, `None` when the line predates v3, and a refusal otherwise.
+
+    `None` rather than a guess: a v2 line has no status, and deriving one from `intent` and
+    `vetoes` would claim the interlock agreed when the line never said so.
+    """
+    if value is None:
+        return None
+    if value not in DECISION_STATUSES:
+        raise ValueError(
+            f"unknown decision status {value!r} (this build knows {DECISION_STATUSES})"
+        )
+    return str(value)
 
 
 def _refusal_from_dict(data: Any) -> Refusal:

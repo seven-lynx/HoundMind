@@ -811,11 +811,9 @@ class BehaviorModule(Module):
         rest_max = float(settings.get("autonomy_rest_energy_max", 0.35))
         play_min = float(settings.get("autonomy_play_energy_min", 0.75))
         if energy is not None and energy <= rest_max:
-            self._autonomy_mode = "rest"
-            return "rest"
+            return self._publish_autonomy(context, "rest", None)
         if energy is not None and energy >= play_min:
-            self._autonomy_mode = "play"
-            return "play"
+            return self._publish_autonomy(context, "play", None)
 
         if self._autonomy_mode and (now - self._last_autonomy_ts) < interval:
             return self._autonomy_mode
@@ -857,6 +855,21 @@ class BehaviorModule(Module):
         choice = (
             self.registry.pick_mode(list(modes), weights) if self.registry else None
         )
-        self._autonomy_mode = choice or "idle"
+        mode = choice or "idle"
         self._last_autonomy_ts = now
-        return self._autonomy_mode
+        # A fallback is not a draw: `weights.get(mode)` is the weight `idle` would have been drawn
+        # with, not the weight that put it there, so a fallback carries no weight at all.
+        return self._publish_autonomy(context, mode, weights.get(mode) if choice else None)
+
+    def _publish_autonomy(self, context, mode: str, weight: float | None) -> str:
+        """Name the autonomy choice where the decision record can carry it (#270).
+
+        `act/gateway.py` ticks *before* this module, so it reads the pair one tick behind — the lag
+        `behavior_state` already has, and the reason this is a context key rather than a return
+        value. Only a fresh choice is written: a tick that reuses the cached mode leaves the last
+        pair standing, and publishing `None` would make "autonomy chose `rest` ten ticks ago" read
+        the same as "autonomy has chosen nothing".
+        """
+        self._autonomy_mode = mode
+        context.set("autonomy_choice", {"mode": mode, "weight": weight})
+        return mode

@@ -644,9 +644,10 @@ is worse than one that never starts. `POST /api/v1/stop` ends the run as well as
     "id": "kitchen", "name": "Kitchen", "valid": true, "source": "odometry", "reason": null
   },
   "decision": {
-    "schema_version": 2, "ts": 4212.3, "trace_id": "trace123",
+    "schema_version": 3, "ts": 4212.3, "trace_id": "trace123",
     "mode": "patrol", "state": "alert", "intent": "forward", "source": "navigation",
-    "driver": "navigation",
+    "driver": "navigation", "autonomy_mode": "patrol", "autonomy_weight": 2.4,
+    "status": "accepted",
     "vetoes": [
       { "action": "sit", "source": "behaviour", "reason": "precedence", "detail": "navigation outranks behaviour" }
     ],
@@ -683,6 +684,15 @@ by signal — so the placeholder is a promise, not a field a client should look 
 otherwise the highest-ranked autonomy source the tick refused, displaced or withdrew — so "the human
 overrode navigation" is readable rather than lost. It is `null` when no autonomy source was on the
 board at all.
+`autonomy_mode` and `autonomy_weight` say what autonomy was doing when it shaped the tick — the mode
+the behaviour FSM chose and the weight it drew with — and are `null` on a tick `driver` says autonomy
+did not shape, because the choice is published once and outlives the tick that wrote it. `behavior`
+ticks *after* the gateway, so the pair is the one published on an earlier tick: the same lag `state`
+already has. A mode the FSM picked from the energy band carries no weight, and neither does a mode
+chosen as a fallback.
+`status` is the tick's outcome — `accepted`, `refused`, `undecided` (intents were on the board and
+none won) or `silent` (nothing asked) — the same vocabulary `actuators.verdict` uses, so a client and
+a record cannot describe one tick differently.
 `vetoes` names every intent that lost and why, where `reason` is the interlock's own veto
 (`obstacle`, `tilt`, `low_voltage`, `expired`, `unknown_action`) or `mode`/`precedence`/`mode_change`
 for an intent the mode policy dropped, a higher rank displaced, or a mode change withdrew;
@@ -690,8 +700,9 @@ for an intent the mode policy dropped, a higher rank displaced, or a mode change
 **with their validity flags**. It is `null` until the gateway's first tick. `confidence` is `null` —
 never `0.0` — when nothing measured it. A client that diffs on `ts` sees one new record per tick; the
 WS `decision` event ([§5](#5-websocket)) fires only when the *choice* changes, so treat the two as different
-cadences over the same object. `schema_version` is `2`; the reader also accepts a `1` line, which has
-no `driver`.
+cadences over the same object. `schema_version` is `3`; the reader also accepts a `1` or `2` line,
+which carries no `driver`, no `status` and no autonomy pair, and reads them as `null` rather than
+guessing.
 
 `routines` is the run the runner is playing — the **same object** `GET /api/v1/routines` returns as
 `current` — or `null` before the first run and after a restart. `state` is `running`, `done`,

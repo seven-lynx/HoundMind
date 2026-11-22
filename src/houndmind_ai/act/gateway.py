@@ -70,6 +70,11 @@ _AUTONOMY_RANK: dict[str, int] = {
     source.name.lower(): int(source) for source in AUTONOMY_SOURCES
 }
 
+# How many consecutive ticks may end with nothing winning before the log says so (#270). Fifty is
+# five seconds at the shipped 5 Hz loop and five at the Pi 4 profile's 10 Hz: long enough that one
+# refused tick stays quiet, short enough that a place goal parked on an answer is visible.
+UNDECIDED_ALERT_TICKS = 50
+
 
 @dataclass(frozen=True)
 class Resolution:
@@ -125,6 +130,9 @@ class MotionGatewayModule(Module):
         # gateway has executed under nothing yet, and treating "unset" as "changed" would withdraw
         # the intent a producer legitimately published before this gateway ever ran (#270).
         self._mode: str | None = None
+        # Consecutive ticks that ended `undecided`. Counted here rather than in a module of its own
+        # because the answer is a property of this tick's resolution and nothing else (#270).
+        self._undecided_ticks = 0
 
     def start(self, context) -> None:
         # Producing modules find the board through the context, so that not one constructor has
@@ -145,6 +153,7 @@ class MotionGatewayModule(Module):
         withdrawn = self._retract_on_mode_change(context)
         snapshot = self._snapshot(context)
         resolution = self._resolve(context, now, snapshot, withdrawn)
+        self._note_outcome(resolution)
         self._publish_cancellations(context, resolution.cancelled)
         # Published before the branches below, and only here: "nobody asked", "refused" and
         # "the same intent as last tick" are decisions too, and four publish sites would drift.
@@ -222,6 +231,29 @@ class MotionGatewayModule(Module):
                 )
             )
         return tuple(withdrawn)
+
+    def _note_outcome(self, resolution: Resolution) -> None:
+        """Say once when nothing has won for `UNDECIDED_ALERT_TICKS` in a row (#270).
+
+        `motion_verdict.status == "undecided"` already tells a client that intents existed and none
+        won, but a place goal waiting on an answer and a dog that is simply parked looked the same
+        in the log, so the operator had nothing to go on. One warning at the threshold, not one per
+        tick: the run that persists is one event, and a warning every tick would bury it.
+        """
+        if _tick_status(resolution) != "undecided":
+            self._undecided_ticks = 0
+            return
+        self._undecided_ticks += 1
+        if self._undecided_ticks != UNDECIDED_ALERT_TICKS:
+            return
+        logger.warning(
+            "Nothing has won %d ticks in a row; refused: %s",
+            self._undecided_ticks,
+            ", ".join(
+                sorted({f"{refusal.source}:{refusal.reason}" for refusal in resolution.vetoes})
+            )
+            or "nothing",
+        )
 
     def _publish(
         self, context, command: Command | None, verdict: Verdict | None, resolution: Resolution
@@ -402,13 +434,24 @@ class MotionGatewayModule(Module):
         state = context.get("behavior_state")
         trace_id = context.get("trace_id")
         winner = resolution.winner
+        driver = _driver(resolution)
+        # Only when autonomy shaped the tick: `autonomy_choice` is a context key and outlives the
+        # tick that wrote it, so an unconditional read would label a hand-driven tick with the mode
+        # autonomy last chose hours ago.
+        autonomy_mode, autonomy_weight = _autonomy_choice(context) if driver is not None else (
+            None,
+            None,
+        )
         return DecisionRecord(
             ts=now,
             mode=resolution.mode,
             state=state if isinstance(state, str) else None,
             intent=winner.action if winner is not None else None,
             source=winner.source.name.lower() if winner is not None else None,
-            driver=_driver(resolution),
+            driver=driver,
+            autonomy_mode=autonomy_mode,
+            autonomy_weight=autonomy_weight,
+            status=_tick_status(resolution),
             vetoes=resolution.vetoes,
             inputs=_decision_inputs(snapshot),
             confidence=confidence,
@@ -478,7 +521,7 @@ def _verdict_payload(verdict: Verdict | None, resolution: Resolution) -> dict[st
     """
     if verdict is not None:
         payload: dict[str, object] = dict(verdict.to_dict())
-        payload["status"] = "accepted" if verdict.accepted else "refused"
+        payload["status"] = _tick_status(resolution)
         payload["sources"] = []
         return payload
     sources: list[str] = []
@@ -489,9 +532,41 @@ def _verdict_payload(verdict: Verdict | None, resolution: Resolution) -> dict[st
         "accepted": False,
         "action": None,
         "params": {},
-        "status": "undecided" if sources else "silent",
+        "status": _tick_status(resolution),
         "sources": sources,
     }
+
+
+def _tick_status(resolution: Resolution) -> str:
+    """The tick's outcome word, one of `DECISION_STATUSES` (#270).
+
+    One function for the verdict payload and the decision record, because a client reading
+    `motion_verdict.status` and a record saying something else about the same tick is the drift the
+    four words exist to prevent. The verdict is read first: it is what the interlock actually said,
+    and a resolution that carried one is a tick where an intent won.
+    """
+    verdict = resolution.verdict
+    if verdict is not None:
+        return "accepted" if verdict.accepted else "refused"
+    return "undecided" if resolution.vetoes else "silent"
+
+
+def _autonomy_choice(context) -> tuple[str | None, float | None]:
+    """The autonomy mode and weight `behavior` last published, or `(None, None)` (#270).
+
+    A context key rather than a hand-off, because `behavior` ticks *after* this module: the record
+    pairs tick N's resolution with the choice published on an earlier tick — the same lag
+    `behavior_state` already has. A weight the FSM did not compute (an energy gate picks a mode
+    without a draw) stays `None` rather than becoming a plausible `1.0`.
+    """
+    choice = context.get("autonomy_choice")
+    if not isinstance(choice, Mapping):
+        return None, None
+    mode = choice.get("mode")
+    return (
+        mode if isinstance(mode, str) and mode else None,
+        confidence_or_none(choice.get("weight")),
+    )
 
 
 def _driver(resolution: Resolution) -> str | None:
