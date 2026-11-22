@@ -456,6 +456,16 @@ Current Release: v2026.11.16
 
 ### Changed
 
+- **A decision record now says what autonomy was doing and whether the tick decided at all** — the
+  record named the winning intent and, since #270, the autonomy source that shaped the tick, but not
+  the mode autonomy was in, the weight it drew with, or whether a run of ticks where nobody won was a
+  decision or a hang (#270). `DecisionRecord` gains `status` (`accepted`, `refused`, `undecided` —
+  intents were on the board and none won — or `silent`), `autonomy_mode` and `autonomy_weight`;
+  `behavior` publishes `autonomy_choice` and the gateway attaches it only when `driver` says autonomy
+  shaped the tick, so a hand-driven tick inherits no mode. `SCHEMA_VERSION` is `3` and the reader still
+  reads `1` and `2` lines, where the new fields are `null` rather than guessed. A run of `undecided`
+  ticks past 50 in a row logs one warning, so a place goal waiting on an answer no longer looks like a
+  parked dog. `tests/test_autonomy_record.py` pins all of it.
 - **CI prints its own summary, and coverage is measured without gating the build** — every run was
   doubly quiet: `pyproject.toml` set `addopts = "-q"` and the documented command was `pytest -q`, so
   the pass/fail line a CI log exists to show never appeared (#399). The `addopts` default is gone, so

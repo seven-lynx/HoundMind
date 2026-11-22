@@ -547,6 +547,9 @@ def test_every_tick_publishes_a_record_even_when_nobody_asks() -> None:
         "intent",
         "source",
         "driver",
+        "autonomy_mode",
+        "autonomy_weight",
+        "status",
         "vetoes",
         "inputs",
         "confidence",
@@ -556,6 +559,10 @@ def test_every_tick_publishes_a_record_even_when_nobody_asks() -> None:
     # No autonomy source was on the board, so there was no autonomy input to name — different
     # from autonomy that was overruled, which the next tests pin.
     assert record["driver"] is None
+    # Nothing asked, so the tick is `silent` and names no autonomy mode — the two outcomes the
+    # record could not tell apart before (#270).
+    assert record["status"] == "silent"
+    assert record["autonomy_mode"] is None
     assert record["vetoes"] == []
     assert record["ts"] == 1000.0
     assert record["mode"] == DEFAULT_MODE

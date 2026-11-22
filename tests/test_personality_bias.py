@@ -1,6 +1,7 @@
 import random
 from houndmind_ai.behavior.fsm import BehaviorModule
 from houndmind_ai.behavior.registry import BehaviorRegistry
+from houndmind_ai.core.runtime import RuntimeContext
 
 
 def test_personality_bias_high_curiosity():
@@ -21,10 +22,13 @@ def test_personality_bias_high_curiosity():
         "autonomy_interval_s": 0.0,
     }
 
-    # High curiosity should bias toward "explore"
-    context = {
-        "settings": {"personality": {"curiosity": 10.0, "sociability": 0.1, "activity": 0.1, "apply_to_autonomy": True}}
-    }
+    # High curiosity should bias toward "explore". A real context, not a dict: the selection
+    # publishes `autonomy_choice` for the decision record, so it writes as well as reads (#270).
+    context = RuntimeContext()
+    context.set(
+        "settings",
+        {"personality": {"curiosity": 10.0, "sociability": 0.1, "activity": 0.1, "apply_to_autonomy": True}},
+    )
 
     explore_count = 0
     trials = 200
