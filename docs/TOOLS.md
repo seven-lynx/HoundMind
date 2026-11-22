@@ -32,6 +32,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 21. [`camera_record`](#21-camera_record)
 22. [`slam_replay`](#22-slam_replay)
 23. [`validate_phrases`](#23-validate_phrases)
+24. [`validate_config`](#24-validate_config)
 
 ---
 
@@ -60,6 +61,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | What does the camera actually see, frame by frame? | `camera_record` |
 | Can that clip be replayed as recorded? | `slam_replay <clip> --verify` |
 | Does every spoken phrase reach an action? | `validate_phrases` |
+| Would this settings file start the runtime? | `validate_config` |
 
 ## 2. Motion risk
 
@@ -69,7 +71,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
 | `step_calibrate` | **yes, unless `--fake`** — it walks toward a wall by design. `--confirm-clearance` is mandatory, `--stop-at` defaults to 45 cm, and every step passes the runtime's interlock |
-| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `validate_phrases`, `bench_tick`, `map_inspect`, `place_match` | no |
+| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `validate_phrases`, `validate_config`, `bench_tick`, `map_inspect`, `place_match` | no |
 | `camera_record`, `slam_replay` | no — both switch every motion-capable module off. `camera_record` needs the camera, never the legs; `slam_replay --host` runs a clip through the loop, not through the servos |
 | `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
@@ -763,4 +765,43 @@ Three errors and one warning:
 Exit `0` every phrase resolves (warnings still exit `0`), `1` at least one cannot reach an action, `2`
 the config would not load. The map is read, never written — this tool cannot rename a phrase on the dog.
 
+## 24. `validate_config`
+
+Answers "would the runtime start from this file" with no dog, no runtime and no HTTP client. It
+parses the file the way `core/config.py` parses it, runs `kernel/config_schema.py::validate_config_tree`
+— the call `load_config` makes before it resolves a profile — and prints every problem with the key it
+was found on, so a refusal is a line rather than a failed boot.
+
+```bash
+python -m tools.validate_config
+python -m tools.validate_config --config bench-settings.jsonc
+python -m tools.validate_config --json
+```
+
+| Flag | Meaning |
+|---|---|
+| `--config PATH` | settings file other than `config/settings.jsonc` |
+| `--json` | one JSON object (`ok`, `errors`, `warnings`, `findings`) instead of lines |
+
+Two kinds of finding:
+
+- **`invalid`** — a key the schema refuses: an unknown or retired module, a wrong type, a value out
+  of range. Printed with its `config.…` path, and with a suggestion where the schema has one
+  (`config.modules.watchdg: unknown module ... (did you mean 'watchdog'?)`). Exit `1`.
+- **`warning`** — a cross-field rule the per-value schema cannot express, from
+  `core/config.py::validate_config`: safety distances out of order, a scan interval outside the bounds
+  `performance` sets, a turn speed no faster than the walk. Advice about a file that is otherwise
+  legal, so it is printed and the exit code stays `0`. The shipped config earns none.
+
+The profile is part of the answer and it is **this host's**: the tree is checked first, then the
+loader applies `profiles.<profile>` and asks for the warnings, so on a workstation the `pi4` fallback
+applies and on the dog its own board does.
+
+Exit `0` the file would load (warnings included), `1` the schema or the loader refused it, `2` the
+file is missing, unreadable or does not parse — a stray brace names no key, so it is not a finding.
+`--json` emits one object on every path, exit `2` included.
+
+This is not the same question as `POST /api/v1/config/validate`: that route validates one PATCH
+**body** one section at a time through `validate_settings_section`, while this walks the whole file
+through the loader's path. Both judge with the same specs, so the two cannot disagree about a key.
 
