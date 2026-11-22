@@ -33,6 +33,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 22. [`slam_replay`](#22-slam_replay)
 23. [`validate_phrases`](#23-validate_phrases)
 24. [`validate_config`](#24-validate_config)
+25. [`validate_calibration`](#25-validate_calibration)
 
 ---
 
@@ -62,6 +63,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | Can that clip be replayed as recorded? | `slam_replay <clip> --verify` |
 | Does every spoken phrase reach an action? | `validate_phrases` |
 | Would this settings file start the runtime? | `validate_config` |
+| Is the saved servo trim consistent with the twelve channels? | `validate_calibration` |
 
 ## 2. Motion risk
 
@@ -71,7 +73,7 @@ checkout use `PYTHONPATH=src python -m tools.<name>`.
 | `hardware_checkup` | **yes, unless `--skip-motion`** |
 | `smoke_test` | **yes, only with `--include-motion`** |
 | `step_calibrate` | **yes, unless `--fake`** — it walks toward a wall by design. `--confirm-clearance` is mandatory, `--stop-at` defaults to 45 cm, and every step passes the runtime's interlock |
-| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `validate_phrases`, `validate_config`, `bench_tick`, `map_inspect`, `place_match` | no |
+| `camera_check`, `list_audio_devices`, `imu_calibrate`, `audio_check`, `collect_support_bundle`, `replay_decisions`, `download_opencv_models`, `validate_rtabmap_adapter`, `validate_phrases`, `validate_calibration`, `validate_config`, `bench_tick`, `map_inspect`, `place_match` | no |
 | `camera_record`, `slam_replay` | no — both switch every motion-capable module off. `camera_record` needs the camera, never the legs; `slam_replay --host` runs a clip through the loop, not through the servos |
 | `calibrate_servos` | **yes, with `--interactive`** — every keypress re-poses as it saves. Without that flag it only reads and saves: a legs write lands on the pose the dog already holds (#263) |
 | `servo_level` | **yes, only with `--apply`** — it nudges each of the eight leg joints twice per pass |
@@ -804,4 +806,47 @@ file is missing, unreadable or does not parse — a stray brace names no key, so
 This is not the same question as `POST /api/v1/config/validate`: that route validates one PATCH
 **body** one section at a time through `validate_settings_section`, while this walks the whole file
 through the loader's path. Both judge with the same specs, so the two cannot disagree about a key.
+
+## 25. `validate_calibration`
+
+Checks the saved servo trim without booting the runtime. `calibration/workflow.py` writes
+`data/calibration.json` (or whatever `calibration.persist_path` names) and `hal/motors.py` applies it at
+boot when the config carries no offsets of its own — inside an `except Exception` that logs at debug, so
+a payload of the wrong shape and an uncalibrated dog look exactly alike: the dog stands crooked and
+nothing says why. This reads the key that reader reads, `last_result.servo_zero_offsets`, and compares it
+with the twelve channels `hal/iface.py` knows.
+
+```bash
+python -m tools.validate_calibration
+python -m tools.validate_calibration --file bench-calibration.json
+python -m tools.validate_calibration --config bench-settings.jsonc --json
+```
+
+| Flag | Meaning |
+|---|---|
+| `--file PATH` | calibration JSON other than the one the config names |
+| `--config PATH` | settings file other than `config/settings.jsonc`, for `calibration.persist_path` |
+| `--json` | one JSON object (`ok`, `path`, `channels`, `errors`, `notes`, `findings`) instead of lines |
+
+Five errors and three notes, each naming the channel it was found on:
+
+- **`out_of_range`** — an offset beyond ±20°, the clamp `hal/iface.py` applies before the vendor sees it
+  (`SERVO_OFFSET_LIMIT_DEG`). The HAL would save ±20 instead, so the file holds a value the dog cannot.
+- **`unknown_channel`** — a name that is not one of the twelve. `apply_offsets` ignores it, so a trim the
+  operator believes is saved is applied to nothing; a near miss gets a suggestion.
+- **`not_numeric`** — a value that is not a number of degrees, `true` included (it coerces to `1.0`).
+- **`missing_section`** — no `last_result` object, which `calibration/workflow.py:176` always writes, so
+  the workflow did not write this file and `hal/motors.py:618` reads no trim out of it.
+- **`malformed_json`** — the file is not JSON at all.
+- **`not_calibrated`** (note) — the file does not exist. An uncalibrated dog is legal, so this exits `0`.
+- **`partial_trim`** (note) — fewer than twelve channels. `hal/iface.py:238-245` makes a joint whose value
+  could not be read *absent* rather than `0.0`, so a short map is how a half-read trim looks, not a
+  defect; the absent names are listed.
+- **`no_servo_trim`** (note) — the file's `last_result` is another calibration request (`wall_follow`,
+  `corner_seek`, `landmark_align`), which carries no trim to check.
+
+Exit `0` the trim is consistent or the file is absent, `1` at least one finding, `2` the config would not
+load or the file could not be read. A relative `persist_path` is resolved against the repository root, the
+way both readers resolve it, so the answer does not depend on where you run it from. The file is read,
+never written: repairing a trim is a measurement, and nothing here can move a joint.
 
