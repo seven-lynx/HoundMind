@@ -207,16 +207,13 @@ def check(settings: Any) -> list[Finding]:
 
 def validate(settings: Any, as_json: bool = False) -> int:
     """Print the verdict for `settings` and return the exit code."""
-    section = _voice_section(settings)
-    if not _phrase_map(section.get("command_map")) and not _phrase_map(section.get("aliases")):
-        print("no voice_assistant.command_map or aliases in this config; nothing to check")
-        return 0
-
     findings = check(settings)
     errors = sum(1 for finding in findings if finding.severity == "error")
     warnings = len(findings) - errors
 
     if as_json:
+        # Even an empty answer is JSON: a consumer that parses this must not get prose for the one
+        # config that has no phrase map at all.
         print(
             json.dumps(
                 {
@@ -230,6 +227,11 @@ def validate(settings: Any, as_json: bool = False) -> int:
             )
         )
         return 0 if errors == 0 else 1
+
+    section = _voice_section(settings)
+    if not _phrase_map(section.get("command_map")) and not _phrase_map(section.get("aliases")):
+        print("no voice_assistant.command_map or aliases in this config; nothing to check")
+        return 0
 
     for finding in findings:
         print(f"{finding.severity:7} {finding.kind:12} {finding.message}")

@@ -123,6 +123,18 @@ def test_a_missing_config_is_an_error_not_a_clean_pass(tmp_path: Path, capsys) -
     assert "cannot read" in capsys.readouterr().out
 
 
+def test_a_config_with_no_phrase_map_says_so_and_passes(capsys) -> None:
+    assert validate({"voice_assistant": {}}) == 0
+    assert "nothing to check" in capsys.readouterr().out
+
+
+def test_json_stays_json_even_when_there_is_nothing_to_check(capsys) -> None:
+    """A consumer parses this; the empty answer must not arrive as prose."""
+    assert validate({"voice_assistant": {}}, as_json=True) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"ok": True, "errors": 0, "warnings": 0, "findings": []}
+
+
 def test_a_top_level_command_map_is_not_what_the_runtime_reads() -> None:
     """`optional/voice.py:80` reads `settings.voice_assistant`, so a stray top-level map is invisible."""
     assert check({"voice_assistant": {}, "command_map": {"moon": "moonwalk"}}) == []
