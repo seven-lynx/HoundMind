@@ -790,6 +790,7 @@ Offline validators — no dog, no motion, and no runtime:
 python -m tools.validate_routines           # the configured routines directory
 python -m tools.validate_routines --dir ./my-routines --config bench-settings.jsonc
 python -m tools.validate_phrases            # every spoken phrase reaches an action
+python -m tools.validate_calibration        # the saved servo trim still fits the twelve channels
 ```
 
 `validate_routines` runs `RoutineStore` - the runtime's own loader, with the runtime's own repertoire -
@@ -805,6 +806,14 @@ the way `optional/voice.py` uses it: an alias resolves one hop, and a value that
 errors (exit `1`); a nested key that maps elsewhere is a warning and still exits `0`, so the shipped
 config is clean. Use it after editing the phrase map: a phrase that reaches a name the interlock
 refuses is silent on the dog, and this is the message instead (#258, #321).
+
+`validate_calibration` reads the persisted trim — `data/calibration.json`, or `calibration.persist_path`
+— and compares its `last_result.servo_zero_offsets` with the twelve channels in `hal/iface.py`. An
+offset beyond the vendor's ±20°, a channel name the HAL does not know and a value that is not a number
+are errors (exit `1`); a missing file, a short map and a file holding another calibration request are
+notes and still exit `0`, because an uncalibrated dog is legal and `hal/iface.py` makes an unreadable
+joint absent rather than `0.0`. Use it after a calibration run: the boot-time reader logs a bad payload
+at debug and applies nothing, so a trim that never arrived looks exactly like one that did (#258, #259).
 
 Replaying a recorded session — no dog, no motion. With `logging.decision_log_file_enabled: true` the
 runtime writes `logs/houndmind_decisions.jsonl`; this tool serves that history through the real

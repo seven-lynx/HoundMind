@@ -36,6 +36,16 @@ Current Release: v2026.11.16
   pass-through, `turn left` canonicalised to `turn_left` — reporting a dead target, a dead alias and an
   alias cycle as errors and a shadowed key as a warning that leaves the exit code alone. `--json` lists
   them; the shipped config exits `0`.
+- **The saved servo trim can be checked without booting the dog** — `calibration/workflow.py` writes
+  `data/calibration.json` and `hal/motors.py` applies it at boot inside an `except Exception` that logs at
+  debug, so a payload of the wrong shape and an uncalibrated dog looked exactly alike: the dog stood
+  crooked and nothing said why (#258, #259). `python -m tools.validate_calibration` reads the key that
+  reader reads, `last_result.servo_zero_offsets`, and compares it with the twelve channels in
+  `hal/iface.py` — an offset beyond the vendor's ±20° (the clamp the HAL applies itself), a channel name
+  the HAL does not know and a value that is not a number are errors, while a missing file, a short map
+  and a file holding another calibration request are notes that leave the exit code alone, because an
+  uncalibrated dog is legal and an unreadable joint is *absent* rather than `0.0`. `--file`, `--config`
+  and `--json`; the file is read and never written.
 - **A config change can be checked before it is applied, and the previous file is kept** — `PATCH
   /api/v1/config` validated correctly and then wrote, so "would this value be accepted?" could only
   be answered by trying it, and the rewrite left no copy of what was there (#406). `POST
