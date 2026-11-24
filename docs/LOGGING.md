@@ -103,7 +103,7 @@ process logged.
 - `config/settings.jsonc` — the runtime config as it was
 
 **Over the network** — `GET /api/v1/support-bundle`, `admin` scope. The route table is
-`src/houndmind_ai/services/api.py::ROUTES` and `docs/CONTROL_API.md` [§2](CONTROL_API.md#2-endpoints) lists the scopes. No log
+`src/houndmind_ai/services/api_routes.py::ROUTES` and `docs/CONTROL_API.md` [§2](CONTROL_API.md#2-endpoints) lists the scopes. No log
 files; this is the one to ask a user for when you cannot reach the device yourself.
 
 - `meta.json`, `state.json`, `modules.json` — identity, the live snapshot, module status
