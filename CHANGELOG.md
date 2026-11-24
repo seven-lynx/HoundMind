@@ -10,6 +10,16 @@ Current Release: v2026.11.16
 
 ### Added
 
+- **A settings file can be checked against the runtime's schema without the dog** — a config the loader
+  refuses is a runtime that does not start, and the two ways to find out were to boot the dog or to
+  PATCH a live one, with `python -m houndmind_ai --dry-run` answering it only by importing the whole
+  runtime. `python -m tools.validate_config` runs `kernel/config_schema.py::validate_config_tree`, the
+  first step `load_config` takes, over a file and prints every refused key with its `config.…` path and
+  suggestion — a retired module, a typo one letter from a real name, a value out of range — then the
+  cross-field warnings `validate_config` adds. Exit `0` the file would load (warnings are printed and
+  still exit `0`), `1` it was refused, `2` it is missing, unreadable or will not parse, because a stray
+  brace names no key. `--json` emits one object on every path, exit `2` included, and the profile
+  applied is the host's own, so the answer is the one that host's runtime would give.
 - **Three pages that were missing: calibration, testing, and the module map** — calibration lived in
   a section of `docs/TOOLS.md` and a step of `docs/HARDWARE_TEST.md` and had no page of its own;
   nothing stated what CI cannot prove; and the context-key contract was discoverable only by

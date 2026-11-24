@@ -790,6 +790,7 @@ Offline validators — no dog, no motion, and no runtime:
 python -m tools.validate_routines           # the configured routines directory
 python -m tools.validate_routines --dir ./my-routines --config bench-settings.jsonc
 python -m tools.validate_phrases            # every spoken phrase reaches an action
+python -m tools.validate_config             # this settings file would start the runtime
 ```
 
 `validate_routines` runs `RoutineStore` - the runtime's own loader, with the runtime's own repertoire -
@@ -805,6 +806,16 @@ the way `optional/voice.py` uses it: an alias resolves one hop, and a value that
 errors (exit `1`); a nested key that maps elsewhere is a warning and still exits `0`, so the shipped
 config is clean. Use it after editing the phrase map: a phrase that reaches a name the interlock
 refuses is silent on the dog, and this is the message instead (#258, #321).
+
+`validate_config` asks the loader's question offline. It parses the file the way `core/config.py`
+does, runs `kernel/config_schema.py::validate_config_tree` — the first thing `load_config` does — and
+prints every refused key with its `config.…` path and, where the schema has one, a suggestion. Then it
+asks `validate_config` for the cross-field warnings: a scan interval outside the `performance` bounds,
+safety distances out of order, a turn speed no faster than the walk. A refused key exits `1`; a warning
+is printed and still exits `0`; a file that will not parse exits `2`, because a stray brace names no
+key. Use it after hand-editing `config/settings.jsonc` rather than restarting the runtime to find out,
+and note that the profile it applies is this host's — `pi4` on a workstation — because the profile
+overrides sections before the warnings are computed.
 
 Replaying a recorded session — no dog, no motion. With `logging.decision_log_file_enabled: true` the
 runtime writes `logs/houndmind_decisions.jsonl`; this tool serves that history through the real
