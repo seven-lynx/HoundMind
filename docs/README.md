@@ -71,7 +71,7 @@ the same commit, or none of them do.
    `.houndmind-local/`, which is gitignored; a tracked file that cites a path under it is broken
    for every reader but the author.
 4. **Facts come from the tree.** Every command, key and default in these files must be checkable:
-   `config/settings.jsonc` for defaults, `src/houndmind_ai/services/api.py` for routes,
+   `config/settings.jsonc` for defaults, `src/houndmind_ai/services/api_routes.py` for routes,
    `pyproject.toml` for the interpreter range.
 5. **Delete, do not deprecate — with one bounded exception.** A guide for a feature that no longer
    exists is a second source of truth, so removals are recorded in `CHANGELOG.md`. A removed feature

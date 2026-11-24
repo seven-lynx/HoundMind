@@ -111,6 +111,87 @@ def test_a_scope_is_declared_for_every_route_that_needs_one() -> None:
         "that needs the answer (#168)"
     )
 
+# The table frozen once, as `(method, full path, scope)`, with the scope **values** spelled out
+# rather than named: a snapshot that reused `ANY_SCOPE` would pass if the constant itself changed.
+# The set catches a route that appears or disappears - a move is meant to be invisible - and the
+# ordered tuple catches a reorder, which silently changes which route a client's path parameter
+# binds to. Written by hand on purpose: a snapshot regenerated from the code it checks proves only
+# that the code equals itself.
+FROZEN_ROUTES: tuple[tuple[str, str, str | None], ...] = (
+    ("GET", "/api/v1/meta", None),
+    ("GET", "/api/v1/health", None),
+    ("GET", "/api/v1/whoami", "any valid token"),
+    ("GET", "/api/v1/state", "state:read"),
+    ("GET", "/api/v1/scan", "state:read"),
+    ("GET", "/api/v1/map", "state:read"),
+    ("PUT", "/api/v1/map", "config"),
+    ("PUT", "/api/v1/map/pose", "move"),
+    ("POST", "/api/v1/map/go", "move"),
+    ("POST", "/api/v1/map/preview", "state:read"),
+    ("GET", "/api/v1/modules", "state:read"),
+    ("GET", "/api/v1/repertoire", "state:read"),
+    ("GET", "/api/v1/routines", "state:read"),
+    ("POST", "/api/v1/routines", "config"),
+    ("GET", "/api/v1/places", "state:read"),
+    ("GET", "/api/v1/people", "admin"),
+    ("POST", "/api/v1/people", "admin"),
+    ("GET", "/api/v1/decisions", "state:read"),
+    ("GET", "/api/v1/events", None),
+    ("GET", "/api/v1/camera/stream", "state:read (in handler)"),
+    ("GET", "/api/v1/camera/snapshot", "state:read (in handler)"),
+    ("POST", "/api/v1/camera/ticket", "state:read"),
+    ("POST", "/api/v1/pair", None),
+    ("POST", "/api/v1/pair/open", "admin"),
+    ("POST", "/api/v1/command", "move"),
+    ("POST", "/api/v1/stop", "move"),
+    ("POST", "/api/v1/routines/{id}/run", "move"),
+    ("POST", "/api/v1/places", "config"),
+    ("DELETE", "/api/v1/places/{id}", "config"),
+    ("PATCH", "/api/v1/places/{id}", "config"),
+    ("DELETE", "/api/v1/people/{id}", "admin"),
+    ("POST", "/api/v1/places/{id}/go", "move"),
+    ("POST", "/api/v1/places/teach", "config"),
+    ("GET", "/api/v1/mode", "state:read"),
+    ("POST", "/api/v1/mode", "move"),
+    ("GET", "/api/v1/config", "config"),
+    ("PATCH", "/api/v1/config", "config"),
+    ("POST", "/api/v1/config/validate", "config"),
+    ("GET", "/api/v1/sessions", "admin"),
+    ("DELETE", "/api/v1/sessions/{key}", "admin"),
+    ("GET", "/api/v1/calibration", "config"),
+    ("POST", "/api/v1/calibration/run", "config"),
+    ("GET", "/api/v1/history", "state:read"),
+    ("GET", "/api/v1/logs", "admin"),
+    ("GET", "/api/v1/support-bundle", "admin"),
+)
+
+
+def test_the_route_table_matches_the_frozen_snapshot() -> None:
+    """Moving the table into `services/api_routes.py` may not change a single row (AP1).
+
+    The test above proves the table agrees with `docs/CONTROL_API.md`; this one is the other half of
+    a move: the same rows, in the same order, with the same scope string, and no row lost on the
+    way. It fails on the row rather than leaving the integration tests to reach it.
+    """
+    actual = tuple((method, f"{API_PREFIX}{path}", scope) for method, path, scope, _h in ROUTES)
+
+    frozen = set(FROZEN_ROUTES)
+    missing = [row for row in FROZEN_ROUTES if row not in set(actual)]
+    unexpected = [row for row in actual if row not in frozen]
+    assert not missing and not unexpected, f"missing: {missing}; unexpected: {unexpected}"
+    assert actual == FROZEN_ROUTES, "the route table was reordered"
+
+    pattern = re.compile(r"\|\s*`(GET|POST|PATCH|PUT|DELETE)`\s*\|\s*`([^`]+)`\s*\|")
+    documented = {
+        (match.group(1), match.group(2).split("?")[0])
+        for line in DOC.read_text(encoding="utf-8").splitlines()
+        if (match := pattern.search(line))
+    }
+    assert len(ROUTES) == len(documented) == len(FROZEN_ROUTES), (
+        "the table, the frozen snapshot and `docs/CONTROL_API.md` must still count the same rows"
+    )
+
+
 
 def test_whoami_answers_any_token_with_its_own_scopes(tmp_path) -> None:
     """#168: a client learns what its token cannot do before a request fails, not after.

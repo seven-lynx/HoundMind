@@ -4,7 +4,7 @@ Status: **contract** — the web app in `services/web/` and the Android app, **H
 against this file. HoundMind Remote lives in its own repository (#274): this tree publishes the contract
 and the fixtures, not the app. Additive changes only within `v1`; anything that removes or renames a
 field requires `v2` and a deprecation window.
-Pairs with: `src/houndmind_ai/services/api.py` (the route table), `docs/FEATURES_GUIDE.md` [§25](FEATURES_GUIDE.md#25-wifi-localization--removed)
+Pairs with: `src/houndmind_ai/services/api_routes.py` (the route table), `docs/FEATURES_GUIDE.md` [§25](FEATURES_GUIDE.md#25-wifi-localization--removed)
 
 Base URL: `http://<pi-ip>:8420`, or `http://<hostname>.local:8420` — the name discovery actually
 publishes. `services/discovery.py::_default_host` returns `<whatever the Pi is called>.local`, so on a
@@ -140,7 +140,7 @@ for 60 seconds and **single use**, and it buys `state:read` on one frame and not
 token is **not** accepted in a query string — it used to be, and that put the credential for `move`
 and `config` into browser history and access logs (`#18`).
 
-Both camera rows declare that requirement in `services/api.py::ROUTES` as the `HANDLER_SCOPE` marker,
+Both camera rows declare that requirement in `services/api_routes.py::ROUTES` as the `HANDLER_SCOPE` marker,
 not as `None`: in that table `None` means "public on purpose", and the camera routes are not. The
 check happens inside the handler because a ticket has to be claimed there, and a visible marker is
 what stops the guard from looking redundant (`#39`).
@@ -927,7 +927,7 @@ display verbatim — it must never contain a path, a token, or a stack trace.
 - Enum values are additive: a client must handle an unknown `mode` or module `state` by displaying it
   read-only rather than crashing.
 - `docs/CONTROL_API.md` is the source of truth. `tests/test_api_routes.py` parses [§2](#2-endpoints) and compares it
-  to the route table in `services/api.py`, so a route that exists in one and not the other fails CI.
+  to the route table in `services/api_routes.py`, so a route that exists in one and not the other fails CI.
   Change both, in the same commit.
 
 ---

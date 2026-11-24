@@ -92,6 +92,13 @@ from houndmind_ai.services.config_writer import (
     stamp_of,
     write_settings_values,
 )
+from houndmind_ai.services.http import (
+    _CORS_ALLOW_METHODS,  # noqa: F401 - re-exported; tests/test_map_routes.py:370 reads it here
+    _PRINCIPAL,
+    _json_body,
+    _optional_json_body,
+    _plane,
+)
 from houndmind_ai.services.sessions import SessionRegistry
 from houndmind_ai.services.settings import ApiSettings
 from houndmind_ai.services.state import build_modules, build_state, redact_config
@@ -102,10 +109,12 @@ logger = logging.getLogger(__name__)
 API_VERSION = 1
 
 __all__ = [
+    "API_PREFIX",
     "API_VERSION",
     "ANY_SCOPE",
     "HANDLER_SCOPE",
     "LIVE_CONFIG_KEYS",
+    "ROUTES",
     "ControlPlane",
     "create_app",
 ]
@@ -386,102 +395,7 @@ class ControlPlane:
         return buffer.getvalue()
 
 
-# --------------------------------------------------------------------- helpers
-
-# aiohttp's documented way to key an application/request mapping: a plain string key warns on
-# every request, and a warning nobody reads is a warning that hides the next one.
-_PLANE: web.AppKey[ControlPlane] = web.AppKey("plane", ControlPlane)
-_PRINCIPAL: web.RequestKey[Any] = web.RequestKey("principal", object)
-
-
-def _plane(request: web.Request) -> ControlPlane:
-    return request.app[_PLANE]
-
-
-_CORS_ALLOW_HEADERS = "Authorization, Content-Type"
-_CORS_ALLOW_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-
-
-def _with_cors(response: web.StreamResponse, origin: str | None) -> web.StreamResponse:
-    """Attach the CORS headers. `Vary` goes on even when the origin is not allowed.
-
-    A cache that keyed a response without `Vary: Origin` would hand one origin's allowed answer to a
-    different one, which is the same hole with a longer path to it.
-    """
-    response.headers["Vary"] = "Origin"
-    if origin is not None:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Headers"] = _CORS_ALLOW_HEADERS
-        response.headers["Access-Control-Allow-Methods"] = _CORS_ALLOW_METHODS
-        response.headers["Access-Control-Max-Age"] = "600"
-    return response
-
-
-@web.middleware
-async def _cors(request: web.Request, handler):
-    """Answer a listed console's cross-origin request, and nothing else (#202).
-
-    The token is still the boundary: this only decides which *pages* may read a response they
-    already hold a token for. `settings.api.cors_origins` is empty by default, so a plain install
-    behaves exactly as before and answers no cross-origin read at all.
-
-    A preflight is answered here rather than by a route, because a browser sends `OPTIONS` without
-    `Authorization` - a preflight that had to pass the token check could never pass.
-    """
-    allowed = _plane(request).settings.cors_origins
-    if not allowed:
-        return await handler(request)
-    origin = request.headers.get("Origin")
-    matched = origin if origin in allowed else None
-    if request.method == "OPTIONS" and matched is not None:
-        return _with_cors(web.Response(status=204), matched)
-    return _with_cors(await handler(request), matched)
-
-
-@web.middleware
-async def _errors(request: web.Request, handler):
-    """Turn every failure into the contract's `{error, detail}` envelope.
-
-    A stack trace in a response body is a leak; a 500 with no explanation is a support ticket.
-    The detail here is written to be shown to a human verbatim.
-    """
-    try:
-        return await handler(request)
-    except AuthError as exc:
-        return web.json_response({"error": exc.code, "detail": exc.detail}, status=exc.status)
-    except web.HTTPException:
-        raise
-    except Exception:  # noqa: BLE001 - the contract has a code for this
-        logger.exception("Unhandled error serving %s %s", request.method, request.path)
-        return web.json_response(
-            {"error": "internal", "detail": "the device hit an internal error; see /logs"},
-            status=500,
-        )
-
-
-def _authed(scope: str | None = None):
-    """Require a valid token, and a scope when one is named. Applied at registration time.
-
-    `scope=None` means "any valid token", which is one route's requirement: `/whoami` must answer a
-    caller holding *any* scope, because the scopes it reports are the answer (#168). Every other
-    route names one, so `None` cannot be read as "no auth" here - that spelling is reserved for
-    `ROUTES`, where `None` means public on purpose.
-    """
-
-    def decorate(handler):
-        async def wrapped(request: web.Request):
-            plane = _plane(request)
-            principal = plane.authorizer.authenticate(request.headers.get("Authorization"))
-            if scope is not None:
-                plane.authorizer.require(principal, scope)
-            request[_PRINCIPAL] = principal
-            return await handler(request)
-
-        wrapped.__name__ = getattr(handler, "__name__", "handler")
-        return wrapped
-
-    return decorate
-
+# --------------------------------------------------------------- camera auth (#18)
 
 def _camera_principal(plane: ControlPlane, request: web.Request) -> Principal:
     """`<img>` cannot send a header, so the camera accepts a ticket — and nothing else.
@@ -526,34 +440,6 @@ async def _camera_ticket(request: web.Request) -> web.Response:
         {"ticket": ticket, "expires_in": expires_in},
         headers={"Cache-Control": "no-store"},
     )
-
-
-def _parse_json_body(raw: str) -> dict[str, object]:
-    """A JSON object or `AuthError(400)` — the one wording every POST body is judged by."""
-    try:
-        payload = json.loads(raw)
-    except ValueError as exc:
-        raise AuthError("bad_request", "body must be JSON", status=400) from exc
-    if not isinstance(payload, dict):
-        raise AuthError("bad_request", "body must be a JSON object", status=400)
-    return payload
-
-
-async def _json_body(request: web.Request) -> dict[str, object]:
-    return _parse_json_body(await request.text())
-
-
-async def _optional_json_body(request: web.Request) -> dict[str, object]:
-    """A POST body that may be absent, read as `{}`.
-
-    `POST /command` and `POST /mode` are meaningless without their fields, but
-    `POST /routines/{id}/run` has none: a client that sends nothing means "run it, not dry".
-    Absent is not malformed, so it gets the same parser rather than a second set of rules.
-    """
-    if not request.can_read_body:
-        return {}
-    raw = await request.text()
-    return _parse_json_body(raw) if raw.strip() else {}
 
 
 # --------------------------------------------------------------------- routes
@@ -2740,121 +2626,19 @@ def _no_identity(plane: ControlPlane) -> web.Response:
     )
 
 
-# ------------------------------------------------------------------ the table
+# ------------------------------------------------------------- the table, re-exported
+# The table and the application wiring live in `api_routes.py`, because the table imports these
+# handlers *by name*: importing it here, on the last line of this module, is what keeps that
+# direction resolvable — `api_routes` imports `services.api` at module scope, so this module has to
+# finish defining its handlers first. Every entry point is `services.api` (`services/module.py:247`
+# and all fourteen `tests/test_api_*.py` files), so the direction stays this way until AP5 moves the
+# last handler out and the dependency becomes one-way.
 #
-# One declaration, used both to register the routes and to check them against
-# `docs/CONTROL_API.md` in `tests/test_api_routes.py`. A route that exists in code and not in
-# the contract is how two clients drift apart.
-#
-# `scope=None` means exactly one thing: the route is public on purpose. `/meta` and `/health` are
-# the liveness surface, and the WebSocket authenticates inside its own `hello` frame because a
-# browser cannot set a header on a handshake.
-#
-# `HANDLER_SCOPE` is the other case, and it is not `None`. The camera routes *do* require
-# `state:read`, but the check lives inside their handler, because an `<img>` cannot send an
-# `Authorization` header and a single-use ticket replaces it (`_camera_principal`, #18). Writing
-# `None` on those two rows made the table read "video is unauthenticated" - a plausible enough
-# reading that it was acted on - and left `None` carrying two meanings at once (#39).
-HANDLER_SCOPE = "state:read (in handler)"
-
-# The third row shape, and it is not `HANDLER_SCOPE`: `/whoami` requires a valid token and no
-# particular scope, because what it reports *is* the scope list (#168). Writing `state:read` there
-# would refuse a client holding only `move`, which is exactly the client that needs to be told it
-# cannot read state.
-ANY_SCOPE = "any valid token"
-
-ROUTES: tuple[tuple[str, str, str | None, Any], ...] = (
-    ("GET", "/meta", None, _meta),
-    ("GET", "/health", None, _health),
-    ("GET", "/whoami", ANY_SCOPE, _whoami),
-    ("GET", "/state", "state:read", _state),
-    ("GET", "/scan", "state:read", _scan),
-    ("GET", "/map", "state:read", _map),
-    ("PUT", "/map", "config", _map_save),
-    ("PUT", "/map/pose", "move", _map_pose),
-    ("POST", "/map/go", "move", _map_go),
-    ("POST", "/map/preview", "state:read", _map_preview),
-    ("GET", "/modules", "state:read", _modules),
-    ("GET", "/repertoire", "state:read", _repertoire),
-    ("GET", "/routines", "state:read", _routines_list),
-    ("POST", "/routines", "config", _routines_create),
-    ("GET", "/places", "state:read", _places_list),
-    ("GET", "/people", "admin", _people_list),
-    ("POST", "/people", "admin", _people_enroll),
-    ("GET", "/decisions", "state:read", _decisions),
-    ("GET", "/events", None, _events),
-    ("GET", "/camera/stream", HANDLER_SCOPE, _camera_stream),
-    ("GET", "/camera/snapshot", HANDLER_SCOPE, _camera_snapshot),
-    ("POST", "/camera/ticket", "state:read", _camera_ticket),
-    ("POST", "/pair", None, _pair),
-    ("POST", "/pair/open", "admin", _pair_open),
-    ("POST", "/command", "move", _command),
-    ("POST", "/stop", "move", _stop),
-    ("POST", "/routines/{id}/run", "move", _routine_run),
-    ("POST", "/places", "config", _places_create),
-    ("DELETE", "/places/{id}", "config", _place_delete),
-    ("PATCH", "/places/{id}", "config", _place_update),
-    ("DELETE", "/people/{id}", "admin", _people_delete),
-    ("POST", "/places/{id}/go", "move", _place_go),
-    ("POST", "/places/teach", "config", _places_teach),
-    ("GET", "/mode", "state:read", _mode_get),
-    ("POST", "/mode", "move", _mode_post),
-    ("GET", "/config", "config", _config_get),
-    ("PATCH", "/config", "config", _config_patch),
-    ("POST", "/config/validate", "config", _config_validate),
-    ("GET", "/sessions", "admin", _sessions),
-    ("DELETE", "/sessions/{key}", "admin", _session_delete),
-    ("GET", "/calibration", "config", _calibration),
-    ("POST", "/calibration/run", "config", _calibration_run),
-    ("GET", "/history", "state:read", _history),
-    ("GET", "/logs", "admin", _logs),
-    ("GET", "/support-bundle", "admin", _support_bundle),
+# `E402` is the point of the line, not an accident of it.
+from houndmind_ai.services.api_routes import (  # noqa: E402
+    ANY_SCOPE,
+    API_PREFIX,
+    HANDLER_SCOPE,
+    ROUTES,
+    create_app,
 )
-
-API_PREFIX = "/api/v1"
-
-
-def create_app(plane: ControlPlane) -> web.Application:
-    """Build the aiohttp application. Binding a port is the caller's job (`ControlPlaneModule`)."""
-    app = web.Application(middlewares=[_cors, _errors], client_max_size=64 * 1024)
-    app[_PLANE] = plane
-    router = app.router
-
-    for method, path, scope, handler in ROUTES:
-        route = f"{API_PREFIX}{path}"
-        if scope is None or scope is HANDLER_SCOPE:
-            # Public, or enforced inside the handler: registering a bearer wrapper either way
-            # would break the route it is meant to protect.
-            router.add_route(method, route, handler)
-        elif scope is ANY_SCOPE:
-            # A token, any token: the wrapper authenticates and stops there (`/whoami`, #168).
-            router.add_route(method, route, _authed()(handler))
-        else:
-            router.add_route(method, route, _authed(scope)(handler))
-
-    router.add_get("/", _index)
-    # At the root, not under `/static/`: a worker's scope defaults to its own directory, and the app
-    # shell it caches is the document at `/` (#176).
-    router.add_get("/sw.js", _service_worker)
-    if plane.static_root.is_dir():
-        # `add_static` refuses to serve outside the directory it was given, so the web app
-        # cannot be used to read `/etc/shadow` by asking for `../../etc/shadow`.
-        router.add_static(_STATIC_PREFIX, plane.static_root, show_index=False)
-    # One hook for the whole app: the assets are the only surface where a stale copy is a wrong
-    # diagnosis rather than a slow load.
-    app.on_response_prepare.append(_static_cache_headers)
-
-    app.on_startup.append(_on_startup)
-    app.on_cleanup.append(_on_cleanup)
-    return app
-
-
-async def _on_startup(app: web.Application) -> None:
-    plane = app[_PLANE]
-    plane.ensure_token()
-    await plane.start()
-
-
-async def _on_cleanup(app: web.Application) -> None:
-    plane = app[_PLANE]
-    await plane.stop()
