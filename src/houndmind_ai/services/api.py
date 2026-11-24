@@ -428,20 +428,6 @@ def _camera_principal(plane: ControlPlane, request: web.Request) -> Principal:
     return principal
 
 
-async def _camera_ticket(request: web.Request) -> web.Response:
-    """Mint a single-use ticket for the two camera routes.
-
-    `state:read` is required to ask for one, and it is all the ticket grants: a ticket cannot be
-    escalated into `move` or `config`, which is the reason it is not simply a second token.
-    """
-    plane = _plane(request)
-    ticket, expires_in = plane.tickets.issue()
-    return web.json_response(
-        {"ticket": ticket, "expires_in": expires_in},
-        headers={"Cache-Control": "no-store"},
-    )
-
-
 # --------------------------------------------------------------------- routes
 
 
@@ -1101,18 +1087,6 @@ async def _modules(request: web.Request) -> web.Response:
 
 async def _events(request: web.Request) -> web.StreamResponse:
     return await _plane(request).hub.handle(request)
-
-
-async def _camera_stream(request: web.Request) -> web.StreamResponse:
-    plane = _plane(request)
-    _camera_principal(plane, request)
-    return await plane.camera.stream(request)
-
-
-async def _camera_snapshot(request: web.Request) -> web.Response:
-    plane = _plane(request)
-    _camera_principal(plane, request)
-    return await plane.camera.snapshot(request)
 
 
 async def _pair(request: web.Request) -> web.Response:

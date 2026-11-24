@@ -6,7 +6,8 @@ contract it is checked against rather than at the bottom of the file that holds 
 bodies.
 
 **The import direction is the bottom line of `services/api.py`.** This module imports the handlers
-from `services.api`, so `api.py` has to import it *last*, once those handlers exist: that resolves
+from `services.api` — the three camera ones excepted, since `services.api_camera` owns them (AP2) —
+so `api.py` has to import it *last*, once those handlers exist: that resolves
 `houndmind_ai.services.api` and fails `import houndmind_ai.services.api_routes` on its own
 (`ImportError` on a partially-initialised module). Every real entry point is `services.api`
 (`services/module.py:247`, every `tests/test_api_*.py`), so the direction stays that way until AP5
@@ -23,9 +24,6 @@ from houndmind_ai.services.api import (
     _STATIC_PREFIX,
     _calibration,
     _calibration_run,
-    _camera_snapshot,
-    _camera_stream,
-    _camera_ticket,
     _command,
     _config_get,
     _config_patch,
@@ -69,6 +67,11 @@ from houndmind_ai.services.api import (
     _stop,
     _support_bundle,
     _whoami,
+)
+from houndmind_ai.services.api_camera import (
+    _camera_snapshot,
+    _camera_stream,
+    _camera_ticket,
 )
 from houndmind_ai.services.http import _PLANE, _authed, _cors, _errors
 
