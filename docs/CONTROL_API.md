@@ -197,7 +197,7 @@ what stops the guard from looking redundant (`#39`).
 | `GET` | `/api/v1/logs?tail=200&level=ERROR&contains=<text>` | `admin` | recent log lines, redacted; `level` (one of `DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`) and `contains` (case-insensitive substring) are applied by the server across a bounded scan, not to the fetched tail |
 | `GET` | `/api/v1/support-bundle` | `admin` | zip: meta, state, modules, redacted config, audit, sessions |
 
-**The four modes gate sources, not verbs.** `services/api.py` validates the name; the table in
+**The four modes gate sources, not verbs.** `services/api_commands.py` validates the name; the table in
 `kernel/commands.py:113-122` decides what each one admits:
 
 | Mode | Sources that may command motion | Means |

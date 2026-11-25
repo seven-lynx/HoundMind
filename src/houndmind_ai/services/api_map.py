@@ -367,7 +367,7 @@ async def _map_save(request: web.Request) -> web.Response:
     document["meta"]["source"] = "user"
     # Whether this map carries a real dimension is a claim about the whole document, derived here
     # rather than taken from the console: one writer per fact, the same reason `meta.source` is
-    # stamped on this side (H2). `size_cm` stays per-room â€” a client that needs the per-room truth
+    # stamped on this side (H2). `size_cm` stays per-room — a client that needs the per-room truth
     # reads the room, not this.
     document["meta"]["scale_source"] = scale_source_for(document.get("rooms"))
 

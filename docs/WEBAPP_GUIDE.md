@@ -284,7 +284,8 @@ plus a **refused files** table naming the file and the loader's own message.
 - **Stop the run**, which posts `/api/v1/stop` like every other stop.
 - **Write a routine** in the JSON box. Save is judged by the loader's own validator, so a refused
   save names the step to fix. A saved routine is playable on the runner's next tick — `POST
-  /routines` sets `routine_reload` (`services/api.py:1049`), so no restart is needed.
+  /routines` sets `routine_reload` (`services/api_routines.py::_routines_create`), so no restart is
+  needed.
 - Watch the **in progress** table: routine, state, step index, action, detail or veto, and whether it
   is a dry run.
 
@@ -351,8 +352,8 @@ seconds while it is on screen, and the limit box takes 1–200 records.
 **Needs** — `state:read`, and `modules.decision_log` running.
 
 **If it looks wrong** — `503` here is a specific fact: "the decision feed is not running; enable
-modules.decision_log" (`services/api.py:1590`). That is a different sentence from "no decisions
-recorded yet", and the panel keeps them apart on purpose.
+modules.decision_log" (`services/api_decisions.py::_decisions`). That is a different sentence from
+"no decisions recorded yet", and the panel keeps them apart on purpose.
 
 ### History
 

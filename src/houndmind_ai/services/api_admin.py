@@ -1,25 +1,35 @@
-"""The config, session and discovery surface, split out of `services/api.py` (AP4).
+"""The config, session, discovery and calibration surface (AP4, extended by AP5).
 
-Eight handlers and the one helper only they call: the three liveness and identity routes (`/meta`,
-`/health`, `/whoami`), the live-config read, patch and dry-run, and the connected-client registry.
-They moved together because they answer the same two questions a console asks before it changes
-anything — what is this box, and what may I change on it.
+The three liveness and identity routes (`/meta`, `/health`, `/whoami`), the live-config read, patch
+and dry-run, the connected-client registry, and the read-only calibration pair. They belong together
+because they answer the questions an operator console asks before it changes anything — what is this
+box, what may I change on it, and what has it measured.
 
 `LIVE_CONFIG_KEYS` moved with them because the allow-list *is* the config contract: the route that
 refuses a key and the two that name the allow-list in a refusal are one three-line rule, and splitting
 them is how "would this be accepted" drifts from "was it accepted" (#406).
 
-**The import direction is one-way, and that is what makes this segment different.** This module
-imports `services/http.py`, `services/auth.py`, `services/config_writer.py`, `services/state.py` and
-`kernel/config_schema.py` — never `services.api` — so it opens no cycle and `api.py` imports it at the
-top rather than at the bottom. `api_camera.py` and `api_people.py` both needed a back-edge into
-`services.api` for a name their block could not take with it; this block needed none.
+**The import direction is one-way, and that is what makes this module different.** It imports
+`services/http.py`, `services/auth.py`, `services/config_writer.py`, `services/state.py` and
+`kernel/config_schema.py` — never `services.api` at module scope — so it opens no cycle and `api.py`
+imports it at the top rather than at the bottom.
 
-**`_header_token` stays in `services/api.py`.** Its only caller is `_command` (`api.py:1177`), which
-is AP5; a handler that moves later cannot take a helper whose reader stays behind.
+**`_CALIBRATION_ACK_TIMEOUT_S` and `CALIBRATION_REQUESTS` stay in `services/api.py`, and are read
+there at call time.** The allow-list is cited by `docs/CONTROL_API.md` as a `services/api.py` symbol,
+and `tests/test_api_routes.py` patches the timeout on `services.api` so the "no ticking runtime"
+case answers in 50 ms instead of a second. An in-call import resolves both names through that module
+on every request, which is the same idiom `api_camera.py` uses for `_camera_principal`; a binding at
+this module's scope would silently stop the patch from reaching and turn a fast test into a slow one
+that still passes.
+
+**`_header_token` left with `_command`.** It stayed behind in AP4 for the same reason and moved to
+`services/api_commands.py` in AP5, when its only caller did.
 """
 
 from __future__ import annotations
+
+import asyncio
+import secrets
 
 from aiohttp import web
 
@@ -260,3 +270,85 @@ async def _session_delete(request: web.Request) -> web.Response:
             {"error": "not_found", "detail": "no connected session with that key"}, status=404
         )
     return web.json_response({"key": key, "closed": closed})
+
+
+# ---------------------------------------------------------------------------- calibration
+# Read-only by contract: `CALIBRATION_REQUESTS` is an allow-list of *reads*, and a request outside
+# it is refused before anything reaches the context. A calibration that moves servos is not on it,
+# so `POST /calibration/run` cannot dispatch one (#17).
+
+
+async def _calibration(request: web.Request) -> web.Response:
+    """Read-only by contract. Writing offsets moves the dog; that is a device action."""
+    plane = _plane(request)
+    calibration = (plane.context.get("settings") or {}).get("calibration", {})
+    calibration = calibration if isinstance(calibration, dict) else {}
+    offsets = calibration.get("servo_zero_offsets", {})
+    return web.json_response(
+        {
+            "servo_zero_offsets": offsets if isinstance(offsets, dict) else {},
+            "auto_apply": bool(calibration.get("auto_apply_servo_offsets", False)),
+            "writable": False,
+            "detail": "calibration is applied on the device; this endpoint is read-only in v1",
+        }
+    )
+
+
+async def _calibration_run(request: web.Request) -> web.Response:
+    """Run one read-only calibration request and return what it measured (#17).
+
+    This route exists to *not* be the footgun the contract reserved for. Calibration as it exists
+    in this tree reads: servo trim (`hal.read_offsets`), the distance error against a wall-follow
+    target, the best angle of the last scan, and the pose confidence. Nothing here writes an
+    offset or publishes a motion intent, so there is nothing for a physical confirmation to
+    confirm — and a prompt that guards nothing teaches the operator to approve it reflexively.
+
+    The safety is structural rather than ceremonial: `CALIBRATION_REQUESTS` is an allow-list, and a
+    request outside it is refused before anything is put on the context. A future calibration that
+    does move servos must be a separate route with its own, deliberately designed arming step,
+    because it will not dispatch through this one.
+    """
+    from houndmind_ai.services.api import (
+        _CALIBRATION_ACK_TIMEOUT_S,
+        CALIBRATION_REQUESTS,
+    )
+
+    plane = _plane(request)
+    body = await _json_body(request)
+    name = str(body.get("request") or "").strip()
+    if name not in CALIBRATION_REQUESTS:
+        return web.json_response(
+            {
+                "error": "unknown_request",
+                "detail": f"'{name}' is not a calibration request this route runs",
+                "requests": list(CALIBRATION_REQUESTS),
+            },
+            status=400,
+        )
+
+    # The id is what makes a second identical POST run again: `CalibrationModule` compares what it
+    # was asked for, and it must not treat "read the trim again" as the same request it already
+    # answered (#17).
+    request_id = secrets.token_hex(4)
+    plane.context.set("calibration_request", {"request": name, "id": request_id})
+
+    # The loop ticks the module on its own thread at the configured rate, so this waits rather than
+    # executing anything: polling keeps the event loop free for telemetry, which is the same reason
+    # `_routine_run` waits on an executor.
+    deadline = plane.now() + _CALIBRATION_ACK_TIMEOUT_S
+    while plane.now() < deadline:
+        result = plane.context.get("calibration_result")
+        if isinstance(result, dict) and result.get("request_id") == request_id:
+            return web.json_response(
+                {"request": name, "request_id": request_id, "result": result}, status=202
+            )
+        await asyncio.sleep(0.02)
+    return web.json_response(
+        {
+            "error": "unavailable",
+            "detail": "no module answered the calibration request; is the runtime ticking?",
+            "request_id": request_id,
+        },
+        status=503,
+    )
+
