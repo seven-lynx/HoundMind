@@ -5,15 +5,12 @@ One declaration of `(method, path, scope, handler)` is what registers the routes
 contract it is checked against rather than at the bottom of the file that holds fifty handler
 bodies.
 
-**The import direction is the bottom line of `services/api.py`.** This module imports the handlers
-from `services.api` — the nine people/places ones aside, which `services.api_people` owns, the three
-camera ones, which `services.api_camera` owns (AP2, AP3), and the eight admin ones, which
-`services.api_admin` owns (AP4) — so `api.py` has to import it
-*last*, once those handlers exist: that resolves
-`houndmind_ai.services.api` and fails `import houndmind_ai.services.api_routes` on its own
-(`ImportError` on a partially-initialised module). Every real entry point is `services.api`
-(`services/module.py:247`, every `tests/test_api_*.py`), so the direction stays that way until AP5
-moves the last handler out and the dependency becomes one-way.
+**Every handler is imported from the module that owns its job** — `api_state`, `api_commands`,
+`api_routines`, `api_admin`, `api_decisions`, `api_logs`, `api_web`, `api_map`, `api_people` and
+`api_camera` (AP2-AP5). This module reads `ControlPlane` from `services.api` under `TYPE_CHECKING`
+only, so the dependency is one-way: `services.api` imports this module on its last line, and nothing
+here needs `services.api` to have finished loading. `import houndmind_ai.services.api_routes`
+therefore resolves on its own, which it could not while the handlers lived there.
 """
 
 from __future__ import annotations
@@ -22,38 +19,9 @@ from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
 
-from houndmind_ai.services.api import (
-    _STATIC_PREFIX,
+from houndmind_ai.services.api_admin import (
     _calibration,
     _calibration_run,
-    _command,
-    _decisions,
-    _events,
-    _history,
-    _index,
-    _logs,
-    _map,
-    _map_go,
-    _map_pose,
-    _map_preview,
-    _map_save,
-    _mode_get,
-    _mode_post,
-    _modules,
-    _pair,
-    _pair_open,
-    _repertoire,
-    _routine_run,
-    _routines_create,
-    _routines_list,
-    _scan,
-    _service_worker,
-    _state,
-    _static_cache_headers,
-    _stop,
-    _support_bundle,
-)
-from houndmind_ai.services.api_admin import (
     _config_get,
     _config_patch,
     _config_validate,
@@ -68,6 +36,22 @@ from houndmind_ai.services.api_camera import (
     _camera_stream,
     _camera_ticket,
 )
+from houndmind_ai.services.api_commands import (
+    _command,
+    _mode_get,
+    _mode_post,
+    _repertoire,
+    _stop,
+)
+from houndmind_ai.services.api_decisions import _decisions, _history
+from houndmind_ai.services.api_logs import _logs, _support_bundle
+from houndmind_ai.services.api_map import (
+    _map,
+    _map_go,
+    _map_pose,
+    _map_preview,
+    _map_save,
+)
 from houndmind_ai.services.api_people import (
     _people_delete,
     _people_enroll,
@@ -78,6 +62,25 @@ from houndmind_ai.services.api_people import (
     _places_create,
     _places_list,
     _places_teach,
+)
+from houndmind_ai.services.api_routines import (
+    _routine_run,
+    _routines_create,
+    _routines_list,
+)
+from houndmind_ai.services.api_state import (
+    _events,
+    _modules,
+    _pair,
+    _pair_open,
+    _scan,
+    _state,
+)
+from houndmind_ai.services.api_web import (
+    _STATIC_PREFIX,
+    _index,
+    _service_worker,
+    _static_cache_headers,
 )
 from houndmind_ai.services.http import _PLANE, _authed, _cors, _errors
 

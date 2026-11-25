@@ -87,10 +87,12 @@ src/houndmind_ai/
   optional/   vision.py  vision_pi4.py  vision_preprocessing.py  vision_inference_scheduler.py
               face_recognition.py  semantic_labeler.py  slam_pi4.py  slam_clip.py  voice.py
               assistant.py  energy_emotion.py
-  services/   api.py  api_admin.py  api_camera.py  api_people.py  api_routes.py
-              auth.py  camera.py  config_writer.py  discovery.py  http.py  module.py
-              sessions.py  settings.py  state.py  stream.py  tls.py  web/  (index.html,
-              app.js, lib.js, style.css, sw.js, manifest.webmanifest, icon.svg, panels/)
+  services/   api.py  api_admin.py  api_camera.py  api_commands.py  api_decisions.py
+              api_logs.py  api_map.py  api_people.py  api_routines.py  api_routes.py
+              api_state.py  api_web.py  auth.py  camera.py  config_writer.py  discovery.py
+              http.py  module.py  sessions.py  settings.py  state.py  stream.py  tls.py web/
+              (index.html, app.js, lib.js, style.css, sw.js, manifest.webmanifest, icon.svg,
+              panels/)
 src/tools/    audio_check.py  bench_tick.py  calibrate_servos.py  camera_check.py
               camera_record.py  collect_support_bundle.py  download_opencv_models.py
               hardware_checkup.py  imu_calibrate.py  installer_verify.py
@@ -106,6 +108,17 @@ against `docs/CONTROL_API.md` and the conformance corpus in `docs/fixtures/clien
 that ships in this tree is the web app inside `services/web/`.
 `src/tools/` holds device CLIs run as `python -m tools.<name>`; it is not a second implementation of
 anything.
+
+`services/` splits the control plane by job. `api.py` keeps the shared `ControlPlane` every route
+reads (plus the camera guard and the calibration allow-list), `api_routes.py` holds the one
+`(method, path, scope, handler)` table the contract is checked against, and each `api_<job>.py` owns
+one surface's handlers and the helpers only they call: `api_state` (state, scan, modules, events,
+pairing), `api_commands` (command, stop, mode, repertoire), `api_routines`, `api_admin` (discovery,
+config, sessions, calibration), `api_decisions` (decisions, history), `api_logs` (the log tail and the
+support bundle), `api_web` (the document, the service worker and the asset cache headers), `api_map`,
+`api_people` and `api_camera`. `services/http.py` holds the request helpers all of them share. A new
+route goes in the module that owns its job or a new one beside them — never back into `api.py`, which
+holds no handler body and is what a reviewer should be able to read end to end.
 
 ---
 
