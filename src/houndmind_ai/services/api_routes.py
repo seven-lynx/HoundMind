@@ -6,8 +6,9 @@ contract it is checked against rather than at the bottom of the file that holds 
 bodies.
 
 **The import direction is the bottom line of `services/api.py`.** This module imports the handlers
-from `services.api` — the nine people/places ones aside, which `services.api_people` owns, and the
-three camera ones, which `services.api_camera` owns (AP2, AP3) — so `api.py` has to import it
+from `services.api` — the nine people/places ones aside, which `services.api_people` owns, the three
+camera ones, which `services.api_camera` owns (AP2, AP3), and the eight admin ones, which
+`services.api_admin` owns (AP4) — so `api.py` has to import it
 *last*, once those handlers exist: that resolves
 `houndmind_ai.services.api` and fails `import houndmind_ai.services.api_routes` on its own
 (`ImportError` on a partially-initialised module). Every real entry point is `services.api`
@@ -26,12 +27,8 @@ from houndmind_ai.services.api import (
     _calibration,
     _calibration_run,
     _command,
-    _config_get,
-    _config_patch,
-    _config_validate,
     _decisions,
     _events,
-    _health,
     _history,
     _index,
     _logs,
@@ -40,7 +37,6 @@ from houndmind_ai.services.api import (
     _map_pose,
     _map_preview,
     _map_save,
-    _meta,
     _mode_get,
     _mode_post,
     _modules,
@@ -52,12 +48,19 @@ from houndmind_ai.services.api import (
     _routines_list,
     _scan,
     _service_worker,
-    _session_delete,
-    _sessions,
     _state,
     _static_cache_headers,
     _stop,
     _support_bundle,
+)
+from houndmind_ai.services.api_admin import (
+    _config_get,
+    _config_patch,
+    _config_validate,
+    _health,
+    _meta,
+    _session_delete,
+    _sessions,
     _whoami,
 )
 from houndmind_ai.services.api_camera import (

@@ -226,9 +226,10 @@ that only cleared the motion in flight would be overwritten by the next autonomo
 already `rest`; the client's own notice is `command_expired` with `reason: "link_loss"`.
 
 `PATCH /config` writes only `behavior.action_cooldown_s`, `led.brightness`,
-`motors.min_action_interval_s` and `navigation.safe_distance_cm` (`services/api.py:81`), each re-read
-every tick by its module. Any other key is refused with the live list in the body, because a config
-write that changes nothing is the bug this API exists to avoid.
+`motors.min_action_interval_s` and `navigation.safe_distance_cm`
+(`services/api_admin.py::LIVE_CONFIG_KEYS`), each re-read every tick by its module. Any other key is
+refused with the live list in the body, because a config write that changes nothing is the bug this
+API exists to avoid.
 
 The `logs` response is `{"lines": [...], "filtered": bool, "truncated": bool}`. `truncated` is the
 honest half of a filter: it says the walk stopped at its 4 MiB budget before reaching the start of the
