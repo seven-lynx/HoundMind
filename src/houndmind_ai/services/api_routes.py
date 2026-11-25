@@ -6,8 +6,9 @@ contract it is checked against rather than at the bottom of the file that holds 
 bodies.
 
 **The import direction is the bottom line of `services/api.py`.** This module imports the handlers
-from `services.api` — the three camera ones excepted, since `services.api_camera` owns them (AP2) —
-so `api.py` has to import it *last*, once those handlers exist: that resolves
+from `services.api` — the nine people/places ones aside, which `services.api_people` owns, and the
+three camera ones, which `services.api_camera` owns (AP2, AP3) — so `api.py` has to import it
+*last*, once those handlers exist: that resolves
 `houndmind_ai.services.api` and fails `import houndmind_ai.services.api_routes` on its own
 (`ImportError` on a partially-initialised module). Every real entry point is `services.api`
 (`services/module.py:247`, every `tests/test_api_*.py`), so the direction stays that way until AP5
@@ -45,15 +46,6 @@ from houndmind_ai.services.api import (
     _modules,
     _pair,
     _pair_open,
-    _people_delete,
-    _people_enroll,
-    _people_list,
-    _place_delete,
-    _place_go,
-    _place_update,
-    _places_create,
-    _places_list,
-    _places_teach,
     _repertoire,
     _routine_run,
     _routines_create,
@@ -72,6 +64,17 @@ from houndmind_ai.services.api_camera import (
     _camera_snapshot,
     _camera_stream,
     _camera_ticket,
+)
+from houndmind_ai.services.api_people import (
+    _people_delete,
+    _people_enroll,
+    _people_list,
+    _place_delete,
+    _place_go,
+    _place_update,
+    _places_create,
+    _places_list,
+    _places_teach,
 )
 from houndmind_ai.services.http import _PLANE, _authed, _cors, _errors
 
