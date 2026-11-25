@@ -5,9 +5,9 @@ the walk request, then the identity roster. They moved together because both are
 draws from context keys the runtime publishes (`place_store`, `identity_roster`), and because both
 validate a JSON body the same way before the store or the module sees it.
 
-**`_number` stays in `services/api.py`.** Its other twenty-three callers are the map, config and
-routine handlers, so it is imported back from there rather than copied: a second copy is exactly
-the duplication #402 exists to remove, and this module is not the place to do that.
+**`_number` and `_problem_dict` come from `services/http.py`**, beside the body parsers that produce
+the values they judge, and the pose helpers from `services/api_map.py`, which owns the map frame
+(AP5a). Neither is copied: a second copy is exactly the duplication #402 exists to remove.
 
 **`view_from_frame` is imported inside `_places_teach`, not at the top.** `tests/test_api_places.py`
 plants refusals through `houndmind_ai.services.api.view_from_frame` (`:474`, `:573`, `:601`); a
@@ -43,14 +43,18 @@ from houndmind_ai.perception.place_views import (
     upsert_view,
     view_from_jpeg,
 )
-from houndmind_ai.services.api import (
+from houndmind_ai.services.api_map import (
     _localization_of,
     _map_document,
     _no_pose_response,
+)
+from houndmind_ai.services.http import (
+    _json_body,
     _number,
+    _optional_json_body,
+    _plane,
     _problem_dict,
 )
-from houndmind_ai.services.http import _json_body, _optional_json_body, _plane
 
 if TYPE_CHECKING:
     from houndmind_ai.services.api import ControlPlane

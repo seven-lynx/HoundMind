@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
 
+from houndmind_ai.kernel.config_schema import Problem
 from houndmind_ai.services.auth import AuthError
 
 if TYPE_CHECKING:
@@ -152,4 +153,27 @@ async def _optional_json_body(request: web.Request) -> dict[str, object]:
         return {}
     raw = await request.text()
     return _parse_json_body(raw) if raw.strip() else {}
+
+
+# ------------------------------------------------------- values read off the wire
+
+
+def _number(value: object) -> float | None:
+    """A JSON number, or `None`. `bool` is an `int` in Python, so `true` would arrive as 1.0.
+
+    The same trap `POST /routines/{id}/run` closes for `dry_run`, where the *string* `"false"` is
+    truthy and would start a real run for a client that asked for a rehearsal.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _problem_dict(problem: Problem) -> dict[str, object]:
+    """One refused file's reason, in the shape `Problem` already has.
+
+    Shared by the routine surface, which validates a posted document, and the people surface, which
+    validates a posted roster entry: one refusal row shape, so a client renders both the same way.
+    """
+    return {"path": problem.path, "message": problem.message, "hint": problem.hint}
 

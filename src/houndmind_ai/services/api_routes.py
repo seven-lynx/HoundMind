@@ -32,11 +32,6 @@ from houndmind_ai.services.api import (
     _history,
     _index,
     _logs,
-    _map,
-    _map_go,
-    _map_pose,
-    _map_preview,
-    _map_save,
     _mode_get,
     _mode_post,
     _modules,
@@ -67,6 +62,13 @@ from houndmind_ai.services.api_camera import (
     _camera_snapshot,
     _camera_stream,
     _camera_ticket,
+)
+from houndmind_ai.services.api_map import (
+    _map,
+    _map_go,
+    _map_pose,
+    _map_preview,
+    _map_save,
 )
 from houndmind_ai.services.api_people import (
     _people_delete,

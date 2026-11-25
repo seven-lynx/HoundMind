@@ -87,7 +87,7 @@ src/houndmind_ai/
   optional/   vision.py  vision_pi4.py  vision_preprocessing.py  vision_inference_scheduler.py
               face_recognition.py  semantic_labeler.py  slam_pi4.py  slam_clip.py  voice.py
               assistant.py  energy_emotion.py
-  services/   api.py  api_admin.py  api_camera.py  api_people.py  api_routes.py
+  services/   api.py  api_admin.py  api_camera.py  api_map.py  api_people.py  api_routes.py
               auth.py  camera.py  config_writer.py  discovery.py  http.py  module.py
               sessions.py  settings.py  state.py  stream.py  tls.py  web/  (index.html,
               app.js, lib.js, style.css, sw.js, manifest.webmanifest, icon.svg, panels/)
