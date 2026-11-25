@@ -20,6 +20,16 @@ Current Release: v2026.11.16
   still exit `0`), `1` it was refused, `2` it is missing, unreadable or will not parse, because a stray
   brace names no key. `--json` emits one object on every path, exit `2` included, and the profile
   applied is the host's own, so the answer is the one that host's runtime would give.
+- **The saved servo trim can be checked without booting the dog** — `calibration/workflow.py` writes
+  `data/calibration.json` and `hal/motors.py` applies it at boot inside an `except Exception` that logs at
+  debug, so a payload of the wrong shape and an uncalibrated dog looked exactly alike: the dog stood
+  crooked and nothing said why (#258, #259). `python -m tools.validate_calibration` reads the key that
+  reader reads, `last_result.servo_zero_offsets`, and compares it with the twelve channels in
+  `hal/iface.py` — an offset beyond the vendor's ±20° (the clamp the HAL applies itself), a channel name
+  the HAL does not know and a value that is not a number are errors, while a missing file, a short map
+  and a file holding another calibration request are notes that leave the exit code alone, because an
+  uncalibrated dog is legal and an unreadable joint is *absent* rather than `0.0`. `--file`, `--config`
+  and `--json`; the file is read and never written.
 - **Three pages that were missing: calibration, testing, and the module map** — calibration lived in
   a section of `docs/TOOLS.md` and a step of `docs/HARDWARE_TEST.md` and had no page of its own;
   nothing stated what CI cannot prove; and the context-key contract was discoverable only by
