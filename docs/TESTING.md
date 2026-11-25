@@ -55,6 +55,27 @@ a pass on a 3.14 venv is tooling evidence. Say which interpreter produced a numb
 measured total was **82 %** (13,885 statements, 2,516 missed, Python 3.14.5). There is deliberately no
 `--cov-fail-under` — a threshold is a decision, not a default (#397).
 
+### The three offline validators
+
+Three questions used to be answerable only by booting the dog or by reading a JSON file by eye. Each now
+has a command that answers it with no hardware, no network and no writes:
+
+| Question | Command | What `0` means |
+|---|---|---|
+| Would the runtime start from this settings file? | [`validate_config`](TOOLS.md#24-validate_config) | the schema accepted the file and the loader resolved a profile; cross-field warnings are printed and still exit `0` |
+| Does every spoken phrase reach an action the dog can perform? | [`validate_phrases`](TOOLS.md#23-validate_phrases) | every value in `command_map`/`aliases` resolves, through one alias hop, to a name in the repertoire |
+| Is the saved servo trim consistent with the twelve channels? | [`validate_calibration`](TOOLS.md#25-validate_calibration) | the offsets read are in range and on known channels — a missing file is a note, because an uncalibrated dog is legal |
+
+All three take the same exit codes: `0` clean (notes allowed), `1` at least one named finding, `2` the
+question could not be asked — a missing, unreadable or unparsable file. None of them writes anything: a
+repair is a measurement, not a text edit.
+
+What they do **not** prove, and no test can: that the microphone hears the phrase and the resulting
+intent survives the interlock; that the saved trim actually straightens the legs; that the IMU is
+calibrated rather than merely readable — `validate_calibration` checks the *servo* trim, so `|acc|` at
+rest and a 90° hand-turn stay `tools.imu_calibrate --apply` and a
+[`hardware_checkup`](HARDWARE_TEST.md) run. Those are the rows above, and they stay a person's.
+
 ## Writing a test that lasts
 
 - Name the defect or the rule, not the function: `test_a_failed_distance_read_is_zero_and_flagged_invalid`
