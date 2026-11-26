@@ -2,8 +2,6 @@
 
 Release: v2026.11.16
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/seven-lynx/HoundMind)
-
 HoundMind is a unified AI control framework for the SunFounder PiDog. Simulation mode is no longer supported; all features require real PiDog hardware. PackMind and CanineCore are now a single system.
 
 ## Current scope
@@ -341,3 +339,9 @@ print("Path:", path)
 ```
 
 See [docs/FEATURES_GUIDE.md](docs/FEATURES_GUIDE.md) for more details.
+
+## Questions about the code
+
+[DeepWiki](https://deepwiki.com/seven-lynx/HoundMind) indexes this repository and answers questions such as "where is the watchdog wired?" or "which module owns the control API?", with links back to the files it read.
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/seven-lynx/HoundMind)
